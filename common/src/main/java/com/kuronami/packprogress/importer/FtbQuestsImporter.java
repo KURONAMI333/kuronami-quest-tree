@@ -39,7 +39,8 @@ public final class FtbQuestsImporter {
             Map.entry("require_sequential_tasks", "sequential_tasks"), Map.entry("min_width", "detail_width"),
             Map.entry("progression_mode", "progression_mode"), Map.entry("disable_recipe_mod", "hide_from_recipe_viewer"),
             Map.entry("ignore_reward_blocking", "ignore_reward_blocking"), Map.entry("guide_page", "guide_page"),
-            Map.entry("tasks_ignore_dependencies", "tasks_ignore_requires"), Map.entry("hide", "visibility.hidden_until"));
+            Map.entry("tasks_ignore_dependencies", "tasks_ignore_requires"), Map.entry("hide", "visibility.hidden_until"),
+            Map.entry("optional_task", ""));
     private static final Map<String, String> TASK_COMMON = Map.of("id", "", "type", "", "icon", "icon", "title", "lang:title",
             "optional_task", "optional", "disable_toast", "toast");
     private static final Map<String, Map<String, String>> TASK = Map.ofEntries(
@@ -113,7 +114,16 @@ public final class FtbQuestsImporter {
             }
         }
         for (Map.Entry<String, JsonObject> e : raw.entrySet()) {
-            out.chapters.put(e.getKey(), chapter(e.getKey(), e.getValue(), idToNode, out));
+            try {
+                out.chapters.put(e.getKey(), chapter(e.getKey(), e.getValue(), idToNode, out));
+            } catch (RuntimeException ex) {
+                // one broken chapter must not stop the rest of the book from coming over
+                out.note("chapter skipped (" + e.getKey() + "): " + ex.getMessage());
+            }
+        }
+        Path data = questsDir.resolve("data.snbt");
+        if (Files.exists(data)) {
+            out.settings = read(data).getAsJsonObject();
         }
         tables(questsDir.resolve("reward_tables"), out);
         lang(questsDir.resolve("lang"), raw, idToNode, out);
@@ -233,14 +243,17 @@ public final class FtbQuestsImporter {
         }
         // values whose meaning changes, not just the name
         if (n.has("visibility") && n.getAsJsonObject("visibility").has("hidden_until")) {
+            n.getAsJsonObject("visibility").remove("hidden_until");
             JsonObject vis = n.getAsJsonObject("visibility");
-            vis.remove("hidden_until");
             if (bool(q, "invisible")) {
                 vis.addProperty("hidden_until", "complete");
             } else if (bool(q, "hide_until_deps_complete")) {
                 vis.addProperty("hidden_until", "deps_complete");
             } else if (bool(q, "hide_until_deps_visible") || bool(q, "hide")) {
                 vis.addProperty("hidden_until", "deps_visible");
+            }
+            if (vis.isEmpty()) {
+                n.remove("visibility");
             }
         }
         if (n.has("requires") && n.getAsJsonObject("requires").has("mode")) {
@@ -295,6 +308,7 @@ public final class FtbQuestsImporter {
             JsonObject o = new JsonObject();
             o.addProperty("type", TASK_RENAME.getOrDefault(ty, ty));
             String tp = prefix + ".task." + id(t);
+            out.textPrefix.put(id(t), tp);
             for (Map.Entry<String, JsonElement> kv : t.entrySet()) {
                 String target = spec.containsKey(kv.getKey()) ? spec.get(kv.getKey()) : TASK_COMMON.get(kv.getKey());
                 if (target == null) {
@@ -314,6 +328,7 @@ public final class FtbQuestsImporter {
             JsonObject r = re.getAsJsonObject();
             String ty = typeOf(r);
             out.count("rewards", 1);
+            out.textPrefix.put(id(r), prefix + ".reward." + id(r));
             JsonObject o = reward(ty, r, prefix + ".reward." + id(r), out, "reward");
             if (o != null) {
                 rewards.add(o);
@@ -345,7 +360,7 @@ public final class FtbQuestsImporter {
         if (TABLE_MODE.containsKey(ty)) {
             o.addProperty("mode", TABLE_MODE.get(ty));
             if (o.has("table")) {
-                o.addProperty("table", out.namespace + ":" + o.get("table").getAsString().toLowerCase(Locale.ROOT));
+                o.addProperty("table", out.namespace + ":" + slug(o.get("table").getAsString()));
             }
         }
         if (ty.equals("item") && o.has("count") && o.has("item")) {
@@ -361,7 +376,7 @@ public final class FtbQuestsImporter {
         try (Stream<Path> files = Files.list(dir)) {
             for (Path f : files.filter(p -> p.toString().endsWith(".snbt")).sorted().toList()) {
                 JsonObject t = read(f).getAsJsonObject();
-                String tid = (t.has("id") ? t.get("id").getAsString() : name(f)).toLowerCase(Locale.ROOT);
+                String tid = slug(t.has("id") ? t.get("id").getAsString() : name(f));
                 JsonArray entries = new JsonArray();
                 for (JsonElement re : arr(t, "rewards")) {
                     JsonObject r = re.getAsJsonObject();
@@ -422,7 +437,12 @@ public final class FtbQuestsImporter {
                             }
                         }
                         case "chapter" -> out.text(locale, "progression." + ns + "." + chapterById.getOrDefault(oid, oid.toLowerCase(Locale.ROOT)) + "." + fld, kv.getValue());
-                        case "chapter_group", "file", "task", "reward", "reward_table", "image" ->
+                        case "task", "reward" -> {
+                            // text of a task or reward belongs next to its quest's text, where the quest file puts it too
+                            String pre = out.textPrefix.get(oid.toLowerCase(Locale.ROOT));
+                            out.text(locale, (pre != null ? pre : "progression." + ns + "." + kind + "." + oid.toLowerCase(Locale.ROOT)) + "." + fld, kv.getValue());
+                        }
+                        case "chapter_group", "file", "reward_table", "image" ->
                                 out.text(locale, "progression." + ns + "." + kind + "." + oid.toLowerCase(Locale.ROOT) + "." + fld, kv.getValue());
                         default -> out.note("lang key kind " + kind);
                     }

@@ -31,6 +31,10 @@ public final class ImportOutput {
     public final Map<String, Integer> counts = new TreeMap<>();
     public final Map<String, Integer> unmapped = new TreeMap<>();
     public final Map<String, Integer> notes = new TreeMap<>();
+    /** Lang prefix of every task and reward by its (lower-case) id, so lang-file text lands next to its quest. */
+    public final Map<String, String> textPrefix = new java.util.HashMap<>();
+    /** File-level defaults (FTB Quests data.snbt) kept as settings.json. */
+    public JsonObject settings;
 
     public ImportOutput(String namespace) {
         this.namespace = namespace;
@@ -68,6 +72,8 @@ public final class ImportOutput {
     /** Writes a data pack folder at {@code root} (replacing files with the same names, leaving others alone). */
     public void writeTo(Path root) throws IOException {
         Path base = root.resolve("data").resolve(namespace).resolve("progression");
+        // a re-import replaces the previous one: chapters deleted or renamed in the source must not linger
+        deleteTree(base);
         Files.createDirectories(base);
         write(root.resolve("pack.mcmeta"), mcmeta());
         for (Map.Entry<String, JsonObject> e : chapters.entrySet()) {
@@ -81,6 +87,9 @@ public final class ImportOutput {
         }
         if (!groups.isEmpty()) {
             write(base.resolve("groups.json"), groups);
+        }
+        if (settings != null) {
+            write(base.resolve("settings.json"), settings);
         }
         for (Map.Entry<String, JsonObject> e : lang.entrySet()) {
             write(base.resolve("lang").resolve(e.getKey() + ".json"), e.getValue());
@@ -103,6 +112,17 @@ public final class ImportOutput {
         JsonObject root = new JsonObject();
         root.add("pack", pack);
         return root;
+    }
+
+    private static void deleteTree(Path dir) throws IOException {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (java.util.stream.Stream<Path> walk = Files.walk(dir)) {
+            for (Path p : walk.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.delete(p);
+            }
+        }
     }
 
     private static void write(Path file, JsonElement json) throws IOException {

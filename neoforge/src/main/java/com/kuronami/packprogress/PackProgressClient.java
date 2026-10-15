@@ -4,6 +4,7 @@ import com.kuronami.packprogress.client.ClientProgress;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 
@@ -26,6 +27,11 @@ public final class PackProgressClient {
         @SubscribeEvent
         public static void tick(ClientTickEvent.Post event) {
             ClientProgress.onClientTick();
+        }
+
+        @SubscribeEvent
+        public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+            ClientProgress.onLogout();
         }
     }
 }

@@ -54,6 +54,14 @@ public final class ClientProgress {
         }
     }
 
+    /** Leaving a server: forget its data so another server never shows it. */
+    public static void onLogout() {
+        model = null;
+        receivingGeneration = -1;
+        buffer = null;
+        ProgressScreen.clearViews();
+    }
+
     public static ClientModel model() {
         return model;
     }

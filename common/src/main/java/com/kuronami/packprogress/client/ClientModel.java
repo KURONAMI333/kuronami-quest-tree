@@ -32,23 +32,37 @@ public final class ClientModel {
     public ClientModel(JsonObject bundle) {
         String locale = Minecraft.getInstance().getLanguageManager().getSelected().toLowerCase(Locale.ROOT);
         JsonObject lang = obj(bundle, "lang");
-        if (lang.has("en_us")) {
-            lang.getAsJsonObject("en_us").entrySet().forEach(e -> fallback.put(e.getKey(), e.getValue().getAsString()));
-        }
-        if (lang.has(locale)) {
-            lang.getAsJsonObject(locale).entrySet().forEach(e -> text.put(e.getKey(), e.getValue().getAsString()));
-        }
+        copyText(lang, "en_us", fallback);
+        copyText(lang, locale, text);
         Map<String, Integer> groupOrder = new LinkedHashMap<>();
         for (JsonElement g : arr(bundle, "groups")) {
-            JsonObject go = g.getAsJsonObject();
-            groupOrder.put(go.get("id").getAsString(), go.has("order") ? go.get("order").getAsInt() : groupOrder.size());
+            if (g.isJsonObject() && g.getAsJsonObject().has("id")) {
+                JsonObject go = g.getAsJsonObject();
+                groupOrder.put(go.get("id").getAsString(), go.has("order") ? go.get("order").getAsInt() : groupOrder.size());
+            }
         }
         for (Map.Entry<String, JsonElement> e : obj(bundle, "chapters").entrySet()) {
-            if (e.getValue().isJsonObject()) {
+            if (!e.getValue().isJsonObject() || !e.getKey().contains(":")) {
+                continue;
+            }
+            try {
                 chapters.add(new Chapter(this, e.getKey(), e.getValue().getAsJsonObject(), groupOrder));
+            } catch (RuntimeException ex) {
+                // one malformed chapter must not hide the others
+                com.kuronami.packprogress.Constants.LOG.warn("Skipping progression chapter {}: {}", e.getKey(), ex.toString());
             }
         }
         chapters.sort(Comparator.comparingInt((Chapter c) -> c.groupOrder).thenComparingInt(c -> c.order).thenComparing(c -> c.id));
+    }
+
+    private static void copyText(JsonObject lang, String locale, Map<String, String> into) {
+        if (!lang.has(locale) || !lang.get(locale).isJsonObject()) {
+            return;
+        }
+        for (Map.Entry<String, JsonElement> e : lang.getAsJsonObject(locale).entrySet()) {
+            JsonElement v = e.getValue();
+            into.put(e.getKey(), v.isJsonPrimitive() ? v.getAsString() : v.toString());
+        }
     }
 
     /** Translation from the synced data, or null. */
@@ -60,12 +74,30 @@ public final class ClientModel {
     Component component(String key, Component orElse) {
         String v = lookup(key);
         if (v != null) {
-            return Component.literal(FtbText.legacyColors(v));
+            return parseText(v);
         }
         if (net.minecraft.client.resources.language.I18n.exists(key)) {
             return Component.translatable(key);
         }
         return orElse;
+    }
+
+    /** Plain text with FTB colour codes, or a JSON text component (Pufferfish titles often are {"translate": ...}). */
+    static Component parseText(String v) {
+        String t = v.trim();
+        if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
+            try {
+                var level = Minecraft.getInstance().level;
+                var provider = level != null ? level.registryAccess() : net.minecraft.core.RegistryAccess.EMPTY;
+                Component c = Component.Serializer.fromJson(t, provider);
+                if (c != null) {
+                    return c;
+                }
+            } catch (RuntimeException ignored) {
+                // not a component after all: show as text
+            }
+        }
+        return Component.literal(FtbText.legacyColors(v));
     }
 
     public static final class Chapter {
@@ -80,6 +112,7 @@ public final class ClientModel {
         public final Map<String, Node> nodes = new LinkedHashMap<>();
         public final List<Decoration> decorations = new ArrayList<>();
         public final String defaultShape;
+        public final double defaultSize;
 
         Chapter(ClientModel m, String id, JsonObject o, Map<String, Integer> groupOrder) {
             this.id = id;
@@ -92,14 +125,23 @@ public final class ClientModel {
             this.skills = o.has("points") && o.get("points").isJsonObject();
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : (skills ? "square" : "square");
-            this.title = m.component("progression." + namespace + "." + path + ".title", Component.literal(path));
+            this.defaultSize = defaults.has("size") && defaults.get("size").isJsonPrimitive() ? defaults.get("size").getAsDouble() : 1;
+            Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString()) : Component.literal(path);
+            this.title = m.component("progression." + namespace + "." + path + ".title", fallbackTitle);
             for (Map.Entry<String, JsonElement> n : obj(o, "nodes").entrySet()) {
-                if (n.getValue().isJsonObject()) {
+                if (!n.getValue().isJsonObject()) {
+                    continue;
+                }
+                try {
                     nodes.put(n.getKey(), new Node(m, this, n.getKey(), n.getValue().getAsJsonObject()));
+                } catch (RuntimeException ex) {
+                    com.kuronami.packprogress.Constants.LOG.warn("Skipping node {} in {}: {}", n.getKey(), id, ex.toString());
                 }
             }
             for (JsonElement d : arr(o, "decorations")) {
-                decorations.add(new Decoration(d.getAsJsonObject()));
+                if (d.isJsonObject()) {
+                    decorations.add(new Decoration(d.getAsJsonObject()));
+                }
             }
             decorations.sort(Comparator.comparingInt(d -> d.order));
         }
@@ -132,7 +174,7 @@ public final class ClientModel {
             this.id = id;
             this.x = o.has("x") ? o.get("x").getAsDouble() : 0;
             this.y = o.has("y") ? o.get("y").getAsDouble() : 0;
-            this.size = o.has("size") ? Math.max(0.3, o.get("size").getAsDouble()) : 1;
+            this.size = o.has("size") ? Math.max(0.3, o.get("size").getAsDouble()) : Math.max(0.3, ch.defaultSize);
             String sh = o.has("shape") ? o.get("shape").getAsString() : "";
             this.shape = sh.isEmpty() || sh.equals("default") ? ch.defaultShape : sh;
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
@@ -142,9 +184,14 @@ public final class ClientModel {
                 requires.add(r.getAsString());
             }
             for (JsonElement t : arr(o, "tasks")) {
-                tasks.add(new Task(t.getAsJsonObject()));
+                if (t.isJsonObject()) {
+                    tasks.add(new Task(t.getAsJsonObject()));
+                }
             }
             for (JsonElement r : arr(o, "rewards")) {
+                if (!r.isJsonObject()) {
+                    continue;
+                }
                 JsonObject ro = r.getAsJsonObject();
                 String type = ro.has("type") ? ro.get("type").getAsString() : "";
                 switch (type) {
@@ -161,7 +208,8 @@ public final class ClientModel {
             }
             this.icon = ic;
             String base = "progression." + ch.namespace + "." + ch.path + "." + id;
-            Component fallbackTitle = !tasks.isEmpty() && !tasks.get(0).item.isEmpty() ? tasks.get(0).item.getHoverName() : Component.literal(id);
+            Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString())
+                    : !tasks.isEmpty() && !tasks.get(0).item.isEmpty() ? tasks.get(0).item.getHoverName() : Component.literal(id);
             this.title = m.component(base + ".title", fallbackTitle);
             String d = m.lookup(base + ".desc");
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);

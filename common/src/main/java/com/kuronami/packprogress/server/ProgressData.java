@@ -34,7 +34,10 @@ public final class ProgressData {
     private static final String ROOT = "progression";
     private static final Gson GSON = new Gson();
 
-    private static byte[] compressed = new byte[0];
+    /** Bundle without translations, plus translations per locale; a player gets their locale and en_us only. */
+    private static JsonObject base = new JsonObject();
+    private static Map<String, JsonObject> langs = new TreeMap<>();
+    private static final Map<String, byte[]> COMPRESSED = new java.util.concurrent.ConcurrentHashMap<>();
     private static int generation;
     private static int chapterCount;
 
@@ -81,12 +84,14 @@ public final class ProgressData {
         bundle.add("chapters", chapters);
         bundle.add("reward_tables", tables);
         bundle.add("groups", groups);
-        bundle.add("lang", lang);
 
-        compressed = gzip(GSON.toJson(bundle).getBytes(StandardCharsets.UTF_8));
+        base = bundle;
+        langs = byLocale;
+        COMPRESSED.clear();
+        model = com.kuronami.packprogress.data.ProgressModel.of(bundle);
         generation++;
         chapterCount = chapters.size();
-        Constants.LOG.info("Loaded {} progression chapters ({} KB compressed, {} locales)", chapterCount, compressed.length / 1024, lang.size());
+        Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount, bundleFor("en_us").length / 1024, lang.size());
     }
 
     /** Patch files carry {"target": "<ns>:<chapter>", ...fields}; nodes merge by id, other fields replace. */
@@ -155,8 +160,31 @@ public final class ProgressData {
         return out.toByteArray();
     }
 
+    private static byte[] bundleFor(String locale) {
+        String loc = langs.containsKey(locale) ? locale : "en_us";
+        return COMPRESSED.computeIfAbsent(loc, l -> {
+            JsonObject b = base.deepCopy();
+            JsonObject lang = new JsonObject();
+            if (langs.containsKey("en_us")) {
+                lang.add("en_us", langs.get("en_us"));
+            }
+            if (langs.containsKey(l)) {
+                lang.add(l, langs.get(l));
+            }
+            b.add("lang", lang);
+            return gzip(GSON.toJson(b).getBytes(StandardCharsets.UTF_8));
+        });
+    }
+
+    private static com.kuronami.packprogress.data.ProgressModel model = com.kuronami.packprogress.data.ProgressModel.of(new JsonObject());
+
+    /** The parsed model of the loaded data, for progress checks. */
+    public static com.kuronami.packprogress.data.ProgressModel model() {
+        return model;
+    }
+
     public static void sync(ServerPlayer player) {
-        byte[] data = compressed;
+        byte[] data = bundleFor(player.clientInformation().language().toLowerCase(java.util.Locale.ROOT));
         int total = Math.max(1, (data.length + SyncPayload.MAX_PART - 1) / SyncPayload.MAX_PART);
         for (int i = 0; i < total; i++) {
             int from = i * SyncPayload.MAX_PART;

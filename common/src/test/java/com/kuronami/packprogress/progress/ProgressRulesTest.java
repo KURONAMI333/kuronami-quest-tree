@@ -79,7 +79,7 @@ class ProgressRulesTest {
     @Test
     void skillPointsAndExclusives() {
         ProgressRules rules = new ProgressRules(model);
-        ProgressModel.Chapter mining = model.chapters.get("t:skill_mining");
+        ProgressModel.Chapter mining = model.chapters.get("t:skill_ftb_mining");
         PlayerProgress p = new PlayerProgress();
         ProgressModel.Node root = mining.nodes.get("root");
         ProgressModel.Node s0 = mining.nodes.get("s0");

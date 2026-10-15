@@ -40,6 +40,8 @@ public class ProgressScreen extends Screen {
     private static final int RAIL_OPEN = 150;
     private static final int BTN = 20;
     private static final float FAR = 0.6f;   // below this zoom, nodes are drawn as state-coloured shapes without icons
+    /** Items render at z=150; flat overlays drawn after them need to sit above or the icons show through. */
+    private static final float OVERLAY_Z = 300;
 
     private static final Set<String> SHAPES = Set.of("square", "rsquare", "circle", "diamond", "hexagon", "octagon", "pentagon", "gear", "heart");
     private static final String[] LOCK = {".###.", "#...#", "#####", "#####", "#####"};
@@ -48,6 +50,14 @@ public class ProgressScreen extends Screen {
     /** Per-chapter camera, kept for the session (players asked for the position to be remembered). */
     private static final Map<String, float[]> VIEWS = new HashMap<>();
     private static int lastChapter = -1;
+    private int railScroll;
+    private int overviewScroll;
+
+    /** Called on logout so another server starts with fresh cameras. */
+    public static void clearViews() {
+        VIEWS.clear();
+        lastChapter = -1;
+    }
 
     private int chapterIndex = lastChapter;
     private String selected;
@@ -100,7 +110,14 @@ public class ProgressScreen extends Screen {
         } else {
             renderChapter(g, ch, mouseX, mouseY);
         }
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z + 100);
         renderRail(g, m, mouseX, mouseY);
+        g.pose().popPose();
+    }
+
+    private int railRows() {
+        return Math.max(1, (height - 8 - 30 - 26) / 22);
     }
 
     @Override
@@ -116,10 +133,17 @@ public class ProgressScreen extends Screen {
         int y = 8;
         rowRail(g, y, -1, null, Component.translatable("screen.pack_progress.now"), w, mouseX, mouseY);
         y += 22;
-        for (int i = 0; i < m.chapters.size() && y < height - 26; i++) {
+        railScroll = Mth.clamp(railScroll, 0, Math.max(0, m.chapters.size() - railRows()));
+        for (int i = railScroll; i < m.chapters.size() && i < railScroll + railRows(); i++) {
             ClientModel.Chapter c = m.chapters.get(i);
             rowRail(g, y, i, c.displayIcon(), c.title, w, mouseX, mouseY);
             y += 22;
+        }
+        if (railScroll > 0) {
+            g.fill(8, 30, w, 31, 0x55FFFFFF);
+        }
+        if (railScroll + railRows() < m.chapters.size()) {
+            g.fill(8, height - 9, w, height - 8, 0x55FFFFFF);
         }
         g.disableScissor();
     }
@@ -155,13 +179,14 @@ public class ProgressScreen extends Screen {
         int tile = 44;
         int gap = 6;
         int cols = Math.max(1, (width - left - 12) / (tile + gap));
-        int y0 = 40;
+        int y0 = 40 - overviewScroll;
+        g.enableScissor(0, 36, width, height);
         for (int i = 0; i < m.chapters.size(); i++) {
             ClientModel.Chapter c = m.chapters.get(i);
             int x = left + (i % cols) * (tile + gap);
             int y = y0 + (i / cols) * (tile + gap + 10);
-            if (y + tile > height - 4) {
-                break;
+            if (y + tile < 36 || y > height) {
+                continue;
             }
             boolean hover = mouseX >= x && mouseX < x + tile && mouseY >= y && mouseY < y + tile;
             g.fill(x, y, x + tile, y + tile, hover ? 0x99000000 : TILE);
@@ -170,8 +195,19 @@ public class ProgressScreen extends Screen {
             g.pose().scale(1.5f, 1.5f, 1);
             g.renderItem(c.displayIcon(), 0, 0);
             g.pose().popPose();
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z);
             g.drawString(font, trim(c.title.getString(), tile + gap), x, y + tile + 2, GRAY, true);
+            g.pose().popPose();
         }
+        g.disableScissor();
+    }
+
+    private int overviewMaxScroll(ClientModel m) {
+        int left = RAIL + 18;
+        int cols = Math.max(1, (width - left - 12) / 50);
+        int rows = (m.chapters.size() + cols - 1) / cols;
+        return Math.max(0, 40 + rows * 60 - height + 8);
     }
 
     private float[] view(ClientModel.Chapter ch) {
@@ -264,20 +300,26 @@ public class ProgressScreen extends Screen {
                 g.renderItem(n.icon, 0, 0);
                 g.pose().popPose();
                 if (locked) {
+                    g.pose().pushPose();
+                    g.pose().translate(0, 0, OVERLAY_Z);
                     shape(g, shape, x, y, s, s, 0x99000000);
                     pixels(g, LOCK, x + s / 2 - 2, y + s / 2 - 2, 1, 0xFFC8C8C8);
+                    g.pose().popPose();
                 }
             } else {
                 shape(g, shape, x + s / 4, y + s / 4, s / 2, s / 2, locked ? 0xFF3A3A3C : 0xFF9A9A9A);
             }
             double sx = v[0] + n.x * UNIT * v[2];
             double sy = v[1] + n.y * UNIT * v[2];
-            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight() && mouseX < sheetLeft()) {
+            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight() && mouseX < (sheetT > 0 ? sheetLeft() : width)) {
                 hovered = e.getKey();
             }
         }
         g.pose().popPose();
 
+        // everything below sits above the map's item icons
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z);
         // header over the map
         g.pose().pushPose();
         g.pose().translate(RAIL + 14, 10, 0);
@@ -291,13 +333,15 @@ public class ProgressScreen extends Screen {
         if (sheetT > 0) {
             renderSheet(g, ch);
         }
+        g.pose().popPose();
         if (hovered != null && !dragging && selected == null) {
             g.renderTooltip(font, ch.nodes.get(hovered).title, mouseX, mouseY);
         }
     }
 
+    /** Right edge of the rail as currently drawn (it opens to RAIL_OPEN on hover). */
     private int railRight() {
-        return RAIL + 4;
+        return (int) Mth.lerp(ease(railT), RAIL, RAIL_OPEN) + 4;
     }
 
     private int sheetWidth() {
@@ -476,9 +520,14 @@ public class ProgressScreen extends Screen {
         }
         int railW = railT > 0.5f ? RAIL_OPEN : RAIL;
         if (mx < railW + 4) {
-            int index = (int) Math.floor((my - 8) / 22) - 1;
-            if (my >= 8 && index < m.chapters.size()) {
-                select(index);
+            int row = (int) Math.floor((my - 8) / 22);
+            if (row == 0) {
+                select(-1);
+            } else if (row >= 1 && row <= railRows()) {
+                int index = railScroll + row - 1;
+                if (index < m.chapters.size()) {
+                    select(index);
+                }
             }
             return true;
         }
@@ -525,7 +574,7 @@ public class ProgressScreen extends Screen {
         int gap = 6;
         int cols = Math.max(1, (width - left - 12) / (tile + gap));
         int col = (int) ((mx - left) / (tile + gap));
-        int row = (int) ((my - 40) / (tile + gap + 10));
+        int row = (int) ((my - 40 + overviewScroll) / (tile + gap + 10));
         if (mx >= left && my >= 40 && col < cols) {
             int index = row * cols + col;
             if (index < m.chapters.size()) {
@@ -610,9 +659,18 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+        ClientModel m = model();
+        if (m == null) {
+            return super.mouseScrolled(mx, my, scrollX, scrollY);
+        }
+        if (mx < railRight()) {
+            railScroll = Mth.clamp(railScroll - (int) Math.signum(scrollY), 0, Math.max(0, m.chapters.size() - railRows()));
+            return true;
+        }
         ClientModel.Chapter ch = chapter();
         if (ch == null) {
-            return super.mouseScrolled(mx, my, scrollX, scrollY);
+            overviewScroll = Mth.clamp(overviewScroll - (int) (scrollY * 20), 0, overviewMaxScroll(m));
+            return true;
         }
         float[] v = view(ch);
         if (scrollX != 0) {

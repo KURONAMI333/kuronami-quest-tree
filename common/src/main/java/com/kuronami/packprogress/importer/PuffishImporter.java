@@ -35,7 +35,8 @@ public final class PuffishImporter {
         JsonObject cons = obj(files.get("connections.json"));
         JsonObject exp = obj(files.get("experience.json"));
         boolean patch = !files.containsKey("category.json");
-        String cid = "skill_" + FtbQuestsImporter.slug(category);
+        // keep the source namespace: two mods may both ship a "combat" tree
+        String cid = "skill_" + FtbQuestsImporter.slug(source.replace('/', '_'));
         out.count("skill_categories", 1);
 
         JsonObject o = new JsonObject();

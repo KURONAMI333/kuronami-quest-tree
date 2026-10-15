@@ -64,7 +64,7 @@ public final class ProgressCommands {
         Path quests = Stream.of("config/ftbquests/quests", "defaultconfigs/ftbquests/quests")
                 .map(game::resolve).filter(Files::isDirectory).findFirst().orElse(null);
         if (quests == null) {
-            c.getSource().sendFailure(Component.translatable("commands.pack_progress.import.ftbquests.missing"));
+            c.getSource().sendFailure(Component.translatableWithFallback("commands.pack_progress.import.ftbquests.missing", "No FTB Quests data found in config/ftbquests/quests"));
             return 0;
         }
         ImportOutput out = new ImportOutput(validNamespace(ns));
@@ -72,7 +72,7 @@ public final class ProgressCommands {
             FtbQuestsImporter.convert(quests, out);
         } catch (Exception ex) {
             Constants.LOG.error("FTB Quests import failed", ex);
-            c.getSource().sendFailure(Component.translatable("commands.pack_progress.import.failed", ex.getMessage()));
+            c.getSource().sendFailure(Component.translatableWithFallback("commands.pack_progress.import.failed", "Import failed: %s", ex.getMessage()));
             return 0;
         }
         return finish(c, out);
@@ -113,7 +113,7 @@ public final class ProgressCommands {
             }
         }
         if (cats.isEmpty()) {
-            c.getSource().sendFailure(Component.translatable("commands.pack_progress.import.puffish.missing"));
+            c.getSource().sendFailure(Component.translatableWithFallback("commands.pack_progress.import.puffish.missing", "No Pufferfish's Skills categories found"));
             return 0;
         }
         ImportOutput out = new ImportOutput(validNamespace(ns));
@@ -128,16 +128,18 @@ public final class ProgressCommands {
             out.writeTo(root);
         } catch (IOException ex) {
             Constants.LOG.error("Writing imported data failed", ex);
-            src.sendFailure(Component.translatable("commands.pack_progress.import.failed", ex.getMessage()));
+            src.sendFailure(Component.translatableWithFallback("commands.pack_progress.import.failed", "Import failed: %s", ex.getMessage()));
             return 0;
         }
         int nodes = out.counts.getOrDefault("nodes", 0) + out.counts.getOrDefault("skills", 0);
         int chapters = out.counts.getOrDefault("chapters", 0) + out.counts.getOrDefault("skill_categories", 0);
-        src.sendSuccess(() -> Component.translatable("commands.pack_progress.import.done", chapters, nodes, out.namespace), true);
+        src.sendSuccess(() -> Component.translatableWithFallback("commands.pack_progress.import.done", "Imported %s chapters with %s nodes into the data pack \"pack_progress_import\" (namespace %s). Reloading.", chapters, nodes, out.namespace), true);
         if (!out.unmapped.isEmpty()) {
-            src.sendSuccess(() -> Component.translatable("commands.pack_progress.import.unmapped", out.unmapped.size())
+            src.sendSuccess(() -> Component.translatableWithFallback("commands.pack_progress.import.unmapped", "%s settings could not be carried over:", out.unmapped.size())
                     .withStyle(ChatFormatting.YELLOW), false);
-            out.unmapped.forEach((k, n) -> src.sendSuccess(() -> Component.literal("  " + k + " x" + n).withStyle(ChatFormatting.GRAY), false));
+            // the full list is in import_report_<ns>.json; chat shows the most frequent few
+            out.unmapped.entrySet().stream().sorted(Map.Entry.<String, Integer>comparingByValue().reversed()).limit(8)
+                    .forEach(e -> src.sendSuccess(() -> Component.literal("  " + e.getKey() + " x" + e.getValue()).withStyle(ChatFormatting.GRAY), false));
         }
         // newly written data packs are picked up and enabled by /reload
         src.getServer().getCommands().performPrefixedCommand(src, "reload");

@@ -55,6 +55,18 @@ class ImporterTest {
         assertTrue(Files.exists(tmp.resolve("pack.mcmeta")));
     }
 
+    @Test
+    void reimportRemovesStaleChapters(@TempDir Path tmp) throws Exception {
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(fixture("ftbquests/quests"), out);
+        out.writeTo(tmp);
+        Path stale = tmp.resolve("data/test/progression/chapters/deleted_in_ftb.json");
+        Files.writeString(stale, "{}");
+        out.writeTo(tmp);
+        assertTrue(Files.notExists(stale));
+        assertTrue(out.settings != null && out.settings.has("version"));
+    }
+
     /** Writes both fixtures as one data pack under build/ for the in-game check (copied into the dev world by hand). */
     @Test
     void writesFixturePack() throws Exception {
@@ -69,7 +81,7 @@ class ImporterTest {
         PuffishImporter.convert("ftb/mining", files, out);
         Path dir = Path.of("build/fixture-pack");
         out.writeTo(dir);
-        assertTrue(Files.exists(dir.resolve("data/fixture/progression/chapters/skill_mining.json")));
+        assertTrue(Files.exists(dir.resolve("data/fixture/progression/chapters/skill_ftb_mining.json")));
     }
 
     @Test
@@ -82,7 +94,7 @@ class ImporterTest {
         }
         ImportOutput out = new ImportOutput("test");
         PuffishImporter.convert("ftb/mining", files, out);
-        JsonObject ch = out.chapters.get("skill_mining");
+        JsonObject ch = out.chapters.get("skill_ftb_mining");
         assertEquals(7, ch.getAsJsonObject("nodes").size());
         assertTrue(ch.getAsJsonObject("points").has("per_level"));
         assertEquals(1, out.counts.get("skill_exclusive_pairs"));

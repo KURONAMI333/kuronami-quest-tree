@@ -104,7 +104,8 @@ public final class Snbt {
         while (true) {
             char c = s.charAt(i);
             if (c == '\\') {
-                b.append(s.charAt(i + 1));
+                char e = s.charAt(i + 1);
+                b.append(e == 'n' ? '\n' : e == 't' ? '\t' : e);
                 i += 2;
                 continue;
             }
@@ -153,7 +154,9 @@ public final class Snbt {
             // not an integer
         }
         try {
-            return new JsonPrimitive(Double.parseDouble(t));
+            double d = Double.parseDouble(t);
+            // Gson refuses NaN/Infinity; keep such bare words as text
+            return Double.isFinite(d) ? new JsonPrimitive(d) : new JsonPrimitive(tok);
         } catch (NumberFormatException ignored) {
             // not a number
         }
