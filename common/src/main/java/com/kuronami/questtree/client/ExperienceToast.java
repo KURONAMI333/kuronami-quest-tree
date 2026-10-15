@@ -70,7 +70,7 @@ final class ExperienceToast implements Toast {
         }
         shown += (target - shown) * 0.25;
         g.blitSprite(BACKGROUND, 0, 0, width(), height());
-        Tiles.tile(g, "square", 6, 6, 20, levelled ? ProgressRules.State.CLAIM : ProgressRules.State.PROGRESS, shown,
+        Tiles.tile(g, "square", 6, 6, 20, levelled ? Tiles.Look.AFFORDABLE : Tiles.Look.PROGRESS, shown,
                 chapter.displayIcon(), false);
         var font = toasts.getMinecraft().font;
         Component top = levelled ? Component.translatable("toast.kuronami_quest_tree.level", level) : chapter.title;

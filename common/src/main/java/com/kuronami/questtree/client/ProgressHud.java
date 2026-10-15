@@ -149,12 +149,12 @@ public final class ProgressHud {
         int y = g.guiHeight() / 2 - total / 2;
         for (ClientModel.Node n : rows) {
             State s = ClientProgress.state(n.key);
-            Tiles.tile(g, n.shape, 4, y, 18, s, ClientProgress.fraction(n.key), n.icon, false);
+            Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), n.icon, false);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
             g.drawString(font, font.plainSubstrByWidth(n.title.getString(), 110), 26, y + 1, 0xFFFFFF, true);
             String line = progressLine(n);
-            g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.YELLOW : 0xFFE0E0E0, true);
+            g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.GOLD : 0xFFE0E0E0, true);
             g.pose().popPose();
             y += 22;
             // the items still needed, with what is in the inventory now (Satisfactory's to-do list, kept per quest)

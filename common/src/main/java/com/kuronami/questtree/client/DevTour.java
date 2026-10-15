@@ -122,7 +122,8 @@ final class DevTour {
         });
         at(t + 380, ProgressHud::toggleTracker);
         shot(t + 400, "10_tracker");
-        at(t + 410, () -> Constants.LOG.info("Dev tour finished"));
+        int pt = t + 420;
+        at(pt + 5, () -> Constants.LOG.info("Dev tour finished"));
     }
 
     private static ClientModel.Node openItemQuest() {

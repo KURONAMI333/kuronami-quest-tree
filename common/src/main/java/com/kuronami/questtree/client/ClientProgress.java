@@ -132,6 +132,34 @@ public final class ClientProgress {
         return c != null && c.alwaysHidden;
     }
 
+    /**
+     * How a node's tile looks. A quest's "claim" is done with a reward waiting (green + gold); a skill's is "can unlock"
+     * (white). Locked nodes carry a lock only when they are the next step (every requirement started or done).
+     */
+    static Tiles.Look look(String key) {
+        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        ProgressRules.State s = state(key);
+        boolean skill = n != null && n.chapter.isSkills() && n.tasks.isEmpty();
+        return switch (s) {
+            case DONE -> Tiles.Look.DONE;
+            case CLAIM -> skill ? Tiles.Look.AFFORDABLE : Tiles.Look.DONE_REWARD;
+            case PROGRESS -> Tiles.Look.PROGRESS;
+            case OPEN -> Tiles.Look.OPEN;
+            case EXCLUDED -> Tiles.Look.EXCLUDED;
+            case LOCKED -> {
+                if (n == null) {
+                    yield Tiles.Look.LOCKED_NEAR;
+                }
+                for (String r : n.requires) {
+                    if (state(r) == ProgressRules.State.LOCKED || state(r) == ProgressRules.State.EXCLUDED) {
+                        yield Tiles.Look.LOCKED_FAR;
+                    }
+                }
+                yield Tiles.Look.LOCKED_NEAR;
+            }
+        };
+    }
+
     public static double fraction(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
         return n == null ? 0 : rules.fraction(progress, n);

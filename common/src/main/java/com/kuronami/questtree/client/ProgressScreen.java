@@ -468,7 +468,7 @@ public class ProgressScreen extends Screen {
         g.pose().translate(0, 0, OVERLAY_Z);
         if (railT <= 0.6f && badge > 0) {
             // closed rail: a dot on the icon's corner
-            g.fill(25, y + 1, 31, y + 7, Tiles.YELLOW);
+            g.fill(25, y + 1, 31, y + 7, Tiles.GOLD);
         }
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
@@ -477,7 +477,7 @@ public class ProgressScreen extends Screen {
                 String b = String.valueOf(badge);
                 rightW = font.width(b) + 6;
                 int bx = w - rightW;
-                g.fill(bx, y + 5, bx + rightW, y + 15, Tiles.YELLOW);
+                g.fill(bx, y + 5, bx + rightW, y + 15, Tiles.GOLD);
                 g.drawString(font, b, bx + 3, y + 6, Tiles.INK, false);
             } else if (right != null && right.isEmpty()) {
                 rightW = 8;
@@ -521,7 +521,7 @@ public class ProgressScreen extends Screen {
         if (claimableNoChoice > 0) {
             Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
             int bw = font.width(ca) + 16;
-            button(g, ca, nowRight() - bw, 10, bw, true, true, mouseX, mouseY, () -> {
+            button(g, ca, nowRight() - bw, 10, bw, Tiles.GOLD, true, mouseX, mouseY, () -> {
                 ClientProgress.send("claim_all", "", -1);
                 long start = Util.getMillis();
                 int i = 0;
@@ -558,14 +558,14 @@ public class ProgressScreen extends Screen {
                 g.renderOutline(x - 3, y - 3, NOW_TILE + 6, NOW_TILE + 6, 0xFFFFFFFF);
             }
             if (e.pointsChapter != null) {
-                Tiles.tile(g, "square", x, y, NOW_TILE, State.CLAIM, 1, e.pointsChapter.displayIcon(), false);
+                Tiles.tile(g, "square", x, y, NOW_TILE, Tiles.Look.AFFORDABLE, 1, e.pointsChapter.displayIcon(), false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 String pts = String.valueOf(ClientProgress.points(e.key));
-                g.drawString(font, pts, x + NOW_TILE - 3 - font.width(pts), y + NOW_TILE - 12, Tiles.INK, false);
+                g.drawString(font, pts, x + NOW_TILE - 4 - font.width(pts), y + NOW_TILE - 12, Tiles.GOLD, true);
                 g.pose().popPose();
             } else {
-                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.state(e.key), Motion.fill(e.key, ClientProgress.fraction(e.key)), e.node.icon, false);
+                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.look(e.key), Motion.fill(e.key, ClientProgress.fraction(e.key)), e.node.icon, false);
                 if (Pins.has(e.key)) {
                     g.pose().pushPose();
                     g.pose().translate(0, 0, OVERLAY_Z);
@@ -709,13 +709,16 @@ public class ProgressScreen extends Screen {
     }
 
     private static int lineColor(State parent, State child) {
-        if (parent == State.DONE && (child == State.DONE || child == State.CLAIM)) {
-            return 0xCC7BC862;
+        boolean parentDone = parent == State.DONE || parent == State.CLAIM;
+        if (parentDone && (child == State.DONE || child == State.CLAIM)) {
+            // the way already walked
+            return 0xB05E9E4A;
         }
-        if (parent == State.DONE && child != State.EXCLUDED) {
-            return 0x52FFFFFF;
+        if (parentDone && child != State.EXCLUDED && child != State.LOCKED) {
+            // the way open now
+            return 0x80E8E8E8;
         }
-        return 0x17FFFFFF;
+        return 0x26FFFFFF;
     }
 
     private void renderChapter(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
@@ -764,7 +767,7 @@ public class ProgressScreen extends Screen {
                     float reach = Math.min(1, ms / (float) Motion.LINE_GROW);
                     float fade = ms < Motion.LINE_GROW ? 1 : 1 - (ms - Motion.LINE_GROW) / 400f;
                     line(g, p.x * UNIT, p.y * UNIT, p.x * UNIT + (n.x - p.x) * UNIT * reach, p.y * UNIT + (n.y - p.y) * UNIT * reach,
-                            3, Tiles.withAlpha(0xFFF2C230, fade));
+                            3, Tiles.withAlpha(0xFFFFFFFF, fade));
                 }
             }
         }
@@ -786,14 +789,14 @@ public class ProgressScreen extends Screen {
                 // optional quests: a broken outline, so they read as "extra" next to the required path
                 dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
             }
-            Tiles.tile(g, shape, x, y, s, ClientProgress.state(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), n.icon, far);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), n.icon, far);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
             if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
                 // the unfinished requirements on the way to the selected node
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z + 15);
-                dashedOutline(g, x - 3, y - 3, s + 6, s + 6, 0xCCF2C230);
+                dashedOutline(g, x - 3, y - 3, s + 6, s + 6, 0xCCFFFFFF);
                 g.pose().popPose();
             }
             if (searching() && !matchSet.contains(n.key)) {
@@ -819,7 +822,7 @@ public class ProgressScreen extends Screen {
             int x = (int) Math.round(l.x * UNIT) - s / 2;
             int y = (int) Math.round(l.y * UNIT) - s / 2;
             String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
-            Tiles.tile(g, shape, x, y, s, ClientProgress.state(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), target.icon, far);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), target.icon, far);
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -889,7 +892,7 @@ public class ProgressScreen extends Screen {
         int pts = ClientProgress.points(ch.id);
         if (pts > 0) {
             Component t = Component.translatable("screen.kuronami_quest_tree.points", pts);
-            g.drawString(font, t, bx + 68, y, Tiles.YELLOW, true);
+            g.drawString(font, t, bx + 68, y, Tiles.GOLD, true);
         }
     }
 
@@ -975,7 +978,7 @@ public class ProgressScreen extends Screen {
                     y += 20;
                     continue;
                 }
-                Tiles.tile(g, p.shape, x, y, 16, ClientProgress.state(p.key), ClientProgress.fraction(p.key), p.icon, false);
+                Tiles.tile(g, p.shape, x, y, 16, ClientProgress.look(p.key), ClientProgress.fraction(p.key), p.icon, false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 ClientModel.Chapter other = m.chapterOf.get(r);
@@ -1022,7 +1025,7 @@ public class ProgressScreen extends Screen {
                     Component label = Component.translatable(t.type.equals("checkmark") ? "screen.kuronami_quest_tree.check" : "screen.kuronami_quest_tree.submit");
                     int bw = font.width(label) + 10;
                     int index = i;
-                    button(g, label, right - bw, y + 1, bw, false, true, mouseX, mouseY, () -> {
+                    button(g, label, right - bw, y + 1, bw, 0, true, mouseX, mouseY, () -> {
                         ClientProgress.send(t.type.equals("checkmark") ? "check" : "submit", n.key, index);
                         ProgressFeedback.click();
                     });
@@ -1101,7 +1104,7 @@ public class ProgressScreen extends Screen {
                 Component take = n.cost > 0 ? Component.translatable("screen.kuronami_quest_tree.unlock_cost", n.cost)
                         : Component.translatable("screen.kuronami_quest_tree.unlock");
                 int bw = font.width(take) + 16;
-                button(g, take, bx, y, bw, true, true, mouseX, mouseY, () -> {
+                button(g, take, bx, y, bw, Tiles.WHITE, true, mouseX, mouseY, () -> {
                     ClientProgress.send("take", n.key, 0);
                     flashes.put(n.key, Util.getMillis());
                 });
@@ -1114,7 +1117,7 @@ public class ProgressScreen extends Screen {
                     int bw = font.width(all) + 16;
                     boolean afford = points >= p.batchCost();
                     List<String> batch = p.nodes().subList(0, p.batchable());
-                    button(g, all, bx, y, bw, true, afford, mouseX, mouseY, () -> {
+                    button(g, all, bx, y, bw, Tiles.WHITE, afford, mouseX, mouseY, () -> {
                         long t = Util.getMillis();
                         int i = 0;
                         for (String k : batch) {
@@ -1136,7 +1139,7 @@ public class ProgressScreen extends Screen {
             boolean ready = n.choice.isEmpty() || choicePick >= 0;
             Component claim = Component.translatable("screen.kuronami_quest_tree.claim");
             int bw = font.width(claim) + 16;
-            button(g, claim, bx, y, bw, true, ready, mouseX, mouseY, () -> {
+            button(g, claim, bx, y, bw, Tiles.GOLD, ready, mouseX, mouseY, () -> {
                 ClientProgress.send("claim", n.key, n.choice.isEmpty() ? -1 : choicePick);
                 flashes.put(n.key, Util.getMillis());
                 choicePick = -1;
@@ -1146,7 +1149,7 @@ public class ProgressScreen extends Screen {
         if (state != State.DONE && state != State.EXCLUDED) {
             Component pin = Component.translatable(Pins.has(n.key) ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
             int bw = font.width(pin) + 16;
-            button(g, pin, bx, y, bw, false, true, mouseX, mouseY, () -> {
+            button(g, pin, bx, y, bw, 0, true, mouseX, mouseY, () -> {
                 Pins.toggle(n.key);
                 ProgressFeedback.click();
                 cachedFor = null;
@@ -1164,13 +1167,17 @@ public class ProgressScreen extends Screen {
     }
 
     /** Flat button: yellow with dark text for the one action that matters, dark with white text otherwise. */
-    private void button(GuiGraphics g, Component label, int x, int y, int w, boolean primary, boolean enabled, int mouseX, int mouseY, Runnable run) {
+    /**
+     * Flat button. {@code accent}: gold for taking a reward (claim), white for spending (unlock), 0 for the quiet ones.
+     */
+    private void button(GuiGraphics g, Component label, int x, int y, int w, int accent, boolean enabled, int mouseX, int mouseY, Runnable run) {
         int h = 20;
+        boolean primary = accent != 0;
         boolean hover = enabled && mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
-        int bg = !enabled ? 0x66000000 : primary ? (hover ? 0xFFFFD24A : Tiles.YELLOW) : (hover ? 0xCC323236 : 0x99000000);
+        int bg = !enabled ? 0x66000000 : primary ? (hover ? lerpColor(accent, 0xFFFFFFFF, 0.25f) : accent) : (hover ? 0xCC323236 : 0x99000000);
         g.fill(x, y, x + w, y + h, bg);
         if (primary && enabled) {
-            g.fill(x, y + h - 2, x + w, y + h, Tiles.YELLOW_DARK);
+            g.fill(x, y + h - 2, x + w, y + h, lerpColor(accent, 0xFF000000, 0.3f));
         }
         int color = !enabled ? 0xFF6A6A6A : primary ? Tiles.INK : 0xFFFFFFFF;
         g.drawString(font, label, x + (w - font.width(label)) / 2, y + 6, color, primary ? false : true);
@@ -1316,7 +1323,7 @@ public class ProgressScreen extends Screen {
     private static int minimapColor(State s) {
         return switch (s) {
             case DONE -> Tiles.GREEN;
-            case CLAIM -> Tiles.YELLOW;
+            case CLAIM -> Tiles.GOLD;
             case OPEN, PROGRESS -> 0xFF9A9A9A;
             default -> 0xFF4A4A4C;
         };
