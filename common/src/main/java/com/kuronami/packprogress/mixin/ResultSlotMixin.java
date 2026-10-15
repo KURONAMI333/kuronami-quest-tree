@@ -20,9 +20,13 @@ public abstract class ResultSlotMixin {
     @Final
     private Player player;
 
+    @Shadow
+    private int removeCount;
+
     @Inject(method = "checkTakeAchievements", at = @At("HEAD"))
     private void packProgress$crafted(ItemStack stack, CallbackInfo ci) {
-        if (player instanceof ServerPlayer sp && !stack.isEmpty()) {
+        // vanilla skips the second call of a partial shift-click (removeCount already 0); so do we, or it counts twice
+        if (removeCount > 0 && player instanceof ServerPlayer sp && !stack.isEmpty()) {
             SkillExperience.onCraft(sp, stack.copy());
         }
     }

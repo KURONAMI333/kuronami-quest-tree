@@ -153,12 +153,18 @@ public final class PackProgressGameTests {
         ServerPlayer p = player(helper);
         PlayerProgress pr = ProgressService.progress(p);
         String c = "pack_progress_gametest:crafts";
+        var result = new net.minecraft.world.inventory.ResultContainer();
         var craft = new net.minecraft.world.inventory.ResultSlot(p, new net.minecraft.world.inventory.TransientCraftingContainer(p.inventoryMenu, 2, 2),
-                new net.minecraft.world.inventory.ResultContainer(), 0, 0, 0);
-        craft.onTake(p, new ItemStack(Items.STICK, 4));
+                result, 0, 0, 0);
+        result.setItem(0, new ItemStack(Items.STICK, 4));
+        craft.onTake(p, craft.remove(4));
+        // the second call of a partial shift-click comes with removeCount already 0 and must not count again
+        craft.onTake(p, new ItemStack(Items.STICK, 2));
         helper.assertTrue(pr.xp.getOrDefault(c, 0.0) == 1, "craft gave " + pr.xp.get(c));
-        var furnace = new net.minecraft.world.inventory.FurnaceResultSlot(p, new net.minecraft.world.SimpleContainer(3), 2, 0, 0);
-        furnace.onTake(p, new ItemStack(Items.IRON_INGOT));
+        var furnaceInv = new net.minecraft.world.SimpleContainer(3);
+        var furnace = new net.minecraft.world.inventory.FurnaceResultSlot(p, furnaceInv, 2, 0, 0);
+        furnaceInv.setItem(2, new ItemStack(Items.IRON_INGOT));
+        furnace.onTake(p, furnace.remove(1));
         helper.assertTrue(pr.xp.getOrDefault(c, 0.0) == 21, "smelt: " + pr.xp.get(c));
         ItemStack bread = new ItemStack(Items.BREAD);
         p.eat(p.level(), bread, bread.get(net.minecraft.core.component.DataComponents.FOOD));
@@ -169,6 +175,66 @@ public final class PackProgressGameTests {
         hook.discard();
         helper.assertTrue(pr.level.getOrDefault(c, 0) == 1 && pr.xp.getOrDefault(c, 0.0) == 521, "fish should level up: level "
                 + pr.level.get(c) + " xp " + pr.xp.get(c));
+        helper.succeed();
+    }
+
+    private static void levels(ServerPlayer p, int n) {
+        for (int i = 0; i < n * 2; i++) {
+            CommonClass.onBlockBroken(p, Blocks.OAK_LOG.defaultBlockState());
+        }
+    }
+
+    /** Ranked skills: a partly ranked node stays open (not done) and keeps earning; ranks stack; respawn restores modifiers. */
+    @GameTest(template = "empty3x3x3")
+    public static void ranksAndRespawn(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        levels(p, 1);
+        double armor = p.getAttributeValue(Attributes.ARMOR);
+        act(p, "take", S + "/ranked", 0);
+        helper.assertTrue(pr.taken.getOrDefault(S + "/ranked", 0) == 1, "first rank not taken");
+        helper.assertTrue(ProgressService.rules().state(pr, ProgressService.rules().model().nodes.get(S + "/ranked"))
+                == com.kuronami.packprogress.progress.ProgressRules.State.OPEN, "partly ranked node without points should be OPEN");
+        levels(p, 1);
+        act(p, "take", S + "/ranked", 0);
+        helper.assertTrue(pr.taken.getOrDefault(S + "/ranked", 0) == 2, "second rank not taken");
+        helper.assertTrue(p.getAttributeValue(Attributes.ARMOR) == armor + 3, "ranks should stack to +3 armor, got "
+                + (p.getAttributeValue(Attributes.ARMOR) - armor));
+        // respawn copies only base values: simulate by removing our modifiers, then the respawn hook puts them back
+        var inst = p.getAttribute(Attributes.ARMOR);
+        inst.getModifiers().stream().map(m -> m.id()).toList().forEach(inst::removeModifier);
+        helper.assertTrue(p.getAttributeValue(Attributes.ARMOR) == armor, "modifiers not removed");
+        CommonClass.onRespawn(p);
+        helper.assertTrue(p.getAttributeValue(Attributes.ARMOR) == armor + 3, "respawn did not restore skill modifiers");
+        helper.succeed();
+    }
+
+    /** A node with tasks inside a skill chapter is claimed like a quest; "take" on it does nothing (no repeated rewards). */
+    @GameTest(template = "empty3x3x3")
+    public static void questInSkillChapter(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        act(p, "check", S + "/quest_in_skill", 0);
+        int xp = p.totalExperience;
+        act(p, "take", S + "/quest_in_skill", 0);
+        act(p, "take", S + "/quest_in_skill", 0);
+        helper.assertTrue(p.totalExperience == xp && !pr.taken.containsKey(S + "/quest_in_skill"), "take worked on a node with tasks");
+        act(p, "claim", S + "/quest_in_skill", -1);
+        act(p, "claim", S + "/quest_in_skill", -1);
+        helper.assertTrue(p.totalExperience == xp + 7, "claim should give 7 xp once");
+        helper.succeed();
+    }
+
+    /** An out-of-range choice keeps the quest claimable instead of swallowing the reward. */
+    @GameTest(template = "empty3x3x3")
+    public static void badChoiceIndex(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        act(p, "check", Q + "pick", 0);
+        act(p, "claim", Q + "pick", 7);
+        helper.assertTrue(!pr.claimed.contains(Q + "pick"), "claimed with an invalid choice");
+        act(p, "claim", Q + "pick", 0);
+        helper.assertTrue(count(p, Items.EMERALD) == 1, "valid choice after an invalid one failed");
         helper.succeed();
     }
 }

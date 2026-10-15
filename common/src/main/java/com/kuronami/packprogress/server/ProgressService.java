@@ -48,12 +48,13 @@ public final class ProgressService {
     private static ProgressModel rulesFor;
     /** Events collected during a tick, sent with the next progress packet. */
     private static final Map<UUID, List<String>> PENDING = new HashMap<>();
+    /** true = send this tick; false = only experience changed, sent at most every 10 ticks (mining gives XP per block). */
     private static final Map<UUID, Boolean> DIRTY = new HashMap<>();
 
     private ProgressService() {
     }
 
-    static ProgressRules rules() {
+    public static ProgressRules rules() {
         ProgressModel m = ProgressData.model();
         if (m != rulesFor) {
             rulesFor = m;
@@ -70,9 +71,15 @@ public final class ProgressService {
 
     /** Join or data reload: re-check everything and send the full state. */
     public static void onJoin(ServerPlayer player) {
+        Rewards.reapplyAttributes(player, progress(player));
         recheck(player, progress(player));
         markDirty(player);
         flush(player);
+    }
+
+    /** Respawning copies only base attribute values, so skill and quest attribute modifiers are put back. */
+    public static void onRespawn(ServerPlayer player) {
+        Rewards.reapplyAttributes(player, progress(player));
     }
 
     public static void onPlayerTick(ServerPlayer player) {
@@ -242,8 +249,9 @@ public final class ProgressService {
             String spec = itemSpec(t);
             long taken = 0;
             var inv = player.getInventory();
-            for (int s = 0; s < inv.getContainerSize() && taken < missing; s++) {
-                ItemStack st = inv.getItem(s);
+            // main inventory and hotbar only: never take worn armour or the offhand item
+            for (int s = 0; s < inv.items.size() && taken < missing; s++) {
+                ItemStack st = inv.items.get(s);
                 if (!st.isEmpty() && itemMatches(spec, st)) {
                     int n2 = (int) Math.min(st.getCount(), missing - taken);
                     st.shrink(n2);
@@ -256,7 +264,8 @@ public final class ProgressService {
             }
         } else if (type(t).equals("xp")) {
             boolean points = ProgressModel.boolOf(t, "points");
-            long take = points ? Math.min(missing, player.totalExperience) : Math.min(missing, player.experienceLevel);
+            // totalExperience is a running counter (not reduced by enchanting), so count the points the player has now
+            long take = points ? Math.min(missing, currentPoints(player)) : Math.min(missing, player.experienceLevel);
             if (take > 0) {
                 if (points) {
                     player.giveExperiencePoints((int) -take);
@@ -267,6 +276,14 @@ public final class ProgressService {
                 event(player, p, "submit", n.key);
             }
         }
+    }
+
+    private static long currentPoints(ServerPlayer player) {
+        long sum = 0;
+        for (int lv = 0; lv < player.experienceLevel; lv++) {
+            sum += lv >= 30 ? 112 + (lv - 30) * 9 : lv >= 15 ? 37 + (lv - 15) * 5 : 7 + lv * 2;
+        }
+        return sum + (long) (player.experienceProgress * player.getXpNeededForNextLevel());
     }
 
     private static void bump(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int i, long value) {
@@ -322,7 +339,7 @@ public final class ProgressService {
         }
         // a choice table needs the player to pick first; claiming without a pick leaves the node claimable
         for (JsonObject rw : n.rewards) {
-            if (type(rw).equals("table") && "choice".equals(str(rw, "mode")) && choice < 0) {
+            if (type(rw).equals("table") && "choice".equals(str(rw, "mode")) && (choice < 0 || choice >= Rewards.tableSize(rw))) {
                 return;
             }
         }
@@ -342,6 +359,7 @@ public final class ProgressService {
 
     static void event(ServerPlayer player, PlayerProgress p, String kind, String node) {
         p.event(kind, node, System.currentTimeMillis());
+        ProgressStore.get(player.server).setDirty();
         PENDING.computeIfAbsent(player.getUUID(), k -> new ArrayList<>()).add(kind + "|" + node);
         markDirty(player);
     }
@@ -350,18 +368,29 @@ public final class ProgressService {
         DIRTY.put(player.getUUID(), true);
     }
 
+    static void markExperienceDirty(ServerPlayer player) {
+        DIRTY.putIfAbsent(player.getUUID(), false);
+    }
+
     /** Sends the player's progress if anything changed since the last send. */
     public static void flush(ServerPlayer player) {
-        if (DIRTY.remove(player.getUUID()) == null) {
+        Boolean urgent = DIRTY.get(player.getUUID());
+        if (urgent == null || (!urgent && player.server.getTickCount() % 10 != 0)) {
             return;
         }
+        DIRTY.remove(player.getUUID());
         List<String> events = PENDING.remove(player.getUUID());
         if (events == null) {
             events = List.of();
         } else if (events.size() > 64) {
             events = events.subList(events.size() - 64, events.size());
         }
-        Services.PLATFORM.sendToPlayer(player, new ProgressPayload(ProgressJson.write(progress(player)).toString(), List.copyOf(events)));
+        ProgressPayload payload = ProgressPayload.of(ProgressJson.write(progress(player)).toString(), List.copyOf(events));
+        if (payload.data().length > ProgressPayload.MAX) {
+            Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)", player.getGameProfile().getName(), payload.data().length);
+            return;
+        }
+        Services.PLATFORM.sendToPlayer(player, payload);
     }
 
     public static void onLogout(ServerPlayer player) {

@@ -30,6 +30,9 @@ public final class ProgressHud {
     private static long noticeNeed;
     private static long noticeAt;
     private static boolean tracker;
+    /** Closest unfinished quests, recomputed only when new progress arrives (scanning every node per frame is too slow). */
+    private static final List<ClientModel.Node> CLOSEST = new ArrayList<>();
+    private static Object closestFor;
 
     private ProgressHud() {
     }
@@ -56,6 +59,8 @@ public final class ProgressHud {
 
     static void clear() {
         noticeTask = null;
+        CLOSEST.clear();
+        closestFor = null;
     }
 
     /** Called by the loader's HUD layer after the vanilla HUD. */
@@ -125,10 +130,15 @@ public final class ProgressHud {
             }
         }
         if (rows.isEmpty()) {
-            m.nodesByKey.values().stream()
-                    .filter(n -> !n.tasks.isEmpty() && ClientProgress.state(n.key) == State.PROGRESS)
-                    .sorted(Comparator.comparingDouble((ClientModel.Node n) -> -ClientProgress.fraction(n.key)))
-                    .limit(3).forEach(rows::add);
+            if (closestFor != ClientProgress.progress()) {
+                closestFor = ClientProgress.progress();
+                CLOSEST.clear();
+                m.nodesByKey.values().stream()
+                        .filter(n -> !n.tasks.isEmpty() && ClientProgress.state(n.key) == State.PROGRESS)
+                        .sorted(Comparator.comparingDouble((ClientModel.Node n) -> -ClientProgress.fraction(n.key)))
+                        .limit(3).forEach(CLOSEST::add);
+            }
+            rows.addAll(CLOSEST);
         }
         int y = g.guiHeight() / 2 - rows.size() * 11;
         for (ClientModel.Node n : rows) {

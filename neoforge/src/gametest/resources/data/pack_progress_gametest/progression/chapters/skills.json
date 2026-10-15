@@ -1,15 +1,131 @@
 {
-  "icon": {"id": "minecraft:oak_log"},
+  "icon": {
+    "id": "minecraft:oak_log"
+  },
   "points": {
-    "per_level": {"type": "expression", "data": {"expression": "10"}},
-    "sources": [{"type": "puffish_skills:mine_block", "data": {
-      "variables": {"is_log": {"operations": [{"type": "get_mined_block_state"}, {"type": "puffish_skills:test", "data": {"block": "#minecraft:logs"}}]},
-                    "is_ripe": {"operations": [{"type": "get_mined_block_state"}, {"type": "puffish_skills:test", "data": {"block": "minecraft:wheat", "state": {"age": "7"}}}]}},
-      "experience": [{"condition": "is_log", "expression": "5"}, {"condition": "is_ripe", "expression": "10"}]}}]
+    "per_level": {
+      "type": "expression",
+      "data": {
+        "expression": "10"
+      }
+    },
+    "sources": [
+      {
+        "type": "puffish_skills:mine_block",
+        "data": {
+          "variables": {
+            "is_log": {
+              "operations": [
+                {
+                  "type": "get_mined_block_state"
+                },
+                {
+                  "type": "puffish_skills:test",
+                  "data": {
+                    "block": "#minecraft:logs"
+                  }
+                }
+              ]
+            },
+            "is_ripe": {
+              "operations": [
+                {
+                  "type": "get_mined_block_state"
+                },
+                {
+                  "type": "puffish_skills:test",
+                  "data": {
+                    "block": "minecraft:wheat",
+                    "state": {
+                      "age": "7"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "experience": [
+            {
+              "condition": "is_log",
+              "expression": "5"
+            },
+            {
+              "condition": "is_ripe",
+              "expression": "10"
+            }
+          ]
+        }
+      }
+    ]
   },
   "nodes": {
-    "root": {"x": 0, "y": 0, "root": true, "cost": 1,
-             "rewards": [{"type": "attribute", "attribute": "minecraft:generic.max_health", "value": 2, "operation": "addition"}]},
-    "next": {"x": 1, "y": 0, "cost": 1, "requires": {"nodes": ["root"]}}
+    "root": {
+      "x": 0,
+      "y": 0,
+      "root": true,
+      "cost": 1,
+      "rewards": [
+        {
+          "type": "attribute",
+          "attribute": "minecraft:generic.max_health",
+          "value": 2,
+          "operation": "addition"
+        }
+      ]
+    },
+    "next": {
+      "x": 1,
+      "y": 0,
+      "cost": 1,
+      "requires": {
+        "nodes": [
+          "root"
+        ]
+      }
+    },
+    "ranked": {
+      "x": 0,
+      "y": 1,
+      "root": true,
+      "cost": 1,
+      "ranks": [
+        {
+          "rewards": [
+            {
+              "type": "attribute",
+              "attribute": "minecraft:generic.armor",
+              "value": 1,
+              "operation": "addition"
+            }
+          ]
+        },
+        {
+          "rewards": [
+            {
+              "type": "attribute",
+              "attribute": "minecraft:generic.armor",
+              "value": 2,
+              "operation": "addition"
+            }
+          ]
+        }
+      ]
+    },
+    "quest_in_skill": {
+      "x": 1,
+      "y": 1,
+      "root": true,
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "xp",
+          "amount": 7
+        }
+      ]
+    }
   }
 }

@@ -129,7 +129,7 @@ public final class SkillExperience {
                 }
                 int levels = rules.addExperience(p, c, total);
                 ProgressStore.get(player.server).setDirty();
-                ProgressService.markDirty(player);
+                ProgressService.markExperienceDirty(player);
                 if (levels > 0) {
                     ProgressService.event(player, p, "level", c.id + "/");
                 }

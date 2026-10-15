@@ -53,6 +53,7 @@ public class PackProgress implements ModInitializer {
                 CommonClass.onBlockBroken(sp, state);
             }
         });
+        net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> CommonClass.onRespawn(newPlayer));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> CommonClass.onLogout(handler.player));
     }
 }

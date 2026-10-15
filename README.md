@@ -3,7 +3,7 @@
 Quest books and skill trees in one screen, defined by data packs. Imports existing FTB Quests quest books and Pufferfish's Skills trees with one command.
 
 - Minecraft 1.21.1, NeoForge and Fabric
-- Status: early development. This version shows imported or data-pack chapters; progress tracking and rewards come next.
+- Status: early development. Progress is tracked per player and saved with the world; rewards are claimed on the screen.
 
 ## Commands
 
@@ -29,4 +29,15 @@ The original FTB Quests and Pufferfish's Skills files are only read. Settings th
 | `lang/<locale>.json` | Text shipped with the data (titles, descriptions) |
 | `patches/<id>.json` | Partial changes to a chapter another pack or mod ships (`"target": "<ns>:<chapter>"`) |
 
-Open the screen with **U** (rebindable).
+## Keys
+
+| Key | |
+|---|---|
+| **U** | Open or close the screen |
+| **Y** | Show or hide pinned quests at the side of the game screen |
+
+Both can be rebound in Controls.
+
+## Experience sources
+
+Skill chapters take Pufferfish's Skills experience sources as they are (`variables` with `operations`, `experience` as an expression or a list of `condition`/`expression` cases). Supported now: `mine_block`, `kill_entity`, `craft_item`, `smelt_item`, `eat_food`, `fish_item`. An operation the mod does not know gives no experience and is logged once.

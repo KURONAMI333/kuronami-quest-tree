@@ -45,7 +45,8 @@ public final class ProgressRules {
             if (availablePoints(p, n.chapter) >= Math.max(0, n.cost)) {
                 return State.CLAIM;
             }
-            return got > 0 ? State.DONE : State.OPEN;
+            // partly ranked nodes are not finished: they still need points (and nothingLeft must not stop experience)
+            return State.OPEN;
         }
         if (p.completed.contains(n.key)) {
             return !n.rewards.isEmpty() && !p.claimed.contains(n.key) ? State.CLAIM : State.DONE;
@@ -194,7 +195,8 @@ public final class ProgressRules {
         int gained = 0;
         while (lvl < limit) {
             double need = experienceForLevel(c, lvl);
-            if (x < need) {
+            // a curve that is not a finite number (pack data error) stops levelling instead of looping forever
+            if (!Double.isFinite(need) || x < need) {
                 break;
             }
             x -= need;
@@ -222,7 +224,8 @@ public final class ProgressRules {
 
     /** Spends points on a skill node if allowed. Returns true if it was taken. */
     public boolean take(PlayerProgress p, ProgressModel.Node n) {
-        if (state(p, n) != State.CLAIM || !n.chapter.isSkills()) {
+        // skill nodes with tasks are quests inside a skill chapter: they are claimed, not taken
+        if (state(p, n) != State.CLAIM || !n.chapter.isSkills() || !n.tasks.isEmpty()) {
             return false;
         }
         p.spent.merge(n.chapter.id, Math.max(0, n.cost), Integer::sum);

@@ -76,7 +76,7 @@ public final class ClientProgress {
     public static void onProgress(ProgressPayload p) {
         PlayerProgress next;
         try {
-            next = ProgressJson.read(JsonParser.parseString(p.progressJson()).getAsJsonObject());
+            next = ProgressJson.read(JsonParser.parseString(p.json()).getAsJsonObject());
         } catch (RuntimeException ex) {
             Constants.LOG.error("Could not read progress from server", ex);
             return;

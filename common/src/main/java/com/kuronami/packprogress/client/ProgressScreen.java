@@ -41,6 +41,7 @@ public class ProgressScreen extends Screen {
     private static final int RAIL_OPEN = 150;
     private static final int BTN = 20;
     private static final int NOW_TILE = 40;
+    private static final int DOCK_MIN_WIDTH = 560;
     private static final float FAR = 0.6f;   // below this zoom, nodes are drawn as state-coloured shapes without icons
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
     private static final String[] NOW_ICON = {"##.#####", "##......", "........", "##.#####", "##......", "........", "##.####."};
@@ -204,7 +205,8 @@ public class ProgressScreen extends Screen {
         }
         refresh(m);
         ClientModel.Chapter ch = chapter();
-        boolean docked = ch == null;
+        // the chapter list stays open on Now, except on small screens (GUI scale 4 on 1080p is 480 wide) where the tiles need the room
+        boolean docked = ch == null && width >= DOCK_MIN_WIDTH;
         boolean overRail = mouseX < (railT > 0.5f ? RAIL_OPEN : RAIL) + 8;
         railT = docked ? 1 : Mth.clamp(railT + (overRail ? 0.25f : -0.25f), 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? 0.3f : -0.35f), 0, 1);
@@ -316,7 +318,7 @@ public class ProgressScreen extends Screen {
     // ------------------------------------------------------------------ Now
 
     private int nowLeft() {
-        return RAIL_OPEN + 20;
+        return (width >= DOCK_MIN_WIDTH ? RAIL_OPEN : RAIL) + 20;
     }
 
     private int nowRight() {
@@ -801,7 +803,7 @@ public class ProgressScreen extends Screen {
 
     private void renderActions(GuiGraphics g, ClientModel.Node n, ClientModel.Chapter ch, State state, int x, int y, int w, int mouseX, int mouseY) {
         int bx = x;
-        if (ch.skills) {
+        if (ch.skills && n.tasks.isEmpty()) {
             if (state == State.CLAIM) {
                 Component take = n.cost > 0 ? Component.translatable("screen.pack_progress.unlock_cost", n.cost)
                         : Component.translatable("screen.pack_progress.unlock");

@@ -39,7 +39,7 @@ public final class Rewards {
                 case "advancement" -> advancement(player, rw);
                 case "stage" -> ServerCommands.run(player, "pack_stages " + (ProgressModel.boolOf(rw, "remove") ? "remove " : "add ")
                         + player.getGameProfile().getName() + " " + ProgressService.str(rw, "stage"), 2, true);
-                case "attribute" -> attribute(player, n.key, 0, rw);
+                case "attribute" -> attribute(player, n.key, slotOf(n, rw), rw);
                 case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
                 case "toast" -> ProgressService.event(player, p, "toast", n.key);
@@ -52,16 +52,7 @@ public final class Rewards {
 
     /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
-        List<JsonObject> list = n.rewards;
-        if (n.ranks > 0 && n.json.has("ranks")) {
-            JsonElement r = n.json.getAsJsonArray("ranks").get(Math.min(rank, n.ranks - 1));
-            list = new ArrayList<>();
-            if (r.isJsonObject() && r.getAsJsonObject().has("rewards")) {
-                for (JsonElement e : r.getAsJsonObject().getAsJsonArray("rewards")) {
-                    list.add(e.getAsJsonObject());
-                }
-            }
-        }
+        List<JsonObject> list = rewardsOfRank(n, rank);
         int i = 0;
         for (JsonObject rw : list) {
             if (ProgressService.type(rw).equals("attribute")) {
@@ -71,6 +62,67 @@ public final class Rewards {
             }
             i++;
         }
+    }
+
+    /** Index of a quest reward, so two attribute rewards of one quest get separate modifiers (1000+ keeps clear of skill ranks). */
+    private static int slotOf(ProgressModel.Node n, JsonObject rw) {
+        for (int i = 0; i < n.rewards.size(); i++) {
+            if (n.rewards.get(i) == rw) {
+                return 1000 + i;
+            }
+        }
+        return 1000;
+    }
+
+    /** Number of entries of the table a table reward points at (0 when missing). */
+    static int tableSize(JsonObject rw) {
+        JsonObject table = ProgressService.rules().model().rewardTables.get(ProgressService.str(rw, "table"));
+        return table == null || !table.has("entries") ? 0 : table.getAsJsonArray("entries").size();
+    }
+
+    /**
+     * Puts back every attribute modifier the player earned: taken skills (each rank so far) and claimed quests. Used on
+     * join and respawn, because respawning copies only base values. Fixed modifier ids make repeating it harmless.
+     */
+    static void reapplyAttributes(ServerPlayer player, PlayerProgress p) {
+        var model = ProgressService.rules().model();
+        for (var e : p.taken.entrySet()) {
+            ProgressModel.Node n = model.nodes.get(e.getKey());
+            if (n != null) {
+                for (int rank = 0; rank < e.getValue(); rank++) {
+                    List<JsonObject> list = rewardsOfRank(n, rank);
+                    for (int i = 0; i < list.size(); i++) {
+                        if (ProgressService.type(list.get(i)).equals("attribute")) {
+                            attribute(player, n.key, rank * 100 + i, list.get(i));
+                        }
+                    }
+                }
+            }
+        }
+        for (String key : p.claimed) {
+            ProgressModel.Node n = model.nodes.get(key);
+            if (n != null) {
+                for (JsonObject rw : n.rewards) {
+                    if (ProgressService.type(rw).equals("attribute")) {
+                        attribute(player, n.key, slotOf(n, rw), rw);
+                    }
+                }
+            }
+        }
+    }
+
+    private static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
+        if (n.ranks > 0 && n.json.has("ranks")) {
+            JsonElement r = n.json.getAsJsonArray("ranks").get(Math.min(rank, n.ranks - 1));
+            List<JsonObject> list = new ArrayList<>();
+            if (r.isJsonObject() && r.getAsJsonObject().has("rewards")) {
+                for (JsonElement e : r.getAsJsonObject().getAsJsonArray("rewards")) {
+                    list.add(e.getAsJsonObject());
+                }
+            }
+            return list;
+        }
+        return n.rewards;
     }
 
     private static void item(ServerPlayer player, JsonObject rw) {
