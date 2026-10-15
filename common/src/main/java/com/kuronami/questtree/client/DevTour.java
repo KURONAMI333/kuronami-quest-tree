@@ -129,7 +129,26 @@ final class DevTour {
         });
         at(t + 380, ProgressHud::toggleTracker);
         shot(t + 400, "10_tracker");
+        // how rewards-waiting quests are set apart: each variant on Now and on the map (Tiles.frame, dev only)
         int pt = t + 420;
+        for (int fr = 1; fr <= 3; fr++) {
+            int f = fr;
+            at(pt, () -> {
+                Tiles.frame = f;
+                open(-1);
+            });
+            shot(pt + 15, "frame" + fr + "_now");
+            if (quests != null) {
+                at(pt + 20, () -> open(m.chapters.indexOf(quests)));
+                shot(pt + 35, "frame" + fr + "_map");
+            }
+            pt += 45;
+        }
+        at(pt, () -> {
+            Tiles.frame = 1;
+            Minecraft.getInstance().setScreen(null);
+        });
+        pt += 5;
         at(pt + 5, () -> Constants.LOG.info("Dev tour finished"));
     }
 

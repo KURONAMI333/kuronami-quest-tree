@@ -60,6 +60,19 @@ final class Tiles {
         if (y1 <= y0) {
             return;
         }
+        if (!shape.equals("gear") && !shape.equals("heart")) {
+            // drawn row by row at the size it is shown, mirrored around the centre: scaling a 32px mask to 20 or 40 px
+            // made uneven steps and lopsided hexagons and diamonds
+            for (int r = y0; r < y1; r++) {
+                double ny = (r + 0.5) / h * 2 - 1;
+                double hw = halfWidth(shape, ny);
+                int inset = (int) Math.round(w / 2.0 * (1 - Math.max(0, Math.min(1, hw))));
+                if (w - 2 * inset > 0) {
+                    g.fill(x + inset, y + r, x + w - inset, y + r + 1, argb);
+                }
+            }
+            return;
+        }
         RenderSystem.enableBlend();
         g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
         float v0 = 32f * y0 / h;
@@ -111,6 +124,87 @@ final class Tiles {
         shape(g, shape, x, y, s, s - edge, top);
     }
 
+    /** Half width (0..1) of a shape at height {@code ny} (-1 top .. 1 bottom), for symmetric pixel rows. */
+    private static double halfWidth(String shape, double ny) {
+        double a = Math.abs(ny);
+        return switch (shape) {
+            case "circle" -> Math.sqrt(Math.max(0, 1 - ny * ny));
+            case "diamond" -> 1 - a;
+            // points left and right, flat top and bottom, filling the square like FTB Quests' hexagon
+            case "hexagon" -> 1 - a / 2;
+            case "octagon" -> a > 0.58 ? 1 - (a - 0.58) : 1;
+            case "pentagon" -> ny < -0.24 ? (ny + 1) / 0.76 : 1 - (ny + 0.24) / 1.24 * 0.4;
+            case "rsquare" -> {
+                double rad = 0.35;
+                if (a > 1 - rad) {
+                    double d = a - (1 - rad);
+                    yield 1 - rad + Math.sqrt(Math.max(0, rad * rad - d * d));
+                }
+                yield 1;
+            }
+            default -> 1;
+        };
+    }
+
+    /**
+     * Development only: the frame that marks a quest with rewards waiting, photographed side by side by the dev tour.
+     * All keep the green fill (no bottom shadow under a frame). 1 = rivets, 2 = corner brackets, 3 = double line.
+     */
+    static int frame = 1;
+
+    static final int GREEN_LIGHT = 0xFFA6DA8A;
+
+    /** Left inset of a shape's row (for placing ornaments on its outline). */
+    private static int inset(String shape, int s, int row) {
+        double ny = (row + 0.5) / s * 2 - 1;
+        return (int) Math.round(s / 2.0 * (1 - Math.max(0, Math.min(1, halfWidth(shape, ny)))));
+    }
+
+    private static void rewardFrame(GuiGraphics g, String shape, int x, int y, int s) {
+        int p = Math.max(1, s / 20);
+        switch (frame) {
+            case 2 -> {
+                // corner brackets just outside the tile: an L at each corner of its box, whatever the shape
+                shape(g, shape, x, y, s, s, GREEN);
+                int o = 2 * p;
+                int len = Math.max(3, s / 4);
+                int x0 = x - o;
+                int y0 = y - o;
+                int x1 = x + s + o;
+                int y1 = y + s + o;
+                g.fill(x0, y0, x0 + len, y0 + p, GREEN_LIGHT);
+                g.fill(x0, y0, x0 + p, y0 + len, GREEN_LIGHT);
+                g.fill(x1 - len, y0, x1, y0 + p, GREEN_LIGHT);
+                g.fill(x1 - p, y0, x1, y0 + len, GREEN_LIGHT);
+                g.fill(x0, y1 - p, x0 + len, y1, GREEN_LIGHT);
+                g.fill(x0, y1 - len, x0 + p, y1, GREEN_LIGHT);
+                g.fill(x1 - len, y1 - p, x1, y1, GREEN_LIGHT);
+                g.fill(x1 - p, y1 - len, x1, y1, GREEN_LIGHT);
+            }
+            case 3 -> {
+                // double line: dark outer line, a band of the fill, a light inner line, then the fill
+                shape(g, shape, x, y, s, s, GREEN_DARK);
+                shape(g, shape, x + p, y + p, s - 2 * p, s - 2 * p, GREEN);
+                shape(g, shape, x + 2 * p, y + 2 * p, s - 4 * p, s - 4 * p, GREEN_LIGHT);
+                shape(g, shape, x + 3 * p, y + 3 * p, s - 6 * p, s - 6 * p, GREEN);
+            }
+            default -> {
+                // rivets: dark rim, a light line inside it, and a light rivet where the outline turns at top and bottom
+                int r = 2 * p;
+                shape(g, shape, x, y, s, s, GREEN_DARK);
+                shape(g, shape, x + r, y + r, s - 2 * r, s - 2 * r, GREEN_LIGHT);
+                shape(g, shape, x + r + p, y + r + p, s - 2 * (r + p), s - 2 * (r + p), GREEN);
+                int top = r / 2;
+                int bottom = s - 1 - r / 2 - p;
+                for (int row : new int[]{top, bottom}) {
+                    int in = inset(shape, s, row) + r / 2;
+                    g.fill(x + in, y + row, x + in + p, y + row + p, GREEN_LIGHT);
+                    g.fill(x + s - in - p, y + row, x + s - in, y + row + p, GREEN_LIGHT);
+                }
+            }
+        }
+    }
+
     static void tile(GuiGraphics g, String shape, int x, int y, int s, State state, double fraction, ItemStack icon, boolean far) {
         tile(g, shape, x, y, s, look(state), fraction, icon, far);
     }
@@ -120,9 +214,8 @@ final class Tiles {
         switch (look) {
             // done: green. Rewards still waiting = a raised bright tile, like a button to press; claimed = flat and settled
             case DONE_REWARD -> {
-                int edge = Math.max(2, s / 8);
-                shape(g, shape, x, y, s, s, GREEN_DARK);
-                shape(g, shape, x, y, s, s - edge, GREEN_BRIGHT);
+                int fw = Math.max(2, s / 10);
+                rewardFrame(g, shape, x, y, s);
             }
             case DONE -> shape(g, shape, x, y, s, s, GREEN_SETTLED);
             case AFFORDABLE -> surface(g, shape, x, y, s, WHITE, GREY_DARK);
@@ -142,7 +235,7 @@ final class Tiles {
         if (!icon.isEmpty()) {
             float k = s / 20f;
             g.pose().pushPose();
-            float lift = look == Look.DONE_REWARD ? Math.max(2, s / 8) / 2f
+            float lift = look == Look.DONE_REWARD ? 0
                     : look == Look.OPEN || look == Look.AFFORDABLE || look == Look.PROGRESS ? Math.max(1, s / 16) / 2f : 0;
             g.pose().translate(x + s / 2f - 8 * k, y + s / 2f - 8 * k - lift, 0);
             g.pose().scale(k, k, 1);
