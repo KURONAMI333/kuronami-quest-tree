@@ -3,12 +3,12 @@ modLoader = "javafml"
 loaderVersion = "[4,)"
 license = "All Rights Reserved"
 [[mods]]
-modId = "pack_progress_gametest"
+modId = "kuronami_quest_tree_gametest"
 version = "0.0.0"
-displayName = "Pack Progress GameTests (dev only)"
-description = '''Holds the Pack Progress GameTests. Development only; never shipped.'''
-[[dependencies.pack_progress_gametest]]
-modId = "pack_progress"
+displayName = "Quest Tree GameTests (dev only)"
+description = '''Holds the Quest Tree GameTests. Development only; never shipped.'''
+[[dependencies.kuronami_quest_tree_gametest]]
+modId = "kuronami_quest_tree"
 type = "required"
 versionRange = "[0,)"
 ordering = "AFTER"

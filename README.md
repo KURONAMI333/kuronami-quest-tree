@@ -1,4 +1,4 @@
-# Pack Progress
+# Kuronami's Quest Tree
 
 Quest books and skill trees in one screen, defined by data packs. Imports existing FTB Quests quest books and Pufferfish's Skills trees with one command.
 
@@ -11,14 +11,14 @@ Permission level 2.
 
 | Command | |
 |---|---|
-| `/pack_progress import ftbquests [namespace]` | Convert `config/ftbquests/quests` into the world data pack `pack_progress_import` and reload |
-| `/pack_progress import puffish [namespace]` | Convert every Pufferfish's Skills category found in data packs and `config/puffish_skills` |
-| `/pack_progress status` | Number of loaded chapters |
-| `/pack_progress reset <players> [chapter or node]` | Forget progress (everything, one chapter, or one node) |
-| `/pack_progress complete <players> <node>` | Finish a quest's tasks; rewards stay claimable |
-| `/pack_progress respec <players> <chapter>` | Give back every point spent in a skill chapter |
-| `/pack_progress points <players> <chapter> <amount>` | Add (or remove) points to spend |
-| `/pack_progress experience <players> <chapter> <amount>` | Add experience to a skill chapter |
+| `/quest_tree import ftbquests [namespace]` | Convert `config/ftbquests/quests` into the world data pack `quest_tree_import` and reload |
+| `/quest_tree import puffish [namespace]` | Convert every Pufferfish's Skills category found in data packs and `config/puffish_skills` |
+| `/quest_tree status` | Number of loaded chapters |
+| `/quest_tree reset <players> [chapter or node]` | Forget progress (everything, one chapter, or one node) |
+| `/quest_tree complete <players> <node>` | Finish a quest's tasks; rewards stay claimable |
+| `/quest_tree respec <players> <chapter>` | Give back every point spent in a skill chapter |
+| `/quest_tree points <players> <chapter> <amount>` | Add (or remove) points to spend |
+| `/quest_tree experience <players> <chapter> <amount>` | Add experience to a skill chapter |
 
 Chapter ids are `<namespace>:<chapter>`, node ids `<namespace>:<chapter>/<node>`.
 

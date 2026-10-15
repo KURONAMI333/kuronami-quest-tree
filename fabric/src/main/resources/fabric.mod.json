@@ -15,10 +15,10 @@
     "environment": "*",
     "entrypoints": {
         "main": [
-            "com.kuronami.packprogress.PackProgress"
+            "com.kuronami.questtree.QuestTree"
         ],
         "client": [
-            "com.kuronami.packprogress.PackProgressClient"
+            "com.kuronami.questtree.QuestTreeClient"
         ]
     },
     "mixins": [
