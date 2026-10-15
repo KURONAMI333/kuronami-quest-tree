@@ -137,8 +137,28 @@ final class Tiles {
             int cut = (int) Math.round(Math.min(w, h) * OCT_CUT);
             return Math.max(0, cut - Math.min(r, h - 1 - r));
         }
+        if (shape.equals("pentagon")) {
+            return pentagonInset(w, h, r);
+        }
         double hw = halfWidth(shape, (r + 0.5) / h * 2 - 1);
         return (int) Math.round(w / 2.0 * (1 - Math.max(0, Math.min(1, hw))));
+    }
+
+    /**
+     * Pentagon rows in fixed pixel steps, so both slopes stay even at every size: the roof widens 1, 2, 1, 2 pixels a
+     * row from the top point (close to a regular pentagon's 36 degrees), the sides narrow 1 pixel every 3 rows towards
+     * the flat bottom. The sides are counted from the bottom, so a shorter copy (the darker bottom edge) follows them.
+     */
+    private static int pentagonInset(int w, int h, int r) {
+        int start = (w - 1) / 2;
+        int roof = 0;
+        while (start - (3 * roof) / 2 > 0) {
+            roof++;
+        }
+        int foot = (w - roof - 1) / 3;
+        int top = Math.max(0, start - (3 * r) / 2);
+        int bottom = Math.max(0, foot - (h - 1 - r) / 3);
+        return Math.max(top, bottom);
     }
 
     /** Half width (0..1) of a shape at height {@code ny} (-1 top .. 1 bottom), for symmetric pixel rows. */
@@ -147,7 +167,6 @@ final class Tiles {
         return switch (shape) {
             case "circle" -> Math.sqrt(Math.max(0, 1 - ny * ny));
             case "diamond" -> 1 - a;
-            case "pentagon" -> ny < -0.24 ? (ny + 1) / 0.76 : 1 - (ny + 0.24) / 1.24 * 0.4;
             case "rsquare" -> {
                 double rad = 0.35;
                 if (a > 1 - rad) {
@@ -174,7 +193,7 @@ final class Tiles {
                 double v = 1 - 2 * OCT_CUT;
                 yield new double[][]{{-v, -1}, {v, -1}, {1, -v}, {1, v}, {v, 1}, {-v, 1}, {-1, v}, {-1, -v}};
             }
-            case "pentagon" -> new double[][]{{0, -1}, {1, -0.24}, {0.6, 1}, {-0.6, 1}, {-1, -0.24}};
+            case "pentagon" -> new double[][]{{0, -1}, {1, -0.3}, {0.58, 1}, {-0.58, 1}, {-1, -0.3}};
             case "circle" -> new double[][]{{-k, -k}, {k, -k}, {k, k}, {-k, k}};
             default -> new double[0][];
         };
@@ -289,12 +308,15 @@ final class Tiles {
             return;
         }
         if (!icon.isEmpty()) {
-            // a diamond's inside is small: a full-size icon spills over its edges
-            float k = s / 20f * (shape.equals("diamond") ? 0.7f : 1f);
+            // a diamond's and a pentagon's insides are small: a full-size icon spills over their slopes. The pentagon's
+            // widest part is below its middle, so its icon sits a little lower
+            boolean penta = shape.equals("pentagon");
+            float k = s / 20f * (shape.equals("diamond") ? 0.7f : penta ? 0.8f : 1f);
+            float drop = penta ? s * 0.06f : 0;
             g.pose().pushPose();
             float lift = look == Look.DONE_REWARD ? 0
                     : look == Look.OPEN || look == Look.AFFORDABLE || look == Look.PROGRESS ? Math.max(1, s / 16) / 2f : 0;
-            g.pose().translate(x + s / 2f - 8 * k, y + s / 2f - 8 * k - lift, 0);
+            g.pose().translate(x + s / 2f - 8 * k, y + s / 2f - 8 * k - lift + drop, 0);
             g.pose().scale(k, k, 1);
             g.renderItem(icon, 0, 0);
             g.pose().popPose();
@@ -308,8 +330,8 @@ final class Tiles {
             if (look == Look.LOCKED_NEAR) {
                 // the next step: what it is stays readable; a small lock in the corner says it is not open yet
                 int m = Math.max(1, s / 16);
-                if (shape.equals("diamond")) {
-                    // a diamond has no bottom-right corner: the lock sits at the bottom point instead
+                if (shape.equals("diamond") || shape.equals("pentagon")) {
+                    // no bottom-right corner (diamond, pentagon): the lock sits at the bottom middle instead
                     pixels(g, LOCK, x + s / 2 - 5 * px / 2, y + s - 5 * px - 2 * m, px, 0xFFD8D8D8);
                 } else {
                     pixels(g, LOCK, x + s - 5 * px - m, y + s - 5 * px - m, px, 0xFFD8D8D8);
