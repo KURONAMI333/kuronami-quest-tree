@@ -1,0 +1,126 @@
+{
+ "root": {
+  "title": "Mining",
+  "icon": {
+   "type": "item",
+   "data": {
+    "item": "iron_pickaxe"
+   }
+  },
+  "rewards": []
+ },
+ "s0": {
+  "title": "Skill 0",
+  "icon": {
+   "type": "item",
+   "data": {
+    "item": "iron_shovel"
+   }
+  },
+  "rewards": [
+   {
+    "type": "puffish_skills:attribute",
+    "data": {
+     "attribute": "minecraft:player.block_break_speed",
+     "value": 0.1,
+     "operation": "multiply_base"
+    }
+   }
+  ]
+ },
+ "s1": {
+  "title": "Skill 1",
+  "icon": {
+   "type": "item",
+   "data": {
+    "item": "iron_hoe"
+   }
+  },
+  "rewards": [
+   {
+    "type": "puffish_skills:attribute",
+    "data": {
+     "attribute": "minecraft:player.block_break_speed",
+     "value": 0.1,
+     "operation": "multiply_base"
+    }
+   }
+  ]
+ },
+ "s2": {
+  "title": "Skill 2",
+  "icon": {
+   "type": "item",
+   "data": {
+    "item": "iron_sword"
+   }
+  },
+  "rewards": [
+   {
+    "type": "puffish_skills:attribute",
+    "data": {
+     "attribute": "minecraft:player.block_break_speed",
+     "value": 0.1,
+     "operation": "multiply_base"
+    }
+   }
+  ]
+ },
+ "s3": {
+  "title": "Skill 3",
+  "icon": {
+   "type": "item",
+   "data": {
+    "item": "shears"
+   }
+  },
+  "rewards": [
+   {
+    "type": "puffish_skills:attribute",
+    "data": {
+     "attribute": "minecraft:player.block_break_speed",
+     "value": 0.1,
+     "operation": "multiply_base"
+    }
+   }
+  ]
+ },
+ "s4": {
+  "title": "Skill 4",
+  "icon": {
+   "type": "item",
+   "data": {
+    "item": "iron_helmet"
+   }
+  },
+  "rewards": [
+   {
+    "type": "puffish_skills:attribute",
+    "data": {
+     "attribute": "minecraft:player.block_break_speed",
+     "value": 0.1,
+     "operation": "multiply_base"
+    }
+   }
+  ]
+ },
+ "s5": {
+  "title": "Skill 5",
+  "icon": {
+   "type": "item",
+   "data": {
+    "item": "bucket"
+   }
+  },
+  "rewards": [
+   {
+    "type": "puffish_skills:attribute",
+    "data": {
+     "attribute": "minecraft:player.block_break_speed",
+     "value": 0.1,
+     "operation": "multiply_base"
+    }
+   }
+  ]
+ }
+}

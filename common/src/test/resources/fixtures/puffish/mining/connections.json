@@ -1,0 +1,38 @@
+{
+ "normal": {
+  "bidirectional": [
+   [
+    "root",
+    "s0"
+   ],
+   [
+    "root",
+    "s1"
+   ],
+   [
+    "root",
+    "s2"
+   ],
+   [
+    "root",
+    "s3"
+   ],
+   [
+    "root",
+    "s4"
+   ],
+   [
+    "root",
+    "s5"
+   ]
+  ]
+ },
+ "exclusive": {
+  "bidirectional": [
+   [
+    "s0",
+    "s1"
+   ]
+  ]
+ }
+}

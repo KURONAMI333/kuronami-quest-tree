@@ -1,0 +1,12 @@
+{
+	chapter.10000000006CC03C.title: "Basics"
+	quest.1000000000001EEF.title: "Basics 1"
+	quest.1000000000007BBC.title: "Basics 2"
+	quest.100000000000D889.title: "Basics 3"
+	quest.1000000000013556.title: "Basics 4"
+	quest.1000000000019223.title: "Basics 5"
+	quest.100000000001EEF0.title: "Basics 6"
+	quest.1000000000024BBD.title: "Basics 7"
+	quest.100000000002A88A.title: "Basics 8"
+	quest.1000000000001EEF.quest_desc: ["Collect your first &ahoneycomb&r.", "{image:minecraft:textures/item/honeycomb.png width:32 height:32}"]
+}

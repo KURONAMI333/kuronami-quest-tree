@@ -1,0 +1,3946 @@
+{
+	id: "10000000006CDF2B"
+	filename: "apiculture"
+	group: ""
+	icon: {
+		id: "minecraft:honeycomb"
+	}
+	order_index: 1
+	default_quest_shape: ""
+	quest_links: [ ]
+	images: [
+		{
+			id: "100000000046EE05"
+			image: "minecraft:textures/block/bee_nest_front_honey.png"
+			x: -3.0d
+			y: -6.0d
+			width: 3.0d
+			height: 3.0d
+			rotation: 0.0d
+		}
+		{
+			id: "1000000000470CF4"
+			image: "minecraft:textures/block/honeycomb_block.png"
+			x: 20.0d
+			y: -6.0d
+			width: 2.0d
+			height: 2.0d
+			rotation: 15.0d
+			dependency: "1000000000030557"
+		}
+	]
+	quests: [
+		{
+			id: "1000000000030557"
+			x: 0.0d
+			y: 0.0d
+			shape: "hexagon"
+			size: 1.6d
+			tasks: [
+				{
+					id: "1000000000032446"
+					type: "item"
+					item: "minecraft:honeycomb"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000034335"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "1000000000036224"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["100000000002A88A"]
+		}
+		{
+			id: "1000000000038113"
+			x: -1.7d
+			y: -2.1d
+			dependencies: ["1000000000030557"]
+			tasks: [
+				{
+					id: "100000000003A002"
+					type: "item"
+					item: "minecraft:iron_ingot"
+				}
+				{
+					id: "100000000003DDE0"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000003BEF1"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "100000000003FCCF"
+			x: -1.7d
+			y: -3.85d
+			dependencies: ["1000000000038113"]
+			tasks: [
+				{
+					id: "1000000000041BBE"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000043AAD"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "100000000004599C"
+			x: -1.7d
+			y: -5.6d
+			dependencies: ["100000000003FCCF"]
+			tasks: [
+				{
+					id: "100000000004788B"
+					type: "item"
+					item: "minecraft:bread"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000004977A"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "100000000004B669"
+			x: -0.75d
+			y: -5.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000004599C"]
+			tasks: [
+				{
+					id: "100000000004D558"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000004F447"
+			x: -1.7d
+			y: -7.35d
+			dependencies: ["100000000004599C"]
+			tasks: [
+				{
+					id: "1000000000051336"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000053225"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "1000000000055114"
+			x: -1.7d
+			y: -9.1d
+			dependencies: ["100000000004F447"]
+			tasks: [
+				{
+					id: "1000000000057003"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000058EF2"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "100000000005ADE1"
+			x: -1.7d
+			y: -10.85d
+			dependencies: ["1000000000055114"]
+			tasks: [
+				{
+					id: "1000000000060AAE"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "100000000005EBBF"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "100000000006299D"
+			x: -1.7d
+			y: -12.6d
+			dependencies: ["100000000005ADE1"]
+			tasks: [
+				{
+					id: "100000000006488C"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000006677B"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "100000000006866A"
+			x: -0.75d
+			y: -12.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000006299D"]
+			tasks: [
+				{
+					id: "100000000006A559"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000006C448"
+			x: -1.7d
+			y: -14.35d
+			dependencies: ["100000000006299D"]
+			tasks: [
+				{
+					id: "100000000006E337"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000070226"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "1000000000072115"
+			x: -1.7d
+			y: -16.1d
+			dependencies: ["100000000006C448"]
+			tasks: [
+				{
+					id: "1000000000074004"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000075EF3"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "1000000000077DE2"
+			x: -0.75d
+			y: -16.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000072115"]
+			tasks: [
+				{
+					id: "1000000000079CD1"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000007BBC0"
+			x: 0.0d
+			y: 2.1d
+			dependencies: ["1000000000030557"]
+			tasks: [
+				{
+					id: "100000000007DAAF"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000007F99E"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000008188D"
+			x: 0.95d
+			y: 2.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000007BBC0"]
+			tasks: [
+				{
+					id: "100000000008377C"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000008566B"
+			x: 0.0d
+			y: 3.85d
+			dependencies: ["100000000007BBC0"]
+			tasks: [
+				{
+					id: "100000000008755A"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000089449"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000008B338"
+			x: 0.0d
+			y: 5.6d
+			dependencies: ["100000000008566B"]
+			tasks: [
+				{
+					id: "100000000008D227"
+					type: "item"
+					item: "minecraft:paper"
+				}
+				{
+					id: "1000000000091005"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000008F116"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000092EF4"
+			x: 0.0d
+			y: 7.35d
+			dependencies: ["100000000008B338"]
+			tasks: [
+				{
+					id: "1000000000094DE3"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000096CD2"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000098BC1"
+			x: 0.95d
+			y: 7.35d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000092EF4"]
+			tasks: [
+				{
+					id: "100000000009AAB0"
+					type: "item"
+					item: "minecraft:emerald"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000009C99F"
+			x: 0.0d
+			y: 9.1d
+			dependencies: ["1000000000092EF4"]
+			tasks: [
+				{
+					id: "100000000009E88E"
+					type: "item"
+					item: "minecraft:honeycomb"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000A077D"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000000A266C"
+			x: 0.0d
+			y: 10.85d
+			dependencies: ["100000000009C99F"]
+			tasks: [
+				{
+					id: "10000000000A455B"
+					type: "item"
+					item: "minecraft:iron_pickaxe"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000A644A"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000000A8339"
+			x: 1.7d
+			y: -2.1d
+			dependencies: ["1000000000030557"]
+			tasks: [
+				{
+					id: "10000000000AA228"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000AC117"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000AE006"
+			x: 1.7d
+			y: -3.85d
+			dependencies: ["10000000000A8339"]
+			tasks: [
+				{
+					id: "10000000000AFEF5"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000B1DE4"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000B3CD3"
+			x: 1.7d
+			y: -5.6d
+			dependencies: ["10000000000AE006"]
+			tasks: [
+				{
+					id: "10000000000B5BC2"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000B7AB1"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000B99A0"
+			x: 2.65d
+			y: -5.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000000B3CD3"]
+			tasks: [
+				{
+					id: "10000000000BB88F"
+					type: "item"
+					item: "minecraft:chain"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000000BD77E"
+			x: 1.7d
+			y: -7.35d
+			dependencies: ["10000000000B3CD3"]
+			tasks: [
+				{
+					id: "10000000000BF66D"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000C155C"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000C344B"
+			x: 5.6d
+			y: 2.0d
+			shape: "hexagon"
+			size: 1.6d
+			tasks: [
+				{
+					id: "10000000000C533A"
+					type: "item"
+					item: "minecraft:honey_bottle"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000C7229"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "10000000000C9118"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["1000000000030557"]
+		}
+		{
+			id: "10000000000CB007"
+			x: 3.8999999999999995d
+			y: -0.10000000000000009d
+			dependencies: ["10000000000C344B"]
+			tasks: [
+				{
+					id: "10000000000CCEF6"
+					type: "item"
+					item: "minecraft:glass_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000CEDE5"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000D0CD4"
+			x: 3.8999999999999995d
+			y: -1.85d
+			dependencies: ["10000000000CB007"]
+			tasks: [
+				{
+					id: "10000000000D2BC3"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000D4AB2"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000D69A1"
+			x: 3.8999999999999995d
+			y: -3.5999999999999996d
+			dependencies: ["10000000000D0CD4"]
+			tasks: [
+				{
+					id: "10000000000D8890"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000DA77F"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000DC66E"
+			x: 3.8999999999999995d
+			y: -5.35d
+			dependencies: ["10000000000D69A1"]
+			tasks: [
+				{
+					id: "10000000000DE55D"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000E044C"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "circle"
+		}
+		{
+			id: "10000000000E233B"
+			x: 5.6d
+			y: 4.1d
+			dependencies: ["10000000000C344B"]
+			tasks: [
+				{
+					id: "10000000000E422A"
+					type: "item"
+					item: "minecraft:glass_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000E6119"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000000E8008"
+			x: 5.6d
+			y: 5.85d
+			dependencies: ["10000000000E233B"]
+			tasks: [
+				{
+					id: "10000000000E9EF7"
+					type: "item"
+					item: "minecraft:bread"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000EBDE6"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000000EDCD5"
+			x: 6.55d
+			y: 5.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000000E8008"]
+			tasks: [
+				{
+					id: "10000000000EFBC4"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000000F1AB3"
+			x: 5.6d
+			y: 7.6d
+			dependencies: ["10000000000E8008"]
+			tasks: [
+				{
+					id: "10000000000F39A2"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+				{
+					id: "10000000000F7780"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000000F5891"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000000F966F"
+			x: 6.55d
+			y: 7.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000000F1AB3"]
+			tasks: [
+				{
+					id: "10000000000FB55E"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000000FD44D"
+			x: 5.6d
+			y: 9.35d
+			dependencies: ["10000000000F1AB3"]
+			tasks: [
+				{
+					id: "10000000000FF33C"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000010122B"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000010311A"
+			x: 5.6d
+			y: 11.1d
+			dependencies: ["10000000000FD44D"]
+			tasks: [
+				{
+					id: "1000000000105009"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000106EF8"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000108DE7"
+			x: 6.55d
+			y: 11.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000010311A"]
+			tasks: [
+				{
+					id: "100000000010ACD6"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000010CBC5"
+			x: 5.6d
+			y: 12.85d
+			dependencies: ["100000000010311A"]
+			tasks: [
+				{
+					id: "100000000010EAB4"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001109A3"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000112892"
+			x: 6.55d
+			y: 12.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000010CBC5"]
+			tasks: [
+				{
+					id: "1000000000114781"
+					type: "item"
+					item: "minecraft:chain"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "1000000000116670"
+			x: 5.6d
+			y: 14.6d
+			dependencies: ["100000000010CBC5"]
+			tasks: [
+				{
+					id: "100000000011855F"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000011A44E"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000011C33D"
+			x: 5.6d
+			y: 16.35d
+			dependencies: ["1000000000116670"]
+			tasks: [
+				{
+					id: "100000000011E22C"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000012011B"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000012200A"
+			x: 6.55d
+			y: 16.35d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000011C33D"]
+			tasks: [
+				{
+					id: "1000000000123EF9"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "1000000000125DE8"
+			x: 5.6d
+			y: 18.1d
+			dependencies: ["100000000011C33D"]
+			tasks: [
+				{
+					id: "1000000000127CD7"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000129BC6"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000012BAB5"
+			x: 7.3d
+			y: -0.10000000000000009d
+			dependencies: ["10000000000C344B"]
+			tasks: [
+				{
+					id: "100000000012D9A4"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000012F893"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000131782"
+			x: 7.3d
+			y: -1.85d
+			dependencies: ["100000000012BAB5"]
+			tasks: [
+				{
+					id: "1000000000133671"
+					type: "item"
+					item: "minecraft:iron_ingot"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000135560"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000013744F"
+			x: 7.3d
+			y: -3.5999999999999996d
+			dependencies: ["1000000000131782"]
+			tasks: [
+				{
+					id: "100000000013933E"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000013B22D"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000013D11C"
+			x: 7.3d
+			y: -5.35d
+			dependencies: ["100000000013744F"]
+			tasks: [
+				{
+					id: "100000000013F00B"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000140EFA"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000142DE9"
+			x: 7.3d
+			y: -7.1d
+			dependencies: ["100000000013D11C"]
+			tasks: [
+				{
+					id: "1000000000144CD8"
+					type: "item"
+					item: "minecraft:emerald"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000146BC7"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000148AB6"
+			x: 8.25d
+			y: -7.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000142DE9"]
+			tasks: [
+				{
+					id: "100000000014A9A5"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000014C894"
+			x: 7.3d
+			y: -8.85d
+			dependencies: ["1000000000142DE9"]
+			tasks: [
+				{
+					id: "1000000000152561"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000150672"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000154450"
+			x: 7.3d
+			y: -10.6d
+			dependencies: ["100000000014C894"]
+			tasks: [
+				{
+					id: "100000000015633F"
+					type: "item"
+					item: "minecraft:emerald"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000015822E"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000015A11D"
+			x: 8.25d
+			y: -10.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000154450"]
+			tasks: [
+				{
+					id: "100000000015C00C"
+					type: "item"
+					item: "minecraft:iron_ingot"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000015DEFB"
+			x: 7.3d
+			y: -12.35d
+			dependencies: ["1000000000154450"]
+			tasks: [
+				{
+					id: "100000000015FDEA"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000161CD9"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000163BC8"
+			x: 11.2d
+			y: 1.0d
+			shape: "hexagon"
+			size: 1.6d
+			tasks: [
+				{
+					id: "1000000000165AB7"
+					type: "item"
+					item: "minecraft:glass_bottle"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001679A6"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "1000000000169895"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["10000000000C344B"]
+		}
+		{
+			id: "100000000016B784"
+			x: 9.5d
+			y: -1.1d
+			dependencies: ["1000000000163BC8"]
+			tasks: [
+				{
+					id: "100000000016D673"
+					type: "item"
+					item: "minecraft:chain"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000016F562"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000171451"
+			x: 9.5d
+			y: -2.85d
+			dependencies: ["100000000016B784"]
+			tasks: [
+				{
+					id: "1000000000173340"
+					type: "item"
+					item: "minecraft:iron_ingot"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000017522F"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000017711E"
+			x: 9.5d
+			y: -4.6d
+			dependencies: ["1000000000171451"]
+			tasks: [
+				{
+					id: "100000000017900D"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000017AEFC"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000017CDEB"
+			x: 9.5d
+			y: -6.35d
+			dependencies: ["100000000017711E"]
+			tasks: [
+				{
+					id: "100000000017ECDA"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000180BC9"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000182AB8"
+			x: 9.5d
+			y: -8.1d
+			dependencies: ["100000000017CDEB"]
+			tasks: [
+				{
+					id: "10000000001849A7"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000186896"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000188785"
+			x: 9.5d
+			y: -9.85d
+			dependencies: ["1000000000182AB8"]
+			tasks: [
+				{
+					id: "100000000018E452"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "100000000018C563"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000190341"
+			x: 10.45d
+			y: -9.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000188785"]
+			tasks: [
+				{
+					id: "1000000000192230"
+					type: "item"
+					item: "minecraft:chain"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000019411F"
+			x: 11.2d
+			y: 3.1d
+			dependencies: ["1000000000163BC8"]
+			tasks: [
+				{
+					id: "100000000019600E"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000197EFD"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "1000000000199DEC"
+			x: 11.2d
+			y: 4.85d
+			dependencies: ["100000000019411F"]
+			tasks: [
+				{
+					id: "100000000019BCDB"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000019DBCA"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "100000000019FAB9"
+			x: 12.149999999999999d
+			y: 4.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000199DEC"]
+			tasks: [
+				{
+					id: "10000000001A19A8"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000001A3897"
+			x: 11.2d
+			y: 6.6d
+			dependencies: ["1000000000199DEC"]
+			tasks: [
+				{
+					id: "10000000001A5786"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001A7675"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000001A9564"
+			x: 12.149999999999999d
+			y: 6.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000001A3897"]
+			tasks: [
+				{
+					id: "10000000001AB453"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000001AD342"
+			x: 11.2d
+			y: 8.35d
+			dependencies: ["10000000001A3897"]
+			tasks: [
+				{
+					id: "10000000001AF231"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001B1120"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000001B300F"
+			x: 11.2d
+			y: 10.1d
+			dependencies: ["10000000001AD342"]
+			tasks: [
+				{
+					id: "10000000001B4EFE"
+					type: "item"
+					item: "minecraft:diamond"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001B6DED"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000001B8CDC"
+			x: 11.2d
+			y: 11.85d
+			dependencies: ["10000000001B300F"]
+			tasks: [
+				{
+					id: "10000000001BABCB"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001BCABA"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000001BE9A9"
+			x: 11.2d
+			y: 13.6d
+			dependencies: ["10000000001B8CDC"]
+			tasks: [
+				{
+					id: "10000000001C0898"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001C2787"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000001C4676"
+			x: 11.2d
+			y: 15.35d
+			dependencies: ["10000000001BE9A9"]
+			tasks: [
+				{
+					id: "10000000001C6565"
+					type: "item"
+					item: "minecraft:iron_pickaxe"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001C8454"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000001CA343"
+			x: 12.899999999999999d
+			y: -1.1d
+			dependencies: ["1000000000163BC8"]
+			tasks: [
+				{
+					id: "10000000001CC232"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001CE121"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "10000000001D0010"
+			x: 12.899999999999999d
+			y: -2.85d
+			dependencies: ["10000000001CA343"]
+			tasks: [
+				{
+					id: "10000000001D1EFF"
+					type: "item"
+					item: "minecraft:diamond"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001D3DEE"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "10000000001D5CDD"
+			x: 13.849999999999998d
+			y: -2.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000001D0010"]
+			tasks: [
+				{
+					id: "10000000001D7BCC"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000001D9ABB"
+			x: 12.899999999999999d
+			y: -4.6d
+			dependencies: ["10000000001D0010"]
+			tasks: [
+				{
+					id: "10000000001DB9AA"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001DD899"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "10000000001DF788"
+			x: 12.899999999999999d
+			y: -6.35d
+			dependencies: ["10000000001D9ABB"]
+			tasks: [
+				{
+					id: "10000000001E1677"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001E3566"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "10000000001E5455"
+			x: 12.899999999999999d
+			y: -8.1d
+			dependencies: ["10000000001DF788"]
+			tasks: [
+				{
+					id: "10000000001E7344"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001E9233"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "10000000001EB122"
+			x: 12.899999999999999d
+			y: -9.85d
+			dependencies: ["10000000001E5455"]
+			tasks: [
+				{
+					id: "10000000001ED011"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001EEF00"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "10000000001F0DEF"
+			x: 16.799999999999997d
+			y: -1.0d
+			shape: "hexagon"
+			size: 1.6d
+			tasks: [
+				{
+					id: "10000000001F2CDE"
+					type: "item"
+					item: "minecraft:campfire"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001F4BCD"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "10000000001F6ABC"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["1000000000163BC8"]
+		}
+		{
+			id: "10000000001F89AB"
+			x: 15.099999999999998d
+			y: -3.1d
+			dependencies: ["10000000001F0DEF"]
+			tasks: [
+				{
+					id: "10000000001FA89A"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000001FC789"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "10000000001FE678"
+			x: 15.099999999999998d
+			y: -4.85d
+			dependencies: ["10000000001F89AB"]
+			tasks: [
+				{
+					id: "1000000000200567"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000202456"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000204345"
+			x: 15.099999999999998d
+			y: -6.6d
+			dependencies: ["10000000001FE678"]
+			tasks: [
+				{
+					id: "100000000020A012"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000208123"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000020BF01"
+			x: 15.099999999999998d
+			y: -8.35d
+			dependencies: ["1000000000204345"]
+			tasks: [
+				{
+					id: "100000000020DDF0"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000020FCDF"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000211BCE"
+			x: 15.099999999999998d
+			y: -10.1d
+			dependencies: ["100000000020BF01"]
+			tasks: [
+				{
+					id: "1000000000213ABD"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002159AC"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000021789B"
+			x: 16.049999999999997d
+			y: -10.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000211BCE"]
+			tasks: [
+				{
+					id: "100000000021978A"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000021B679"
+			x: 15.099999999999998d
+			y: -11.85d
+			dependencies: ["1000000000211BCE"]
+			tasks: [
+				{
+					id: "1000000000221346"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "100000000021F457"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000223235"
+			x: 15.099999999999998d
+			y: -13.6d
+			dependencies: ["100000000021B679"]
+			tasks: [
+				{
+					id: "1000000000225124"
+					type: "item"
+					item: "minecraft:emerald"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000227013"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000228F02"
+			x: 16.049999999999997d
+			y: -13.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000223235"]
+			tasks: [
+				{
+					id: "100000000022ADF1"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000022CCE0"
+			x: 16.799999999999997d
+			y: 1.1d
+			dependencies: ["10000000001F0DEF"]
+			tasks: [
+				{
+					id: "100000000022EBCF"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000230ABE"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "10000000002329AD"
+			x: 16.799999999999997d
+			y: 2.85d
+			dependencies: ["100000000022CCE0"]
+			tasks: [
+				{
+					id: "100000000023489C"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000023678B"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000023867A"
+			x: 17.749999999999996d
+			y: 2.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000002329AD"]
+			tasks: [
+				{
+					id: "100000000023A569"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000023C458"
+			x: 16.799999999999997d
+			y: 4.6d
+			dependencies: ["10000000002329AD"]
+			tasks: [
+				{
+					id: "100000000023E347"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000240236"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000242125"
+			x: 16.799999999999997d
+			y: 6.35d
+			dependencies: ["100000000023C458"]
+			tasks: [
+				{
+					id: "1000000000244014"
+					type: "item"
+					item: "minecraft:iron_ingot"
+				}
+				{
+					id: "1000000000247DF2"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000245F03"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000249CE1"
+			x: 16.799999999999997d
+			y: 8.1d
+			dependencies: ["1000000000242125"]
+			tasks: [
+				{
+					id: "100000000024F9AE"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "100000000024DABF"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000025189D"
+			x: 16.799999999999997d
+			y: 9.85d
+			dependencies: ["1000000000249CE1"]
+			tasks: [
+				{
+					id: "100000000025378C"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000025567B"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000025756A"
+			x: 17.749999999999996d
+			y: 9.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000025189D"]
+			tasks: [
+				{
+					id: "1000000000259459"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000025B348"
+			x: 18.499999999999996d
+			y: -3.1d
+			dependencies: ["10000000001F0DEF"]
+			tasks: [
+				{
+					id: "100000000025D237"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000025F126"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "1000000000261015"
+			x: 18.499999999999996d
+			y: -4.85d
+			dependencies: ["100000000025B348"]
+			tasks: [
+				{
+					id: "1000000000262F04"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000264DF3"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "1000000000266CE2"
+			x: 18.499999999999996d
+			y: -6.6d
+			dependencies: ["1000000000261015"]
+			tasks: [
+				{
+					id: "1000000000268BD1"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000026AAC0"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000026C9AF"
+			x: 18.499999999999996d
+			y: -8.35d
+			dependencies: ["1000000000266CE2"]
+			tasks: [
+				{
+					id: "100000000026E89E"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000027078D"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000027267C"
+			x: 18.499999999999996d
+			y: -10.1d
+			dependencies: ["100000000026C9AF"]
+			tasks: [
+				{
+					id: "100000000027456B"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000027645A"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "1000000000278349"
+			x: 18.499999999999996d
+			y: -11.85d
+			dependencies: ["100000000027267C"]
+			tasks: [
+				{
+					id: "100000000027A238"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000027C127"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000027E016"
+			x: 18.499999999999996d
+			y: -13.6d
+			dependencies: ["1000000000278349"]
+			tasks: [
+				{
+					id: "100000000027FF05"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+				{
+					id: "1000000000283CE3"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000281DF4"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "1000000000285BD2"
+			x: 18.499999999999996d
+			y: -15.35d
+			dependencies: ["100000000027E016"]
+			tasks: [
+				{
+					id: "100000000028B89F"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002899B0"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000028D78E"
+			x: 22.4d
+			y: -2.0d
+			shape: "hexagon"
+			size: 1.6d
+			tasks: [
+				{
+					id: "100000000028F67D"
+					type: "item"
+					item: "minecraft:flower_pot"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "100000000029156C"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "100000000029345B"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["10000000001F0DEF"]
+		}
+		{
+			id: "100000000029534A"
+			x: 21.549999999999997d
+			y: -4.1d
+			dependencies: ["100000000028D78E"]
+			tasks: [
+				{
+					id: "1000000000297239"
+					type: "item"
+					item: "minecraft:brick"
+				}
+				{
+					id: "100000000029B017"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000299128"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "100000000029CF06"
+			x: 22.499999999999996d
+			y: -4.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000029534A"]
+			tasks: [
+				{
+					id: "100000000029EDF5"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000002A0CE4"
+			x: 21.549999999999997d
+			y: -5.85d
+			dependencies: ["100000000029534A"]
+			tasks: [
+				{
+					id: "10000000002A2BD3"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002A4AC2"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000002A69B1"
+			x: 21.549999999999997d
+			y: -7.6d
+			dependencies: ["10000000002A0CE4"]
+			tasks: [
+				{
+					id: "10000000002A88A0"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002AA78F"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000002AC67E"
+			x: 22.499999999999996d
+			y: -7.6d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000002A69B1"]
+			tasks: [
+				{
+					id: "10000000002AE56D"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000002B045C"
+			x: 21.549999999999997d
+			y: -9.35d
+			dependencies: ["10000000002A69B1"]
+			tasks: [
+				{
+					id: "10000000002B234B"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+				{
+					id: "10000000002B6129"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002B423A"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000002B8018"
+			x: 21.549999999999997d
+			y: -11.1d
+			dependencies: ["10000000002B045C"]
+			tasks: [
+				{
+					id: "10000000002B9F07"
+					type: "item"
+					item: "minecraft:glass_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002BBDF6"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000002BDCE5"
+			x: 22.499999999999996d
+			y: -11.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000002B8018"]
+			tasks: [
+				{
+					id: "10000000002BFBD4"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000002C1AC3"
+			x: 21.549999999999997d
+			y: -12.85d
+			dependencies: ["10000000002B8018"]
+			tasks: [
+				{
+					id: "10000000002C39B2"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002C58A1"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000002C7790"
+			x: 21.549999999999997d
+			y: -14.6d
+			dependencies: ["10000000002C1AC3"]
+			tasks: [
+				{
+					id: "10000000002C967F"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002CB56E"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "10000000002CD45D"
+			x: 23.25d
+			y: 0.10000000000000009d
+			dependencies: ["100000000028D78E"]
+			tasks: [
+				{
+					id: "10000000002CF34C"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002D123B"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "10000000002D312A"
+			x: 23.25d
+			y: 1.85d
+			dependencies: ["10000000002CD45D"]
+			tasks: [
+				{
+					id: "10000000002D5019"
+					type: "item"
+					item: "minecraft:iron_pickaxe"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002D6F08"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "10000000002D8DF7"
+			x: 24.2d
+			y: 1.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000002D312A"]
+			tasks: [
+				{
+					id: "10000000002DACE6"
+					type: "item"
+					item: "minecraft:bread"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000002DCBD5"
+			x: 23.25d
+			y: 3.5999999999999996d
+			dependencies: ["10000000002D312A"]
+			tasks: [
+				{
+					id: "10000000002DEAC4"
+					type: "item"
+					item: "minecraft:emerald"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002E09B3"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "10000000002E28A2"
+			x: 23.25d
+			y: 5.35d
+			dependencies: ["10000000002DCBD5"]
+			tasks: [
+				{
+					id: "10000000002E4791"
+					type: "item"
+					item: "minecraft:bread"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002E6680"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "10000000002E856F"
+			x: 28.0d
+			y: 0.0d
+			shape: "hexagon"
+			size: 1.6d
+			tasks: [
+				{
+					id: "10000000002EA45E"
+					type: "item"
+					item: "minecraft:shears"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002EC34D"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "10000000002EE23C"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["100000000028D78E"]
+		}
+		{
+			id: "10000000002F012B"
+			x: 27.15d
+			y: -2.1d
+			dependencies: ["10000000002E856F"]
+			tasks: [
+				{
+					id: "10000000002F201A"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002F3F09"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000002F5DF8"
+			x: 28.099999999999998d
+			y: -2.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000002F012B"]
+			tasks: [
+				{
+					id: "10000000002F7CE7"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000002F9BD6"
+			x: 27.15d
+			y: -3.85d
+			dependencies: ["10000000002F012B"]
+			tasks: [
+				{
+					id: "10000000002FBAC5"
+					type: "item"
+					item: "minecraft:iron_ingot"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000002FD9B4"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000002FF8A3"
+			x: 27.15d
+			y: -5.6d
+			dependencies: ["10000000002F9BD6"]
+			tasks: [
+				{
+					id: "1000000000301792"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000303681"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000305570"
+			x: 27.15d
+			y: -7.35d
+			dependencies: ["10000000002FF8A3"]
+			tasks: [
+				{
+					id: "100000000030B23D"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "100000000030934E"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000030D12C"
+			x: 28.099999999999998d
+			y: -7.35d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000305570"]
+			tasks: [
+				{
+					id: "100000000030F01B"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "1000000000310F0A"
+			x: 27.15d
+			y: -9.1d
+			dependencies: ["1000000000305570"]
+			tasks: [
+				{
+					id: "1000000000312DF9"
+					type: "item"
+					item: "minecraft:bread"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000314CE8"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000316BD7"
+			x: 27.15d
+			y: -10.85d
+			dependencies: ["1000000000310F0A"]
+			tasks: [
+				{
+					id: "1000000000318AC6"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000031A9B5"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000031C8A4"
+			x: 27.15d
+			y: -12.6d
+			dependencies: ["1000000000316BD7"]
+			tasks: [
+				{
+					id: "100000000031E793"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000320682"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000322571"
+			x: 27.15d
+			y: -14.35d
+			dependencies: ["100000000031C8A4"]
+			tasks: [
+				{
+					id: "1000000000324460"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000032634F"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000032823E"
+			x: 27.15d
+			y: -16.1d
+			dependencies: ["1000000000322571"]
+			tasks: [
+				{
+					id: "100000000032A12D"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000032C01C"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000032DF0B"
+			x: 28.85d
+			y: 2.1d
+			dependencies: ["10000000002E856F"]
+			tasks: [
+				{
+					id: "100000000032FDFA"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000331CE9"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "1000000000333BD8"
+			x: 28.85d
+			y: 3.85d
+			dependencies: ["100000000032DF0B"]
+			tasks: [
+				{
+					id: "100000000033B794"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003379B6"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000033D683"
+			x: 29.8d
+			y: 3.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000333BD8"]
+			tasks: [
+				{
+					id: "100000000033F572"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "1000000000341461"
+			x: 28.85d
+			y: 5.6d
+			dependencies: ["1000000000333BD8"]
+			tasks: [
+				{
+					id: "1000000000343350"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000034523F"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000034712E"
+			x: 28.85d
+			y: 7.35d
+			dependencies: ["1000000000341461"]
+			tasks: [
+				{
+					id: "100000000034901D"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+				{
+					id: "100000000034CDFB"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000034AF0C"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000034ECEA"
+			x: 28.85d
+			y: 9.1d
+			dependencies: ["100000000034712E"]
+			tasks: [
+				{
+					id: "1000000000350BD9"
+					type: "item"
+					item: "minecraft:golden_apple"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000352AC8"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "10000000003549B7"
+			x: 28.85d
+			y: 10.85d
+			dependencies: ["100000000034ECEA"]
+			tasks: [
+				{
+					id: "10000000003568A6"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000358795"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "octagon"
+		}
+		{
+			id: "100000000035A684"
+			x: 33.599999999999994d
+			y: 2.0d
+			shape: "hexagon"
+			size: 1.6d
+			tasks: [
+				{
+					id: "100000000035C573"
+					type: "item"
+					item: "minecraft:wheat"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "100000000035E462"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "1000000000360351"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["10000000002E856F"]
+		}
+		{
+			id: "1000000000362240"
+			x: 31.899999999999995d
+			y: -0.10000000000000009d
+			dependencies: ["100000000035A684"]
+			tasks: [
+				{
+					id: "100000000036412F"
+					type: "item"
+					item: "minecraft:iron_pickaxe"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000036601E"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000367F0D"
+			x: 32.849999999999994d
+			y: -0.10000000000000009d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000362240"]
+			tasks: [
+				{
+					id: "1000000000369DFC"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000036BCEB"
+			x: 31.899999999999995d
+			y: -1.85d
+			dependencies: ["1000000000362240"]
+			tasks: [
+				{
+					id: "100000000036DBDA"
+					type: "item"
+					item: "minecraft:bread"
+				}
+				{
+					id: "10000000003719B8"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000036FAC9"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "10000000003738A7"
+			x: 31.899999999999995d
+			y: -3.5999999999999996d
+			dependencies: ["100000000036BCEB"]
+			tasks: [
+				{
+					id: "1000000000379574"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000377685"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000037B463"
+			x: 32.849999999999994d
+			y: -3.5999999999999996d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000003738A7"]
+			tasks: [
+				{
+					id: "100000000037D352"
+					type: "item"
+					item: "minecraft:chain"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000037F241"
+			x: 31.899999999999995d
+			y: -5.35d
+			dependencies: ["10000000003738A7"]
+			tasks: [
+				{
+					id: "1000000000381130"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000038301F"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000384F0E"
+			x: 31.899999999999995d
+			y: -7.1d
+			dependencies: ["100000000037F241"]
+			tasks: [
+				{
+					id: "1000000000386DFD"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000388CEC"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "100000000038ABDB"
+			x: 31.899999999999995d
+			y: -8.85d
+			dependencies: ["1000000000384F0E"]
+			tasks: [
+				{
+					id: "100000000038CACA"
+					type: "item"
+					item: "minecraft:shears"
+				}
+				{
+					id: "10000000003908A8"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000038E9B9"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000392797"
+			x: 31.899999999999995d
+			y: -10.6d
+			dependencies: ["100000000038ABDB"]
+			tasks: [
+				{
+					id: "1000000000394686"
+					type: "item"
+					item: "minecraft:glass_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000396575"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "rsquare"
+		}
+		{
+			id: "1000000000398464"
+			x: 33.599999999999994d
+			y: 4.1d
+			dependencies: ["100000000035A684"]
+			tasks: [
+				{
+					id: "100000000039A353"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000039C242"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "100000000039E131"
+			x: 33.599999999999994d
+			y: 5.85d
+			dependencies: ["1000000000398464"]
+			tasks: [
+				{
+					id: "10000000003A0020"
+					type: "item"
+					item: "minecraft:chain"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003A1F0F"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003A3DFE"
+			x: 33.599999999999994d
+			y: 7.6d
+			dependencies: ["100000000039E131"]
+			tasks: [
+				{
+					id: "10000000003A5CED"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003A7BDC"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003A9ACB"
+			x: 33.599999999999994d
+			y: 9.35d
+			dependencies: ["10000000003A3DFE"]
+			tasks: [
+				{
+					id: "10000000003AB9BA"
+					type: "item"
+					item: "minecraft:honeycomb"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003AD8A9"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003AF798"
+			x: 33.599999999999994d
+			y: 11.1d
+			dependencies: ["10000000003A9ACB"]
+			tasks: [
+				{
+					id: "10000000003B1687"
+					type: "item"
+					item: "minecraft:shears"
+				}
+				{
+					id: "10000000003B5465"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003B3576"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003B7354"
+			x: 33.599999999999994d
+			y: 12.85d
+			dependencies: ["10000000003AF798"]
+			tasks: [
+				{
+					id: "10000000003B9243"
+					type: "item"
+					item: "minecraft:iron_ingot"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003BB132"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003BD021"
+			x: 33.599999999999994d
+			y: 14.6d
+			dependencies: ["10000000003B7354"]
+			tasks: [
+				{
+					id: "10000000003BEF10"
+					type: "item"
+					item: "minecraft:bread"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003C0DFF"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003C2CEE"
+			x: 33.599999999999994d
+			y: 16.35d
+			dependencies: ["10000000003BD021"]
+			tasks: [
+				{
+					id: "10000000003C4BDD"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003C6ACC"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003C89BB"
+			x: 33.599999999999994d
+			y: 18.1d
+			dependencies: ["10000000003C2CEE"]
+			tasks: [
+				{
+					id: "10000000003CA8AA"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+				{
+					id: "10000000003CE688"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003CC799"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "diamond"
+		}
+		{
+			id: "10000000003D0577"
+			x: 35.3d
+			y: -0.10000000000000009d
+			dependencies: ["100000000035A684"]
+			tasks: [
+				{
+					id: "10000000003D2466"
+					type: "item"
+					item: "minecraft:honey_bottle"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003D4355"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000003D6244"
+			x: 35.3d
+			y: -1.85d
+			dependencies: ["10000000003D0577"]
+			tasks: [
+				{
+					id: "10000000003D8133"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003DA022"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000003DBF11"
+			x: 35.3d
+			y: -3.5999999999999996d
+			dependencies: ["10000000003D6244"]
+			tasks: [
+				{
+					id: "10000000003DDE00"
+					type: "item"
+					item: "minecraft:campfire"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003DFCEF"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000003E1BDE"
+			x: 36.25d
+			y: -3.5999999999999996d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000003DBF11"]
+			tasks: [
+				{
+					id: "10000000003E3ACD"
+					type: "item"
+					item: "minecraft:glass_bottle"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "10000000003E59BC"
+			x: 35.3d
+			y: -5.35d
+			dependencies: ["10000000003DBF11"]
+			tasks: [
+				{
+					id: "10000000003E78AB"
+					type: "item"
+					item: "minecraft:wheat"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003E979A"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000003EB689"
+			x: 35.3d
+			y: -7.1d
+			dependencies: ["10000000003E59BC"]
+			tasks: [
+				{
+					id: "10000000003ED578"
+					type: "item"
+					item: "minecraft:lantern"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003EF467"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000003F1356"
+			x: 35.3d
+			y: -8.85d
+			dependencies: ["10000000003EB689"]
+			tasks: [
+				{
+					id: "10000000003F3245"
+					type: "item"
+					item: "minecraft:honeycomb"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003F5134"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000003F7023"
+			x: 35.3d
+			y: -10.6d
+			dependencies: ["10000000003F1356"]
+			tasks: [
+				{
+					id: "10000000003F8F12"
+					type: "item"
+					item: "minecraft:bread"
+				}
+			]
+			rewards: [
+				{
+					id: "10000000003FAE01"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000003FCCF0"
+			x: 35.3d
+			y: -12.35d
+			dependencies: ["10000000003F7023"]
+			tasks: [
+				{
+					id: "10000000003FEBDF"
+					type: "item"
+					item: "minecraft:emerald"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000400ACE"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "10000000004029BD"
+			x: 36.25d
+			y: -12.35d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["10000000003FCCF0"]
+			tasks: [
+				{
+					id: "10000000004048AC"
+					type: "item"
+					item: "minecraft:glass_bottle"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000040679B"
+			x: 35.3d
+			y: -14.100000000000001d
+			dependencies: ["10000000003FCCF0"]
+			tasks: [
+				{
+					id: "100000000040868A"
+					type: "item"
+					item: "minecraft:brick"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000040A579"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000040C468"
+			x: 39.199999999999996d
+			y: 1.0d
+			shape: "gear"
+			size: 1.6d
+			tasks: [
+				{
+					id: "100000000040E357"
+					type: "item"
+					item: "minecraft:bread"
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000410246"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 16
+					}
+				}
+				{
+					id: "1000000000412135"
+					type: "random"
+					table_id: "10000000025C2BF8"
+				}
+			]
+			dependencies: ["100000000035A684"]
+		}
+		{
+			id: "1000000000414024"
+			x: 38.349999999999994d
+			y: -1.1d
+			dependencies: ["100000000040C468"]
+			tasks: [
+				{
+					id: "1000000000419CF1"
+					type: "kill"
+					entity: "minecraft:zombie"
+					value: 5
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000417E02"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000041BBE0"
+			x: 39.3d
+			y: -1.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000414024"]
+			tasks: [
+				{
+					id: "100000000041DACF"
+					type: "item"
+					item: "minecraft:book"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000041F9BE"
+			x: 38.349999999999994d
+			y: -2.85d
+			dependencies: ["1000000000414024"]
+			tasks: [
+				{
+					id: "10000000004218AD"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000042379C"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000042568B"
+			x: 38.349999999999994d
+			y: -4.6d
+			dependencies: ["100000000041F9BE"]
+			tasks: [
+				{
+					id: "100000000042757A"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000429469"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000042B358"
+			x: 38.349999999999994d
+			y: -6.35d
+			dependencies: ["100000000042568B"]
+			tasks: [
+				{
+					id: "100000000042D247"
+					type: "item"
+					item: "minecraft:flower_pot"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000042F136"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000431025"
+			x: 38.349999999999994d
+			y: -8.1d
+			dependencies: ["100000000042B358"]
+			tasks: [
+				{
+					id: "1000000000432F14"
+					type: "item"
+					item: "minecraft:honeycomb"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000434E03"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "1000000000436CF2"
+			x: 39.3d
+			y: -8.1d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["1000000000431025"]
+			tasks: [
+				{
+					id: "1000000000438BE1"
+					type: "item"
+					item: "minecraft:coal"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000043AAD0"
+			x: 38.349999999999994d
+			y: -9.85d
+			dependencies: ["1000000000431025"]
+			tasks: [
+				{
+					id: "100000000043C9BF"
+					type: "item"
+					item: "minecraft:iron_pickaxe"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000043E8AE"
+					type: "xp"
+					xp: 5
+				}
+			]
+		}
+		{
+			id: "100000000044079D"
+			x: 39.3d
+			y: -9.85d
+			shape: "circle"
+			size: 0.7d
+			optional: true
+			dependencies: ["100000000043AAD0"]
+			tasks: [
+				{
+					id: "100000000044268C"
+					type: "item"
+					item: "minecraft:emerald"
+				}
+			]
+			rewards: [ ]
+		}
+		{
+			id: "100000000044457B"
+			x: 40.05d
+			y: 3.1d
+			dependencies: ["100000000040C468"]
+			tasks: [
+				{
+					id: "100000000044646A"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000448359"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "100000000044A248"
+			x: 40.05d
+			y: 4.85d
+			dependencies: ["100000000044457B"]
+			tasks: [
+				{
+					id: "100000000044C137"
+					type: "item"
+					item: "minecraft:iron_pickaxe"
+				}
+				{
+					id: "100000000044FF15"
+					type: "checkmark"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000044E026"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "1000000000451E04"
+			x: 40.05d
+			y: 6.6d
+			dependencies: ["100000000044A248"]
+			tasks: [
+				{
+					id: "1000000000453CF3"
+					type: "item"
+					item: "minecraft:bucket"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000455BE2"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "1000000000457AD1"
+			x: 40.05d
+			y: 8.35d
+			dependencies: ["1000000000451E04"]
+			tasks: [
+				{
+					id: "10000000004599C0"
+					type: "item"
+					item: "minecraft:honeycomb"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000045B8AF"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "100000000045D79E"
+			x: 40.05d
+			y: 10.1d
+			dependencies: ["1000000000457AD1"]
+			tasks: [
+				{
+					id: "100000000045F68D"
+					type: "item"
+					item: "minecraft:paper"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000046157C"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "100000000046346B"
+			x: 40.05d
+			y: 11.85d
+			dependencies: ["100000000045D79E"]
+			tasks: [
+				{
+					id: "100000000046535A"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000467249"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+		{
+			id: "1000000000469138"
+			x: 40.05d
+			y: 13.6d
+			dependencies: ["100000000046346B"]
+			tasks: [
+				{
+					id: "100000000046B027"
+					type: "item"
+					item: "minecraft:shears"
+				}
+			]
+			rewards: [
+				{
+					id: "100000000046CF16"
+					type: "xp"
+					xp: 5
+				}
+			]
+			shape: "pentagon"
+		}
+	]
+}

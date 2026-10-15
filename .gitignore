@@ -1,0 +1,33 @@
+# eclipse
+bin
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# idea
+out
+*.ipr
+*.iws
+*.iml
+.idea/*
+!.idea/scopes
+
+# gradle
+build
+.gradle
+
+# other
+eclipse
+run
+runs
+
+### 統括↔executor の作業文書（公開 repo に入れない）
+GAP_LOG.md
+_handoff/
+
+# dev run folders (worlds, configs, logs)
+neoforge/run/
+fabric/runs/
+run/

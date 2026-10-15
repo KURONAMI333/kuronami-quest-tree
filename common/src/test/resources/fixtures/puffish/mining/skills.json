@@ -1,0 +1,38 @@
+{
+ "root": {
+  "definition": "root",
+  "x": 0,
+  "y": 0,
+  "root": true
+ },
+ "s0": {
+  "definition": "s0",
+  "x": 96,
+  "y": 0
+ },
+ "s1": {
+  "definition": "s1",
+  "x": 48,
+  "y": 83
+ },
+ "s2": {
+  "definition": "s2",
+  "x": -48,
+  "y": 83
+ },
+ "s3": {
+  "definition": "s3",
+  "x": -96,
+  "y": 0
+ },
+ "s4": {
+  "definition": "s4",
+  "x": -48,
+  "y": -83
+ },
+ "s5": {
+  "definition": "s5",
+  "x": 48,
+  "y": -83
+ }
+}

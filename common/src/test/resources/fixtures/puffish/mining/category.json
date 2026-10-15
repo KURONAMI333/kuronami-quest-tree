@@ -1,0 +1,10 @@
+{
+ "unlocked_by_default": true,
+ "title": "Mining",
+ "icon": {
+  "type": "item",
+  "data": {
+   "item": "diamond_pickaxe"
+  }
+ }
+}

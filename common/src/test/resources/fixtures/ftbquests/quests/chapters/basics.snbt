@@ -1,0 +1,208 @@
+{
+	id: "10000000006CC03C"
+	filename: "basics"
+	group: ""
+	icon: {
+		id: "minecraft:book"
+	}
+	order_index: 0
+	default_quest_shape: ""
+	default_hide_dependency_lines: false
+	quest_links: [ ]
+	images: [ ]
+	quests: [
+		{
+			id: "1000000000001EEF"
+			x: 0.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "1000000000003DDE"
+					type: "item"
+					item: {
+						id: "minecraft:honeycomb"
+						count: 1
+					}
+					count: 1
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000005CCD"
+					type: "xp"
+					xp: 10
+				}
+			]
+		}
+		{
+			id: "1000000000007BBC"
+			x: 2.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "1000000000009AAB"
+					type: "item"
+					item: {
+						id: "minecraft:honey_bottle"
+						count: 1
+					}
+					count: 2
+				}
+			]
+			rewards: [
+				{
+					id: "100000000000B99A"
+					type: "xp"
+					xp: 20
+				}
+			]
+			dependencies: ["1000000000001EEF"]
+		}
+		{
+			id: "100000000000D889"
+			x: 4.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "100000000000F778"
+					type: "item"
+					item: {
+						id: "minecraft:glass_bottle"
+						count: 1
+					}
+					count: 3
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000011667"
+					type: "xp"
+					xp: 30
+				}
+			]
+			dependencies: ["1000000000007BBC"]
+		}
+		{
+			id: "1000000000013556"
+			x: 6.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "1000000000015445"
+					type: "item"
+					item: {
+						id: "minecraft:campfire"
+						count: 1
+					}
+					count: 4
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000017334"
+					type: "xp"
+					xp: 40
+				}
+			]
+			dependencies: ["100000000000D889"]
+			shape: "hexagon"
+			size: 1.5d
+		}
+		{
+			id: "1000000000019223"
+			x: 8.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "100000000001B112"
+					type: "item"
+					item: {
+						id: "minecraft:flower_pot"
+						count: 1
+					}
+					count: 5
+				}
+			]
+			rewards: [
+				{
+					id: "100000000001D001"
+					type: "xp"
+					xp: 50
+				}
+			]
+			dependencies: ["1000000000013556"]
+		}
+		{
+			id: "100000000001EEF0"
+			x: 10.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "1000000000020DDF"
+					type: "item"
+					item: {
+						id: "minecraft:shears"
+						count: 1
+					}
+					count: 6
+				}
+			]
+			rewards: [
+				{
+					id: "1000000000022CCE"
+					type: "xp"
+					xp: 60
+				}
+			]
+			dependencies: ["1000000000019223"]
+		}
+		{
+			id: "1000000000024BBD"
+			x: 12.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "1000000000026AAC"
+					type: "item"
+					item: {
+						id: "minecraft:wheat"
+						count: 1
+					}
+					count: 7
+				}
+			]
+			rewards: [
+				{
+					id: "100000000002899B"
+					type: "xp"
+					xp: 70
+				}
+			]
+			dependencies: ["100000000001EEF0"]
+		}
+		{
+			id: "100000000002A88A"
+			x: 14.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "100000000002C779"
+					type: "item"
+					item: {
+						id: "minecraft:bread"
+						count: 1
+					}
+					count: 8
+				}
+			]
+			rewards: [
+				{
+					id: "100000000002E668"
+					type: "xp"
+					xp: 80
+				}
+			]
+			dependencies: ["1000000000024BBD"]
+		}
+	]
+}
