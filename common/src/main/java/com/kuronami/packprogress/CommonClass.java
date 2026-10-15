@@ -56,6 +56,17 @@ public final class CommonClass {
         ProgressService.onAction(player, action);
     }
 
+    /** A player took damage (after armour and absorption). */
+    public static void onTakeDamage(ServerPlayer player, net.minecraft.world.damagesource.DamageSource source, float amount) {
+        SkillExperience.onTakeDamage(player, source, amount);
+    }
+
+    /** A player damaged another living entity (after the target's armour). */
+    public static void onDealDamage(ServerPlayer player, net.minecraft.world.entity.LivingEntity target,
+                                    net.minecraft.world.damagesource.DamageSource source, float amount) {
+        SkillExperience.onDealDamage(player, target, source, amount);
+    }
+
     /** After respawning (death or returning from the End): attribute modifiers are not copied by vanilla. */
     public static void onRespawn(ServerPlayer player) {
         ProgressService.onRespawn(player);

@@ -7,8 +7,10 @@
     "mixins": [
         "FishingTriggerMixin",
         "FurnaceResultSlotMixin",
+        "LivingHealMixin",
         "PlayerEatMixin",
-        "ResultSlotMixin"
+        "ResultSlotMixin",
+        "StatsCounterMixin"
     ],
     "client": [],
     "server": [],

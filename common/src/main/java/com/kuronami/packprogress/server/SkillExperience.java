@@ -92,6 +92,36 @@ public final class SkillExperience {
         award(player, "fish_item", ctx);
     }
 
+    public static void onTakeDamage(ServerPlayer player, DamageSource source, float amount) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("damage_source", source);
+        ctx.put("taken_damage", (double) amount);
+        ctx.put("weapon_item_stack", source.getWeaponItem() != null ? source.getWeaponItem() : ItemStack.EMPTY);
+        award(player, "take_damage", ctx);
+    }
+
+    public static void onDealDamage(ServerPlayer player, LivingEntity target, DamageSource source, float amount) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("damaged_living_entity", target);
+        ctx.put("damage_source", source);
+        ctx.put("dealt_damage", (double) amount);
+        ctx.put("weapon_item_stack", player.getMainHandItem());
+        award(player, "deal_damage", ctx);
+    }
+
+    public static void onHeal(ServerPlayer player, float amount) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("heal_amount", (double) amount);
+        award(player, "heal", ctx);
+    }
+
+    public static void onStat(ServerPlayer player, net.minecraft.stats.Stat<?> stat, int amount) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("stat", stat);
+        ctx.put("increase_amount", (double) amount);
+        award(player, "increase_stat", ctx);
+    }
+
     private static Map<String, Object> base(ServerPlayer player) {
         Map<String, Object> ctx = new HashMap<>();
         ctx.put("player", player);
@@ -102,6 +132,9 @@ public final class SkillExperience {
 
     private static void award(ServerPlayer player, String source, Map<String, Object> ctx) {
         var rules = ProgressService.rules();
+        if (!usedSources(rules.model()).contains(source)) {
+            return;
+        }
         PlayerProgress p = null;
         for (ProgressModel.Chapter c : rules.model().chapters.values()) {
             if (!c.isSkills() || !c.points.has("sources") || !c.points.get("sources").isJsonArray()) {
@@ -135,6 +168,28 @@ public final class SkillExperience {
                 }
             }
         }
+    }
+
+    private static ProgressModel sourcesFor;
+    private static Set<String> used = Set.of();
+
+    /** Source types any chapter uses; most events (stats change every tick while walking) are skipped by this check. */
+    private static Set<String> usedSources(ProgressModel m) {
+        if (m != sourcesFor) {
+            Set<String> s = new HashSet<>();
+            for (ProgressModel.Chapter c : m.chapters.values()) {
+                if (c.isSkills() && c.points.has("sources") && c.points.get("sources").isJsonArray()) {
+                    for (JsonElement e : c.points.getAsJsonArray("sources")) {
+                        if (e.isJsonObject()) {
+                            s.add(strip(ProgressService.str(e.getAsJsonObject(), "type")));
+                        }
+                    }
+                }
+            }
+            used = s;
+            sourcesFor = m;
+        }
+        return used;
     }
 
     /** Experience for one event: evaluates the variables, then the expression (or the first case whose condition holds). */
@@ -280,8 +335,19 @@ public final class SkillExperience {
             return spec.isEmpty() || matches(spec, ds.typeHolder().unwrapKey().map(k -> k.location()).orElse(null),
                     tag -> ds.is(TagKey.create(Registries.DAMAGE_TYPE, tag)));
         }
+        if (v instanceof net.minecraft.stats.Stat<?> st) {
+            // accepts the vanilla stat name ("minecraft.custom:minecraft.jump") or "<type>:<value>" ids
+            String spec = d.has("stat") ? d.get("stat").getAsString() : "";
+            return spec.isEmpty() || spec.equals(st.getName()) || spec.equals(statId(st));
+        }
         warn(where, "test on", v == null ? "nothing" : v.getClass().getSimpleName());
         return false;
+    }
+
+    private static <T> String statId(net.minecraft.stats.Stat<T> st) {
+        var type = BuiltInRegistries.STAT_TYPE.getKey(st.getType());
+        var value = st.getType().getRegistry().getKey(st.getValue());
+        return type + ":" + value;
     }
 
     private static <T extends Comparable<T>> String valueName(BlockState s, Property<T> prop) {

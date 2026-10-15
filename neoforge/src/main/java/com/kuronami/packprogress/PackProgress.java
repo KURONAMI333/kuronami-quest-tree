@@ -45,6 +45,17 @@ public class PackProgress {
                 CommonClass.onBlockBroken(sp, e.getState());
             }
         });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post e) -> {
+            if (e.getEntity().level().isClientSide() || e.getNewDamage() <= 0) {
+                return;
+            }
+            if (e.getEntity() instanceof ServerPlayer sp) {
+                CommonClass.onTakeDamage(sp, e.getSource(), e.getNewDamage());
+            }
+            if (e.getSource().getEntity() instanceof ServerPlayer sp && e.getEntity() != sp) {
+                CommonClass.onDealDamage(sp, e.getEntity(), e.getSource(), e.getNewDamage());
+            }
+        });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerRespawnEvent e) -> {
             if (e.getEntity() instanceof ServerPlayer sp) {
                 CommonClass.onRespawn(sp);

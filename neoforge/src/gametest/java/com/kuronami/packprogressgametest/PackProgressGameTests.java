@@ -237,4 +237,27 @@ public final class PackProgressGameTests {
         helper.assertTrue(count(p, Items.EMERALD) == 1, "valid choice after an invalid one failed");
         helper.succeed();
     }
+
+    /** Damage taken and dealt, healing and statistics give experience through the real game paths. */
+    @GameTest(template = "empty3x3x3")
+    public static void bodySources(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        String c = "pack_progress_gametest:body";
+        // fresh players are spawn-protected; falling out of the world bypasses that (and armour)
+        p.hurt(p.damageSources().fellOutOfWorld(), 2);
+        double afterHurt = pr.xp.getOrDefault(c, 0.0);
+        helper.assertTrue(afterHurt == 2000, "take_damage 2 should give 2000, got " + afterHurt);
+        p.heal(1);
+        helper.assertTrue(pr.xp.getOrDefault(c, 0.0) == afterHurt + 10, "heal 1 should give 10: " + pr.xp.get(c));
+        p.awardStat(net.minecraft.stats.Stats.JUMP);
+        p.awardStat(net.minecraft.stats.Stats.WALK_ONE_CM, 50);
+        helper.assertTrue(pr.xp.getOrDefault(c, 0.0) == afterHurt + 11, "only the jump stat should count: " + pr.xp.get(c));
+        Zombie z = helper.spawn(EntityType.ZOMBIE, POS);
+        z.hurt(p.damageSources().playerAttack(p), 3);
+        double dealt = pr.xp.getOrDefault(c, 0.0) - afterHurt - 11;
+        helper.assertTrue(dealt > 0 && dealt <= 300, "deal_damage should give up to 300 (3 minus armour) * 100, got " + dealt);
+        z.discard();
+        helper.succeed();
+    }
 }

@@ -1,0 +1,15 @@
+{
+  "icon": {"id": "minecraft:golden_apple"},
+  "points": {
+    "per_level": "100000",
+    "sources": [
+      {"type": "puffish_skills:take_damage", "data": {"variables": {"d": {"operations": [{"type": "get_taken_damage"}]}}, "experience": "d * 1000"}},
+      {"type": "puffish_skills:deal_damage", "data": {"variables": {"d": {"operations": [{"type": "get_dealt_damage"}]}}, "experience": "d * 100"}},
+      {"type": "puffish_skills:heal", "data": {"variables": {"h": {"operations": [{"type": "get_heal_amount"}]}}, "experience": "h * 10"}},
+      {"type": "puffish_skills:increase_stat", "data": {
+        "variables": {"jump": {"operations": [{"type": "get_stat"}, {"type": "puffish_skills:test", "data": {"stat": "minecraft.custom:minecraft.jump"}}]}},
+        "experience": [{"condition": "jump", "expression": "1"}]}}
+    ]
+  },
+  "nodes": {"a": {"x": 0, "y": 0, "root": true, "cost": 1}}
+}
