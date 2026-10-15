@@ -68,5 +68,6 @@
   "task.kuronami_quest_tree.dim.minecraft.overworld": "the Overworld",
   "task.kuronami_quest_tree.dim.minecraft.the_nether": "the Nether",
   "task.kuronami_quest_tree.dim.minecraft.the_end": "the End",
-  "screen.kuronami_quest_tree.search": "Search"
+  "screen.kuronami_quest_tree.search": "Search",
+  "screen.kuronami_quest_tree.unlock_path": "Unlock %s (%s)"
 }

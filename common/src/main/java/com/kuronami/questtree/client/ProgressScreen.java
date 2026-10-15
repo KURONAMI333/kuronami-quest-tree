@@ -119,6 +119,26 @@ public class ProgressScreen extends Screen {
 
     private Object matchedProgress;
 
+    // ------------------------------------------------------------------ path to the selected node (EXTERNAL_REFERENCES 1-2)
+
+    private PathFinder.Path path = PathFinder.Path.NONE;
+    private java.util.Set<String> pathSet = java.util.Set.of();
+    private String pathFor;
+    private Object pathProgress;
+
+    private PathFinder.Path path() {
+        if (selected == null || ClientProgress.rules() == null) {
+            return PathFinder.Path.NONE;
+        }
+        if (!selected.equals(pathFor) || ClientProgress.progress() != pathProgress) {
+            pathFor = selected;
+            pathProgress = ClientProgress.progress();
+            path = PathFinder.find(ClientProgress.rules(), ClientProgress.progress(), selected);
+            pathSet = new java.util.HashSet<>(path.nodes());
+        }
+        return path;
+    }
+
     private static boolean nodeMatches(ClientModel.Node n, String q) {
         if (n.title.getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
             return true;
@@ -754,6 +774,13 @@ public class ProgressScreen extends Screen {
             Tiles.tile(g, shape, x, y, s, ClientProgress.state(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), n.icon, far);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
+            if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
+                // the unfinished requirements on the way to the selected node
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z + 15);
+                dashedOutline(g, x - 3, y - 3, s + 6, s + 6, 0xCCF2C230);
+                g.pose().popPose();
+            }
             if (searching() && !matchSet.contains(n.key)) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z + 20);
@@ -1053,8 +1080,30 @@ public class ProgressScreen extends Screen {
                     ClientProgress.send("take", n.key, 0);
                     flashes.put(n.key, Util.getMillis());
                 });
-            } else if (state == State.OPEN && n.cost > 0) {
-                g.drawString(font, Component.translatable("screen.kuronami_quest_tree.cost", n.cost), bx, y + 6, GRAY, true);
+            } else {
+                PathFinder.Path p = path();
+                int points = ClientProgress.points(ch.id);
+                if (p.nodes().size() > 1 && p.batchable() > 0) {
+                    // the way there in one go (stops before an exclusive choice, which stays the player's pick)
+                    Component all = Component.translatable("screen.kuronami_quest_tree.unlock_path", p.batchable(), p.batchCost());
+                    int bw = font.width(all) + 16;
+                    boolean afford = points >= p.batchCost();
+                    List<String> batch = p.nodes().subList(0, p.batchable());
+                    button(g, all, bx, y, bw, true, afford, mouseX, mouseY, () -> {
+                        long t = Util.getMillis();
+                        int i = 0;
+                        for (String k : batch) {
+                            ClientProgress.send("take", k, 0);
+                            flashes.put(k, t + 110L * i++);
+                        }
+                    });
+                    if (!afford) {
+                        String need = p.batchCost() + "";
+                        g.drawString(font, Component.translatable("screen.kuronami_quest_tree.cost", need), bx + bw + 6, y + 6, GRAY, true);
+                    }
+                } else if (state == State.OPEN && n.cost > 0) {
+                    g.drawString(font, Component.translatable("screen.kuronami_quest_tree.cost", n.cost), bx, y + 6, GRAY, true);
+                }
             }
             return;
         }
