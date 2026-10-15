@@ -43,6 +43,14 @@ public final class Rewards {
                 case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
                 case "toast" -> ProgressService.event(player, p, "toast", n.key);
+                // Kuronami's Trophies (mod-108): it gives each trophy once per player and engraves it; no dependency, only its command
+                case "trophy" -> {
+                    // only a valid id reaches the command line
+                    if (com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("kuronami_trophies")
+                            && ResourceLocation.tryParse(ProgressService.str(rw, "trophy")) != null && ProgressService.str(rw, "trophy").contains(":")) {
+                        ServerCommands.run(player, "trophy award @s " + ProgressService.str(rw, "trophy"), 2, true);
+                    }
+                }
                 default -> Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
             }
         } catch (RuntimeException ex) {

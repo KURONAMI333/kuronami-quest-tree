@@ -198,6 +198,27 @@
       "repeat": {
         "cooldown": 0
       }
+    },
+    "trophy_q": {
+      "x": 6,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "trophy",
+          "trophy": "artisan:potter"
+        },
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:stick"
+          }
+        }
+      ]
     }
   }
 }

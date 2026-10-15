@@ -246,7 +246,19 @@ public final class ClientModel {
                 }
                 JsonObject ro = r.getAsJsonObject();
                 String type = ro.has("type") ? ro.get("type").getAsString() : "";
+                // any reward may name its own icon (FTB Quests reward icons; command rewards have nothing else to show)
+                ItemStack own = ro.has("icon") ? stack(ro.get("icon")) : ItemStack.EMPTY;
+                if (!own.isEmpty()) {
+                    rewards.add(own);
+                    continue;
+                }
                 switch (type) {
+                    case "trophy" -> {
+                        ItemStack t = trophyPreview(ro.has("trophy") ? ro.get("trophy").getAsString() : "");
+                        if (!t.isEmpty()) {
+                            rewards.add(t);
+                        }
+                    }
                     case "item" -> rewards.add(stack(ro.get("item")));
                     case "xp", "xp_levels" -> rewards.add(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64, ro.has("amount") ? ro.get("amount").getAsInt() : 1))));
                     case "table" -> {
@@ -394,6 +406,36 @@ public final class ClientModel {
             this.size = o.has("size") ? Math.max(0.3, num(o, "size")) : ch.defaultSize;
             this.shape = o.has("shape") ? o.get("shape").getAsString() : "";
         }
+    }
+
+    /**
+     * The trophy as Kuronami's Trophies draws it (its item with the trophy component), so the reward shows the actual
+     * trophy before it is claimed. Empty when that mod is not installed.
+     */
+    static ItemStack trophyPreview(String id) {
+        var level = Minecraft.getInstance().level;
+        var player = Minecraft.getInstance().player;
+        ResourceLocation item = ResourceLocation.fromNamespaceAndPath("kuronami_trophies", "trophy");
+        if (id.isEmpty() || level == null || player == null || !BuiltInRegistries.ITEM.containsKey(item)) {
+            return ItemStack.EMPTY;
+        }
+        JsonObject data = new JsonObject();
+        data.addProperty("trophy", id);
+        com.google.gson.JsonArray uuid = new com.google.gson.JsonArray();
+        for (int v : net.minecraft.core.UUIDUtil.uuidToIntArray(player.getUUID())) {
+            uuid.add(v);
+        }
+        data.add("recipient", uuid);
+        data.addProperty("name", "");
+        data.addProperty("date", "");
+        JsonObject components = new JsonObject();
+        components.add("kuronami_trophies:trophy", data);
+        JsonObject json = new JsonObject();
+        json.addProperty("id", item.toString());
+        json.addProperty("count", 1);
+        json.add("components", components);
+        return ItemStack.CODEC.parse(level.registryAccess().createSerializationContext(com.mojang.serialization.JsonOps.INSTANCE), json)
+                .result().orElse(ItemStack.EMPTY);
     }
 
     static ItemStack stack(JsonElement e) {

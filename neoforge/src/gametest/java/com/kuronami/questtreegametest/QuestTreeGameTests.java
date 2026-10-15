@@ -350,4 +350,15 @@ public final class QuestTreeGameTests {
         helper.assertTrue(count(p, Items.APPLE) >= 1, "complete on a task-less quest skipped its auto reward");
         helper.succeed();
     }
+
+    /** A trophy reward without Kuronami's Trophies installed does nothing and does not block the other rewards. */
+    @GameTest(template = "empty3x3x3")
+    public static void trophyWithoutTrophyMod(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        act(p, "check", Q + "trophy_q", 0);
+        act(p, "claim", Q + "trophy_q", -1);
+        helper.assertTrue(pr.claimed.contains(Q + "trophy_q") && count(p, Items.STICK) == 1, "claim with a trophy reward failed");
+        helper.succeed();
+    }
 }
