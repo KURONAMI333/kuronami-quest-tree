@@ -167,7 +167,7 @@ public final class ProgressModel {
         return o != null && o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isNumber() ? o.get(k).getAsInt() : def;
     }
 
-    static boolean boolOf(JsonObject o, String k) {
+    public static boolean boolOf(JsonObject o, String k) {
         return o != null && o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isBoolean() && o.get(k).getAsBoolean();
     }
 }

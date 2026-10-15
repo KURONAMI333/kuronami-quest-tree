@@ -19,6 +19,12 @@ public final class PackProgressClient {
         @SubscribeEvent
         public static void keys(RegisterKeyMappingsEvent event) {
             event.register(ClientProgress.OPEN_KEY);
+            ClientProgress.sender = a -> {
+                var conn = net.minecraft.client.Minecraft.getInstance().getConnection();
+                if (conn != null && conn.hasChannel(a.type())) {
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(a);
+                }
+            };
         }
     }
 

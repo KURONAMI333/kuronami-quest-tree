@@ -3,7 +3,11 @@ package com.kuronami.packprogress.client;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.packprogress.Constants;
+import com.kuronami.packprogress.network.ActionPayload;
+import com.kuronami.packprogress.network.ProgressPayload;
 import com.kuronami.packprogress.network.SyncPayload;
+import com.kuronami.packprogress.progress.PlayerProgress;
+import com.kuronami.packprogress.progress.ProgressJson;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -12,6 +16,8 @@ import org.lwjgl.glfw.GLFW;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.function.Consumer;
 import java.util.zip.GZIPInputStream;
 
 /** Client entry points shared by both loaders: receiving the bundle and the open key. */
@@ -21,6 +27,11 @@ public final class ClientProgress {
             GLFW.GLFW_KEY_U, "key.categories.pack_progress");
 
     private static ClientModel model;
+    private static PlayerProgress progress = new PlayerProgress();
+    /** Set by the loader module: sends a payload to the server. */
+    public static Consumer<ActionPayload> sender = a -> { };
+    /** Listeners for progress events (motion and sound); the screen and the HUD register here. */
+    public static final List<Consumer<String>> EVENT_LISTENERS = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static int receivingGeneration = -1;
     private static ByteArrayOutputStream buffer;
     private static int nextPart;
@@ -54,9 +65,31 @@ public final class ClientProgress {
         }
     }
 
+    /** The player's own progress, replaced whole on every update. */
+    public static void onProgress(ProgressPayload p) {
+        try {
+            progress = ProgressJson.read(JsonParser.parseString(p.progressJson()).getAsJsonObject());
+        } catch (RuntimeException ex) {
+            Constants.LOG.error("Could not read progress from server", ex);
+            return;
+        }
+        for (String e : p.events()) {
+            EVENT_LISTENERS.forEach(l -> l.accept(e));
+        }
+    }
+
+    public static PlayerProgress progress() {
+        return progress;
+    }
+
+    public static void send(String action, String node, int index) {
+        sender.accept(new ActionPayload(action, node == null ? "" : node, index));
+    }
+
     /** Leaving a server: forget its data so another server never shows it. */
     public static void onLogout() {
         model = null;
+        progress = new PlayerProgress();
         receivingGeneration = -1;
         buffer = null;
         ProgressScreen.clearViews();

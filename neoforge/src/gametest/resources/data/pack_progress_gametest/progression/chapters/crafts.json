@@ -1,0 +1,14 @@
+{
+  "icon": {"id": "minecraft:crafting_table"},
+  "points": {
+    "per_level": "1000",
+    "sources": [
+      {"type": "puffish_skills:craft_item", "data": {"experience": "1"}},
+      {"type": "puffish_skills:smelt_item", "data": {"experience": "20"}},
+      {"type": "puffish_skills:eat_food", "data": {"variables": {"food": {"operations": [{"type": "get_eaten_item_stack"}, {"type": "get_nutrition"}]}},
+                                                   "experience": "food * 100"}},
+      {"type": "puffish_skills:fish_item", "data": {"experience": "1000"}}
+    ]
+  },
+  "nodes": {"a": {"x": 0, "y": 0, "root": true, "cost": 1}}
+}

@@ -25,6 +25,10 @@ public final class ProgressRules {
         this.model = model;
     }
 
+    public ProgressModel model() {
+        return model;
+    }
+
     public State state(PlayerProgress p, ProgressModel.Node n) {
         if (excluded(p, n)) {
             return State.EXCLUDED;

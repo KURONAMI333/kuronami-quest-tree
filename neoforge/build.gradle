@@ -3,6 +3,14 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
+// In-game tests live in their own source set and companion mod so they never reach the shipped jar.
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
 neoForge {
     version = neoforge_version
     // Automatically enable neoforge AccessTransformers if the file exists
@@ -14,10 +22,22 @@ neoForge {
         minecraftVersion = parchment_minecraft
         mappingsVersion = parchment_version
     }
+    addModdingDependenciesTo sourceSets.gametest
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+        "${mod_id}_gametest" {
+            sourceSet sourceSets.gametest
+        }
+    }
     runs {
         configureEach {
             systemProperty('neoforge.enabledGameTestNamespaces', mod_id)
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
+            if (it.name != 'gameTestServer') {
+                loadedMods = [project.neoForge.mods.getByName(mod_id)]
+            }
         }
         client {
             client()
@@ -38,10 +58,11 @@ neoForge {
         server {
             server()
         }
-    }
-    mods {
-        "${mod_id}" {
-            sourceSet sourceSets.main
+        gameTestServer {
+            type = 'gameTestServer'
+            sourceSet = sourceSets.gametest
+            systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},${mod_id}_gametest")
+            loadedMods = [project.neoForge.mods.getByName(mod_id), project.neoForge.mods.getByName("${mod_id}_gametest")]
         }
     }
 }

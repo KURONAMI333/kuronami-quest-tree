@@ -1,0 +1,323 @@
+package com.kuronami.packprogress.server;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.kuronami.packprogress.Constants;
+import com.kuronami.packprogress.data.ProgressModel;
+import com.kuronami.packprogress.points.Expression;
+import com.kuronami.packprogress.progress.PlayerProgress;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Experience sources of skill chapters, in Pufferfish's Skills' own format so imported trees keep their numbers:
+ * <pre>{"type": "puffish_skills:mine_block", "data": {
+ *    "variables": {"is_ripe": {"operations": [{"type": "get_mined_block_state"},
+ *                                             {"type": "puffish_skills:test", "data": {"block": "#minecraft:crops", "state": {"age": "7"}}}]}},
+ *    "experience": [{"condition": "is_ripe", "expression": "1"}]}}</pre>
+ * A variable is a chain of operations over game objects; the first operation reads from the event ("get_mined_block_state"),
+ * later ones convert or test. An operation this class does not know makes the variable 0 (no experience rather than
+ * wrong experience) and is logged once, so pack authors see what to change.
+ */
+public final class SkillExperience {
+
+    private static final Set<String> WARNED = new HashSet<>();
+    private static final Map<String, Expression> PARSED = new HashMap<>();
+
+    private SkillExperience() {
+    }
+
+    // ------------------------------------------------------------------ event entry points
+
+    public static void onMine(ServerPlayer player, BlockState state) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("mined_block_state", state);
+        ctx.put("tool_item_stack", player.getMainHandItem());
+        award(player, "mine_block", ctx);
+    }
+
+    static void onKill(ServerPlayer player, PlayerProgress p, Entity killed) {
+        if (!(killed instanceof LivingEntity living)) {
+            return;
+        }
+        Map<String, Object> ctx = base(player);
+        ctx.put("killed_living_entity", living);
+        ctx.put("weapon_item_stack", player.getMainHandItem());
+        ctx.put("damage_source", living.getLastDamageSource());
+        ctx.put("dropped_experience", (double) living.getExperienceReward(player.serverLevel(), player));
+        award(player, "kill_entity", ctx);
+    }
+
+    public static void onCraft(ServerPlayer player, ItemStack crafted) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("crafted_item_stack", crafted);
+        award(player, "craft_item", ctx);
+    }
+
+    public static void onSmelt(ServerPlayer player, ItemStack smelted) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("smelted_item_stack", smelted);
+        award(player, "smelt_item", ctx);
+    }
+
+    public static void onEat(ServerPlayer player, ItemStack food) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("eaten_item_stack", food);
+        award(player, "eat_food", ctx);
+    }
+
+    public static void onFish(ServerPlayer player, ItemStack caught) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("fished_item_stack", caught);
+        ctx.put("tool_item_stack", player.getMainHandItem());
+        award(player, "fish_item", ctx);
+    }
+
+    private static Map<String, Object> base(ServerPlayer player) {
+        Map<String, Object> ctx = new HashMap<>();
+        ctx.put("player", player);
+        return ctx;
+    }
+
+    // ------------------------------------------------------------------ evaluation
+
+    private static void award(ServerPlayer player, String source, Map<String, Object> ctx) {
+        var rules = ProgressService.rules();
+        PlayerProgress p = null;
+        for (ProgressModel.Chapter c : rules.model().chapters.values()) {
+            if (!c.isSkills() || !c.points.has("sources") || !c.points.get("sources").isJsonArray()) {
+                continue;
+            }
+            if (c.points.has("experience_enabled") && !c.points.get("experience_enabled").getAsBoolean()) {
+                continue;
+            }
+            double total = 0;
+            for (JsonElement e : c.points.getAsJsonArray("sources")) {
+                if (!e.isJsonObject()) {
+                    continue;
+                }
+                JsonObject s = e.getAsJsonObject();
+                String type = ProgressService.str(s, "type");
+                if (!strip(type).equals(source)) {
+                    continue;
+                }
+                JsonObject data = s.has("data") && s.get("data").isJsonObject() ? s.getAsJsonObject("data") : s;
+                total += amount(c.id, data, ctx);
+            }
+            if (total > 0) {
+                if (p == null) {
+                    p = ProgressService.progress(player);
+                }
+                int levels = rules.addExperience(p, c, total);
+                ProgressStore.get(player.server).setDirty();
+                ProgressService.markDirty(player);
+                if (levels > 0) {
+                    ProgressService.event(player, p, "level", c.id + "/");
+                }
+            }
+        }
+    }
+
+    /** Experience for one event: evaluates the variables, then the expression (or the first case whose condition holds). */
+    static double amount(String where, JsonObject data, Map<String, Object> ctx) {
+        Map<String, Double> vars = new HashMap<>();
+        if (data.has("variables") && data.get("variables").isJsonObject()) {
+            for (Map.Entry<String, JsonElement> v : data.getAsJsonObject("variables").entrySet()) {
+                vars.put(v.getKey(), variable(where, v.getValue(), ctx));
+            }
+        }
+        JsonElement exp = data.get("experience");
+        if (exp == null) {
+            return 0;
+        }
+        try {
+            if (exp.isJsonArray()) {
+                for (JsonElement ce : exp.getAsJsonArray()) {
+                    JsonObject cs = ce.getAsJsonObject();
+                    String cond = cs.has("condition") ? cs.get("condition").getAsString() : "true";
+                    if (cond.equals("true") || eval(cond, vars) != 0) {
+                        return Math.max(0, eval(cs.get("expression").getAsString(), vars));
+                    }
+                }
+                return 0;
+            }
+            return Math.max(0, eval(exp.getAsString(), vars));
+        } catch (RuntimeException ex) {
+            warn(where, "expression", ex.getMessage());
+            return 0;
+        }
+    }
+
+    private static double eval(String expr, Map<String, Double> vars) {
+        Expression e = PARSED.computeIfAbsent(expr, Expression::parse);
+        return e.eval(vars);
+    }
+
+    private static double variable(String where, JsonElement def, Map<String, Object> ctx) {
+        if (!def.isJsonObject() || !def.getAsJsonObject().has("operations")) {
+            warn(where, "variable", def.toString());
+            return 0;
+        }
+        Object value = null;
+        for (JsonElement oe : def.getAsJsonObject().getAsJsonArray("operations")) {
+            JsonObject op = oe.getAsJsonObject();
+            String type = strip(ProgressService.str(op, "type"));
+            JsonObject data = op.has("data") && op.get("data").isJsonObject() ? op.getAsJsonObject("data") : new JsonObject();
+            value = apply(where, type, data, value, ctx);
+            if (value == null) {
+                return 0;
+            }
+        }
+        return number(value);
+    }
+
+    /** One operation. Returns null when it cannot be applied to the value. */
+    private static Object apply(String where, String type, JsonObject data, Object v, Map<String, Object> ctx) {
+        if (type.startsWith("get_") && ctx.containsKey(type.substring(4))) {
+            return ctx.get(type.substring(4));
+        }
+        switch (type) {
+            case "test":
+                return test(where, data, v) ? 1.0 : 0.0;
+            case "get_block":
+                return v instanceof BlockState s ? s.getBlock() : null;
+            case "get_item":
+                return v instanceof ItemStack s ? s.getItem() : null;
+            case "get_count":
+                return v instanceof ItemStack s ? (double) s.getCount() : null;
+            case "get_type":
+                return v instanceof Entity e ? e.getType() : null;
+            case "as_living_entity":
+                return v instanceof LivingEntity l ? l : null;
+            case "as_entity":
+                return v instanceof Entity e ? e : null;
+            case "get_health":
+                return v instanceof LivingEntity l ? (double) l.getHealth() : null;
+            case "get_max_health":
+                return v instanceof LivingEntity l ? (double) l.getMaxHealth() : null;
+            case "get_hardness":
+                return v instanceof BlockState s ? (double) s.getBlock().defaultDestroyTime() : null;
+            case "get_blast_resistance":
+                return v instanceof BlockState s ? (double) s.getBlock().getExplosionResistance() : null;
+            case "get_attacker":
+                return v instanceof DamageSource d ? d.getEntity() : null;
+            case "get_nutrition", "get_saturation_modifier": {
+                if (!(v instanceof ItemStack s)) {
+                    return null;
+                }
+                FoodProperties f = s.get(DataComponents.FOOD);
+                if (f == null) {
+                    return 0.0;
+                }
+                return type.equals("get_nutrition") ? (double) f.nutrition() : (double) f.saturation();
+            }
+            case "get_world":
+                return v instanceof Entity e ? e.level() : null;
+            case "get_time_of_day":
+                return v instanceof net.minecraft.world.level.Level l ? (double) (l.getDayTime() % 24000L) : null;
+            default:
+                warn(where, "operation", type);
+                return null;
+        }
+    }
+
+    /** The "test" operation: matches a block state, item, entity or damage source against an id, #tag and state. */
+    private static boolean test(String where, JsonObject d, Object v) {
+        if (v instanceof BlockState s) {
+            if (d.has("block") && !matches(d.get("block").getAsString(), s.getBlock().builtInRegistryHolder().key().location(),
+                    tag -> s.is(TagKey.create(Registries.BLOCK, tag)))) {
+                return false;
+            }
+            if (d.has("state") && d.get("state").isJsonObject()) {
+                for (Map.Entry<String, JsonElement> e : d.getAsJsonObject("state").entrySet()) {
+                    Property<?> prop = s.getBlock().getStateDefinition().getProperty(e.getKey());
+                    if (prop == null || !valueName(s, prop).equals(e.getValue().getAsString())) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        if (v instanceof Block b) {
+            return !d.has("block") || matches(d.get("block").getAsString(), BuiltInRegistries.BLOCK.getKey(b),
+                    tag -> b.builtInRegistryHolder().is(TagKey.create(Registries.BLOCK, tag)));
+        }
+        if (v instanceof ItemStack st) {
+            return !d.has("item") || matches(d.get("item").getAsString(), BuiltInRegistries.ITEM.getKey(st.getItem()),
+                    tag -> st.is(TagKey.create(Registries.ITEM, tag)));
+        }
+        if (v instanceof Item it) {
+            return !d.has("item") || matches(d.get("item").getAsString(), BuiltInRegistries.ITEM.getKey(it),
+                    tag -> it.builtInRegistryHolder().is(TagKey.create(Registries.ITEM, tag)));
+        }
+        EntityType<?> type = v instanceof Entity e ? e.getType() : v instanceof EntityType<?> t ? t : null;
+        if (type != null) {
+            String spec = d.has("entity") ? d.get("entity").getAsString() : d.has("entity_type") ? d.get("entity_type").getAsString()
+                    : d.has("type") ? d.get("type").getAsString() : "";
+            return spec.isEmpty() || ProgressService.entityMatches(spec, type);
+        }
+        if (v instanceof DamageSource ds) {
+            String spec = d.has("damage") ? d.get("damage").getAsString() : d.has("damage_type") ? d.get("damage_type").getAsString() : "";
+            return spec.isEmpty() || matches(spec, ds.typeHolder().unwrapKey().map(k -> k.location()).orElse(null),
+                    tag -> ds.is(TagKey.create(Registries.DAMAGE_TYPE, tag)));
+        }
+        warn(where, "test on", v == null ? "nothing" : v.getClass().getSimpleName());
+        return false;
+    }
+
+    private static <T extends Comparable<T>> String valueName(BlockState s, Property<T> prop) {
+        return prop.getName(s.getValue(prop));
+    }
+
+    private static boolean matches(String spec, ResourceLocation id, java.util.function.Predicate<ResourceLocation> inTag) {
+        if (spec.startsWith("#")) {
+            ResourceLocation tag = ResourceLocation.tryParse(spec.substring(1));
+            return tag != null && inTag.test(tag);
+        }
+        return id != null && id.toString().equals(spec.contains(":") ? spec : "minecraft:" + spec);
+    }
+
+    private static double number(Object v) {
+        if (v instanceof Double d) {
+            return d;
+        }
+        if (v instanceof Number n) {
+            return n.doubleValue();
+        }
+        if (v instanceof Boolean b) {
+            return b ? 1 : 0;
+        }
+        // an object left at the end of a chain counts as "present"
+        return 1;
+    }
+
+    private static String strip(String type) {
+        int colon = type.indexOf(':');
+        return colon < 0 ? type : type.substring(colon + 1);
+    }
+
+    private static void warn(String where, String what, String detail) {
+        if (WARNED.add(where + what + detail)) {
+            Constants.LOG.warn("Skill chapter {}: unsupported {} '{}' (gives no experience)", where, what, detail);
+        }
+    }
+}

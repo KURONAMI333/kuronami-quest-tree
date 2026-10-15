@@ -1,6 +1,7 @@
 package com.kuronami.packprogress;
 
 import com.kuronami.packprogress.client.ClientProgress;
+import com.kuronami.packprogress.network.ProgressPayload;
 import com.kuronami.packprogress.network.SyncPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -15,6 +16,12 @@ public class PackProgressClient implements ClientModInitializer {
         KeyBindingHelper.registerKeyBinding(ClientProgress.OPEN_KEY);
         ClientTickEvents.END_CLIENT_TICK.register(mc -> ClientProgress.onClientTick());
         ClientPlayNetworking.registerGlobalReceiver(SyncPayload.TYPE, (payload, context) -> ClientProgress.onSync(payload));
+        ClientPlayNetworking.registerGlobalReceiver(ProgressPayload.TYPE, (payload, context) -> ClientProgress.onProgress(payload));
+        ClientProgress.sender = a -> {
+            if (ClientPlayNetworking.canSend(a.type())) {
+                ClientPlayNetworking.send(a);
+            }
+        };
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientProgress.onLogout());
     }
 }
