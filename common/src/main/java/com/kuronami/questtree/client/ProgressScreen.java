@@ -54,6 +54,111 @@ public class ProgressScreen extends Screen {
     public static void clearViews() {
         VIEWS.clear();
         lastChapter = -1;
+        query = "";
+    }
+
+    // ------------------------------------------------------------------ search (EXTERNAL_REFERENCES 1-1)
+
+    /** The search text, kept while the game runs so reopening the screen keeps the search. */
+    private static String query = "";
+    private net.minecraft.client.gui.components.EditBox searchBox;
+    private String matchedFor;
+    private ClientModel matchedModel;
+    /** Visible nodes matching the search, in chapter order, and the count per chapter. */
+    private final List<String> matches = new ArrayList<>();
+    private final java.util.Set<String> matchSet = new java.util.HashSet<>();
+    private final Map<String, Integer> matchCount = new HashMap<>();
+    private int matchCursor = -1;
+
+    @Override
+    protected void init() {
+        searchBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 110, 16, Component.translatable("screen.kuronami_quest_tree.search"));
+        searchBox.setHint(Component.translatable("screen.kuronami_quest_tree.search").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
+        searchBox.setMaxLength(64);
+        searchBox.setValue(query);
+        searchBox.setResponder(v -> {
+            query = v;
+            matchCursor = -1;
+        });
+        // input only: drawn by render() above the scrim
+        addWidget(searchBox);
+    }
+
+    private boolean searching() {
+        return !query.isBlank();
+    }
+
+    /** Title, task targets and reward item names, in the player's language, case-insensitive. */
+    private void refreshMatches(ClientModel m) {
+        if (query.equals(matchedFor) && m == matchedModel && cachedFor == matchedProgress) {
+            return;
+        }
+        matchedFor = query;
+        matchedModel = m;
+        matchedProgress = cachedFor;
+        matches.clear();
+        matchSet.clear();
+        matchCount.clear();
+        if (!searching()) {
+            return;
+        }
+        String q = query.toLowerCase(java.util.Locale.ROOT).trim();
+        for (ClientModel.Chapter c : m.chapters) {
+            if (ClientProgress.chapterHidden(c.id)) {
+                continue;
+            }
+            for (ClientModel.Node n : c.nodes.values()) {
+                if (ClientProgress.visible(n.key) && nodeMatches(n, q)) {
+                    matches.add(n.key);
+                    matchSet.add(n.key);
+                    matchCount.merge(c.id, 1, Integer::sum);
+                }
+            }
+        }
+    }
+
+    private Object matchedProgress;
+
+    private static boolean nodeMatches(ClientModel.Node n, String q) {
+        if (n.title.getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
+            return true;
+        }
+        for (ClientModel.Task t : n.tasks) {
+            if (t.name.getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
+                return true;
+            }
+        }
+        for (ItemStack r : n.rewards) {
+            if (r.getHoverName().getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
+                return true;
+            }
+        }
+        for (ItemStack r : n.choice) {
+            if (r.getHoverName().getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Enter: the next match (in the open chapter first, then across chapters), centred and selected. */
+    private void nextMatch() {
+        if (matches.isEmpty()) {
+            return;
+        }
+        ClientModel.Chapter ch = chapter();
+        int start = matchCursor;
+        for (int step = 1; step <= matches.size(); step++) {
+            int i = (start + step) % matches.size();
+            String key = matches.get(i);
+            if (ch == null || model().chapterOf.get(key) == ch || step == matches.size()) {
+                matchCursor = i;
+                goTo(key);
+                return;
+            }
+        }
+        matchCursor = (start + 1) % matches.size();
+        goTo(matches.get(matchCursor));
     }
 
     private record Button(int x, int y, int w, int h, Runnable run) {
@@ -222,6 +327,7 @@ public class ProgressScreen extends Screen {
             return;
         }
         refresh(m);
+        refreshMatches(m);
         ClientModel.Chapter ch = chapter();
         // the chapter list stays open on Now, except on small screens (GUI scale 4 on 1080p is 480 wide) where the tiles need the room
         boolean docked = ch == null && width >= DOCK_MIN_WIDTH;
@@ -243,7 +349,18 @@ public class ProgressScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 100);
         renderRail(g, m, mouseX, mouseY, docked);
+        renderSearch(g, mouseX, mouseY, partialTick);
         g.pose().popPose();
+    }
+
+    private void renderSearch(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        int right = (sheetT > 0 ? sheetLeft() : width) - 8;
+        searchBox.setX(right - searchBox.getWidth());
+        searchBox.render(g, mouseX, mouseY, partialTick);
+        if (searching()) {
+            String n = matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size();
+            g.drawString(font, n, searchBox.getX() - font.width(n) - 6, 12, matches.isEmpty() ? 0xFFC86464 : GRAY, true);
+        }
     }
 
     @Override
@@ -274,6 +391,13 @@ public class ProgressScreen extends Screen {
             int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
             String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
                     ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
+            if (searching()) {
+                // while searching, the rail shows where the matches are instead
+                int hits = matchCount.getOrDefault(c.id, 0);
+                rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, 0, String.valueOf(hits));
+                y += 22;
+                continue;
+            }
             rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
                     !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
             y += 22;
@@ -630,6 +754,12 @@ public class ProgressScreen extends Screen {
             Tiles.tile(g, shape, x, y, s, ClientProgress.state(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), n.icon, far);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
+            if (searching() && !matchSet.contains(n.key)) {
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z + 20);
+                Tiles.shape(g, shape, x - 1, y - 1, s + 2, s + 2, 0xC00A0A0C);
+                g.pose().popPose();
+            }
             double sx = v[0] + n.x * UNIT * v[2];
             double sy = v[1] + n.y * UNIT * v[2];
             if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight()
@@ -1123,6 +1253,15 @@ public class ProgressScreen extends Screen {
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         ClientModel m = model();
+        if (searchBox != null && searchBox.isMouseOver(mx, my)) {
+            setFocused(searchBox);
+            searchBox.setFocused(true);
+            return searchBox.mouseClicked(mx, my, button);
+        }
+        if (searchBox != null && searchBox.isFocused()) {
+            searchBox.setFocused(false);
+            setFocused(null);
+        }
         if (m == null || button != 0) {
             return super.mouseClicked(mx, my, button);
         }
@@ -1431,6 +1570,28 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (searchBox != null && searchBox.isFocused()) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) {
+                nextMatch();
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+                searchBox.setFocused(false);
+                setFocused(null);
+                return true;
+            }
+            // typing goes to the box (the open key must not close the screen mid-word)
+            return searchBox.keyPressed(key, scan, modifiers) || true;
+        }
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_F && Screen.hasControlDown()) {
+            setFocused(searchBox);
+            searchBox.setFocused(true);
+            return true;
+        }
+        if ((key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) && searching()) {
+            nextMatch();
+            return true;
+        }
         if (ClientProgress.OPEN_KEY.matches(key, scan)) {
             onClose();
             return true;

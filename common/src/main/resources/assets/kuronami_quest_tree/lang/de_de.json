@@ -67,5 +67,6 @@
   "task.kuronami_quest_tree.item": "Gegenstand",
   "task.kuronami_quest_tree.dim.minecraft.overworld": "die Oberwelt",
   "task.kuronami_quest_tree.dim.minecraft.the_nether": "den Nether",
-  "task.kuronami_quest_tree.dim.minecraft.the_end": "das Ende"
+  "task.kuronami_quest_tree.dim.minecraft.the_end": "das Ende",
+  "screen.kuronami_quest_tree.search": "Suchen"
 }

@@ -67,5 +67,6 @@
   "task.kuronami_quest_tree.item": "アイテム",
   "task.kuronami_quest_tree.dim.minecraft.overworld": "オーバーワールド",
   "task.kuronami_quest_tree.dim.minecraft.the_nether": "ネザー",
-  "task.kuronami_quest_tree.dim.minecraft.the_end": "エンド"
+  "task.kuronami_quest_tree.dim.minecraft.the_end": "エンド",
+  "screen.kuronami_quest_tree.search": "検索"
 }
