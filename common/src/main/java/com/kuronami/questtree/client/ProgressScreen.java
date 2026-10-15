@@ -152,7 +152,8 @@ public class ProgressScreen extends Screen {
                 NowEntry e = new NowEntry(n.key, n, null);
                 if (Pins.has(n.key) && s != State.DONE) {
                     pinned.add(e);
-                } else if (s == State.CLAIM) {
+                } else if (s == State.CLAIM || flashes.containsKey(n.key)) {
+                    // a just-claimed tile stays where it was until its animation ends, then the list closes up
                     claim.add(e);
                 } else if (s == State.PROGRESS) {
                     moving.add(e);
@@ -175,7 +176,8 @@ public class ProgressScreen extends Screen {
             badges.put(c.id, badge);
             chapterCounts.put(c.id, new int[]{done, c.nodes.size()});
         }
-        moving.sort(Comparator.comparingDouble((NowEntry e) -> -ClientProgress.fraction(e.key)));
+        // the required path first, optional quests after it, each closest-to-done first
+        moving.sort(Comparator.comparing((NowEntry e) -> e.node.optional).thenComparingDouble(e -> -ClientProgress.fraction(e.key)));
         nowEntries.addAll(pinned);
         nowEntries.addAll(claim);
         nowEntries.addAll(points);
@@ -346,9 +348,12 @@ public class ProgressScreen extends Screen {
             int bw = font.width(ca) + 16;
             button(g, ca, nowRight() - bw, 10, bw, true, true, mouseX, mouseY, () -> {
                 ClientProgress.send("claim_all", "", -1);
+                long start = Util.getMillis();
+                int i = 0;
                 for (NowEntry e : nowEntries) {
                     if (e.node != null && ClientProgress.state(e.key) == State.CLAIM && e.node.choice.isEmpty()) {
-                        flashes.put(e.key, Util.getMillis());
+                        // one tile after another, 140ms apart
+                        flashes.put(e.key, start + 140L * i++);
                     }
                 }
             });
@@ -547,7 +552,7 @@ public class ProgressScreen extends Screen {
         g.pose().scale(v[2], v[2], 1);
         // decorations behind everything (FTB Quests chapter images)
         for (ClientModel.Decoration d : ch.decorations) {
-            if (d.dev || d.image == null) {
+            if (!decorationVisible(d)) {
                 continue;
             }
             int dw = (int) (d.w * UNIT);
@@ -558,15 +563,22 @@ public class ProgressScreen extends Screen {
                 g.pose().mulPose(Axis.ZP.rotationDegrees((float) d.rotation));
             }
             RenderSystem.enableBlend();
+            g.setColor(((d.color >> 16) & 255) / 255f, ((d.color >> 8) & 255) / 255f, (d.color & 255) / 255f, d.alpha);
             g.blit(d.image, -dw / 2, -dh / 2, dw, dh, 0, 0, 1, 1, 1, 1);
+            g.setColor(1, 1, 1, 1);
             g.pose().popPose();
         }
         // lines
+        // lines; authors hide some to keep busy maps readable (chapter default, or per node in either direction)
+        ClientModel cm = model();
         for (ClientModel.Node n : ch.nodes.values()) {
+            if (ch.hideLines || n.hideLinesToRequired) {
+                continue;
+            }
             State cs = ClientProgress.state(n.key);
-            for (String r : n.requires) {
-                ClientModel.Node p = ch.nodes.get(r);
-                if (p == null) {
+            for (String r : n.requireKeys) {
+                ClientModel.Node p = cm.nodesByKey.get(r);
+                if (p == null || cm.chapterOf.get(r) != ch || p.hideLinesToDependents) {
                     continue;
                 }
                 line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional ? 1 : 2, lineColor(ClientProgress.state(p.key), cs));
@@ -583,6 +595,10 @@ public class ProgressScreen extends Screen {
                 Tiles.shape(g, shape, x - 3, y - 3, s + 6, s + 6, 0xFFFFFFFF);
                 Tiles.shape(g, shape, x - 1, y - 1, s + 2, s + 2, 0xFF141416);
             }
+            if (n.optional && !far) {
+                // optional quests: a broken outline, so they read as "extra" next to the required path
+                dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
+            }
             Tiles.tile(g, shape, x, y, s, ClientProgress.state(n.key), ClientProgress.fraction(n.key), n.icon, far);
             flash(g, n.key, x, y, s, now);
             double sx = v[0] + n.x * UNIT * v[2];
@@ -592,7 +608,32 @@ public class ProgressScreen extends Screen {
                 hovered = n.key;
             }
         }
+        // quest links: the linked quest's tile, with an arrow in the corner (click goes to its chapter)
+        for (ClientModel.Link l : ch.links) {
+            ClientModel.Node target = cm.nodesByKey.get(l.node);
+            if (target == null) {
+                continue;
+            }
+            int s = (int) Math.round(NODE * l.size);
+            int x = (int) Math.round(l.x * UNIT) - s / 2;
+            int y = (int) Math.round(l.y * UNIT) - s / 2;
+            String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.state(target.key), ClientProgress.fraction(target.key), target.icon, far);
+            if (!far) {
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z);
+                Tiles.pixels(g, LINK_ARROW, x + s - 6, y + 1, 1, 0xFFFFFFFF);
+                g.pose().popPose();
+            }
+            double sx = v[0] + l.x * UNIT * v[2];
+            double sy = v[1] + l.y * UNIT * v[2];
+            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight()
+                    && mouseX < (sheetT > 0 ? sheetLeft() : width)) {
+                hovered = target.key;
+            }
+        }
         g.pose().popPose();
+        List<Component> decoTip = hovered == null && !dragging ? decorationAt(ch, v, mouseX, mouseY, true) : null;
 
         // everything below sits above the map's item icons
         g.pose().pushPose();
@@ -615,6 +656,11 @@ public class ProgressScreen extends Screen {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 200);
             g.renderTooltip(font, model().nodesByKey.get(hovered).title, mouseX, mouseY);
+            g.pose().popPose();
+        } else if (decoTip != null && !decoTip.isEmpty()) {
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 200);
+            g.renderComponentTooltip(font, decoTip, mouseX, mouseY);
             g.pose().popPose();
         }
     }
@@ -703,15 +749,24 @@ public class ProgressScreen extends Screen {
             y += 8;
             g.drawString(font, Component.translatable("screen.kuronami_quest_tree.needs"), x, y, GRAY, true);
             y += 12;
-            for (String r : n.requires) {
-                ClientModel.Node p = ch.nodes.get(r.contains("/") ? r.substring(r.lastIndexOf('/') + 1) : r);
+            for (String r : n.requireKeys) {
+                ClientModel.Node p = m.nodesByKey.get(r);
                 if (p == null) {
                     continue;
                 }
                 Tiles.tile(g, p.shape, x, y, 16, ClientProgress.state(p.key), ClientProgress.fraction(p.key), p.icon, false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
-                g.drawString(font, trim(p.title.getString(), w - 22), x + 22, y + 4, 0xFFFFFFFF, true);
+                ClientModel.Chapter other = m.chapterOf.get(r);
+                if (other != ch) {
+                    // a requirement in another chapter: its chapter name above, and the row opens it
+                    g.drawString(font, trim(p.title.getString(), w - 22), x + 22, y, 0xFFFFFFFF, true);
+                    g.drawString(font, trim(other.title.getString(), w - 22), x + 22, y + 9, GRAY, true);
+                    String key = r;
+                    buttons.add(new Button(x, y, w, 18, () -> goTo(key)));
+                } else {
+                    g.drawString(font, trim(p.title.getString(), w - 22), x + 22, y + 4, 0xFFFFFFFF, true);
+                }
                 g.pose().popPose();
                 y += 20;
                 if (y > actionsTop - 50) {
@@ -864,21 +919,45 @@ public class ProgressScreen extends Screen {
         }
     }
 
+    /**
+     * Claim feedback (MOTION_SOUND.md): a short press and a white flash on the tile, then the reward icons rise out of
+     * it one after another and shrink away. Nothing loops; "claim all" staggers the tiles instead of repeating sounds.
+     */
     private void flash(GuiGraphics g, String key, int x, int y, int s, long now) {
         Long at = flashes.get(key);
-        if (at == null) {
+        if (at == null || now < at) {
             return;
         }
         long t = now - at;
-        if (t > 380) {
+        ClientModel.Node n = model().nodesByKey.get(key);
+        List<ItemStack> icons = n == null ? List.of() : n.rewards.subList(0, Math.min(4, n.rewards.size()));
+        long end = 380 + 70L * icons.size() + 620;
+        if (t > end) {
             flashes.remove(key);
+            cachedFor = null;
             return;
         }
-        // press 160ms, then a white flash that fades over 220ms
-        float a = t < 160 ? 0.15f : 0.85f * (1 - (t - 160) / 220f);
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        g.fill(x, y, x + s, y + s, Tiles.withAlpha(0xFFFFFFFF, a));
+        if (t < 380) {
+            // press 160ms, then a white flash that fades over 220ms
+            float a = t < 160 ? 0.15f : 0.85f * (1 - (t - 160) / 220f);
+            g.fill(x, y, x + s, y + s, Tiles.withAlpha(0xFFFFFFFF, a));
+        }
+        for (int i = 0; i < icons.size(); i++) {
+            long ti = t - 160 - 70L * i;
+            if (ti < 0 || ti > 620) {
+                continue;
+            }
+            float p = ti / 620f;
+            float ease = 1 - (1 - p) * (1 - p) * (1 - p);
+            float k = Math.max(0.05f, 1 - p * p);
+            g.pose().pushPose();
+            g.pose().translate(x + s / 2f + (i - (icons.size() - 1) / 2f) * 10, y + s / 2f - ease * (s * 0.9f + 8), 50);
+            g.pose().scale(k, k, 1);
+            g.renderItem(icons.get(i), -8, -8);
+            g.pose().popPose();
+        }
         g.pose().popPose();
     }
 
@@ -1051,6 +1130,88 @@ public class ProgressScreen extends Screen {
         return true;
     }
 
+    /** Dev tour only ({@link DevTour}): open on a chapter (-1 = Now). */
+    void tourChapter(int index) {
+        select(index);
+    }
+
+    /** Dev tour only: select the first node in the current view that has {@code state}. */
+    void tourSelectFirst(State state) {
+        ClientModel m = model();
+        ClientModel.Chapter ch = chapter();
+        Iterable<ClientModel.Node> nodes = ch != null ? ch.nodes.values()
+                : nowEntries.stream().filter(e -> e.node != null).map(e -> e.node).toList();
+        for (ClientModel.Node n : nodes) {
+            if (ClientProgress.state(n.key) == state) {
+                selected = n.key;
+                return;
+            }
+        }
+    }
+
+    private static final String[] LINK_ARROW = {"..###", "...##", "..#.#", ".#...", "#...."};
+
+    private boolean decorationVisible(ClientModel.Decoration d) {
+        if (d.dev || d.image == null) {
+            return false;
+        }
+        return d.visibleAfter == null || com.kuronami.questtree.progress.ProgressRules.doneOnce(ClientProgress.progress(), d.visibleAfter);
+    }
+
+    /**
+     * The topmost visible decoration under the mouse (rotation ignored: bounds are axis-aligned). Returns its hover
+     * text when {@code tooltip}, else null; {@link #clickDecoration} uses the same hit test.
+     */
+    private List<Component> decorationAt(ClientModel.Chapter ch, float[] v, double mx, double my, boolean tooltip) {
+        ClientModel.Decoration hit = decorationHit(ch, v, mx, my);
+        return hit == null ? null : hit.hover;
+    }
+
+    private ClientModel.Decoration decorationHit(ClientModel.Chapter ch, float[] v, double mx, double my) {
+        if (mx < railRight() || (sheetT > 0 && mx >= sheetLeft())) {
+            return null;
+        }
+        double wx = (mx - v[0]) / v[2];
+        double wy = (my - v[1]) / v[2];
+        for (int i = ch.decorations.size() - 1; i >= 0; i--) {
+            ClientModel.Decoration d = ch.decorations.get(i);
+            if (!decorationVisible(d) || (d.hover.isEmpty() && d.clickNode == null && d.clickUrl == null)) {
+                continue;
+            }
+            if (Math.abs(wx - d.x * UNIT) <= d.w * UNIT / 2 && Math.abs(wy - d.y * UNIT) <= d.h * UNIT / 2) {
+                return d;
+            }
+        }
+        return null;
+    }
+
+    /** Opens a node's chapter and selects it, centring the map on it. */
+    private void goTo(String key) {
+        ClientModel m = model();
+        ClientModel.Chapter c = m.chapterOf.get(key);
+        ClientModel.Node n = m.nodesByKey.get(key);
+        if (c == null || n == null) {
+            return;
+        }
+        ProgressFeedback.click();
+        select(m.chapters.indexOf(c));
+        float[] v = view(c);
+        v[0] = (float) ((width - sheetWidth()) / 2.0 - n.x * UNIT * v[2]);
+        v[1] = (float) (height / 2.0 - n.y * UNIT * v[2]);
+        selected = key;
+    }
+
+    private static void dashedOutline(GuiGraphics g, int x, int y, int w, int h, int argb) {
+        for (int i = 0; i < w; i += 4) {
+            g.fill(x + i, y, x + Math.min(i + 2, w), y + 1, argb);
+            g.fill(x + i, y + h - 1, x + Math.min(i + 2, w), y + h, argb);
+        }
+        for (int i = 0; i < h; i += 4) {
+            g.fill(x, y + i, x + 1, y + Math.min(i + 2, h), argb);
+            g.fill(x + w - 1, y + i, x + w, y + Math.min(i + 2, h), argb);
+        }
+    }
+
     private void select(int index) {
         chapterIndex = index;
         lastChapter = index;
@@ -1104,6 +1265,30 @@ public class ProgressScreen extends Screen {
                 double half = NODE * n.size * v[2] / 2;
                 if (Math.abs(mx - sx) <= half && Math.abs(my - sy) <= half) {
                     hit = n;
+                }
+            }
+            if (hit == null) {
+                for (ClientModel.Link l : ch.links) {
+                    double sx = v[0] + l.x * UNIT * v[2];
+                    double sy = v[1] + l.y * UNIT * v[2];
+                    double half = NODE * l.size * v[2] / 2;
+                    if (Math.abs(mx - sx) <= half && Math.abs(my - sy) <= half) {
+                        goTo(l.node);
+                        dragging = false;
+                        return true;
+                    }
+                }
+                ClientModel.Decoration d = decorationHit(ch, v, mx, my);
+                if (d != null && d.clickNode != null) {
+                    goTo(d.clickNode);
+                    dragging = false;
+                    return true;
+                }
+                if (d != null && d.clickUrl != null) {
+                    dragging = false;
+                    // vanilla's "open this link?" screen, then back here
+                    net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(this, d.clickUrl);
+                    return true;
                 }
             }
             String key = hit == null ? null : hit.key;

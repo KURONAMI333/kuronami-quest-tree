@@ -46,6 +46,8 @@ neoForge {
         clientTest {
             client()
             programArguments.addAll '--quickPlaySingleplayer', 'ppworld'
+            // scripted walk through the screens with screenshots (client/DevTour); no keyboard or mouse input needed
+            systemProperty 'quest_tree.devTour', 'true'
         }
         data {
             data()

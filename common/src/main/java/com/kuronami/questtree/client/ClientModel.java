@@ -126,6 +126,10 @@ public final class ClientModel {
         public final List<Decoration> decorations = new ArrayList<>();
         public final String defaultShape;
         public final double defaultSize;
+        /** Chapter-wide "hide dependency lines" (FTB Quests chapter default). */
+        public final boolean hideLines;
+        /** Tiles that stand for a quest of another chapter (FTB Quests quest links). */
+        public final List<Link> links = new ArrayList<>();
 
         Chapter(ClientModel m, String id, JsonObject o, Map<String, Integer> groupOrder) {
             this.id = id;
@@ -139,6 +143,7 @@ public final class ClientModel {
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : (skills ? "square" : "square");
             this.defaultSize = defaults.has("size") && defaults.get("size").isJsonPrimitive() ? defaults.get("size").getAsDouble() : 1;
+            this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString()) : Component.literal(path);
             this.title = m.component("progression." + namespace + "." + path + ".title", fallbackTitle);
             for (Map.Entry<String, JsonElement> n : obj(o, "nodes").entrySet()) {
@@ -153,10 +158,20 @@ public final class ClientModel {
             }
             for (JsonElement d : arr(o, "decorations")) {
                 if (d.isJsonObject()) {
-                    decorations.add(new Decoration(d.getAsJsonObject()));
+                    decorations.add(new Decoration(this, d.getAsJsonObject()));
+                }
+            }
+            for (JsonElement l : arr(o, "links")) {
+                if (l.isJsonObject() && l.getAsJsonObject().has("node")) {
+                    links.add(new Link(this, l.getAsJsonObject()));
                 }
             }
             decorations.sort(Comparator.comparingInt(d -> d.order));
+        }
+
+        /** Global node key for a reference written in this chapter: "node" or "otherchapter/node" (same namespace). */
+        public String keyOf(String ref) {
+            return ref.contains("/") ? namespace + ":" + ref : id + "/" + ref;
         }
 
         public ItemStack displayIcon() {
@@ -180,6 +195,11 @@ public final class ClientModel {
         public final ItemStack icon;
         public final boolean optional;
         public final List<String> requires = new ArrayList<>();
+        /** Requirements as global keys (may point into other chapters). */
+        public final List<String> requireKeys = new ArrayList<>();
+        /** FTB Quests' "hide dependency lines" / "hide dependent lines": authors thin out busy maps with these. */
+        public final boolean hideLinesToRequired;
+        public final boolean hideLinesToDependents;
         public final List<Task> tasks = new ArrayList<>();
         public final List<ItemStack> rewards = new ArrayList<>();
         public final List<String> rewardLines = new ArrayList<>();
@@ -200,7 +220,11 @@ public final class ClientModel {
             JsonObject req = obj(o, "requires");
             for (JsonElement r : arr(req, "nodes")) {
                 requires.add(r.getAsString());
+                requireKeys.add(ch.keyOf(r.getAsString()));
             }
+            JsonObject lines = obj(o, "lines");
+            this.hideLinesToRequired = lines.has("hide_to_deps") && lines.get("hide_to_deps").getAsBoolean();
+            this.hideLinesToDependents = lines.has("hide_to_dependents") && lines.get("hide_to_dependents").getAsBoolean();
             for (JsonElement t : arr(o, "tasks")) {
                 if (t.isJsonObject()) {
                     tasks.add(new Task(t.getAsJsonObject(), o.has("repeat") && !(o.get("repeat").isJsonPrimitive() && !o.get("repeat").getAsBoolean())));
@@ -281,8 +305,17 @@ public final class ClientModel {
         public final double rotation;
         public final int order;
         public final boolean dev;
+        /** Shown only once this node (global key) is done; null = always. */
+        public final String visibleAfter;
+        /** Click: open this node (global key), or open this URL (after the vanilla confirm screen). */
+        public final String clickNode;
+        public final String clickUrl;
+        /** Tint (0xRRGGBB) and opacity (0..1) from FTB Quests' color / alpha. */
+        public final int color;
+        public final float alpha;
+        public final List<Component> hover = new ArrayList<>();
 
-        Decoration(JsonObject o) {
+        Decoration(Chapter ch, JsonObject o) {
             ResourceLocation img = null;
             if (o.has("image")) {
                 String s = o.get("image").getAsString();
@@ -300,6 +333,37 @@ public final class ClientModel {
             this.rotation = num(o, "rotation");
             this.order = o.has("order") ? o.get("order").getAsInt() : 0;
             this.dev = o.has("dev") && o.get("dev").getAsBoolean();
+            this.visibleAfter = o.has("visible_after") ? ch.keyOf(o.get("visible_after").getAsString()) : null;
+            JsonObject click = obj(o, "click");
+            String type = click.has("type") ? click.get("type").getAsString() : "";
+            String target = click.has("target") ? click.get("target").getAsString() : "";
+            this.clickNode = type.equals("node") && !target.isEmpty() ? ch.keyOf(target) : null;
+            this.clickUrl = type.equals("url") && (target.startsWith("https://") || target.startsWith("http://")) ? target : null;
+            this.color = o.has("color") && o.get("color").isJsonPrimitive() ? o.get("color").getAsInt() & 0xFFFFFF : 0xFFFFFF;
+            this.alpha = o.has("alpha") && o.get("alpha").isJsonPrimitive() ? Math.max(0, Math.min(255, o.get("alpha").getAsInt())) / 255f : 1;
+            for (JsonElement e : arr(o, "hover")) {
+                if (e.isJsonPrimitive()) {
+                    hover.add(parseText(e.getAsString()));
+                }
+            }
+        }
+    }
+
+    /** A tile in one chapter that stands for a quest of another chapter; clicking it goes there. */
+    public static final class Link {
+        public final String node;
+        public final double x;
+        public final double y;
+        public final double size;
+        public final String shape;
+
+        Link(Chapter ch, JsonObject o) {
+            String ref = o.get("node").getAsString();
+            this.node = ref.contains(":") ? ref : ch.keyOf(ref);
+            this.x = num(o, "x");
+            this.y = num(o, "y");
+            this.size = o.has("size") ? Math.max(0.3, num(o, "size")) : ch.defaultSize;
+            this.shape = o.has("shape") ? o.get("shape").getAsString() : "";
         }
     }
 

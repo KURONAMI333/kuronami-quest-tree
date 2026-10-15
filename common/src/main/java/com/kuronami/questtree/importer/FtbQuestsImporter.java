@@ -173,7 +173,25 @@ public final class FtbQuestsImporter {
             copy(i, "color", d, "color");
             copy(i, "alpha", d, "alpha");
             copy(i, "hover", d, "hover");
-            copy(i, "click", d, "click");
+            if (i.has("click") && i.get("click").isJsonPrimitive()) {
+                // FTB Quests: a quest id (optionally "#id") opens that quest; anything else (a URL) is kept as it is
+                String click = i.get("click").getAsString().trim();
+                String[] t = idToNode.get(click.startsWith("#") ? click.substring(1) : click);
+                if (t == null) {
+                    t = idToNode.get((click.startsWith("#") ? click.substring(1) : click).toUpperCase(Locale.ROOT));
+                }
+                if (t != null) {
+                    JsonObject c = new JsonObject();
+                    c.addProperty("type", "node");
+                    c.addProperty("target", t[0].equals(cid) ? t[1] : t[0] + "/" + t[1]);
+                    d.add("click", c);
+                } else if (!click.isEmpty()) {
+                    JsonObject c = new JsonObject();
+                    c.addProperty("type", "url");
+                    c.addProperty("target", click);
+                    d.add("click", c);
+                }
+            }
             copy(i, "click_action", d, "click_action");
             if (i.has("dependency")) {
                 String[] t = idToNode.get(i.get("dependency").getAsString());

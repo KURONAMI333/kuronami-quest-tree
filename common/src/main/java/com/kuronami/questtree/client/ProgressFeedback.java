@@ -58,6 +58,8 @@ final class ProgressFeedback {
                 ExperienceToast.show(c, xp, lv, lv > lvBefore);
             }
         }
+        // claim all sends one event per quest: play each sound once per update, not once per quest
+        java.util.Set<String> played = new java.util.HashSet<>();
         for (String ev : events) {
             int bar = ev.indexOf('|');
             String kind = bar < 0 ? ev : ev.substring(0, bar);
@@ -77,7 +79,11 @@ final class ProgressFeedback {
                         QuestToast.show(n, ProgressRules.State.DONE, n.title);
                     }
                 }
-                case "claim" -> play(SoundEvents.ITEM_PICKUP, 0.8f + (float) Math.random() * 0.6f, 0.5f);
+                case "claim" -> {
+                    if (played.add(kind)) {
+                        play(SoundEvents.ITEM_PICKUP, 0.8f + (float) Math.random() * 0.6f, 0.5f);
+                    }
+                }
                 case "submit" -> play(SoundEvents.BUNDLE_INSERT, 1, 0.8f);
                 case "take" -> play(SoundEvents.ENCHANTMENT_TABLE_USE, 1, 0.8f);
                 case "level" -> play(SoundEvents.PLAYER_LEVELUP, 1, 0.6f);
