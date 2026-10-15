@@ -127,6 +127,27 @@ public final class Rewards {
     }
 
     /** Removes the attribute modifiers a node gave (all ranks, quest rewards), for resets and respec. */
+    /**
+     * Takes a skill back ({@code taken} ranks of it): attribute bonuses go, each command reward runs its
+     * {@code lock_command}, and tag rewards are removed, as Pufferfish's Skills does on a respec.
+     */
+    static void revokeSkill(ServerPlayer player, ProgressModel.Node n, int taken) {
+        removeAttributes(player, n);
+        for (int rank = 0; rank < Math.max(1, Math.min(taken, Math.max(1, n.ranks))); rank++) {
+            for (JsonObject rw : rewardsOfRank(n, rank)) {
+                try {
+                    switch (ProgressService.type(rw)) {
+                        case "command" -> run(player, rw, ProgressService.str(rw, "lock_command"));
+                        case "tag" -> player.removeTag(ProgressService.str(rw, "tag"));
+                        default -> { }
+                    }
+                } catch (RuntimeException ex) {
+                    Constants.LOG.error("Taking back a reward of {} failed: {}", n.key, ex.toString());
+                }
+            }
+        }
+    }
+
     static void removeAttributes(ServerPlayer player, ProgressModel.Node n) {
         int ranks = Math.max(1, n.ranks);
         for (int rank = 0; rank < ranks; rank++) {
@@ -201,7 +222,12 @@ public final class Rewards {
     }
 
     private static void command(ServerPlayer player, JsonObject rw) {
-        String cmd = ProgressService.str(rw, "command");
+        // Pufferfish's Skills keeps the command of a skill reward as "unlock_command" (and its undo as "lock_command")
+        String cmd = rw.has("command") ? ProgressService.str(rw, "command") : ProgressService.str(rw, "unlock_command");
+        run(player, rw, cmd);
+    }
+
+    private static void run(ServerPlayer player, JsonObject rw, String cmd) {
         if (cmd.isEmpty()) {
             return;
         }

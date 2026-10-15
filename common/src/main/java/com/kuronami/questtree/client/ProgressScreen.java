@@ -402,7 +402,8 @@ public class ProgressScreen extends Screen {
         boolean map = chapter() != null;
         int w = searchBox.getWidth() + 12;
         int y = height - 8 - BTN;
-        int x = map ? RAIL + 12 : nowRight() - w;
+        // on maps it moves aside with the chapter list, so it never sits on the list's rows
+        int x = map ? railRight() + 8 : nowRight() - w;
         boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + BTN;
         g.fill(x, y, x + w, y + BTN, hover || searchBox.isFocused() ? CONTROL_HOVER : CONTROL);
         if (searchBox.isFocused()) {

@@ -146,8 +146,12 @@ final class PlayerCommands {
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {
         // removing an id that is not there is harmless, and repeats may have cleared "claimed"
-        Rewards.removeAttributes(p, n);
         Integer taken = pr.taken.get(n.key);
+        if (taken != null && taken > 0) {
+            Rewards.revokeSkill(p, n, taken);
+        } else {
+            Rewards.removeAttributes(p, n);
+        }
         if (taken != null && n.chapter.isSkills()) {
             // give the points back, as a chapter reset or respec would
             pr.spent.computeIfPresent(n.chapter.id, (k, v) -> Math.max(0, v - Math.max(0, n.cost) * taken));
@@ -181,8 +185,9 @@ final class PlayerCommands {
             throw new IllegalArgumentException("Unknown skill chapter " + id);
         }
         for (ProgressModel.Node n : ch.nodes.values()) {
-            if (pr.taken.remove(n.key) != null) {
-                Rewards.removeAttributes(p, n);
+            Integer taken = pr.taken.remove(n.key);
+            if (taken != null) {
+                Rewards.revokeSkill(p, n, taken);
             }
         }
         pr.spent.remove(ch.id);

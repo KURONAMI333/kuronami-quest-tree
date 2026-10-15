@@ -184,6 +184,23 @@ public final class QuestTreeGameTests {
         }
     }
 
+    /** Pufferfish's Skills command rewards: taking runs unlock_command, a respec runs lock_command and drops tag rewards. */
+    @GameTest(template = "empty3x3x3")
+    public static void unlockAndLockCommands(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        act(p, "take", "kuronami_quest_tree_gametest:staged/gate", 0);
+        helper.assertTrue(pr.taken.getOrDefault("kuronami_quest_tree_gametest:staged/gate", 0) == 1, "skill with a starting point not taken");
+        helper.assertTrue(p.getTags().contains("qt_unlocked"), "unlock_command did not run");
+        helper.assertTrue(p.getTags().contains("qt_tagged"), "tag reward not given");
+        p.server.getCommands().performPrefixedCommand(p.createCommandSourceStack().withPermission(2).withSuppressedOutput(),
+                "quest_tree respec @s kuronami_quest_tree_gametest:staged");
+        helper.assertTrue(!pr.taken.containsKey("kuronami_quest_tree_gametest:staged/gate"), "respec did not give the skill back");
+        helper.assertTrue(!p.getTags().contains("qt_unlocked"), "lock_command did not run on respec");
+        helper.assertTrue(!p.getTags().contains("qt_tagged"), "tag reward not removed on respec");
+        helper.succeed();
+    }
+
     /** Ranked skills: a partly ranked node stays open (not done) and keeps earning; ranks stack; respawn restores modifiers. */
     @GameTest(template = "empty3x3x3")
     public static void ranksAndRespawn(GameTestHelper helper) {

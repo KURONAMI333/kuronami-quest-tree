@@ -150,12 +150,16 @@ public final class ClientProgress {
                 if (n == null) {
                     yield Tiles.Look.LOCKED_NEAR;
                 }
+                // the next step: with "all", every requirement is reachable; with "any", one of them is
+                boolean any = n.requireMode.startsWith("any");
+                boolean someNear = false;
+                boolean someFar = false;
                 for (String r : n.requires) {
-                    if (state(r) == ProgressRules.State.LOCKED || state(r) == ProgressRules.State.EXCLUDED) {
-                        yield Tiles.Look.LOCKED_FAR;
-                    }
+                    boolean far = state(r) == ProgressRules.State.LOCKED || state(r) == ProgressRules.State.EXCLUDED;
+                    someFar |= far;
+                    someNear |= !far;
                 }
-                yield Tiles.Look.LOCKED_NEAR;
+                yield (any ? someNear || n.requires.isEmpty() : !someFar) ? Tiles.Look.LOCKED_NEAR : Tiles.Look.LOCKED_FAR;
             }
         };
     }
