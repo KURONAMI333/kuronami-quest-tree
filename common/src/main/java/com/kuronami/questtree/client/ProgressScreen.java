@@ -94,6 +94,7 @@ public class ProgressScreen extends Screen {
 
     public ProgressScreen() {
         super(Component.translatable("screen.kuronami_quest_tree.title"));
+        Motion.resetFills();
     }
 
     private ClientModel model() {
@@ -200,6 +201,7 @@ public class ProgressScreen extends Screen {
         super.render(g, mouseX, mouseY, partialTick);
         g.fill(0, 0, width, height, 0xB80A0A0C);
         buttons.clear();
+        Motion.tick();
         ClientModel m = model();
         if (m == null || m.chapters.isEmpty()) {
             g.drawCenteredString(font, Component.translatable("screen.kuronami_quest_tree.empty"), width / 2, height / 2 - 4, GRAY);
@@ -390,7 +392,7 @@ public class ProgressScreen extends Screen {
                 g.drawString(font, pts, x + NOW_TILE - 3 - font.width(pts), y + NOW_TILE - 12, Tiles.INK, false);
                 g.pose().popPose();
             } else {
-                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.state(e.key), ClientProgress.fraction(e.key), e.node.icon, false);
+                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.state(e.key), Motion.fill(e.key, ClientProgress.fraction(e.key)), e.node.icon, false);
                 if (Pins.has(e.key)) {
                     g.pose().pushPose();
                     g.pose().translate(0, 0, OVERLAY_Z);
@@ -582,6 +584,15 @@ public class ProgressScreen extends Screen {
                     continue;
                 }
                 line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional ? 1 : 2, lineColor(ClientProgress.state(p.key), cs));
+                float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW + 400);
+                if (grow >= 0) {
+                    // unlock chain: a bright line runs from the unlocked node to each child (300ms), then fades
+                    long ms = (long) (grow * (Motion.LINE_GROW + 400));
+                    float reach = Math.min(1, ms / (float) Motion.LINE_GROW);
+                    float fade = ms < Motion.LINE_GROW ? 1 : 1 - (ms - Motion.LINE_GROW) / 400f;
+                    line(g, p.x * UNIT, p.y * UNIT, p.x * UNIT + (n.x - p.x) * UNIT * reach, p.y * UNIT + (n.y - p.y) * UNIT * reach,
+                            3, Tiles.withAlpha(0xFFF2C230, fade));
+                }
             }
         }
         // nodes
@@ -599,8 +610,9 @@ public class ProgressScreen extends Screen {
                 // optional quests: a broken outline, so they read as "extra" next to the required path
                 dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
             }
-            Tiles.tile(g, shape, x, y, s, ClientProgress.state(n.key), ClientProgress.fraction(n.key), n.icon, far);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.state(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), n.icon, far);
             flash(g, n.key, x, y, s, now);
+            resultMotion(g, n.key, shape, x, y, s);
             double sx = v[0] + n.x * UNIT * v[2];
             double sy = v[1] + n.y * UNIT * v[2];
             if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight()
@@ -618,7 +630,7 @@ public class ProgressScreen extends Screen {
             int x = (int) Math.round(l.x * UNIT) - s / 2;
             int y = (int) Math.round(l.y * UNIT) - s / 2;
             String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
-            Tiles.tile(g, shape, x, y, s, ClientProgress.state(target.key), ClientProgress.fraction(target.key), target.icon, far);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.state(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), target.icon, far);
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -807,7 +819,18 @@ public class ProgressScreen extends Screen {
                     });
                     right -= bw + 4;
                 }
-                g.drawString(font, cnt, right - font.width(cnt), y + 6, met ? Tiles.GREEN_TEXT : GRAY, true);
+                float bump = Motion.progress(Motion.SUBMITTED, n.key + "#" + i, 200);
+                if (bump >= 0) {
+                    // hand-in: the count turns green and bumps (200ms)
+                    float k = 1 + 0.35f * (1 - bump);
+                    g.pose().pushPose();
+                    g.pose().translate(right - font.width(cnt) / 2f, y + 10, 0);
+                    g.pose().scale(k, k, 1);
+                    g.drawString(font, cnt, -font.width(cnt) / 2, -4, Tiles.GREEN_TEXT, true);
+                    g.pose().popPose();
+                } else {
+                    g.drawString(font, cnt, right - font.width(cnt), y + 6, met ? Tiles.GREEN_TEXT : GRAY, true);
+                }
                 g.drawString(font, trim(ProgressFeedback.taskName(t).getString(), right - font.width(cnt) - x - 26), x + 20, y + 6,
                         met || t.optional ? GRAY : 0xFFFFFFFF, true);
                 g.pose().popPose();
@@ -963,6 +986,26 @@ public class ProgressScreen extends Screen {
             g.pose().scale(k, k, 1);
             g.renderItem(icons.get(i), -8, -8);
             g.pose().popPose();
+        }
+        g.pose().popPose();
+    }
+
+    /** The unlock chain's light-up of newly opened nodes, and the stamp on nodes an exclusive pick closed. */
+    private void resultMotion(GuiGraphics g, String key, String shape, int x, int y, int s) {
+        float open = Motion.progress(Motion.OPENED, key, 260);
+        float stamp = Motion.progress(Motion.STAMPED, key, 180);
+        if (open < 0 && stamp < 0) {
+            return;
+        }
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z + 10);
+        if (open >= 0) {
+            Tiles.shape(g, shape, x, y, s, s, Tiles.withAlpha(0xFFFFFFFF, 0.6f * (1 - open)));
+        }
+        if (stamp >= 0) {
+            // the cross lands: from twice its size down to its place
+            int px = Math.max(1, Math.round(s / 20f * (2 - stamp)));
+            Tiles.pixels(g, Tiles.CROSS, x + s / 2 - 5 * px / 2, y + s / 2 - 5 * px / 2, px, Tiles.withAlpha(0xFFFFFFFF, 0.4f + 0.6f * stamp));
         }
         g.pose().popPose();
     }

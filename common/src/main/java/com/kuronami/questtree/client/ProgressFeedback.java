@@ -58,6 +58,7 @@ final class ProgressFeedback {
                 ExperienceToast.show(c, xp, lv, lv > lvBefore);
             }
         }
+        motions(m, old, now, events);
         // claim all sends one event per quest: play each sound once per update, not once per quest
         java.util.Set<String> played = new java.util.HashSet<>();
         for (String ev : events) {
@@ -89,6 +90,79 @@ final class ProgressFeedback {
                 case "level" -> play(SoundEvents.PLAYER_LEVELUP, 1, 0.6f);
                 default -> { }
             }
+        }
+    }
+
+    /**
+     * Starts the result animations of MOTION_SOUND.md: the count bump and the fill-up pling of a hand-in, the unlock
+     * chain (lines grow, newly opened skills light up one by one with a rising pling) and the stamp on choices an
+     * exclusive pick closed.
+     */
+    private static void motions(ClientModel m, PlayerProgress old, PlayerProgress now, List<String> events) {
+        var rules = ClientProgress.rules();
+        if (rules == null) {
+            return;
+        }
+        long t = net.minecraft.Util.getMillis();
+        java.util.Set<String> completed = new java.util.HashSet<>();
+        for (String ev : events) {
+            if (ev.startsWith("complete|")) {
+                completed.add(ev.substring(9));
+            }
+        }
+        boolean stamped = false;
+        for (String ev : events) {
+            int bar = ev.indexOf('|');
+            if (bar < 0) {
+                continue;
+            }
+            String kind = ev.substring(0, bar);
+            String key = ev.substring(bar + 1);
+            var node = rules.model().nodes.get(key);
+            if (node == null) {
+                continue;
+            }
+            if (kind.equals("submit")) {
+                for (int i = 0; i < node.tasks.size(); i++) {
+                    if (now.task(key, i) > old.task(key, i)) {
+                        Motion.SUBMITTED.put(key + "#" + i, t);
+                    }
+                }
+                if (completed.contains(key)) {
+                    // after the fill has run up (360ms)
+                    Motion.plingLater(360, 1.6f);
+                }
+            }
+            if (kind.equals("take")) {
+                Motion.UNLOCKED.put(key, t);
+                int i = 0;
+                for (var child : node.chapter.nodes.values()) {
+                    if (child.requires.contains(key) && rules.state(old, child) == ProgressRules.State.LOCKED
+                            && rules.state(now, child) != ProgressRules.State.LOCKED) {
+                        long delay = Motion.LINE_GROW + Motion.CHILD_STEP * i;
+                        Motion.OPENED.put(child.key, t + delay);
+                        Motion.plingLater(delay, Math.min(2f, 1f + 0.1f * i));
+                        i++;
+                    }
+                }
+            }
+            if (kind.equals("take") || kind.equals("complete")) {
+                java.util.Set<com.kuronami.questtree.data.ProgressModel.Node> rivals = new java.util.LinkedHashSet<>();
+                node.exclusiveWith.forEach(k -> rivals.add(rules.model().nodes.get(k)));
+                if (node.exclusiveGroup != null) {
+                    rivals.addAll(node.chapter.exclusiveGroups.getOrDefault(node.exclusiveGroup, List.of()));
+                }
+                for (var r : rivals) {
+                    if (r != null && r != node && rules.state(old, r) != ProgressRules.State.EXCLUDED
+                            && rules.state(now, r) == ProgressRules.State.EXCLUDED) {
+                        Motion.STAMPED.put(r.key, t);
+                        stamped = true;
+                    }
+                }
+            }
+        }
+        if (stamped) {
+            play(SoundEvents.IRON_DOOR_CLOSE, 1, 0.3f);
         }
     }
 

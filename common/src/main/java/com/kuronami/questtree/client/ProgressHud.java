@@ -69,6 +69,7 @@ public final class ProgressHud {
         if (mc.options.hideGui || ClientProgress.model() == null) {
             return;
         }
+        Motion.tick();
         renderNotice(g, mc.font);
         if (tracker) {
             renderTracker(g, mc.font);

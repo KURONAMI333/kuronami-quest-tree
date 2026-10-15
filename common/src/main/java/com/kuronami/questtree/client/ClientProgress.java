@@ -132,6 +132,7 @@ public final class ClientProgress {
         buffer = null;
         ProgressScreen.clearViews();
         ProgressHud.clear();
+        Motion.clear();
     }
 
     /** Called every client tick by the loader module. The same key opens and closes the screen. */
