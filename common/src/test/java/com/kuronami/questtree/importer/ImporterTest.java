@@ -38,6 +38,10 @@ class ImporterTest {
         ImportOutput out = new ImportOutput("test");
         FtbQuestsImporter.convert(fixture("ftbquests/quests"), out);
         assertEquals(2, out.counts.get("chapters"));
+        // imported chapters keep their shapes instead of taking the shape of each quest's role
+        for (Map.Entry<String, JsonObject> ch : out.chapters.entrySet()) {
+            assertTrue(ch.getValue().getAsJsonObject("defaults").has("shape"), ch.getKey() + " has no default shape");
+        }
         assertEquals(196, out.counts.get("nodes"));
         assertEquals(1, out.counts.get("reward_tables"));
         assertEquals(1, out.counts.get("cross_chapter_dependencies"));

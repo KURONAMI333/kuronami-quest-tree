@@ -170,6 +170,11 @@ public final class FtbQuestsImporter {
                 default -> out.unknown("chapter", k);
             }
         }
+        // an imported chapter keeps the pack's shapes: without a chapter default, nodes would take the shape of their role
+        JsonObject defaults = o.has("defaults") ? o.getAsJsonObject("defaults") : null;
+        if (defaults == null || !defaults.has("shape") || defaults.get("shape").getAsString().isEmpty()) {
+            put(o, "defaults.shape", new JsonPrimitive("square"));
+        }
         JsonArray decos = new JsonArray();
         for (JsonElement im : arr(ch, "images")) {
             JsonObject i = im.getAsJsonObject();

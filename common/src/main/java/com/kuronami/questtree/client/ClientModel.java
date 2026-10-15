@@ -3,6 +3,7 @@ package com.kuronami.questtree.client;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.data.ProgressModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -124,8 +125,10 @@ public final class ClientModel {
         public final Component title;
         public final Map<String, Node> nodes = new LinkedHashMap<>();
         public final List<Decoration> decorations = new ArrayList<>();
+        /** The chapter's "defaults.shape"; null when unset, so each node takes the shape of its role. */
         public final String defaultShape;
         public final double defaultSize;
+        final boolean defaultSizeSet;
         /** Chapter-wide "hide dependency lines" (FTB Quests chapter default). */
         public final boolean hideLines;
         public final boolean hideDetailsByDefault;
@@ -142,8 +145,9 @@ public final class ClientModel {
             this.groupOrder = o.has("group") ? groupOrder.getOrDefault(o.get("group").getAsString(), 999) : 999;
             this.skills = o.has("points") && o.get("points").isJsonObject();
             JsonObject defaults = obj(o, "defaults");
-            this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : (skills ? "square" : "square");
-            this.defaultSize = defaults.has("size") && defaults.get("size").isJsonPrimitive() ? defaults.get("size").getAsDouble() : 1;
+            this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
+            this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive();
+            this.defaultSize = defaultSizeSet ? defaults.get("size").getAsDouble() : 1;
             this.hideDetailsByDefault = defaults.has("hide_details_until_startable") && defaults.get("hide_details_until_startable").isJsonPrimitive()
                     && defaults.get("hide_details_until_startable").getAsBoolean();
             this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
@@ -185,6 +189,9 @@ public final class ClientModel {
         }
     }
 
+    /** Milestones are drawn larger unless the node or its chapter sets a size. */
+    static final double MILESTONE_SIZE = 1.5;
+
     public static final class Node {
         public final String id;
         /** Global key {@code <chapter id>/<node id>}, as used by the progress data. */
@@ -218,9 +225,11 @@ public final class ClientModel {
             this.key = ch.id + "/" + id;
             this.x = o.has("x") ? o.get("x").getAsDouble() : 0;
             this.y = o.has("y") ? o.get("y").getAsDouble() : 0;
-            this.size = o.has("size") ? Math.max(0.3, o.get("size").getAsDouble()) : Math.max(0.3, ch.defaultSize);
+            boolean milestone = ProgressModel.boolOf(o, "milestone");
+            this.size = o.has("size") ? Math.max(0.3, o.get("size").getAsDouble())
+                    : milestone && !ch.defaultSizeSet ? MILESTONE_SIZE : Math.max(0.3, ch.defaultSize);
             String sh = o.has("shape") ? o.get("shape").getAsString() : "";
-            this.shape = sh.isEmpty() || sh.equals("default") ? ch.defaultShape : sh;
+            this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             this.cost = o.has("cost") ? o.get("cost").getAsInt() : 0;
             JsonObject req = obj(o, "requires");

@@ -161,6 +161,25 @@ public final class ProgressModel {
         }
     }
 
+    /**
+     * The shape a node takes from what it is when neither the node nor its chapter names one: pentagon for a milestone,
+     * diamond for one side of a pick-one choice ("exclusive" or "exclusive_with"), circle for a repeatable quest,
+     * square otherwise.
+     */
+    public static String roleShape(JsonObject o) {
+        if (boolOf(o, "milestone")) {
+            return "pentagon";
+        }
+        if (obj(o, "exclusive").has("group") || !arr(o, "exclusive_with").isEmpty()) {
+            return "diamond";
+        }
+        JsonElement rep = o.get("repeat");
+        if (rep != null && (rep.isJsonObject() || rep.isJsonPrimitive() && rep.getAsJsonPrimitive().isBoolean() && rep.getAsBoolean())) {
+            return "circle";
+        }
+        return "square";
+    }
+
     static JsonObject obj(JsonObject o, String k) {
         return o != null && o.has(k) && o.get(k).isJsonObject() ? o.getAsJsonObject(k) : new JsonObject();
     }
