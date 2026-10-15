@@ -280,6 +280,9 @@ public final class FtbQuestsImporter {
                 vis.addProperty("hidden_until", "deps_complete");
             } else if (bool(q, "hide_until_deps_visible") || bool(q, "hide")) {
                 vis.addProperty("hidden_until", "deps_visible");
+            } else {
+                // FTB Quests' quest flags are three-valued: an explicit false overrides the chapter default
+                vis.addProperty("hidden_until", "none");
             }
             if (vis.isEmpty()) {
                 n.remove("visibility");

@@ -66,10 +66,11 @@ public final class ProgressHud {
     /** Called by the loader's HUD layer after the vanilla HUD. */
     public static void render(GuiGraphics g) {
         Minecraft mc = Minecraft.getInstance();
+        // scheduled sounds play even with the HUD hidden (F1), so they never pile up
+        Motion.tick();
         if (mc.options.hideGui || ClientProgress.model() == null) {
             return;
         }
-        Motion.tick();
         renderNotice(g, mc.font);
         if (tracker) {
             renderTracker(g, mc.font);
@@ -162,7 +163,7 @@ public final class ProgressHud {
                 g.pose().pushPose();
                 g.pose().translate(26, y, 0);
                 g.pose().scale(0.625f, 0.625f, 1);
-                g.renderItem(t.icon, 0, 0);
+                g.renderItem(t.icon(), 0, 0);
                 g.pose().popPose();
                 g.pose().pushPose();
                 g.pose().translate(0, 0, Tiles.OVERLAY_Z);

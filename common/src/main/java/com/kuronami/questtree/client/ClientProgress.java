@@ -110,8 +110,21 @@ public final class ClientProgress {
     /** Whether the player may see the node yet (hidden quests); unknown nodes count as visible. */
     public static boolean visible(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
-        return n == null || rules.visible(progress, n);
+        if (n == null) {
+            return true;
+        }
+        // asked several times per node per frame; the answer only changes with new progress
+        if (visibleFor != progress || visibleRules != rules) {
+            VISIBLE.clear();
+            visibleFor = progress;
+            visibleRules = rules;
+        }
+        return VISIBLE.computeIfAbsent(key, k -> rules.visible(progress, n));
     }
+
+    private static final java.util.Map<String, Boolean> VISIBLE = new java.util.HashMap<>();
+    private static Object visibleFor;
+    private static Object visibleRules;
 
     /** Chapters hidden from the list as a whole. */
     public static boolean chapterHidden(String id) {

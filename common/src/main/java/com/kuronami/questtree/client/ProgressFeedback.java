@@ -42,7 +42,7 @@ final class ProgressFeedback {
             int i = Integer.parseInt(e.getKey().substring(hash + 1));
             if (i < n.tasks.size()) {
                 ClientModel.Task t = n.tasks.get(i);
-                ProgressHud.notice(t.icon.isEmpty() ? n.icon : t.icon, taskName(t), e.getValue(), t.count, n.title);
+                ProgressHud.notice(t.icon().isEmpty() ? n.icon : t.icon(), taskName(t), e.getValue(), t.count, n.title);
             }
         }
         // experience in skill chapters: one toast per chapter that updates while experience keeps coming
@@ -179,7 +179,7 @@ final class ProgressFeedback {
     }
 
     static Component taskName(ClientModel.Task t) {
-        return t.name;
+        return t.name();
     }
 
     static void play(SoundEvent sound, float pitch, float volume) {

@@ -21,7 +21,11 @@ import java.util.Locale;
  */
 final class TaskText {
 
-    record Shown(ItemStack icon, Component name) {
+    /** {@code resolved} is false only while an advancement's display is not known on the client yet. */
+    record Shown(ItemStack icon, Component name, boolean resolved) {
+        Shown(ItemStack icon, Component name) {
+            this(icon, name, true);
+        }
     }
 
     private TaskText() {
@@ -49,7 +53,7 @@ final class TaskText {
                 }
                 // not sent to the client yet (hidden advancements stay hidden until earned)
                 return new Shown(new ItemStack(Items.KNOWLEDGE_BOOK), Component.translatable("task." + p + ".advancement_named",
-                        rl == null ? Component.literal("?") : pretty(rl.toString())));
+                        rl == null ? Component.literal("?") : pretty(rl.toString())), h != null);
             }
             case "biome": {
                 String id = str(o, "biome");

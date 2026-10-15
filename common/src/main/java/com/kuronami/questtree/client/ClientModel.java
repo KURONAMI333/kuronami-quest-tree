@@ -279,12 +279,12 @@ public final class ClientModel {
             }
             ItemStack ic = stack(o.get("icon"));
             if (ic.isEmpty() && !tasks.isEmpty()) {
-                ic = tasks.get(0).icon;
+                ic = tasks.get(0).icon();
             }
             this.icon = ic;
             String base = "progression." + ch.namespace + "." + ch.path + "." + id;
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString())
-                    : !tasks.isEmpty() ? tasks.get(0).name : Component.literal(id);
+                    : !tasks.isEmpty() ? tasks.get(0).name() : Component.literal(id);
             this.title = m.component(base + ".title", fallbackTitle);
             String d = m.lookup(base + ".desc");
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);
@@ -310,8 +310,12 @@ public final class ClientModel {
         public final boolean consume;
         public final boolean optional;
         /** What the row shows: the target (mob, advancement, biome...) rather than just the kind of task. */
-        public final ItemStack icon;
-        public final Component name;
+        private ItemStack icon;
+        private Component name;
+        /** Advancements reach the client after the bundle (first server tick), so their text is looked up again later. */
+        private final JsonObject source;
+        private boolean resolved;
+        private final boolean authorTitle;
 
         Task(ClientModel m, JsonObject o, boolean repeatable) {
             this.type = o.has("type") ? o.get("type").getAsString() : "";
@@ -321,6 +325,7 @@ public final class ClientModel {
             this.item = type.equals("item") && o.has("item") ? stack(o.get("item")) : ItemStack.EMPTY;
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
             this.count = o.has("count") ? o.get("count").getAsLong() : it.has("count") ? it.get("count").getAsLong() : 1;
+            this.source = o;
             TaskText.Shown shown = TaskText.describe(type, o, item);
             ItemStack explicitIcon = o.has("icon") ? stack(o.get("icon")) : ItemStack.EMPTY;
             this.icon = !explicitIcon.isEmpty() ? explicitIcon : shown.icon();
@@ -334,6 +339,34 @@ public final class ClientModel {
                 title = parseText(o.get("title").getAsString());
             }
             this.name = title != null ? title : shown.name();
+            this.authorTitle = title != null;
+            this.resolved = !type.equals("advancement") || shown.resolved();
+        }
+
+        public ItemStack icon() {
+            resolve();
+            return icon;
+        }
+
+        public Component name() {
+            resolve();
+            return name;
+        }
+
+        private void resolve() {
+            if (resolved) {
+                return;
+            }
+            TaskText.Shown shown = TaskText.describe(type, source, item);
+            if (shown.resolved()) {
+                resolved = true;
+                if (!source.has("icon")) {
+                    icon = shown.icon();
+                }
+                if (!authorTitle) {
+                    name = shown.name();
+                }
+            }
         }
     }
 

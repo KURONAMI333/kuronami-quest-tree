@@ -144,7 +144,7 @@ public class ProgressScreen extends Screen {
             return true;
         }
         for (ClientModel.Task t : n.tasks) {
-            if (t.name.getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
+            if (t.name().getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
                 return true;
             }
         }
@@ -341,6 +341,11 @@ public class ProgressScreen extends Screen {
         g.fill(0, 0, width, height, 0xB80A0A0C);
         buttons.clear();
         Motion.tick();
+        // claim animations of tiles that were never drawn (scrolled away) end here, so their tiles leave the list
+        long nowMs = Util.getMillis();
+        if (flashes.values().removeIf(at -> nowMs - at > 2500)) {
+            cachedFor = null;
+        }
         ClientModel m = model();
         if (m == null || m.chapters.isEmpty()) {
             g.drawCenteredString(font, Component.translatable("screen.kuronami_quest_tree.empty"), width / 2, height / 2 - 4, GRAY);
@@ -506,7 +511,9 @@ public class ProgressScreen extends Screen {
         if (claimableNoChoice > 0) {
             Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
             int bw = font.width(ca) + 16;
-            button(g, ca, nowRight() - bw, 10, bw, true, true, mouseX, mouseY, () -> {
+            // left of the search box (and its match count), which sits at the top right
+            int searchLeft = nowRight() - 110 - (searching() ? font.width(matches.size() + "/" + matches.size()) + 12 : 6);
+            button(g, ca, searchLeft - bw, 10, bw, true, true, mouseX, mouseY, () -> {
                 ClientProgress.send("claim_all", "", -1);
                 long start = Util.getMillis();
                 int i = 0;
@@ -950,6 +957,16 @@ public class ProgressScreen extends Screen {
                 if (p == null) {
                     continue;
                 }
+                if (!ClientProgress.visible(r)) {
+                    // a hidden requirement: counted, never named
+                    Tiles.tile(g, "square", x, y, 16, State.LOCKED, 0, ItemStack.EMPTY, false);
+                    g.pose().pushPose();
+                    g.pose().translate(0, 0, OVERLAY_Z);
+                    g.drawString(font, "???", x + 22, y + 4, GRAY, true);
+                    g.pose().popPose();
+                    y += 20;
+                    continue;
+                }
                 Tiles.tile(g, p.shape, x, y, 16, ClientProgress.state(p.key), ClientProgress.fraction(p.key), p.icon, false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -980,8 +997,8 @@ public class ProgressScreen extends Screen {
                 long have = Math.min(p.task(n.key, i), t.count);
                 boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
                 g.fill(x, y - 2, x + w, y - 1, 0x1AFFFFFF);
-                if (!t.icon.isEmpty()) {
-                    g.renderItem(t.icon, x, y + 2);
+                if (!t.icon().isEmpty()) {
+                    g.renderItem(t.icon(), x, y + 2);
                 } else if (t.type.equals("checkmark")) {
                     Tiles.pixels(g, Tiles.TICK, x + 4, y + 6, 2, met ? Tiles.GREEN_TEXT : 0xFFD0D0D0);
                 }
@@ -1454,6 +1471,11 @@ public class ProgressScreen extends Screen {
 
     /** Opens a node's chapter and selects it, centring the map on it. */
     private void goTo(String key) {
+        if (!ClientProgress.visible(key)) {
+            // hidden quests stay hidden, also through links, images and requirement rows
+            ProgressFeedback.locked();
+            return;
+        }
         ClientModel m = model();
         ClientModel.Chapter c = m.chapterOf.get(key);
         ClientModel.Node n = m.nodesByKey.get(key);

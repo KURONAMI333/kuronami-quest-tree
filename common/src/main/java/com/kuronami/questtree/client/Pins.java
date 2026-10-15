@@ -53,6 +53,13 @@ public final class Pins {
         }
     }
 
+    private static int version;
+
+    /** Changes whenever pins change (caches built from pins compare it). */
+    public static int version() {
+        return version;
+    }
+
     public static boolean has(String key) {
         return PINNED.contains(key);
     }
@@ -63,6 +70,7 @@ public final class Pins {
 
     /** Pins or unpins; the oldest pin drops out when more than {@link #MAX} are pinned. */
     public static void toggle(String key) {
+        version++;
         if (!PINNED.remove(key)) {
             PINNED.add(key);
             while (PINNED.size() > MAX) {

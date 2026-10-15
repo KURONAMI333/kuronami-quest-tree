@@ -30,12 +30,17 @@ public final class ItemTooltips {
     private static final Map<String, List<Want>> BY_ITEM = new HashMap<>();
     private static final List<Want> BY_TAG = new ArrayList<>();
     private static Object builtFor;
+    private static int builtPins = -1;
 
     private ItemTooltips() {
     }
 
     /** Called by the loader's tooltip event. */
     public static void append(ItemStack stack, List<Component> lines) {
+        // creative and recipe search build their indexes on worker threads and ask for tooltips there: never answer those
+        if (!net.minecraft.client.Minecraft.getInstance().isSameThread()) {
+            return;
+        }
         ClientConfig.ensureLoaded();
         ProgressRules rules = ClientProgress.rules();
         ClientModel model = ClientProgress.model();
@@ -43,9 +48,10 @@ public final class ItemTooltips {
             return;
         }
         PlayerProgress p = ClientProgress.progress();
-        if (builtFor != p) {
+        if (builtFor != p || builtPins != Pins.version()) {
             build(rules, p);
             builtFor = p;
+            builtPins = Pins.version();
         }
         List<Want> wants = new ArrayList<>(BY_ITEM.getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), List.of()));
         for (Want w : BY_TAG) {

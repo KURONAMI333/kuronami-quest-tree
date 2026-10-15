@@ -5,16 +5,23 @@ import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 
 /**
  * The unfinished requirements between the player and a node, prerequisites first (EXTERNAL_REFERENCES 1-2: Dead by
- * Daylight's Bloodweb chain, Diablo IV's path allocation). "Any of" requirements take the cheapest branch; players who
- * want another branch take nodes one by one. Exclusive choices are never decided for the player: the batch stops
- * before the first node that would close another.
+ * Daylight's Bloodweb chain, Diablo IV's path allocation). Exclusive choices are never decided for the player: the batch
+ * stops before the first node that would close another.
+ * <p>
+ * Requirements form an and/or graph ("all of", "any of", "at least n of"), often with cycles (Pufferfish's Skills
+ * connections go both ways). A cost-ordered search (Knuth's generalisation of Dijkstra to and/or graphs) settles each
+ * node once at its cheapest cost: an "any" node from its cheapest settled requirement, an "all" node once all its
+ * requirements are settled, an "at least n" node from its n cheapest. Polynomial, and cycles cannot loop. Costs of shared
+ * ancestors are counted per branch while choosing (an estimate); the reported cost counts each node once.
  */
 final class PathFinder {
 
@@ -26,21 +33,77 @@ final class PathFinder {
     }
 
     static Path find(ProgressRules rules, PlayerProgress p, String targetKey) {
-        ProgressModel.Node target = rules.model().nodes.get(targetKey);
+        ProgressModel model = rules.model();
+        ProgressModel.Node target = model.nodes.get(targetKey);
         if (target == null || ProgressRules.doneOnce(p, targetKey) || rules.state(p, target) == ProgressRules.State.EXCLUDED) {
             return Path.NONE;
         }
-        LinkedHashSet<String> out = new LinkedHashSet<>();
-        if (!collect(rules, p, target, out, new HashSet<>())) {
+        // nodes of the target's namespace only (requirements never leave it)
+        Map<String, List<ProgressModel.Node>> dependents = new HashMap<>();
+        Map<String, Long> dist = new HashMap<>();
+        Map<String, List<String>> chosen = new HashMap<>();
+        Map<String, Integer> settledReqs = new HashMap<>();
+        Map<String, List<String>> settledList = new HashMap<>();
+        PriorityQueue<Object[]> queue = new PriorityQueue<>((a, b) -> Long.compare((long) a[1], (long) b[1]));
+        for (ProgressModel.Node n : model.nodes.values()) {
+            if (!n.chapter.namespace.equals(target.chapter.namespace)) {
+                continue;
+            }
+            for (String r : n.requires) {
+                dependents.computeIfAbsent(r, k -> new ArrayList<>()).add(n);
+            }
+            if (ProgressRules.doneOnce(p, n.key)) {
+                queue.add(new Object[]{n.key, 0L, List.of()});
+            } else if (rules.state(p, n) != ProgressRules.State.EXCLUDED && (n.root || n.requires.isEmpty() || rules.unlocked(p, n))) {
+                queue.add(new Object[]{n.key, (long) Math.max(0, n.cost) + 1, List.of()});
+            }
+        }
+        while (!queue.isEmpty()) {
+            Object[] e = queue.poll();
+            String key = (String) e[0];
+            if (dist.containsKey(key)) {
+                continue;
+            }
+            long d = (long) e[1];
+            @SuppressWarnings("unchecked")
+            List<String> via = (List<String>) e[2];
+            dist.put(key, d);
+            chosen.put(key, via);
+            if (key.equals(targetKey)) {
+                break;
+            }
+            for (ProgressModel.Node v : dependents.getOrDefault(key, List.of())) {
+                if (dist.containsKey(v.key) || rules.state(p, v) == ProgressRules.State.EXCLUDED) {
+                    continue;
+                }
+                int settled = settledReqs.merge(v.key, 1, Integer::sum);
+                List<String> list = settledList.computeIfAbsent(v.key, k -> new ArrayList<>());
+                list.add(key);
+                long own = (long) Math.max(0, v.cost) + 1;
+                boolean any = v.requireMode.startsWith("any") || v.requireMode.equals("one");
+                int need = v.requireMin > 0 ? Math.min(v.requireMin, v.requires.size()) : any ? 1 : v.requires.size();
+                if (settled == need) {
+                    // settled in cost order, so the first "need" requirements are the cheapest ones
+                    long sum = own;
+                    for (String r : list) {
+                        sum += dist.get(r);
+                    }
+                    queue.add(new Object[]{v.key, sum, List.copyOf(list)});
+                }
+            }
+        }
+        if (!dist.containsKey(targetKey)) {
             return Path.NONE;
         }
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        collect(targetKey, p, chosen, out, new LinkedHashSet<>());
         List<String> nodes = new ArrayList<>(out);
         int cost = 0;
         int batchable = 0;
         int batchCost = 0;
         boolean stopped = false;
         for (String k : nodes) {
-            ProgressModel.Node n = rules.model().nodes.get(k);
+            ProgressModel.Node n = model.nodes.get(k);
             int c = Math.max(0, n.cost);
             cost += c;
             // only skills can be bought in one go; an exclusive node (or anything after it) is the player's choice
@@ -54,60 +117,15 @@ final class PathFinder {
         return new Path(nodes, cost, batchable, batchCost);
     }
 
-    /** Adds the unfinished nodes needed for {@code n} (and {@code n}) in dependency order. False when unreachable. */
-    private static boolean collect(ProgressRules rules, PlayerProgress p, ProgressModel.Node n, Set<String> out, Set<String> visiting) {
-        if (ProgressRules.doneOnce(p, n.key) || out.contains(n.key)) {
-            return true;
+    /** Unfinished nodes of the chosen requirements, dependencies first. */
+    private static void collect(String key, PlayerProgress p, Map<String, List<String>> chosen, Set<String> out, Set<String> stack) {
+        if (ProgressRules.doneOnce(p, key) || out.contains(key) || !stack.add(key)) {
+            return;
         }
-        if (rules.state(p, n) == ProgressRules.State.EXCLUDED || !visiting.add(n.key)) {
-            return false;
+        for (String r : chosen.getOrDefault(key, List.of())) {
+            collect(r, p, chosen, out, stack);
         }
-        boolean ok = true;
-        if (!n.root && !n.requires.isEmpty() && !rules.unlocked(p, n)) {
-            boolean any = n.requireMode.startsWith("any") || n.requireMode.equals("one") || n.requireMin > 0;
-            if (any) {
-                // cheapest single branch that is reachable
-                Set<String> best = null;
-                int bestCost = Integer.MAX_VALUE;
-                for (String r : n.requires) {
-                    ProgressModel.Node d = rules.model().nodes.get(r);
-                    if (d == null) {
-                        continue;
-                    }
-                    Set<String> trial = new LinkedHashSet<>(out);
-                    if (collect(rules, p, d, trial, new HashSet<>(visiting))) {
-                        int c = 0;
-                        for (String k : trial) {
-                            if (!out.contains(k)) {
-                                c += Math.max(0, rules.model().nodes.get(k).cost) + 1;
-                            }
-                        }
-                        if (c < bestCost) {
-                            bestCost = c;
-                            best = trial;
-                        }
-                    }
-                }
-                if (best == null) {
-                    ok = false;
-                } else {
-                    out.clear();
-                    out.addAll(best);
-                }
-            } else {
-                for (String r : n.requires) {
-                    ProgressModel.Node d = rules.model().nodes.get(r);
-                    if (d == null || !collect(rules, p, d, out, visiting)) {
-                        ok = false;
-                        break;
-                    }
-                }
-            }
-        }
-        visiting.remove(n.key);
-        if (ok) {
-            out.add(n.key);
-        }
-        return ok;
+        stack.remove(key);
+        out.add(key);
     }
 }
