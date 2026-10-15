@@ -56,7 +56,8 @@
           ]
         }
       }
-    ]
+    ],
+    "reset_on_death": true
   },
   "nodes": {
     "root": {

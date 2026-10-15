@@ -53,5 +53,6 @@
   "event.pack_progress.level": "レベルアップ",
   "event.pack_progress.toast": "",
   "toast.pack_progress.complete": "クエスト達成",
-  "toast.pack_progress.level": "レベル %s"
+  "toast.pack_progress.level": "レベル %s",
+  "commands.pack_progress.changed": "%s人の進行を変更しました"
 }

@@ -57,6 +57,7 @@ public final class ProgressCommands {
                     c.getSource().sendSuccess(() -> Component.literal(ProgressData.chapterCount() + " chapters loaded"), false);
                     return ProgressData.chapterCount();
                 })));
+        PlayerCommands.register(dispatcher);
     }
 
     private static int importFtb(CommandContext<CommandSourceStack> c, String ns) {

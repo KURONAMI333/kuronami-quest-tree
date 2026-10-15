@@ -48,6 +48,9 @@ public final class ProgressRules {
             // partly ranked nodes are not finished: they still need points (and nothingLeft must not stop experience)
             return State.OPEN;
         }
+        if (p.cooldown.getOrDefault(n.key, 0L) > System.currentTimeMillis()) {
+            return State.LOCKED;
+        }
         if (p.completed.contains(n.key)) {
             return !n.rewards.isEmpty() && !p.claimed.contains(n.key) ? State.CLAIM : State.DONE;
         }
@@ -223,6 +226,31 @@ public final class ProgressRules {
     }
 
     /** Spends points on a skill node if allowed. Returns true if it was taken. */
+    /**
+     * After a claim: whether the quest starts over ({@code "repeat": {"cooldown": seconds, "max": n}}). Quests without
+     * tasks only repeat with a cooldown, or they would complete again in the same tick forever.
+     */
+    public boolean repeatAfterClaim(PlayerProgress p, ProgressModel.Node n, long now) {
+        JsonElement rep = n.json.get("repeat");
+        if (rep == null || !(rep.isJsonObject() || (rep.isJsonPrimitive() && rep.getAsJsonPrimitive().isBoolean() && rep.getAsBoolean()))) {
+            return false;
+        }
+        JsonObject r = rep.isJsonObject() ? rep.getAsJsonObject() : new JsonObject();
+        long cooldown = r.has("cooldown") ? r.get("cooldown").getAsLong() : 0;
+        int max = r.has("max") && r.get("max").isJsonPrimitive() ? r.get("max").getAsInt() : Integer.MAX_VALUE;
+        int done = p.repeats.getOrDefault(n.key, 0);
+        // max = how many times the quest can be done in total
+        if (done + 1 >= max || (n.tasks.isEmpty() && cooldown <= 0)) {
+            return false;
+        }
+        p.repeats.put(n.key, done + 1);
+        p.clearNode(n.key);
+        if (cooldown > 0) {
+            p.cooldown.put(n.key, now + cooldown * 1000);
+        }
+        return true;
+    }
+
     public boolean take(PlayerProgress p, ProgressModel.Node n) {
         // skill nodes with tasks are quests inside a skill chapter: they are claimed, not taken
         if (state(p, n) != State.CLAIM || !n.chapter.isSkills() || !n.tasks.isEmpty()) {

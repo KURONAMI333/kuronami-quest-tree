@@ -111,6 +111,32 @@ public final class Rewards {
         }
     }
 
+    /** Removes the attribute modifiers a node gave (all ranks, quest rewards), for resets and respec. */
+    static void removeAttributes(ServerPlayer player, ProgressModel.Node n) {
+        int ranks = Math.max(1, n.ranks);
+        for (int rank = 0; rank < ranks; rank++) {
+            List<JsonObject> list = rewardsOfRank(n, rank);
+            for (int i = 0; i < list.size(); i++) {
+                removeAttribute(player, list.get(i), modifierId(n.key, rank * 100 + i));
+            }
+        }
+        for (int i = 0; i < n.rewards.size(); i++) {
+            removeAttribute(player, n.rewards.get(i), modifierId(n.key, 1000 + i));
+        }
+    }
+
+    private static void removeAttribute(ServerPlayer player, JsonObject rw, ResourceLocation id) {
+        if (!ProgressService.type(rw).equals("attribute")) {
+            return;
+        }
+        ResourceLocation rl = ResourceLocation.tryParse(ProgressService.str(rw, "attribute"));
+        Holder<Attribute> attr = rl == null ? null : BuiltInRegistries.ATTRIBUTE.getHolder(rl).orElse(null);
+        AttributeInstance inst = attr == null ? null : player.getAttribute(attr);
+        if (inst != null) {
+            inst.removeModifier(id);
+        }
+    }
+
     private static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
         if (n.ranks > 0 && n.json.has("ranks")) {
             JsonElement r = n.json.getAsJsonArray("ranks").get(Math.min(rank, n.ranks - 1));

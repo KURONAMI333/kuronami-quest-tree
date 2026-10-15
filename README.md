@@ -14,6 +14,13 @@ Permission level 2.
 | `/pack_progress import ftbquests [namespace]` | Convert `config/ftbquests/quests` into the world data pack `pack_progress_import` and reload |
 | `/pack_progress import puffish [namespace]` | Convert every Pufferfish's Skills category found in data packs and `config/puffish_skills` |
 | `/pack_progress status` | Number of loaded chapters |
+| `/pack_progress reset <players> [chapter or node]` | Forget progress (everything, one chapter, or one node) |
+| `/pack_progress complete <players> <node>` | Finish a quest's tasks; rewards stay claimable |
+| `/pack_progress respec <players> <chapter>` | Give back every point spent in a skill chapter |
+| `/pack_progress points <players> <chapter> <amount>` | Add (or remove) points to spend |
+| `/pack_progress experience <players> <chapter> <amount>` | Add experience to a skill chapter |
+
+Chapter ids are `<namespace>:<chapter>`, node ids `<namespace>:<chapter>/<node>`.
 
 The original FTB Quests and Pufferfish's Skills files are only read. Settings that could not be carried over are listed in chat and in `import_report_<namespace>.json` next to the data pack.
 

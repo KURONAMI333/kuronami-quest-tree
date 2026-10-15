@@ -26,6 +26,9 @@ public final class PlayerProgress {
     public final Map<String, Integer> level = new HashMap<>();
     public final Map<String, Integer> spent = new HashMap<>();
     public final Map<String, Integer> bonus = new HashMap<>();
+    /** Repeatable quests: how often each was claimed, and until when (epoch millis) it rests before it opens again. */
+    public final Map<String, Integer> repeats = new HashMap<>();
+    public final Map<String, Long> cooldown = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public final Deque<String> recent = new ArrayDeque<>();
 
@@ -37,6 +40,13 @@ public final class PlayerProgress {
 
     public void setTask(String node, int index, long value) {
         tasks.put(node + "#" + index, value);
+    }
+
+    /** Forgets a node's own progress (tasks, completion, claim); used by repeats and resets. */
+    public void clearNode(String node) {
+        completed.remove(node);
+        claimed.remove(node);
+        tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
     }
 
     public void event(String kind, String node, long time) {

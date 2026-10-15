@@ -27,6 +27,10 @@ public final class ProgressJson {
         o.add("spent", ints(p.spent));
         o.add("bonus", ints(p.bonus));
         o.add("recent", strings(p.recent));
+        o.add("repeats", ints(p.repeats));
+        JsonObject cd = new JsonObject();
+        p.cooldown.forEach(cd::addProperty);
+        o.add("cooldown", cd);
         return o;
     }
 
@@ -48,6 +52,10 @@ public final class ProgressJson {
         readInts(obj(o, "level"), p.level);
         readInts(obj(o, "spent"), p.spent);
         readInts(obj(o, "bonus"), p.bonus);
+        readInts(obj(o, "repeats"), p.repeats);
+        for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
+            p.cooldown.put(e.getKey(), e.getValue().getAsLong());
+        }
         for (JsonElement e : arr(o, "recent")) {
             p.recent.addLast(e.getAsString());
         }

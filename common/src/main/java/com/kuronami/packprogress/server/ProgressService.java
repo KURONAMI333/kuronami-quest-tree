@@ -78,8 +78,19 @@ public final class ProgressService {
     }
 
     /** Respawning copies only base attribute values, so skill and quest attribute modifiers are put back. */
-    public static void onRespawn(ServerPlayer player) {
-        Rewards.reapplyAttributes(player, progress(player));
+    public static void onRespawn(ServerPlayer player, boolean died) {
+        PlayerProgress p = progress(player);
+        Rewards.reapplyAttributes(player, p);
+        if (died) {
+            // "reset_on_death": the experience towards the next level is lost (levels and points stay)
+            for (ProgressModel.Chapter c : rules().model().chapters.values()) {
+                if (c.isSkills() && ProgressModel.boolOf(c.points, "reset_on_death") && p.xp.getOrDefault(c.id, 0.0) > 0) {
+                    p.xp.put(c.id, 0.0);
+                    ProgressStore.get(player.server).setDirty();
+                    markDirty(player);
+                }
+            }
+        }
     }
 
     public static void onPlayerTick(ServerPlayer player) {
@@ -348,6 +359,7 @@ public final class ProgressService {
             Rewards.give(player, p, n, rw, choice);
         }
         event(player, p, "claim", n.key);
+        rules().repeatAfterClaim(p, n, System.currentTimeMillis());
         ProgressStore.get(player.server).setDirty();
     }
 

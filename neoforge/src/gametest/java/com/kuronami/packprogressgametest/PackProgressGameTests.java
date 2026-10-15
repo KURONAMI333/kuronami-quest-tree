@@ -204,7 +204,7 @@ public final class PackProgressGameTests {
         var inst = p.getAttribute(Attributes.ARMOR);
         inst.getModifiers().stream().map(m -> m.id()).toList().forEach(inst::removeModifier);
         helper.assertTrue(p.getAttributeValue(Attributes.ARMOR) == armor, "modifiers not removed");
-        CommonClass.onRespawn(p);
+        CommonClass.onRespawn(p, false);
         helper.assertTrue(p.getAttributeValue(Attributes.ARMOR) == armor + 3, "respawn did not restore skill modifiers");
         helper.succeed();
     }
@@ -258,6 +258,58 @@ public final class PackProgressGameTests {
         double dealt = pr.xp.getOrDefault(c, 0.0) - afterHurt - 11;
         helper.assertTrue(dealt > 0 && dealt <= 300, "deal_damage should give up to 300 (3 minus armour) * 100, got " + dealt);
         z.discard();
+        helper.succeed();
+    }
+
+    private static int cmd(ServerPlayer p, String command) {
+        var src = p.createCommandSourceStack().withPermission(2).withSuppressedOutput();
+        try {
+            return p.server.getCommands().getDispatcher().execute(command, src);
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            throw new IllegalStateException(command + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** A repeatable quest starts over after each claim, up to its max. */
+    @GameTest(template = "empty3x3x3")
+    public static void repeatable(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        for (int i = 0; i < 3; i++) {
+            act(p, "check", Q + "daily", 0);
+            act(p, "claim", Q + "daily", -1);
+        }
+        helper.assertTrue(count(p, Items.BREAD) == 2, "max 2 should give 2 breads, got " + count(p, Items.BREAD));
+        helper.assertTrue(pr.claimed.contains(Q + "daily"), "after the last repeat the quest should stay claimed");
+        helper.succeed();
+    }
+
+    /** Admin commands: complete, reset, points, experience, respec (with attribute removal). */
+    @GameTest(template = "empty3x3x3")
+    public static void commands(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        cmd(p, "pack_progress complete @s " + Q + "ingots");
+        helper.assertTrue(pr.completed.contains(Q + "ingots"), "complete did not complete");
+        cmd(p, "pack_progress reset @s " + Q + "ingots");
+        helper.assertTrue(!pr.completed.contains(Q + "ingots") && pr.task(Q + "ingots", 0) == 0, "reset node failed");
+        cmd(p, "pack_progress points @s " + S + " 2");
+        double health = p.getAttributeValue(Attributes.MAX_HEALTH);
+        act(p, "take", S + "/root", 0);
+        act(p, "take", S + "/next", 0);
+        helper.assertTrue(pr.taken.containsKey(S + "/root") && pr.taken.containsKey(S + "/next"), "points command did not give 2 points");
+        helper.assertTrue(p.getAttributeValue(Attributes.MAX_HEALTH) == health + 2, "root attribute missing");
+        cmd(p, "pack_progress respec @s " + S);
+        helper.assertTrue(pr.taken.isEmpty() && pr.spent.getOrDefault(S, 0) == 0, "respec did not refund");
+        helper.assertTrue(p.getAttributeValue(Attributes.MAX_HEALTH) == health, "respec left the attribute");
+        cmd(p, "pack_progress experience @s " + S + " 25");
+        helper.assertTrue(pr.level.getOrDefault(S, 0) == 2 && pr.xp.getOrDefault(S, 0.0) == 5, "experience command: level "
+                + pr.level.get(S) + " xp " + pr.xp.get(S));
+        // death loses the experience towards the next level ("reset_on_death"), not levels
+        CommonClass.onRespawn(p, true);
+        helper.assertTrue(pr.level.getOrDefault(S, 0) == 2 && pr.xp.getOrDefault(S, 0.0) == 0, "reset_on_death failed");
+        cmd(p, "pack_progress reset @s");
+        helper.assertTrue(pr.level.isEmpty() && pr.bonus.isEmpty() && pr.completed.isEmpty(), "full reset failed");
         helper.succeed();
     }
 }

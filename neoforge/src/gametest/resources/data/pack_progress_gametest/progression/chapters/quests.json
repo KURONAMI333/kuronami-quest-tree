@@ -1,18 +1,167 @@
 {
-  "icon": {"id": "minecraft:iron_ingot"},
+  "icon": {
+    "id": "minecraft:iron_ingot"
+  },
   "nodes": {
-    "ingots": {"x": 0, "y": 0, "tasks": [{"type": "item", "item": {"id": "minecraft:iron_ingot"}, "count": 3}],
-               "rewards": [{"type": "item", "item": {"id": "minecraft:diamond", "count": 2}}]},
-    "tick": {"x": 1, "y": 0, "requires": {"nodes": ["ingots"]}, "tasks": [{"type": "checkmark"}],
-             "rewards": [{"type": "xp", "amount": 10, "auto": true}]},
-    "hand_in": {"x": 2, "y": 0, "requires": {"nodes": ["ingots"]},
-                "tasks": [{"type": "item", "item": {"id": "minecraft:gold_ingot"}, "count": 2, "consume": true}],
-                "rewards": [{"type": "command", "command": "tag @s add pp_cmd"}]},
-    "zombie": {"x": 0, "y": 1, "tasks": [{"type": "kill", "entity": "minecraft:zombie", "count": 1}]},
-    "left": {"x": 0, "y": 2, "exclusive": {"group": "side", "max": 1}, "tasks": [{"type": "checkmark"}]},
-    "right": {"x": 1, "y": 2, "exclusive": {"group": "side", "max": 1}, "tasks": [{"type": "checkmark"}]},
-    "free": {"x": 0, "y": 3, "requires": {"nodes": ["left"]}, "rewards": [{"type": "item", "item": {"id": "minecraft:apple"}, "auto": true}]},
-    "pick": {"x": 1, "y": 3, "tasks": [{"type": "checkmark"}],
-             "rewards": [{"type": "table", "table": "pack_progress_gametest:gems", "mode": "choice"}]}
+    "ingots": {
+      "x": 0,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:iron_ingot"
+          },
+          "count": 3
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:diamond",
+            "count": 2
+          }
+        }
+      ]
+    },
+    "tick": {
+      "x": 1,
+      "y": 0,
+      "requires": {
+        "nodes": [
+          "ingots"
+        ]
+      },
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "xp",
+          "amount": 10,
+          "auto": true
+        }
+      ]
+    },
+    "hand_in": {
+      "x": 2,
+      "y": 0,
+      "requires": {
+        "nodes": [
+          "ingots"
+        ]
+      },
+      "tasks": [
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:gold_ingot"
+          },
+          "count": 2,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "command",
+          "command": "tag @s add pp_cmd"
+        }
+      ]
+    },
+    "zombie": {
+      "x": 0,
+      "y": 1,
+      "tasks": [
+        {
+          "type": "kill",
+          "entity": "minecraft:zombie",
+          "count": 1
+        }
+      ]
+    },
+    "left": {
+      "x": 0,
+      "y": 2,
+      "exclusive": {
+        "group": "side",
+        "max": 1
+      },
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ]
+    },
+    "right": {
+      "x": 1,
+      "y": 2,
+      "exclusive": {
+        "group": "side",
+        "max": 1
+      },
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ]
+    },
+    "free": {
+      "x": 0,
+      "y": 3,
+      "requires": {
+        "nodes": [
+          "left"
+        ]
+      },
+      "rewards": [
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:apple"
+          },
+          "auto": true
+        }
+      ]
+    },
+    "pick": {
+      "x": 1,
+      "y": 3,
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "table",
+          "table": "pack_progress_gametest:gems",
+          "mode": "choice"
+        }
+      ]
+    },
+    "daily": {
+      "x": 3,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:bread"
+          }
+        }
+      ],
+      "repeat": {
+        "cooldown": 0,
+        "max": 2
+      }
+    }
   }
 }

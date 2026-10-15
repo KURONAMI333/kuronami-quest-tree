@@ -58,7 +58,7 @@ public class PackProgress {
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerRespawnEvent e) -> {
             if (e.getEntity() instanceof ServerPlayer sp) {
-                CommonClass.onRespawn(sp);
+                CommonClass.onRespawn(sp, !e.isEndConquered());
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent e) -> {

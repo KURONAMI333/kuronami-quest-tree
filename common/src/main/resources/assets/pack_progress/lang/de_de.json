@@ -53,5 +53,6 @@
   "event.pack_progress.level": "Stufenaufstieg",
   "event.pack_progress.toast": "",
   "toast.pack_progress.complete": "Quest abgeschlossen",
-  "toast.pack_progress.level": "Stufe %s"
+  "toast.pack_progress.level": "Stufe %s",
+  "commands.pack_progress.changed": "Fortschritt von %s Spielern geändert"
 }
