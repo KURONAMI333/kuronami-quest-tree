@@ -98,4 +98,32 @@ class ProgressRulesTest {
         assertEquals(ProgressRules.State.EXCLUDED, rules.state(p, s1));
         assertFalse(rules.take(p, s1));
     }
+
+    /** Hidden quests: secret until done, until requirements are done, or until requirements are visible (recursively). */
+    @Test
+    void visibility() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"v:c": {"defaults": {"hidden_until": "deps_visible"}, "nodes": {
+                  "a": {"visibility": {"hidden_until": "deps_complete"}, "requires": {"nodes": ["root"]}},
+                  "root": {"visibility": {"hidden_until": "none"}},
+                  "b": {"requires": {"nodes": ["a"]}},
+                  "secret": {"visibility": {"hidden_until": "complete"}},
+                  "after3": {"visibility": {"invisible_until_tasks": 1}, "tasks": [{"type": "checkmark"}]}
+                }}}}""").getAsJsonObject();
+        ProgressModel m = ProgressModel.of(bundle);
+        ProgressRules r = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertTrue(r.visible(p, m.nodes.get("v:c/root")));
+        assertFalse(r.visible(p, m.nodes.get("v:c/a")), "a waits for root to be done");
+        assertFalse(r.visible(p, m.nodes.get("v:c/b")), "b (chapter default deps_visible) waits for a to be visible");
+        assertFalse(r.visible(p, m.nodes.get("v:c/secret")));
+        assertFalse(r.visible(p, m.nodes.get("v:c/after3")));
+        p.completed.add("v:c/root");
+        assertTrue(r.visible(p, m.nodes.get("v:c/a")));
+        assertTrue(r.visible(p, m.nodes.get("v:c/b")));
+        p.setTask("v:c/after3", 0, 1);
+        assertTrue(r.visible(p, m.nodes.get("v:c/after3")));
+        p.completed.add("v:c/secret");
+        assertTrue(r.visible(p, m.nodes.get("v:c/secret")), "done nodes are always visible");
+    }
 }

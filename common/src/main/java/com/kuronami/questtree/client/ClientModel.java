@@ -128,6 +128,7 @@ public final class ClientModel {
         public final double defaultSize;
         /** Chapter-wide "hide dependency lines" (FTB Quests chapter default). */
         public final boolean hideLines;
+        public final boolean hideDetailsByDefault;
         /** Tiles that stand for a quest of another chapter (FTB Quests quest links). */
         public final List<Link> links = new ArrayList<>();
 
@@ -143,6 +144,8 @@ public final class ClientModel {
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : (skills ? "square" : "square");
             this.defaultSize = defaults.has("size") && defaults.get("size").isJsonPrimitive() ? defaults.get("size").getAsDouble() : 1;
+            this.hideDetailsByDefault = defaults.has("hide_details_until_startable") && defaults.get("hide_details_until_startable").isJsonPrimitive()
+                    && defaults.get("hide_details_until_startable").getAsBoolean();
             this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString()) : Component.literal(path);
             this.title = m.component("progression." + namespace + "." + path + ".title", fallbackTitle);
@@ -199,6 +202,9 @@ public final class ClientModel {
         public final List<String> requireKeys = new ArrayList<>();
         /** FTB Quests' "hide dependency lines" / "hide dependent lines": authors thin out busy maps with these. */
         public final boolean hideLinesToRequired;
+        /** FTB Quests: show only the title until the quest can be started / show the text only once done. */
+        public final boolean hideDetailsUntilStartable;
+        public final boolean hideTextUntilComplete;
         public final boolean hideLinesToDependents;
         public final List<Task> tasks = new ArrayList<>();
         public final List<ItemStack> rewards = new ArrayList<>();
@@ -222,6 +228,10 @@ public final class ClientModel {
                 requires.add(r.getAsString());
                 requireKeys.add(ch.keyOf(r.getAsString()));
             }
+            JsonObject vis = obj(o, "visibility");
+            this.hideDetailsUntilStartable = vis.has("hide_details_until_startable") ? vis.get("hide_details_until_startable").getAsBoolean()
+                    : ch.hideDetailsByDefault;
+            this.hideTextUntilComplete = vis.has("hide_text_until_complete") && vis.get("hide_text_until_complete").getAsBoolean();
             JsonObject lines = obj(o, "lines");
             this.hideLinesToRequired = lines.has("hide_to_deps") && lines.get("hide_to_deps").getAsBoolean();
             this.hideLinesToDependents = lines.has("hide_to_dependents") && lines.get("hide_to_dependents").getAsBoolean();

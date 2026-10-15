@@ -75,6 +75,10 @@ public final class ProgressModel {
         /** Skill chapters have a points block (experience sources, curve, limits). */
         public final JsonObject points;
         public final Map<String, List<Node>> exclusiveGroups = new LinkedHashMap<>();
+        /** Chapter defaults for its nodes ("hidden_until", "shape", ...). */
+        public final JsonObject defaults;
+        /** The whole chapter is hidden from the list (FTB Quests "always invisible"). */
+        public final boolean alwaysHidden;
 
         Chapter(String id, JsonObject o) {
             this.id = id;
@@ -82,6 +86,8 @@ public final class ProgressModel {
             this.namespace = id.substring(0, colon);
             this.path = id.substring(colon + 1);
             this.points = o.has("points") && o.get("points").isJsonObject() ? o.getAsJsonObject("points") : null;
+            this.defaults = obj(o, "defaults");
+            this.alwaysHidden = boolOf(obj(o, "visibility"), "always_hidden");
             for (Map.Entry<String, JsonElement> e : obj(o, "nodes").entrySet()) {
                 if (e.getValue().isJsonObject()) {
                     nodes.put(e.getKey(), new Node(this, e.getKey(), e.getValue().getAsJsonObject()));

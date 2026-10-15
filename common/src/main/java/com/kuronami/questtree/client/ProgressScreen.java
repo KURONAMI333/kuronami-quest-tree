@@ -87,7 +87,10 @@ public class ProgressScreen extends Screen {
     private ClientModel cachedModel;
     private final List<NowEntry> nowEntries = new ArrayList<>();
     private final Map<String, Integer> badges = new LinkedHashMap<>();
+    /** done, visible, hidden node counts per chapter. */
     private final Map<String, int[]> chapterCounts = new LinkedHashMap<>();
+    /** Chapters listed in the rail (chapters hidden as a whole are left out). */
+    private final List<ClientModel.Chapter> railChapters = new ArrayList<>();
     private int claimableNoChoice;
     private int doneTotal;
     private int questTotal;
@@ -133,10 +136,21 @@ public class ProgressScreen extends Screen {
         List<NowEntry> claim = new ArrayList<>();
         List<NowEntry> points = new ArrayList<>();
         List<NowEntry> moving = new ArrayList<>();
+        railChapters.clear();
         for (ClientModel.Chapter c : m.chapters) {
+            if (!ClientProgress.chapterHidden(c.id)) {
+                railChapters.add(c);
+            }
             int done = 0;
             int badge = 0;
+            int shown = 0;
+            int hidden = 0;
             for (ClientModel.Node n : c.nodes.values()) {
+                if (!ClientProgress.visible(n.key)) {
+                    hidden++;
+                    continue;
+                }
+                shown++;
                 State s = ClientProgress.state(n.key);
                 if (s == State.DONE) {
                     done++;
@@ -175,7 +189,7 @@ public class ProgressScreen extends Screen {
                 }
             }
             badges.put(c.id, badge);
-            chapterCounts.put(c.id, new int[]{done, c.nodes.size()});
+            chapterCounts.put(c.id, new int[]{done, shown, hidden});
         }
         // the required path first, optional quests after it, each closest-to-done first
         moving.sort(Comparator.comparing((NowEntry e) -> e.node.optional).thenComparingDouble(e -> -ClientProgress.fraction(e.key)));
@@ -254,20 +268,20 @@ public class ProgressScreen extends Screen {
         }
         rowRail(g, y, -1, null, Component.translatable("screen.kuronami_quest_tree.now"), w, mouseX, mouseY, nowBadge, null);
         y += 22;
-        railScroll = Mth.clamp(railScroll, 0, Math.max(0, m.chapters.size() - railRows()));
-        for (int i = railScroll; i < m.chapters.size() && i < railScroll + railRows(); i++) {
-            ClientModel.Chapter c = m.chapters.get(i);
-            int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0});
+        railScroll = Mth.clamp(railScroll, 0, Math.max(0, railChapters.size() - railRows()));
+        for (int i = railScroll; i < railChapters.size() && i < railScroll + railRows(); i++) {
+            ClientModel.Chapter c = railChapters.get(i);
+            int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
             String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
                     ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
-            rowRail(g, y, i, c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
-                    !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] ? "" : right);
+            rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
+                    !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
             y += 22;
         }
         if (railScroll > 0) {
             g.fill(8, 30, w, 31, 0x55FFFFFF);
         }
-        if (railScroll + railRows() < m.chapters.size()) {
+        if (railScroll + railRows() < railChapters.size()) {
             g.fill(8, height - 9, w, height - 8, 0x55FFFFFF);
         }
         g.disableScissor();
@@ -574,13 +588,13 @@ public class ProgressScreen extends Screen {
         // lines; authors hide some to keep busy maps readable (chapter default, or per node in either direction)
         ClientModel cm = model();
         for (ClientModel.Node n : ch.nodes.values()) {
-            if (ch.hideLines || n.hideLinesToRequired) {
+            if (ch.hideLines || n.hideLinesToRequired || !ClientProgress.visible(n.key)) {
                 continue;
             }
             State cs = ClientProgress.state(n.key);
             for (String r : n.requireKeys) {
                 ClientModel.Node p = cm.nodesByKey.get(r);
-                if (p == null || cm.chapterOf.get(r) != ch || p.hideLinesToDependents) {
+                if (p == null || cm.chapterOf.get(r) != ch || p.hideLinesToDependents || !ClientProgress.visible(p.key)) {
                     continue;
                 }
                 line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional ? 1 : 2, lineColor(ClientProgress.state(p.key), cs));
@@ -598,6 +612,9 @@ public class ProgressScreen extends Screen {
         // nodes
         String hovered = null;
         for (ClientModel.Node n : ch.nodes.values()) {
+            if (!ClientProgress.visible(n.key)) {
+                continue;
+            }
             int s = (int) Math.round(NODE * n.size);
             int x = (int) Math.round(n.x * UNIT) - s / 2 + shake(n.key, now);
             int y = (int) Math.round(n.y * UNIT) - s / 2;
@@ -623,7 +640,7 @@ public class ProgressScreen extends Screen {
         // quest links: the linked quest's tile, with an arrow in the corner (click goes to its chapter)
         for (ClientModel.Link l : ch.links) {
             ClientModel.Node target = cm.nodesByKey.get(l.node);
-            if (target == null) {
+            if (target == null || !ClientProgress.visible(target.key)) {
                 continue;
             }
             int s = (int) Math.round(NODE * l.size);
@@ -658,8 +675,15 @@ public class ProgressScreen extends Screen {
         if (ch.skills) {
             renderSkillHeader(g, ch, RAIL + 14, 30);
         } else {
-            int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size()});
-            g.drawString(font, cnt[0] + "/" + cnt[1], RAIL + 14, 30, GRAY, true);
+            int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size(), 0});
+            String count = cnt[0] + "/" + cnt[1];
+            g.drawString(font, count, RAIL + 14, 30, GRAY, true);
+            if (cnt[2] > 0) {
+                // more is hidden (Steam's "n hidden achievements remaining"): a lock and the number, never what it is
+                int hx = RAIL + 14 + font.width(count) + 6;
+                Tiles.pixels(g, Tiles.LOCK, hx, 31, 1, 0xFF707070);
+                g.drawString(font, "+" + cnt[2], hx + 7, 30, 0xFF707070, true);
+            }
         }
         renderMinimap(g, ch, v);
         renderZoomButtons(g, ch, v, mouseX, mouseY);
@@ -748,7 +772,10 @@ public class ProgressScreen extends Screen {
         }
         int actionsTop = height - 34;
         y += 4;
-        for (String d : n.description) {
+        // pack authors can keep a quest's details secret until it can be started, and its text until it is done
+        boolean details = !(n.hideDetailsUntilStartable && state == State.LOCKED);
+        boolean text = details && !(n.hideTextUntilComplete && state != State.DONE && state != State.CLAIM);
+        for (String d : text ? n.description : List.<String>of()) {
             for (FormattedCharSequence line : font.split(Component.literal(d), w)) {
                 if (y > actionsTop - 70) {
                     break;
@@ -786,7 +813,7 @@ public class ProgressScreen extends Screen {
                 }
             }
         }
-        if (!n.tasks.isEmpty()) {
+        if (!n.tasks.isEmpty() && details) {
             y += 8;
             g.drawString(font, Component.translatable("screen.kuronami_quest_tree.tasks"), x, y, GRAY, true);
             y += 12;
@@ -840,7 +867,7 @@ public class ProgressScreen extends Screen {
                 }
             }
         }
-        if (!n.rewards.isEmpty() || !n.rewardLines.isEmpty()) {
+        if ((!n.rewards.isEmpty() || !n.rewardLines.isEmpty()) && details) {
             y += 8;
             g.drawString(font, Component.translatable("screen.kuronami_quest_tree.rewards"), x, y, GRAY, true);
             y += 12;
@@ -860,7 +887,7 @@ public class ProgressScreen extends Screen {
                 y += 10;
             }
         }
-        if (!n.choice.isEmpty()) {
+        if (!n.choice.isEmpty() && details) {
             y += 8;
             g.drawString(font, Component.translatable("screen.kuronami_quest_tree.choose"), x, y, GRAY, true);
             y += 12;
@@ -1063,6 +1090,9 @@ public class ProgressScreen extends Screen {
         double[] b = bounds(ch);
         double s = Math.min((r[2] - 8) / Math.max(1, b[2] - b[0]), (r[3] - 8) / Math.max(1, b[3] - b[1]));
         for (ClientModel.Node n : ch.nodes.values()) {
+            if (!ClientProgress.visible(n.key)) {
+                continue;
+            }
             int px = r[0] + 4 + (int) ((n.x * UNIT - b[0]) * s);
             int py = r[1] + 4 + (int) ((n.y * UNIT - b[1]) * s);
             g.fill(px - 1, py - 1, px + 1, py + 1, minimapColor(ClientProgress.state(n.key)));
@@ -1109,8 +1139,8 @@ public class ProgressScreen extends Screen {
                 select(-1);
             } else if (row >= 1 && row <= railRows()) {
                 int index = railScroll + row - 1;
-                if (index < m.chapters.size()) {
-                    select(index);
+                if (index < railChapters.size()) {
+                    select(m.chapters.indexOf(railChapters.get(index)));
                 }
             }
             return true;
@@ -1309,6 +1339,9 @@ public class ProgressScreen extends Screen {
             float[] v = view(ch);
             ClientModel.Node hit = null;
             for (ClientModel.Node n : ch.nodes.values()) {
+                if (!ClientProgress.visible(n.key)) {
+                    continue;
+                }
                 double sx = v[0] + n.x * UNIT * v[2];
                 double sy = v[1] + n.y * UNIT * v[2];
                 double half = NODE * n.size * v[2] / 2;
@@ -1374,7 +1407,7 @@ public class ProgressScreen extends Screen {
             return super.mouseScrolled(mx, my, scrollX, scrollY);
         }
         if (mx < railRight()) {
-            railScroll = Mth.clamp(railScroll - (int) Math.signum(scrollY), 0, Math.max(0, m.chapters.size() - railRows()));
+            railScroll = Mth.clamp(railScroll - (int) Math.signum(scrollY), 0, Math.max(0, railChapters.size() - railRows()));
             return true;
         }
         if (sheetT > 0 && selected != null && mx >= sheetLeft()) {

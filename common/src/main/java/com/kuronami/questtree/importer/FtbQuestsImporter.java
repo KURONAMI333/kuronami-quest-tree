@@ -151,7 +151,18 @@ public final class FtbQuestsImporter {
                 case "default_min_width" -> put(o, "defaults.detail_width", v);
                 case "progression_mode" -> put(o, "defaults.progression_mode", v);
                 case "always_invisible" -> put(o, "visibility.always_hidden", v);
-                case "hide_quest_until_deps_complete", "hide_quest_until_deps_visible" -> put(o, "defaults.hidden_until", v);
+                case "hide_quest_until_deps_complete" -> {
+                    if (v.isJsonPrimitive() && v.getAsBoolean()) {
+                        put(o, "defaults.hidden_until", new JsonPrimitive("deps_complete"));
+                    }
+                }
+                case "hide_quest_until_deps_visible" -> {
+                    // "deps_complete" is the stricter of the two and wins when both are set
+                    if (v.isJsonPrimitive() && v.getAsBoolean() && !o.has("defaults")
+                            || v.isJsonPrimitive() && v.getAsBoolean() && !o.getAsJsonObject("defaults").has("hidden_until")) {
+                        put(o, "defaults.hidden_until", new JsonPrimitive("deps_visible"));
+                    }
+                }
                 case "hide_quest_details_until_startable" -> put(o, "defaults.hide_details_until_startable", v);
                 case "disable_toast" -> put(o, "defaults.toast", new JsonPrimitive(!v.getAsBoolean()));
                 case "consume_items" -> put(o, "defaults.consume_items", v);

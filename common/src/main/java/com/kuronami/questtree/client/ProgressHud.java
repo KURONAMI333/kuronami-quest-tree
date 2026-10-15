@@ -126,7 +126,7 @@ public final class ProgressHud {
         List<ClientModel.Node> rows = new ArrayList<>();
         for (String key : Pins.all()) {
             ClientModel.Node n = m.nodesByKey.get(key);
-            if (n != null && ClientProgress.state(key) != State.DONE) {
+            if (n != null && ClientProgress.state(key) != State.DONE && ClientProgress.visible(key)) {
                 rows.add(n);
             }
         }
@@ -135,7 +135,7 @@ public final class ProgressHud {
                 closestFor = ClientProgress.progress();
                 CLOSEST.clear();
                 m.nodesByKey.values().stream()
-                        .filter(n -> !n.tasks.isEmpty() && ClientProgress.state(n.key) == State.PROGRESS)
+                        .filter(n -> !n.tasks.isEmpty() && ClientProgress.state(n.key) == State.PROGRESS && ClientProgress.visible(n.key))
                         .sorted(Comparator.comparingDouble((ClientModel.Node n) -> -ClientProgress.fraction(n.key)))
                         .limit(3).forEach(CLOSEST::add);
             }

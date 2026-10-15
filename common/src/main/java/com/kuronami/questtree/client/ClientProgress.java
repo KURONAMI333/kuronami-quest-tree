@@ -107,6 +107,18 @@ public final class ClientProgress {
         return n == null ? ProgressRules.State.OPEN : rules.state(progress, n);
     }
 
+    /** Whether the player may see the node yet (hidden quests); unknown nodes count as visible. */
+    public static boolean visible(String key) {
+        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        return n == null || rules.visible(progress, n);
+    }
+
+    /** Chapters hidden from the list as a whole. */
+    public static boolean chapterHidden(String id) {
+        ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(id);
+        return c != null && c.alwaysHidden;
+    }
+
     public static double fraction(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
         return n == null ? 0 : rules.fraction(progress, n);

@@ -121,6 +121,68 @@ public final class ProgressRules {
         return rep != null && (rep.isJsonObject() || (rep.isJsonPrimitive() && rep.getAsJsonPrimitive().isBoolean() && rep.getAsBoolean()));
     }
 
+    /**
+     * Whether the player may see a node yet (FTB Quests' hidden quests). Done nodes are always visible. Otherwise
+     * {@code visibility.hidden_until} (or the chapter default) decides: "complete" (secret until done),
+     * "deps_complete", "deps_visible"; {@code visibility.invisible_until_tasks} shows it after that many tasks;
+     * {@code visibility.requires} names nodes that must be done first. Hidden nodes still track progress.
+     */
+    public boolean visible(PlayerProgress p, ProgressModel.Node n) {
+        return visible(p, n, 0);
+    }
+
+    private boolean visible(PlayerProgress p, ProgressModel.Node n, int depth) {
+        if (doneOnce(p, n.key) || depth > 32) {
+            return true;
+        }
+        JsonObject vis = n.json.has("visibility") && n.json.get("visibility").isJsonObject() ? n.json.getAsJsonObject("visibility") : new JsonObject();
+        if (vis.has("invisible_until_tasks")) {
+            int need = vis.get("invisible_until_tasks").getAsInt();
+            int done = 0;
+            for (int i = 0; i < n.tasks.size(); i++) {
+                if (p.task(n.key, i) >= target(n.tasks.get(i))) {
+                    done++;
+                }
+            }
+            if (done < need) {
+                return false;
+            }
+        }
+        if (vis.has("requires") && vis.get("requires").isJsonObject()) {
+            for (JsonElement e : vis.getAsJsonObject("requires").has("nodes") ? vis.getAsJsonObject("requires").getAsJsonArray("nodes") : new com.google.gson.JsonArray()) {
+                String r = e.getAsString();
+                String key = r.contains(":") ? r : r.contains("/") ? n.chapter.namespace + ":" + r : n.chapter.id + "/" + r;
+                if (!doneOnce(p, key)) {
+                    return false;
+                }
+            }
+        }
+        String until = vis.has("hidden_until") ? vis.get("hidden_until").getAsString()
+                : n.chapter.defaults.has("hidden_until") && n.chapter.defaults.get("hidden_until").isJsonPrimitive()
+                ? n.chapter.defaults.get("hidden_until").getAsString() : "";
+        switch (until) {
+            case "complete":
+                return false;
+            case "deps_complete":
+                for (String r : n.requires) {
+                    if (!doneOnce(p, r)) {
+                        return false;
+                    }
+                }
+                return true;
+            case "deps_visible":
+                for (String r : n.requires) {
+                    ProgressModel.Node d = model.nodes.get(r);
+                    if (d != null && !visible(p, d, depth + 1)) {
+                        return false;
+                    }
+                }
+                return true;
+            default:
+                return true;
+        }
+    }
+
     /** Share of the node's tasks done, 0..1 (counts weighted by their targets). */
     public double fraction(PlayerProgress p, ProgressModel.Node n) {
         if (n.tasks.isEmpty()) {
