@@ -277,7 +277,8 @@ public class ProgressScreen extends Screen {
                 }
                 shown++;
                 State s = ClientProgress.state(n.key);
-                if (s == State.DONE) {
+                if (s == State.DONE || s == State.CLAIM) {
+                    // completed, rewards waiting or not
                     done++;
                 }
                 if (c.skills) {
@@ -378,13 +379,22 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
     }
 
+    /**
+     * The search box sits in a corner nothing else uses, so it never covers a title, a button or the details sheet:
+     * bottom left on chapter maps (zoom buttons and minimap are bottom right), bottom right on Now (its recent list is
+     * bottom left). The match count is on the box's open side.
+     */
     private void renderSearch(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        int right = (sheetT > 0 ? sheetLeft() : width) - 8;
-        searchBox.setX(right - searchBox.getWidth());
+        boolean map = chapter() != null;
+        int y = height - 8 - searchBox.getHeight();
+        int x = map ? RAIL + 12 : nowRight() - searchBox.getWidth();
+        searchBox.setX(x);
+        searchBox.setY(y);
         searchBox.render(g, mouseX, mouseY, partialTick);
         if (searching()) {
             String n = matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size();
-            g.drawString(font, n, searchBox.getX() - font.width(n) - 6, 12, matches.isEmpty() ? 0xFFC86464 : GRAY, true);
+            int nx = map ? x + searchBox.getWidth() + 6 : x - font.width(n) - 6;
+            g.drawString(font, n, nx, y + 4, matches.isEmpty() ? 0xFFC86464 : GRAY, true);
         }
     }
 
@@ -511,9 +521,7 @@ public class ProgressScreen extends Screen {
         if (claimableNoChoice > 0) {
             Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
             int bw = font.width(ca) + 16;
-            // left of the search box (and its match count), which sits at the top right
-            int searchLeft = nowRight() - 110 - (searching() ? font.width(matches.size() + "/" + matches.size()) + 12 : 6);
-            button(g, ca, searchLeft - bw, 10, bw, true, true, mouseX, mouseY, () -> {
+            button(g, ca, nowRight() - bw, 10, bw, true, true, mouseX, mouseY, () -> {
                 ClientProgress.send("claim_all", "", -1);
                 long start = Util.getMillis();
                 int i = 0;
@@ -527,7 +535,7 @@ public class ProgressScreen extends Screen {
         }
         int top = 40;
         int recentH = recentHeight();
-        int bottom = height - 12 - recentH;
+        int bottom = Math.min(height - 12 - recentH, height - 34);
         int cols = nowCols();
         int rows = (nowEntries.size() + cols - 1) / cols;
         int rowH = NOW_TILE + 6;
@@ -1378,7 +1386,7 @@ public class ProgressScreen extends Screen {
     private boolean clickNow(ClientModel m, double mx, double my) {
         int left = nowLeft();
         int top = 40;
-        int bottom = height - 12 - recentHeight();
+        int bottom = Math.min(height - 12 - recentHeight(), height - 34);
         if (mx < left || my < top || my >= bottom) {
             selected = null;
             return true;

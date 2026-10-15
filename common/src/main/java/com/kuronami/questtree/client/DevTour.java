@@ -29,9 +29,24 @@ final class DevTour {
     private DevTour() {
     }
 
+    private static int idle;
+    private static String lastScreen = "";
+
     static void tick() {
         Minecraft mc = Minecraft.getInstance();
-        if (!ENABLED || mc.player == null || ClientProgress.model() == null) {
+        if (!ENABLED) {
+            return;
+        }
+        if (mc.player == null || ClientProgress.model() == null) {
+            // not in the world yet: say which screen holds it up, and grab it once
+            String screen = mc.screen == null ? "none" : mc.screen.getClass().getName();
+            if (!screen.equals(lastScreen) || ++idle % 200 == 0) {
+                lastScreen = screen;
+                Constants.LOG.info("Dev tour waiting: player={} model={} screen={}", mc.player != null, ClientProgress.model() != null, screen);
+                if (idle > 0 && idle % 200 == 0) {
+                    Screenshot.grab(mc.gameDirectory, "questtree_00_waiting.png", mc.getMainRenderTarget(), msg -> { });
+                }
+            }
             return;
         }
         if (ticks < 0) {
@@ -94,15 +109,43 @@ final class DevTour {
         }
         at(t + 210, () -> Minecraft.getInstance().setScreen(null));
         // a task that moves while playing: the HUD line, then the quest-complete toast
-        if (nodes.size() > 5) {
-            give(t + 220, nodes.get(5), 0.5);
-            shot(t + 240, "08_hud_notice");
-            give(t + 260, nodes.get(5), 1.0);
-            shot(t + 290, "09_toast");
-        }
+        // an open quest with an item task (picked when the step runs; the dev world keeps progress between runs):
+        // its task moves, so the HUD line shows, then the toast when it completes
+        at(t + 220, () -> {
+            ClientModel.Node open = openItemQuest();
+            if (open != null) {
+                giveNow(open, 0.3);
+                at(ticks + 20, () -> shot("08_hud_notice"));
+                at(ticks + 40, () -> giveNow(open, 1.0));
+                at(ticks + 70, () -> shot("09_toast"));
+            }
+        });
         at(t + 380, ProgressHud::toggleTracker);
         shot(t + 400, "10_tracker");
         at(t + 410, () -> Constants.LOG.info("Dev tour finished"));
+    }
+
+    private static ClientModel.Node openItemQuest() {
+        for (ClientModel.Node n : ClientProgress.model().nodesByKey.values()) {
+            State s = ClientProgress.state(n.key);
+            if ((s == State.OPEN || s == State.PROGRESS) && !n.tasks.isEmpty() && !n.tasks.get(0).item.isEmpty()
+                    && ClientProgress.visible(n.key)) {
+                return n;
+            }
+        }
+        return null;
+    }
+
+    private static void giveNow(ClientModel.Node n, double share) {
+        ClientModel.Task task = n.tasks.get(0);
+        long count = Math.max(1, Math.round(task.count * share));
+        Minecraft.getInstance().player.connection.sendCommand("give @s " + BuiltInRegistries.ITEM.getKey(task.item.getItem()) + " " + count);
+    }
+
+    private static void shot(String name) {
+        Minecraft mc = Minecraft.getInstance();
+        Screenshot.grab(mc.gameDirectory, "questtree_" + name + ".png", mc.getMainRenderTarget(),
+                msg -> Constants.LOG.info("Dev tour screenshot {}", name));
     }
 
     private static ClientModel.Chapter first(ClientModel m, boolean skills) {
@@ -110,7 +153,11 @@ final class DevTour {
     }
 
     private static void at(int tick, Runnable r) {
-        STEPS.add(new Step(tick, r));
+        int i = STEPS.size();
+        while (i > 0 && STEPS.get(i - 1).at > tick) {
+            i--;
+        }
+        STEPS.add(Math.max(i, next), new Step(tick, r));
     }
 
     private static void cmd(int tick, String command) {
