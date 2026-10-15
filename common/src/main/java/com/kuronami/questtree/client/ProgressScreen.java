@@ -884,20 +884,22 @@ public class ProgressScreen extends Screen {
         // everything below sits above the map's item icons
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
+        // the header moves aside with the chapter list when it opens, instead of showing through it
+        int hx0 = railRight() + 10;
         g.pose().pushPose();
-        g.pose().translate(RAIL + 14, 10, 0);
+        g.pose().translate(hx0, 10, 0);
         g.pose().scale(2, 2, 1);
         g.drawString(font, ch.title, 0, 0, 0xFFFFFFFF, true);
         g.pose().popPose();
         if (ch.skills) {
-            renderSkillHeader(g, ch, RAIL + 14, 30);
+            renderSkillHeader(g, ch, hx0, 30);
         } else {
             int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size(), 0});
             String count = cnt[0] + "/" + cnt[1];
-            g.drawString(font, count, RAIL + 14, 30, GRAY, true);
+            g.drawString(font, count, hx0, 30, GRAY, true);
             if (cnt[2] > 0) {
                 // more is hidden (Steam's "n hidden achievements remaining"): a lock and the number, never what it is
-                int hx = RAIL + 14 + font.width(count) + 6;
+                int hx = hx0 + font.width(count) + 6;
                 Tiles.pixels(g, Tiles.LOCK, hx, 31, 1, 0xFF707070);
                 g.drawString(font, "+" + cnt[2], hx + 7, 30, 0xFF707070, true);
             }
