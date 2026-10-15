@@ -169,8 +169,11 @@ final class Tiles {
             case "square" -> new double[][]{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
             case "rsquare" -> new double[][]{{-0.9, -0.9}, {0.9, -0.9}, {0.9, 0.9}, {-0.9, 0.9}};
             case "diamond" -> new double[][]{{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-            // the octagon's corners are its four cut edges: one clasp over each (eight vertex clasps looked like a gear)
-            case "octagon" -> new double[][]{{-k, -k}, {k, -k}, {k, k}, {-k, k}};
+            // the regular octagon's eight vertices (cut = OCT_CUT of the width); clasps sit on the corners like the square's
+            case "octagon" -> {
+                double v = 1 - 2 * OCT_CUT;
+                yield new double[][]{{-v, -1}, {v, -1}, {1, -v}, {1, v}, {v, 1}, {-v, 1}, {-1, v}, {-1, -v}};
+            }
             case "pentagon" -> new double[][]{{0, -1}, {1, -0.24}, {0.6, 1}, {-0.6, 1}, {-1, -0.24}};
             case "circle" -> new double[][]{{-k, -k}, {k, -k}, {k, k}, {-k, k}};
             default -> new double[0][];
