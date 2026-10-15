@@ -24,6 +24,11 @@ public class QuestTreeClient implements ClientModInitializer {
                 ClientPlayNetworking.send(a);
             }
         };
+        net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, context, type, lines) -> {
+            if (net.minecraft.client.Minecraft.getInstance().player != null) {
+                com.kuronami.questtree.client.ItemTooltips.append(stack, lines);
+            }
+        });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientProgress.onLogout());
     }
 }

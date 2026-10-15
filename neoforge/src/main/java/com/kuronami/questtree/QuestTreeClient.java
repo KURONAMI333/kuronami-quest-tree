@@ -46,6 +46,13 @@ public final class QuestTreeClient {
         }
 
         @SubscribeEvent
+        public static void tooltip(net.neoforged.neoforge.event.entity.player.ItemTooltipEvent event) {
+            if (event.getEntity() != null) {
+                com.kuronami.questtree.client.ItemTooltips.append(event.getItemStack(), event.getToolTip());
+            }
+        }
+
+        @SubscribeEvent
         public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
             ClientProgress.onLogout();
         }

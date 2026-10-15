@@ -141,7 +141,11 @@ public final class ProgressHud {
             }
             rows.addAll(CLOSEST);
         }
-        int y = g.guiHeight() / 2 - rows.size() * 11;
+        int total = 0;
+        for (ClientModel.Node n : rows) {
+            total += 22 + 12 * materials(n).size();
+        }
+        int y = g.guiHeight() / 2 - total / 2;
         for (ClientModel.Node n : rows) {
             State s = ClientProgress.state(n.key);
             Tiles.tile(g, n.shape, 4, y, 18, s, ClientProgress.fraction(n.key), n.icon, false);
@@ -152,7 +156,47 @@ public final class ProgressHud {
             g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.YELLOW : 0xFFE0E0E0, true);
             g.pose().popPose();
             y += 22;
+            // the items still needed, with what is in the inventory now (Satisfactory's to-do list, kept per quest)
+            for (long[] mat : materials(n)) {
+                ClientModel.Task t = n.tasks.get((int) mat[0]);
+                g.pose().pushPose();
+                g.pose().translate(26, y, 0);
+                g.pose().scale(0.625f, 0.625f, 1);
+                g.renderItem(t.icon, 0, 0);
+                g.pose().popPose();
+                g.pose().pushPose();
+                g.pose().translate(0, 0, Tiles.OVERLAY_Z);
+                String c = Math.min(mat[1], mat[2]) + "/" + mat[2];
+                g.drawString(font, c, 38, y + 1, mat[1] >= mat[2] ? Tiles.GREEN_TEXT : 0xFFB0B0B0, true);
+                g.pose().popPose();
+                y += 12;
+            }
         }
+    }
+
+    /**
+     * Unfinished item tasks of a pinned quest: {task index, in inventory now, still needed}. Up to four, only for
+     * pinned quests (the closest-quests fallback stays one line each).
+     */
+    private static List<long[]> materials(ClientModel.Node n) {
+        List<long[]> out = new ArrayList<>();
+        var player = Minecraft.getInstance().player;
+        if (player == null || !Pins.has(n.key)) {
+            return out;
+        }
+        var p = ClientProgress.progress();
+        for (int i = 0; i < n.tasks.size() && out.size() < 4; i++) {
+            ClientModel.Task t = n.tasks.get(i);
+            if (!t.type.equals("item") || t.item.isEmpty()) {
+                continue;
+            }
+            long need = t.count - Math.min(p.task(n.key, i), t.count);
+            if (need <= 0) {
+                continue;
+            }
+            out.add(new long[]{i, player.getInventory().countItem(t.item.getItem()), need});
+        }
+        return out;
     }
 
     /** "n/N" of the first unfinished task, or the share done for nodes with several tasks. */
