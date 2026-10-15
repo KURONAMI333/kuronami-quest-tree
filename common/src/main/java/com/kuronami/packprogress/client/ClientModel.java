@@ -26,10 +26,17 @@ import java.util.Map;
 public final class ClientModel {
 
     public final List<Chapter> chapters = new ArrayList<>();
+    /** Reward tables, used to show the options of a choice reward. */
+    final JsonObject tables;
+    /** Every node by global key. */
+    public final Map<String, Node> nodesByKey = new LinkedHashMap<>();
+    /** Chapter of every node, by node key. */
+    public final Map<String, Chapter> chapterOf = new LinkedHashMap<>();
     private final Map<String, String> text = new LinkedHashMap<>();
     private final Map<String, String> fallback = new LinkedHashMap<>();
 
     public ClientModel(JsonObject bundle) {
+        this.tables = obj(bundle, "reward_tables");
         String locale = Minecraft.getInstance().getLanguageManager().getSelected().toLowerCase(Locale.ROOT);
         JsonObject lang = obj(bundle, "lang");
         copyText(lang, "en_us", fallback);
@@ -50,6 +57,12 @@ public final class ClientModel {
             } catch (RuntimeException ex) {
                 // one malformed chapter must not hide the others
                 com.kuronami.packprogress.Constants.LOG.warn("Skipping progression chapter {}: {}", e.getKey(), ex.toString());
+            }
+        }
+        for (Chapter c : chapters) {
+            for (Node n : c.nodes.values()) {
+                nodesByKey.put(n.key, n);
+                chapterOf.put(n.key, c);
             }
         }
         chapters.sort(Comparator.comparingInt((Chapter c) -> c.groupOrder).thenComparingInt(c -> c.order).thenComparing(c -> c.id));
@@ -156,6 +169,10 @@ public final class ClientModel {
 
     public static final class Node {
         public final String id;
+        /** Global key {@code <chapter id>/<node id>}, as used by the progress data. */
+        public final String key;
+        /** Options of a choice reward (pick one), empty when the node has none. */
+        public final List<ItemStack> choice = new ArrayList<>();
         public final double x;
         public final double y;
         public final double size;
@@ -172,6 +189,7 @@ public final class ClientModel {
 
         Node(ClientModel m, Chapter ch, String id, JsonObject o) {
             this.id = id;
+            this.key = ch.id + "/" + id;
             this.x = o.has("x") ? o.get("x").getAsDouble() : 0;
             this.y = o.has("y") ? o.get("y").getAsDouble() : 0;
             this.size = o.has("size") ? Math.max(0.3, o.get("size").getAsDouble()) : Math.max(0.3, ch.defaultSize);
@@ -197,7 +215,18 @@ public final class ClientModel {
                 switch (type) {
                     case "item" -> rewards.add(stack(ro.get("item")));
                     case "xp", "xp_levels" -> rewards.add(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64, ro.has("amount") ? ro.get("amount").getAsInt() : 1))));
-                    case "table" -> rewards.add(new ItemStack(Items.CHEST));
+                    case "table" -> {
+                        String mode = ro.has("mode") ? ro.get("mode").getAsString() : "random";
+                        JsonObject table = ro.has("table") ? obj(m.tables, ro.get("table").getAsString()) : new JsonObject();
+                        if (mode.equals("choice")) {
+                            for (JsonElement en : arr(table, "entries")) {
+                                JsonObject rw = en.isJsonObject() ? obj(en.getAsJsonObject(), "reward") : new JsonObject();
+                                choice.add(rw.has("item") ? stack(rw.get("item")) : new ItemStack(Items.EXPERIENCE_BOTTLE));
+                            }
+                        } else {
+                            rewards.add(new ItemStack(Items.CHEST));
+                        }
+                    }
                     case "attribute" -> rewardLines.add(attributeLine(ro));
                     default -> { }
                 }
@@ -230,9 +259,12 @@ public final class ClientModel {
         public final String type;
         public final ItemStack item;
         public final long count;
+        /** Item tasks that take the items (a Submit button) instead of checking the inventory. */
+        public final boolean consume;
 
         Task(JsonObject o) {
             this.type = o.has("type") ? o.get("type").getAsString() : "";
+            this.consume = (type.equals("item") && o.has("consume") && o.get("consume").getAsBoolean()) || type.equals("xp");
             this.item = o.has("item") ? stack(o.get("item")) : (o.has("icon") ? stack(o.get("icon")) : ItemStack.EMPTY);
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
             this.count = o.has("count") ? o.get("count").getAsLong() : it.has("count") ? it.get("count").getAsLong() : 1;

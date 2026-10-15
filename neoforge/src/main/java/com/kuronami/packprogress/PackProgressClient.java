@@ -19,12 +19,22 @@ public final class PackProgressClient {
         @SubscribeEvent
         public static void keys(RegisterKeyMappingsEvent event) {
             event.register(ClientProgress.OPEN_KEY);
+            event.register(ClientProgress.TRACK_KEY);
             ClientProgress.sender = a -> {
                 var conn = net.minecraft.client.Minecraft.getInstance().getConnection();
                 if (conn != null && conn.hasChannel(a.type())) {
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(a);
                 }
             };
+        }
+    }
+
+    @EventBusSubscriber(modid = Constants.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+    public static final class HudEvents {
+        @SubscribeEvent
+        public static void layers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
+            event.registerAboveAll(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "hud"),
+                    (g, delta) -> com.kuronami.packprogress.client.ProgressHud.render(g));
         }
     }
 

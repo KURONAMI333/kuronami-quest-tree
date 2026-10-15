@@ -1,57 +1,53 @@
 package com.kuronami.packprogress.client;
 
-import com.kuronami.packprogress.Constants;
+import com.kuronami.packprogress.progress.PlayerProgress;
+import com.kuronami.packprogress.progress.ProgressRules.State;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
+import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * Read-only progression screen (phase 1 of the implementation plan, see _research/progression_ui/PLAN.md).
- * <p>
- * Layout follows the accepted v12-v14 mocks: a chapter screen gives the tree the whole screen; the chapter list is a
- * rail that opens on hover; node details slide in from the right only while a node is selected; zoom buttons and the
- * minimap sit bottom-right. Progress is not tracked yet, so nodes show "open" (no requirements) or "locked".
- * Everything is drawn in GUI units with the vanilla font, so it follows the player's GUI scale (2 to 4 tested by
- * arithmetic; 480x270 at scale 4 on 1080p is the smallest target).
+ * The progression screen (layout of the accepted v12-v14 mocks, see _research/progression_ui/).
+ * <ul>
+ *   <li>"Now" first: what can be claimed or unlocked now, then what is moving, then recent events. The chapter list is
+ *       docked open on this screen.</li>
+ *   <li>A chapter gives the tree the whole screen. The chapter list becomes a rail that opens on hover; node details
+ *       slide in from the right only while a node is selected; zoom buttons and the minimap sit bottom-right.</li>
+ * </ul>
+ * State is a filled surface: yellow = one click to claim or unlock, green = done, a yellow fill from the bottom =
+ * progress. Everything is drawn in GUI units with the vanilla font, so it follows the player's GUI scale.
  */
 public class ProgressScreen extends Screen {
 
-    // palette (same values as the mocks)
-    private static final int YELLOW = 0xFFF2C230;
-    private static final int GRAY = 0xFFA8A8A8;
-    private static final int TILE = 0x80000000;
-    private static final int TILE_LOCKED = 0xA0000000;
+    private static final int GRAY = Tiles.GRAY;
     private static final int PANEL = 0xF20E0E10;
 
-    private static final int UNIT = 24;      // GUI px per FTB Quests grid unit
+    private static final int UNIT = 24;      // GUI px per grid unit (FTB Quests positions)
     private static final int NODE = 20;      // GUI px of a size-1 node
     private static final int RAIL = 34;
     private static final int RAIL_OPEN = 150;
     private static final int BTN = 20;
+    private static final int NOW_TILE = 40;
     private static final float FAR = 0.6f;   // below this zoom, nodes are drawn as state-coloured shapes without icons
-    /** Items render at z=150; flat overlays drawn after them need to sit above or the icons show through. */
-    private static final float OVERLAY_Z = 300;
-
-    private static final Set<String> SHAPES = Set.of("square", "rsquare", "circle", "diamond", "hexagon", "octagon", "pentagon", "gear", "heart");
-    private static final String[] LOCK = {".###.", "#...#", "#####", "#####", "#####"};
+    private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
     private static final String[] NOW_ICON = {"##.#####", "##......", "........", "##.#####", "##......", "........", "##.####."};
 
     /** Per-chapter camera, kept for the session (players asked for the position to be remembered). */
     private static final Map<String, float[]> VIEWS = new HashMap<>();
     private static int lastChapter = -1;
-    private int railScroll;
-    private int overviewScroll;
 
     /** Called on logout so another server starts with fresh cameras. */
     public static void clearViews() {
@@ -59,14 +55,41 @@ public class ProgressScreen extends Screen {
         lastChapter = -1;
     }
 
+    private record Button(int x, int y, int w, int h, Runnable run) {
+        boolean hit(double mx, double my) {
+            return mx >= x && mx < x + w && my >= y && my < y + h;
+        }
+    }
+
+    /** A tile on the Now screen: a node, or a skill chapter with points to spend. */
+    private record NowEntry(String key, ClientModel.Node node, ClientModel.Chapter pointsChapter) {
+    }
+
     private int chapterIndex = lastChapter;
+    /** Selected node, global key. */
     private String selected;
+    private int choicePick = -1;
+    private int railScroll;
+    private int nowScroll;
     private float railT;
     private float sheetT;
     private boolean dragging;
     private boolean moved;
     private double dragStartX;
     private double dragStartY;
+    private final List<Button> buttons = new ArrayList<>();
+    private final Map<String, Long> flashes = new HashMap<>();
+    private final Map<String, Long> shakes = new HashMap<>();
+
+    // derived from the progress; rebuilt when a new progress object arrives
+    private PlayerProgress cachedFor;
+    private ClientModel cachedModel;
+    private final List<NowEntry> nowEntries = new ArrayList<>();
+    private final Map<String, Integer> badges = new LinkedHashMap<>();
+    private final Map<String, int[]> chapterCounts = new LinkedHashMap<>();
+    private int claimableNoChoice;
+    private int doneTotal;
+    private int questTotal;
 
     public ProgressScreen() {
         super(Component.translatable("screen.pack_progress.title"));
@@ -89,35 +112,118 @@ public class ProgressScreen extends Screen {
         return false;
     }
 
+    // ------------------------------------------------------------------ derived data
+
+    private void refresh(ClientModel m) {
+        PlayerProgress p = ClientProgress.progress();
+        if (p == cachedFor && m == cachedModel) {
+            return;
+        }
+        cachedFor = p;
+        cachedModel = m;
+        nowEntries.clear();
+        badges.clear();
+        chapterCounts.clear();
+        claimableNoChoice = 0;
+        doneTotal = 0;
+        questTotal = 0;
+        List<NowEntry> pinned = new ArrayList<>();
+        List<NowEntry> claim = new ArrayList<>();
+        List<NowEntry> points = new ArrayList<>();
+        List<NowEntry> moving = new ArrayList<>();
+        for (ClientModel.Chapter c : m.chapters) {
+            int done = 0;
+            int badge = 0;
+            for (ClientModel.Node n : c.nodes.values()) {
+                State s = ClientProgress.state(n.key);
+                if (s == State.DONE) {
+                    done++;
+                }
+                if (c.skills) {
+                    continue;
+                }
+                if (!n.optional) {
+                    questTotal++;
+                    if (s == State.DONE || s == State.CLAIM) {
+                        doneTotal++;
+                    }
+                }
+                NowEntry e = new NowEntry(n.key, n, null);
+                if (Pins.has(n.key) && s != State.DONE) {
+                    pinned.add(e);
+                } else if (s == State.CLAIM) {
+                    claim.add(e);
+                } else if (s == State.PROGRESS) {
+                    moving.add(e);
+                }
+                if (s == State.CLAIM) {
+                    badge++;
+                    if (n.choice.isEmpty()) {
+                        claimableNoChoice++;
+                    }
+                }
+            }
+            if (c.skills) {
+                badge = ClientProgress.points(c.id);
+                if (badge > 0 && hasTakeable(c)) {
+                    points.add(new NowEntry(c.id, null, c));
+                } else {
+                    badge = 0;
+                }
+            }
+            badges.put(c.id, badge);
+            chapterCounts.put(c.id, new int[]{done, c.nodes.size()});
+        }
+        moving.sort(Comparator.comparingDouble((NowEntry e) -> -ClientProgress.fraction(e.key)));
+        nowEntries.addAll(pinned);
+        nowEntries.addAll(claim);
+        nowEntries.addAll(points);
+        nowEntries.addAll(moving.subList(0, Math.min(moving.size(), 40)));
+    }
+
+    private static boolean hasTakeable(ClientModel.Chapter c) {
+        for (ClientModel.Node n : c.nodes.values()) {
+            if (ClientProgress.state(n.key) == State.CLAIM) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ------------------------------------------------------------------ rendering
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         g.fill(0, 0, width, height, 0xB80A0A0C);
+        buttons.clear();
         ClientModel m = model();
         if (m == null || m.chapters.isEmpty()) {
             g.drawCenteredString(font, Component.translatable("screen.pack_progress.empty"), width / 2, height / 2 - 4, GRAY);
             return;
         }
+        refresh(m);
+        ClientModel.Chapter ch = chapter();
+        boolean docked = ch == null;
         boolean overRail = mouseX < (railT > 0.5f ? RAIL_OPEN : RAIL) + 8;
-        railT = Mth.clamp(railT + (overRail ? 0.25f : -0.25f), 0, 1);
+        railT = docked ? 1 : Mth.clamp(railT + (overRail ? 0.25f : -0.25f), 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? 0.3f : -0.35f), 0, 1);
 
-        ClientModel.Chapter ch = chapter();
         if (ch == null) {
-            renderOverview(g, m, mouseX, mouseY);
+            renderNow(g, m, mouseX, mouseY);
         } else {
             renderChapter(g, ch, mouseX, mouseY);
         }
         g.pose().pushPose();
-        g.pose().translate(0, 0, OVERLAY_Z + 100);
-        renderRail(g, m, mouseX, mouseY);
+        g.pose().translate(0, 0, OVERLAY_Z + 50);
+        if (sheetT > 0) {
+            renderSheet(g, m, mouseX, mouseY);
+        }
         g.pose().popPose();
-    }
-
-    private int railRows() {
-        return Math.max(1, (height - 8 - 30 - 26) / 22);
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z + 100);
+        renderRail(g, m, mouseX, mouseY, docked);
+        g.pose().popPose();
     }
 
     @Override
@@ -126,17 +232,30 @@ public class ProgressScreen extends Screen {
         this.renderBlurredBackground(partialTick);
     }
 
-    private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
+    private int railRows() {
+        return Math.max(1, (height - 8 - 30 - 26) / 22);
+    }
+
+    private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, boolean docked) {
         int w = (int) Mth.lerp(ease(railT), RAIL, RAIL_OPEN);
-        g.fill(4, 4, 4 + w, height - 4, railT > 0.01f ? lerpColor(0x73000000, PANEL, railT) : 0x73000000);
+        int bg = docked ? 0x40000000 : railT > 0.01f ? lerpColor(0x73000000, PANEL, railT) : 0x73000000;
+        g.fill(4, 4, 4 + w, height - 4, bg);
         g.enableScissor(4, 4, 4 + w, height - 4);
         int y = 8;
-        rowRail(g, y, -1, null, Component.translatable("screen.pack_progress.now"), w, mouseX, mouseY);
+        int nowBadge = 0;
+        for (int b : badges.values()) {
+            nowBadge += b;
+        }
+        rowRail(g, y, -1, null, Component.translatable("screen.pack_progress.now"), w, mouseX, mouseY, nowBadge, null);
         y += 22;
         railScroll = Mth.clamp(railScroll, 0, Math.max(0, m.chapters.size() - railRows()));
         for (int i = railScroll; i < m.chapters.size() && i < railScroll + railRows(); i++) {
             ClientModel.Chapter c = m.chapters.get(i);
-            rowRail(g, y, i, c.displayIcon(), c.title, w, mouseX, mouseY);
+            int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0});
+            String right = c.skills ? Component.translatable("screen.pack_progress.level_short",
+                    ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
+            rowRail(g, y, i, c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
+                    !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] ? "" : right);
             y += 22;
         }
         if (railScroll > 0) {
@@ -148,7 +267,11 @@ public class ProgressScreen extends Screen {
         g.disableScissor();
     }
 
-    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, int mouseX, int mouseY) {
+    /**
+     * One rail row. {@code badge} > 0 shows a yellow count (claimable quests, points to spend); otherwise {@code right}
+     * is a grey count, and an empty string means the chapter is complete (a green tick).
+     */
+    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, int mouseX, int mouseY, int badge, String right) {
         boolean on = index == chapterIndex;
         boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + 20;
         if (on) {
@@ -158,57 +281,214 @@ public class ProgressScreen extends Screen {
             g.fill(6, y, 2 + w, y + 20, 0x12FFFFFF);
         }
         if (icon == null) {
-            pixels(g, NOW_ICON, 13, y + 6, 1, on ? 0xFFFFFFFF : 0xFFD8D8D8);
+            Tiles.pixels(g, NOW_ICON, 13, y + 6, 1, on ? 0xFFFFFFFF : 0xFFD8D8D8);
         } else {
             g.renderItem(icon, 13, y + 2);
         }
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z);
+        if (railT <= 0.6f && badge > 0) {
+            // closed rail: a dot on the icon's corner
+            g.fill(25, y + 1, 31, y + 7, Tiles.YELLOW);
+        }
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
-            String s = trim(label.getString(), w - 44);
+            int rightW = 0;
+            if (badge > 0) {
+                String b = String.valueOf(badge);
+                rightW = font.width(b) + 6;
+                int bx = w - rightW;
+                g.fill(bx, y + 5, bx + rightW, y + 15, Tiles.YELLOW);
+                g.drawString(font, b, bx + 3, y + 6, Tiles.INK, false);
+            } else if (right != null && right.isEmpty()) {
+                rightW = 8;
+                Tiles.pixels(g, Tiles.TICK, w - 7, y + 8, 1, Tiles.GREEN_TEXT);
+            } else if (right != null) {
+                rightW = font.width(right) + 2;
+                g.drawString(font, right, w - rightW, y + 6, 0x808080 | alpha, true);
+            }
+            String s = trim(label.getString(), w - 38 - rightW);
             g.drawString(font, s, 34, y + 6, (on ? 0xFFFFFF : 0xD0D0D0) | alpha, true);
         }
+        g.pose().popPose();
     }
 
-    private void renderOverview(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
-        int left = RAIL + 18;
+    // ------------------------------------------------------------------ Now
+
+    private int nowLeft() {
+        return RAIL_OPEN + 20;
+    }
+
+    private int nowRight() {
+        return (sheetT > 0 ? sheetLeft() : width) - 12;
+    }
+
+    private int nowCols() {
+        return Math.max(1, (nowRight() - nowLeft() + 6) / (NOW_TILE + 6));
+    }
+
+    private void renderNow(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
+        int left = nowLeft();
         g.pose().pushPose();
         g.pose().translate(left, 12, 0);
         g.pose().scale(2, 2, 1);
-        g.drawString(font, Component.translatable("screen.pack_progress.now"), 0, 0, 0xFFFFFFFF, true);
+        Component title = Component.translatable("screen.pack_progress.now");
+        g.drawString(font, title, 0, 0, 0xFFFFFFFF, true);
         g.pose().popPose();
-        int tile = 44;
-        int gap = 6;
-        int cols = Math.max(1, (width - left - 12) / (tile + gap));
-        int y0 = 40 - overviewScroll;
-        g.enableScissor(0, 36, width, height);
-        for (int i = 0; i < m.chapters.size(); i++) {
-            ClientModel.Chapter c = m.chapters.get(i);
-            int x = left + (i % cols) * (tile + gap);
-            int y = y0 + (i / cols) * (tile + gap + 10);
-            if (y + tile < 36 || y > height) {
+        int tx = left + font.width(title) * 2 + 10;
+        if (questTotal > 0) {
+            g.drawString(font, doneTotal + "/" + questTotal, tx, 20, GRAY, true);
+        }
+        if (claimableNoChoice > 0) {
+            Component ca = Component.translatable("screen.pack_progress.claim_all");
+            int bw = font.width(ca) + 16;
+            button(g, ca, nowRight() - bw, 10, bw, true, true, mouseX, mouseY, () -> {
+                ClientProgress.send("claim_all", "", -1);
+                for (NowEntry e : nowEntries) {
+                    if (e.node != null && ClientProgress.state(e.key) == State.CLAIM && e.node.choice.isEmpty()) {
+                        flashes.put(e.key, Util.getMillis());
+                    }
+                }
+            });
+        }
+        int top = 40;
+        int recentH = recentHeight();
+        int bottom = height - 12 - recentH;
+        int cols = nowCols();
+        int rows = (nowEntries.size() + cols - 1) / cols;
+        int rowH = NOW_TILE + 6;
+        nowScroll = Mth.clamp(nowScroll, 0, Math.max(0, rows * rowH - (bottom - top)));
+        g.enableScissor(left - 4, top - 4, nowRight() + 4, bottom);
+        long now = Util.getMillis();
+        NowEntry hovered = null;
+        for (int i = 0; i < nowEntries.size(); i++) {
+            NowEntry e = nowEntries.get(i);
+            int x = left + (i % cols) * (NOW_TILE + 6);
+            int y = top + (i / cols) * rowH - nowScroll;
+            if (y + NOW_TILE < top - 4 || y > bottom) {
                 continue;
             }
-            boolean hover = mouseX >= x && mouseX < x + tile && mouseY >= y && mouseY < y + tile;
-            g.fill(x, y, x + tile, y + tile, hover ? 0x99000000 : TILE);
-            g.pose().pushPose();
-            g.pose().translate(x + tile / 2f - 12, y + tile / 2f - 12, 0);
-            g.pose().scale(1.5f, 1.5f, 1);
-            g.renderItem(c.displayIcon(), 0, 0);
-            g.pose().popPose();
-            g.pose().pushPose();
-            g.pose().translate(0, 0, OVERLAY_Z);
-            g.drawString(font, trim(c.title.getString(), tile + gap), x, y + tile + 2, GRAY, true);
-            g.pose().popPose();
+            boolean hover = mouseX >= x && mouseX < x + NOW_TILE && mouseY >= y && mouseY < y + NOW_TILE && mouseY < bottom;
+            if (hover) {
+                hovered = e;
+            }
+            if (e.key.equals(selected)) {
+                g.renderOutline(x - 3, y - 3, NOW_TILE + 6, NOW_TILE + 6, 0xFFFFFFFF);
+            }
+            if (e.pointsChapter != null) {
+                Tiles.tile(g, "square", x, y, NOW_TILE, State.CLAIM, 1, e.pointsChapter.displayIcon(), false);
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z);
+                String pts = String.valueOf(ClientProgress.points(e.key));
+                g.drawString(font, pts, x + NOW_TILE - 3 - font.width(pts), y + NOW_TILE - 12, Tiles.INK, false);
+                g.pose().popPose();
+            } else {
+                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.state(e.key), ClientProgress.fraction(e.key), e.node.icon, false);
+                if (Pins.has(e.key)) {
+                    g.pose().pushPose();
+                    g.pose().translate(0, 0, OVERLAY_Z);
+                    g.fill(x + 3, y + 3, x + 7, y + 7, 0xFFFFFFFF);
+                    g.pose().popPose();
+                }
+            }
+            flash(g, e.key, x, y, NOW_TILE, now);
+            if (hover) {
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z);
+                g.fill(x, y, x + NOW_TILE, y + NOW_TILE, 0x1AFFFFFF);
+                g.pose().popPose();
+            }
         }
         g.disableScissor();
+        if (rows * rowH > bottom - top) {
+            int trackH = bottom - top;
+            int barH = Math.max(10, trackH * trackH / (rows * rowH));
+            int barY = top + (trackH - barH) * nowScroll / Math.max(1, rows * rowH - trackH);
+            g.fill(nowRight() + 6, barY, nowRight() + 8, barY + barH, 0x55FFFFFF);
+        }
+        renderRecent(g, m, left, height - 8 - recentH);
+        if (hovered != null && !dragging) {
+            Component tip = hovered.node != null ? hovered.node.title
+                    : Component.translatable("screen.pack_progress.points", ClientProgress.points(hovered.key));
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 200);
+            g.renderTooltip(font, tip, mouseX, mouseY);
+            g.pose().popPose();
+        }
     }
 
-    private int overviewMaxScroll(ClientModel m) {
-        int left = RAIL + 18;
-        int cols = Math.max(1, (width - left - 12) / 50);
-        int rows = (m.chapters.size() + cols - 1) / cols;
-        return Math.max(0, 40 + rows * 60 - height + 8);
+    private int recentHeight() {
+        int n = Math.min(5, ClientProgress.progress().recent.size());
+        return n == 0 ? 0 : 16 + n * 18;
     }
+
+    private void renderRecent(GuiGraphics g, ClientModel m, int x, int y) {
+        PlayerProgress p = ClientProgress.progress();
+        if (p.recent.isEmpty()) {
+            return;
+        }
+        g.drawString(font, Component.translatable("screen.pack_progress.recent"), x, y, GRAY, true);
+        y += 14;
+        int shown = 0;
+        long now = System.currentTimeMillis();
+        for (String r : p.recent) {
+            if (shown++ >= 5) {
+                break;
+            }
+            String[] parts = r.split("\\|");
+            if (parts.length < 3) {
+                continue;
+            }
+            ClientModel.Node n = m.nodesByKey.get(parts[1]);
+            ClientModel.Chapter c = n != null ? m.chapterOf.get(parts[1]) : chapterById(m, parts[1].endsWith("/") ? parts[1].substring(0, parts[1].length() - 1) : "");
+            ItemStack icon = n != null ? n.icon : c != null ? c.displayIcon() : ItemStack.EMPTY;
+            Component name = n != null ? n.title : c != null ? c.title : Component.literal(parts[1]);
+            g.renderItem(icon, x, y);
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z);
+            String kind = Component.translatable("event.pack_progress." + parts[0]).getString();
+            String ago = ago(now - parseLong(parts[2]));
+            int nameW = Math.min(font.width(name.getString()), 200);
+            g.drawString(font, trim(name.getString(), 200), x + 20, y + 4, 0xFFFFFFFF, true);
+            g.drawString(font, kind, x + 26 + nameW, y + 4, GRAY, true);
+            g.drawString(font, ago, x + 32 + nameW + font.width(kind), y + 4, 0xFF707070, true);
+            g.pose().popPose();
+            y += 18;
+        }
+    }
+
+    private static ClientModel.Chapter chapterById(ClientModel m, String id) {
+        for (ClientModel.Chapter c : m.chapters) {
+            if (c.id.equals(id)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static long parseLong(String s) {
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static String ago(long ms) {
+        long s = Math.max(0, ms / 1000);
+        if (s < 60) {
+            return Component.translatable("screen.pack_progress.ago_s", s).getString();
+        }
+        if (s < 3600) {
+            return Component.translatable("screen.pack_progress.ago_m", s / 60).getString();
+        }
+        if (s < 86400) {
+            return Component.translatable("screen.pack_progress.ago_h", s / 3600).getString();
+        }
+        return Component.translatable("screen.pack_progress.ago_d", s / 86400).getString();
+    }
+
+    // ------------------------------------------------------------------ chapter map
 
     private float[] view(ClientModel.Chapter ch) {
         return VIEWS.computeIfAbsent(ch.id, k -> fitView(ch));
@@ -246,9 +526,20 @@ public class ProgressScreen extends Screen {
         return new double[]{minX, minY, maxX, maxY};
     }
 
+    private static int lineColor(State parent, State child) {
+        if (parent == State.DONE && (child == State.DONE || child == State.CLAIM)) {
+            return 0xCC7BC862;
+        }
+        if (parent == State.DONE && child != State.EXCLUDED) {
+            return 0x52FFFFFF;
+        }
+        return 0x17FFFFFF;
+    }
+
     private void renderChapter(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
         float[] v = view(ch);
         boolean far = v[2] < FAR;
+        long now = Util.getMillis();
         g.pose().pushPose();
         g.pose().translate(v[0], v[1], 0);
         g.pose().scale(v[2], v[2], 1);
@@ -270,49 +561,33 @@ public class ProgressScreen extends Screen {
         }
         // lines
         for (ClientModel.Node n : ch.nodes.values()) {
+            State cs = ClientProgress.state(n.key);
             for (String r : n.requires) {
                 ClientModel.Node p = ch.nodes.get(r);
                 if (p == null) {
                     continue;
                 }
-                line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional ? 1 : 2, 0x2EFFFFFF);
+                line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional ? 1 : 2, lineColor(ClientProgress.state(p.key), cs));
             }
         }
         // nodes
         String hovered = null;
-        for (Map.Entry<String, ClientModel.Node> e : ch.nodes.entrySet()) {
-            ClientModel.Node n = e.getValue();
+        for (ClientModel.Node n : ch.nodes.values()) {
             int s = (int) Math.round(NODE * n.size);
-            int x = (int) Math.round(n.x * UNIT) - s / 2;
+            int x = (int) Math.round(n.x * UNIT) - s / 2 + shake(n.key, now);
             int y = (int) Math.round(n.y * UNIT) - s / 2;
-            boolean locked = !n.requires.isEmpty();
-            String shape = SHAPES.contains(n.shape) ? n.shape : "square";
-            if (e.getKey().equals(selected)) {
-                shape(g, shape, x - 3, y - 3, s + 6, s + 6, 0xFFFFFFFF);
-                shape(g, shape, x - 1, y - 1, s + 2, s + 2, 0xFF141416);
+            String shape = Tiles.shapeOf(n.shape);
+            if (n.key.equals(selected)) {
+                Tiles.shape(g, shape, x - 3, y - 3, s + 6, s + 6, 0xFFFFFFFF);
+                Tiles.shape(g, shape, x - 1, y - 1, s + 2, s + 2, 0xFF141416);
             }
-            shape(g, shape, x, y, s, s, locked ? TILE_LOCKED : TILE);
-            if (!far) {
-                float k = s / 20f;
-                g.pose().pushPose();
-                g.pose().translate(x + s / 2f - 8 * k, y + s / 2f - 8 * k, 0);
-                g.pose().scale(k, k, 1);
-                g.renderItem(n.icon, 0, 0);
-                g.pose().popPose();
-                if (locked) {
-                    g.pose().pushPose();
-                    g.pose().translate(0, 0, OVERLAY_Z);
-                    shape(g, shape, x, y, s, s, 0x99000000);
-                    pixels(g, LOCK, x + s / 2 - 2, y + s / 2 - 2, 1, 0xFFC8C8C8);
-                    g.pose().popPose();
-                }
-            } else {
-                shape(g, shape, x + s / 4, y + s / 4, s / 2, s / 2, locked ? 0xFF3A3A3C : 0xFF9A9A9A);
-            }
+            Tiles.tile(g, shape, x, y, s, ClientProgress.state(n.key), ClientProgress.fraction(n.key), n.icon, far);
+            flash(g, n.key, x, y, s, now);
             double sx = v[0] + n.x * UNIT * v[2];
             double sy = v[1] + n.y * UNIT * v[2];
-            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight() && mouseX < (sheetT > 0 ? sheetLeft() : width)) {
-                hovered = e.getKey();
+            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight()
+                    && mouseX < (sheetT > 0 ? sheetLeft() : width)) {
+                hovered = n.key;
             }
         }
         g.pose().popPose();
@@ -320,22 +595,45 @@ public class ProgressScreen extends Screen {
         // everything below sits above the map's item icons
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        // header over the map
         g.pose().pushPose();
         g.pose().translate(RAIL + 14, 10, 0);
         g.pose().scale(2, 2, 1);
         g.drawString(font, ch.title, 0, 0, 0xFFFFFFFF, true);
         g.pose().popPose();
-        g.drawString(font, Component.translatable("screen.pack_progress.nodes", ch.nodes.size()), RAIL + 14, 30, GRAY, true);
-
-        renderMinimap(g, ch, v);
-        renderZoomButtons(g, mouseX, mouseY);
-        if (sheetT > 0) {
-            renderSheet(g, ch);
+        if (ch.skills) {
+            renderSkillHeader(g, ch, RAIL + 14, 30);
+        } else {
+            int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size()});
+            g.drawString(font, cnt[0] + "/" + cnt[1], RAIL + 14, 30, GRAY, true);
         }
+        renderMinimap(g, ch, v);
+        renderZoomButtons(g, ch, v, mouseX, mouseY);
         g.pose().popPose();
         if (hovered != null && !dragging && selected == null) {
-            g.renderTooltip(font, ch.nodes.get(hovered).title, mouseX, mouseY);
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 200);
+            g.renderTooltip(font, model().nodesByKey.get(hovered).title, mouseX, mouseY);
+            g.pose().popPose();
+        }
+    }
+
+    /** Level, experience bar and points to spend, under a skill chapter's title. */
+    private void renderSkillHeader(GuiGraphics g, ClientModel.Chapter ch, int x, int y) {
+        PlayerProgress p = ClientProgress.progress();
+        int level = p.level.getOrDefault(ch.id, 0);
+        String lv = Component.translatable("screen.pack_progress.level_short", level).getString();
+        g.drawString(font, lv, x, y, 0xFFFFFFFF, true);
+        int bx = x + font.width(lv) + 6;
+        var rules = ClientProgress.rules();
+        var mc = rules == null ? null : rules.model().chapters.get(ch.id);
+        double need = mc == null ? 0 : rules.experienceForLevel(mc, level);
+        double frac = need <= 0 ? 0 : Mth.clamp(p.xp.getOrDefault(ch.id, 0.0) / need, 0, 1);
+        g.fill(bx, y + 3, bx + 60, y + 6, 0xFF2A2A2A);
+        g.fill(bx, y + 3, bx + (int) (60 * frac), y + 6, Tiles.GREEN_TEXT);
+        int pts = ClientProgress.points(ch.id);
+        if (pts > 0) {
+            Component t = Component.translatable("screen.pack_progress.points", pts);
+            g.drawString(font, t, bx + 68, y, Tiles.YELLOW, true);
         }
     }
 
@@ -352,19 +650,25 @@ public class ProgressScreen extends Screen {
         return width - (int) (sheetWidth() * ease(sheetT));
     }
 
-    private void renderSheet(GuiGraphics g, ClientModel.Chapter ch) {
+    // ------------------------------------------------------------------ details sheet
+
+    private void renderSheet(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
         int sw = sheetWidth();
         int x0 = sheetLeft();
         g.fill(x0, 0, x0 + sw, height, PANEL);
-        ClientModel.Node n = selected == null ? null : ch.nodes.get(selected);
+        ClientModel.Node n = selected == null ? null : m.nodesByKey.get(selected);
         if (n == null) {
             return;
         }
+        ClientModel.Chapter ch = m.chapterOf.get(n.key);
+        State state = ClientProgress.state(n.key);
+        boolean working = state == State.OPEN || state == State.PROGRESS;
         int x = x0 + 12;
         int w = sw - 24;
         int y = 14;
-        pixels(g, new String[]{"#...#", ".#.#.", "..#..", ".#.#.", "#...#"}, x0 + sw - 14, 10, 1, 0xFFC8C8C8);
-        g.drawString(font, ch.title, x, y, GRAY, true);
+        Tiles.pixels(g, Tiles.CROSS, x0 + sw - 14, 10, 1, 0xFFC8C8C8);
+        buttons.add(new Button(x0 + sw - 20, 4, 18, 18, () -> selected = null));
+        g.drawString(font, trim(ch.title.getString(), w - 16), x, y, GRAY, true);
         y += 12;
         List<FormattedCharSequence> titleLines = font.split(n.title, w / 2);
         if (titleLines.size() <= 2) {
@@ -382,29 +686,33 @@ public class ProgressScreen extends Screen {
                 y += 10;
             }
         }
+        int actionsTop = height - 34;
         y += 4;
         for (String d : n.description) {
             for (FormattedCharSequence line : font.split(Component.literal(d), w)) {
-                if (y > height - 60) {
+                if (y > actionsTop - 70) {
                     break;
                 }
                 g.drawString(font, line, x, y, GRAY, true);
                 y += 10;
             }
         }
-        if (!n.requires.isEmpty()) {
+        if (!n.requires.isEmpty() && state == State.LOCKED) {
             y += 8;
             g.drawString(font, Component.translatable("screen.pack_progress.needs"), x, y, GRAY, true);
             y += 12;
             for (String r : n.requires) {
-                ClientModel.Node p = ch.nodes.get(r);
-                Component name = p != null ? p.title : Component.literal(r);
-                if (p != null) {
-                    g.renderItem(p.icon, x, y);
+                ClientModel.Node p = ch.nodes.get(r.contains("/") ? r.substring(r.lastIndexOf('/') + 1) : r);
+                if (p == null) {
+                    continue;
                 }
-                g.drawString(font, trim(name.getString(), w - 20), x + 20, y + 4, 0xFFFFFFFF, true);
-                y += 18;
-                if (y > height - 80) {
+                Tiles.tile(g, p.shape, x, y, 16, ClientProgress.state(p.key), ClientProgress.fraction(p.key), p.icon, false);
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z);
+                g.drawString(font, trim(p.title.getString(), w - 22), x + 22, y + 4, 0xFFFFFFFF, true);
+                g.pose().popPose();
+                y += 20;
+                if (y > actionsTop - 50) {
                     break;
                 }
             }
@@ -413,17 +721,35 @@ public class ProgressScreen extends Screen {
             y += 8;
             g.drawString(font, Component.translatable("screen.pack_progress.tasks"), x, y, GRAY, true);
             y += 12;
-            for (ClientModel.Task t : n.tasks) {
+            PlayerProgress p = ClientProgress.progress();
+            for (int i = 0; i < n.tasks.size(); i++) {
+                ClientModel.Task t = n.tasks.get(i);
+                long have = Math.min(p.task(n.key, i), t.count);
+                boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
                 g.fill(x, y - 2, x + w, y - 1, 0x1AFFFFFF);
                 if (!t.item.isEmpty()) {
                     g.renderItem(t.item, x, y + 2);
                 }
-                Component name = t.item.isEmpty() ? Component.translatable("task.pack_progress." + t.type) : t.item.getHoverName();
-                g.drawString(font, trim(name.getString(), w - 60), x + 20, y + 6, 0xFFFFFFFF, true);
-                String cnt = "0/" + t.count;
-                g.drawString(font, cnt, x + w - font.width(cnt), y + 6, GRAY, true);
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z);
+                String cnt = (met ? t.count : have) + "/" + t.count;
+                int right = x + w;
+                if (!met && working && (t.consume || t.type.equals("checkmark"))) {
+                    Component label = Component.translatable(t.type.equals("checkmark") ? "screen.pack_progress.check" : "screen.pack_progress.submit");
+                    int bw = font.width(label) + 10;
+                    int index = i;
+                    button(g, label, right - bw, y + 1, bw, false, true, mouseX, mouseY, () -> {
+                        ClientProgress.send(t.type.equals("checkmark") ? "check" : "submit", n.key, index);
+                        ProgressFeedback.click();
+                    });
+                    right -= bw + 4;
+                }
+                g.drawString(font, cnt, right - font.width(cnt), y + 6, met ? Tiles.GREEN_TEXT : GRAY, true);
+                g.drawString(font, trim(ProgressFeedback.taskName(t).getString(), right - font.width(cnt) - x - 26), x + 20, y + 6,
+                        met ? GRAY : 0xFFFFFFFF, true);
+                g.pose().popPose();
                 y += 20;
-                if (y > height - 50) {
+                if (y > actionsTop - 40) {
                     break;
                 }
             }
@@ -434,9 +760,7 @@ public class ProgressScreen extends Screen {
             y += 12;
             int rx = x;
             for (ItemStack r : n.rewards) {
-                g.fill(rx, y, rx + 22, y + 22, TILE);
-                g.renderItem(r, rx + 3, y + 3);
-                g.renderItemDecorations(font, r, rx + 3, y + 3);
+                slot(g, r, rx, y, false);
                 rx += 26;
                 if (rx + 22 > x + w) {
                     break;
@@ -450,13 +774,126 @@ public class ProgressScreen extends Screen {
                 y += 10;
             }
         }
-        if (n.cost > 0) {
+        if (!n.choice.isEmpty()) {
             y += 8;
-            g.drawString(font, Component.translatable("screen.pack_progress.cost", n.cost), x, y, YELLOW, true);
+            g.drawString(font, Component.translatable("screen.pack_progress.choose"), x, y, GRAY, true);
+            y += 12;
+            int rx = x;
+            for (int i = 0; i < n.choice.size(); i++) {
+                int index = i;
+                boolean pickable = state == State.CLAIM;
+                slot(g, n.choice.get(i), rx, y, index == choicePick);
+                if (pickable) {
+                    buttons.add(new Button(rx, y, 22, 22, () -> {
+                        choicePick = index;
+                        ProgressFeedback.click();
+                    }));
+                }
+                rx += 26;
+                if (rx + 22 > x + w) {
+                    rx = x;
+                    y += 26;
+                }
+            }
+        }
+        renderActions(g, n, ch, state, x, actionsTop, w, mouseX, mouseY);
+    }
+
+    private void renderActions(GuiGraphics g, ClientModel.Node n, ClientModel.Chapter ch, State state, int x, int y, int w, int mouseX, int mouseY) {
+        int bx = x;
+        if (ch.skills) {
+            if (state == State.CLAIM) {
+                Component take = n.cost > 0 ? Component.translatable("screen.pack_progress.unlock_cost", n.cost)
+                        : Component.translatable("screen.pack_progress.unlock");
+                int bw = font.width(take) + 16;
+                button(g, take, bx, y, bw, true, true, mouseX, mouseY, () -> {
+                    ClientProgress.send("take", n.key, 0);
+                    flashes.put(n.key, Util.getMillis());
+                });
+            } else if (state == State.OPEN && n.cost > 0) {
+                g.drawString(font, Component.translatable("screen.pack_progress.cost", n.cost), bx, y + 6, GRAY, true);
+            }
+            return;
+        }
+        if (state == State.CLAIM) {
+            boolean ready = n.choice.isEmpty() || choicePick >= 0;
+            Component claim = Component.translatable("screen.pack_progress.claim");
+            int bw = font.width(claim) + 16;
+            button(g, claim, bx, y, bw, true, ready, mouseX, mouseY, () -> {
+                ClientProgress.send("claim", n.key, n.choice.isEmpty() ? -1 : choicePick);
+                flashes.put(n.key, Util.getMillis());
+                choicePick = -1;
+            });
+            bx += bw + 6;
+        }
+        if (state != State.DONE && state != State.EXCLUDED) {
+            Component pin = Component.translatable(Pins.has(n.key) ? "screen.pack_progress.pinned" : "screen.pack_progress.pin");
+            int bw = font.width(pin) + 16;
+            button(g, pin, bx, y, bw, false, true, mouseX, mouseY, () -> {
+                Pins.toggle(n.key);
+                ProgressFeedback.click();
+                cachedFor = null;
+            });
         }
     }
 
-    private void renderZoomButtons(GuiGraphics g, int mouseX, int mouseY) {
+    private void slot(GuiGraphics g, ItemStack r, int x, int y, boolean picked) {
+        if (picked) {
+            g.renderOutline(x - 2, y - 2, 26, 26, 0xFFFFFFFF);
+        }
+        g.fill(x, y, x + 22, y + 22, Tiles.TILE);
+        g.renderItem(r, x + 3, y + 3);
+        g.renderItemDecorations(font, r, x + 3, y + 3);
+    }
+
+    /** Flat button: yellow with dark text for the one action that matters, dark with white text otherwise. */
+    private void button(GuiGraphics g, Component label, int x, int y, int w, boolean primary, boolean enabled, int mouseX, int mouseY, Runnable run) {
+        int h = 20;
+        boolean hover = enabled && mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
+        int bg = !enabled ? 0x66000000 : primary ? (hover ? 0xFFFFD24A : Tiles.YELLOW) : (hover ? 0xCC323236 : 0x99000000);
+        g.fill(x, y, x + w, y + h, bg);
+        if (primary && enabled) {
+            g.fill(x, y + h - 2, x + w, y + h, Tiles.YELLOW_DARK);
+        }
+        int color = !enabled ? 0xFF6A6A6A : primary ? Tiles.INK : 0xFFFFFFFF;
+        g.drawString(font, label, x + (w - font.width(label)) / 2, y + 6, color, primary ? false : true);
+        if (enabled) {
+            buttons.add(new Button(x, y, w, h, run));
+        }
+    }
+
+    private void flash(GuiGraphics g, String key, int x, int y, int s, long now) {
+        Long at = flashes.get(key);
+        if (at == null) {
+            return;
+        }
+        long t = now - at;
+        if (t > 380) {
+            flashes.remove(key);
+            return;
+        }
+        // press 160ms, then a white flash that fades over 220ms
+        float a = t < 160 ? 0.15f : 0.85f * (1 - (t - 160) / 220f);
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z);
+        g.fill(x, y, x + s, y + s, Tiles.withAlpha(0xFFFFFFFF, a));
+        g.pose().popPose();
+    }
+
+    private int shake(String key, long now) {
+        Long at = shakes.get(key);
+        if (at == null) {
+            return 0;
+        }
+        long t = now - at;
+        if (t > 180) {
+            shakes.remove(key);
+            return 0;
+        }
+        return (int) Math.round(Math.sin(t / 180.0 * Math.PI * 4) * 2 * (1 - t / 180.0));
+    }
+
+    private void renderZoomButtons(GuiGraphics g, ClientModel.Chapter ch, float[] v, int mouseX, int mouseY) {
         int right = (sheetT > 0 ? sheetLeft() : width) - 8;
         String[][] glyphs = {
                 {"..#..", "#####", "#.#.#", "#####", "..#.."},
@@ -467,7 +904,9 @@ public class ProgressScreen extends Screen {
             int y = height - BTN - 8;
             boolean hover = mouseX >= x && mouseX < x + BTN && mouseY >= y && mouseY < y + BTN;
             g.fill(x, y, x + BTN, y + BTN, hover ? 0xCC28282C : 0x99000000);
-            pixels(g, glyphs[i], x + 7, y + 7, 1, 0xFFFFFFFF);
+            Tiles.pixels(g, glyphs[i], x + 7, y + 7, 1, 0xFFFFFFFF);
+            int which = i;
+            buttons.add(new Button(x, y, BTN, BTN, () -> zoomButton(ch, v, which)));
         }
     }
 
@@ -496,7 +935,7 @@ public class ProgressScreen extends Screen {
         for (ClientModel.Node n : ch.nodes.values()) {
             int px = r[0] + 4 + (int) ((n.x * UNIT - b[0]) * s);
             int py = r[1] + 4 + (int) ((n.y * UNIT - b[1]) * s);
-            g.fill(px - 1, py - 1, px + 1, py + 1, n.requires.isEmpty() ? 0xFF9A9A9A : 0xFF4A4A4C);
+            g.fill(px - 1, py - 1, px + 1, py + 1, minimapColor(ClientProgress.state(n.key)));
         }
         // the part of the chapter that is on screen
         double vx0 = (-v[0]) / v[2];
@@ -510,6 +949,15 @@ public class ProgressScreen extends Screen {
         g.renderOutline(x0, y0, Math.max(2, x1 - x0), Math.max(2, y1 - y0), 0xFFFFFFFF);
     }
 
+    private static int minimapColor(State s) {
+        return switch (s) {
+            case DONE -> Tiles.GREEN;
+            case CLAIM -> Tiles.YELLOW;
+            case OPEN, PROGRESS -> 0xFF9A9A9A;
+            default -> 0xFF4A4A4C;
+        };
+    }
+
     // ------------------------------------------------------------------ input
 
     @Override
@@ -517,6 +965,12 @@ public class ProgressScreen extends Screen {
         ClientModel m = model();
         if (m == null || button != 0) {
             return super.mouseClicked(mx, my, button);
+        }
+        for (int i = buttons.size() - 1; i >= 0; i--) {
+            if (buttons.get(i).hit(mx, my)) {
+                buttons.get(i).run.run();
+                return true;
+            }
         }
         int railW = railT > 0.5f ? RAIL_OPEN : RAIL;
         if (mx < railW + 4) {
@@ -531,26 +985,14 @@ public class ProgressScreen extends Screen {
             }
             return true;
         }
-        ClientModel.Chapter ch = chapter();
-        if (ch == null) {
-            return clickOverview(m, mx, my);
-        }
-        float[] v = view(ch);
         if (sheetT > 0 && selected != null && mx >= sheetLeft()) {
-            if (mx >= sheetLeft() + sheetWidth() - 18 && my < 22) {
-                selected = null;
-            }
             return true;
         }
-        int right = (sheetT > 0 ? sheetLeft() : width) - 8;
-        for (int i = 0; i < 3; i++) {
-            int x = right - (3 - i) * (BTN + 3);
-            int y = height - BTN - 8;
-            if (mx >= x && mx < x + BTN && my >= y && my < y + BTN) {
-                zoomButton(ch, v, i);
-                return true;
-            }
+        ClientModel.Chapter ch = chapter();
+        if (ch == null) {
+            return clickNow(m, mx, my);
         }
+        float[] v = view(ch);
         int[] r = minimapRect(ch, v);
         if (r != null && mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3]) {
             double[] b = bounds(ch);
@@ -568,19 +1010,42 @@ public class ProgressScreen extends Screen {
         return true;
     }
 
-    private boolean clickOverview(ClientModel m, double mx, double my) {
-        int left = RAIL + 18;
-        int tile = 44;
-        int gap = 6;
-        int cols = Math.max(1, (width - left - 12) / (tile + gap));
-        int col = (int) ((mx - left) / (tile + gap));
-        int row = (int) ((my - 40 + overviewScroll) / (tile + gap + 10));
-        if (mx >= left && my >= 40 && col < cols) {
-            int index = row * cols + col;
-            if (index < m.chapters.size()) {
-                select(index);
-            }
+    private boolean clickNow(ClientModel m, double mx, double my) {
+        int left = nowLeft();
+        int top = 40;
+        int bottom = height - 12 - recentHeight();
+        if (mx < left || my < top || my >= bottom) {
+            selected = null;
+            return true;
         }
+        int cols = nowCols();
+        int col = (int) ((mx - left) / (NOW_TILE + 6));
+        int row = (int) ((my - top + nowScroll) / (NOW_TILE + 6));
+        double inX = (mx - left) - col * (NOW_TILE + 6);
+        double inY = (my - top + nowScroll) - row * (NOW_TILE + 6);
+        int index = row * cols + col;
+        if (col >= cols || inX >= NOW_TILE || inY >= NOW_TILE || index >= nowEntries.size()) {
+            selected = null;
+            return true;
+        }
+        NowEntry e = nowEntries.get(index);
+        if (e.pointsChapter != null) {
+            ProgressFeedback.click();
+            select(m.chapters.indexOf(e.pointsChapter));
+            return true;
+        }
+        if (ClientProgress.state(e.key) == State.CLAIM && e.node.choice.isEmpty()) {
+            ClientProgress.send("claim", e.key, -1);
+            flashes.put(e.key, Util.getMillis());
+            if (e.key.equals(selected)) {
+                selected = null;
+            }
+            return true;
+        }
+        if (!e.key.equals(selected)) {
+            choicePick = -1;
+        }
+        selected = e.key;
         return true;
     }
 
@@ -588,6 +1053,7 @@ public class ProgressScreen extends Screen {
         chapterIndex = index;
         lastChapter = index;
         selected = null;
+        choicePick = -1;
         sheetT = 0;
     }
 
@@ -629,19 +1095,27 @@ public class ProgressScreen extends Screen {
         ClientModel.Chapter ch = chapter();
         if (dragging && ch != null && !moved) {
             float[] v = view(ch);
-            String hit = null;
-            for (Map.Entry<String, ClientModel.Node> e : ch.nodes.entrySet()) {
-                ClientModel.Node n = e.getValue();
+            ClientModel.Node hit = null;
+            for (ClientModel.Node n : ch.nodes.values()) {
                 double sx = v[0] + n.x * UNIT * v[2];
                 double sy = v[1] + n.y * UNIT * v[2];
                 double half = NODE * n.size * v[2] / 2;
                 if (Math.abs(mx - sx) <= half && Math.abs(my - sy) <= half) {
-                    hit = e.getKey();
+                    hit = n;
                 }
             }
-            selected = hit;
+            String key = hit == null ? null : hit.key;
+            if (key != null && !key.equals(selected)) {
+                choicePick = -1;
+            }
+            selected = key;
             if (hit != null) {
-                keepVisible(ch, v, ch.nodes.get(hit));
+                State s = ClientProgress.state(hit.key);
+                if (s == State.LOCKED || s == State.EXCLUDED) {
+                    shakes.put(hit.key, Util.getMillis());
+                    ProgressFeedback.locked();
+                }
+                keepVisible(v, hit);
             }
         }
         dragging = false;
@@ -649,7 +1123,7 @@ public class ProgressScreen extends Screen {
     }
 
     /** Shift the map so the selected node is not hidden under the sheet. */
-    private void keepVisible(ClientModel.Chapter ch, float[] v, ClientModel.Node n) {
+    private void keepVisible(float[] v, ClientModel.Node n) {
         double sx = v[0] + n.x * UNIT * v[2];
         int limit = width - sheetWidth() - 24;
         if (sx > limit) {
@@ -667,9 +1141,12 @@ public class ProgressScreen extends Screen {
             railScroll = Mth.clamp(railScroll - (int) Math.signum(scrollY), 0, Math.max(0, m.chapters.size() - railRows()));
             return true;
         }
+        if (sheetT > 0 && selected != null && mx >= sheetLeft()) {
+            return true;
+        }
         ClientModel.Chapter ch = chapter();
         if (ch == null) {
-            overviewScroll = Mth.clamp(overviewScroll - (int) (scrollY * 20), 0, overviewMaxScroll(m));
+            nowScroll = Math.max(0, nowScroll - (int) (scrollY * 20));
             return true;
         }
         float[] v = view(ch);
@@ -700,18 +1177,6 @@ public class ProgressScreen extends Screen {
 
     // ------------------------------------------------------------------ drawing helpers
 
-    private static ResourceLocation shapeTexture(String shape) {
-        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/shape/" + shape + ".png");
-    }
-
-    /** Draws a white 32x32 shape mask tinted with {@code argb}. */
-    private static void shape(GuiGraphics g, String shape, int x, int y, int w, int h, int argb) {
-        RenderSystem.enableBlend();
-        g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
-        g.blit(shapeTexture(shape), x, y, w, h, 0, 0, 32, 32, 32, 32);
-        g.setColor(1, 1, 1, 1);
-    }
-
     /** Draws a line of {@code thickness} GUI px between two points in the current pose. */
     private static void line(GuiGraphics g, double x1, double y1, double x2, double y2, int thickness, int argb) {
         double dx = x2 - x1;
@@ -725,16 +1190,6 @@ public class ProgressScreen extends Screen {
         g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
         g.fill(0, -thickness / 2, (int) len, thickness - thickness / 2, argb);
         g.pose().popPose();
-    }
-
-    private static void pixels(GuiGraphics g, String[] rows, int x, int y, int scale, int argb) {
-        for (int r = 0; r < rows.length; r++) {
-            for (int c = 0; c < rows[r].length(); c++) {
-                if (rows[r].charAt(c) == '#') {
-                    g.fill(x + c * scale, y + r * scale, x + (c + 1) * scale, y + (r + 1) * scale, argb);
-                }
-            }
-        }
     }
 
     private String trim(String s, int w) {

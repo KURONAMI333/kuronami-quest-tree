@@ -14,6 +14,8 @@ public class PackProgressClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         KeyBindingHelper.registerKeyBinding(ClientProgress.OPEN_KEY);
+        KeyBindingHelper.registerKeyBinding(ClientProgress.TRACK_KEY);
+        net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register((g, delta) -> com.kuronami.packprogress.client.ProgressHud.render(g));
         ClientTickEvents.END_CLIENT_TICK.register(mc -> ClientProgress.onClientTick());
         ClientPlayNetworking.registerGlobalReceiver(SyncPayload.TYPE, (payload, context) -> ClientProgress.onSync(payload));
         ClientPlayNetworking.registerGlobalReceiver(ProgressPayload.TYPE, (payload, context) -> ClientProgress.onProgress(payload));
