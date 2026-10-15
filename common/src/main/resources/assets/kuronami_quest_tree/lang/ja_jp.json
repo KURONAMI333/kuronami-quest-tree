@@ -54,5 +54,18 @@
   "event.kuronami_quest_tree.toast": "",
   "toast.kuronami_quest_tree.complete": "クエスト達成",
   "toast.kuronami_quest_tree.level": "レベル %s",
-  "commands.kuronami_quest_tree.changed": "%s人の進行を変更しました"
+  "commands.kuronami_quest_tree.changed": "%s人の進行を変更しました",
+  "task.kuronami_quest_tree.kill_named": "%sを倒す",
+  "task.kuronami_quest_tree.any_mob": "モブ",
+  "task.kuronami_quest_tree.advancement_named": "進捗「%s」",
+  "task.kuronami_quest_tree.biome_named": "%sを訪れる",
+  "task.kuronami_quest_tree.dimension_named": "%sに入る",
+  "task.kuronami_quest_tree.structure_named": "%sを見つける",
+  "task.kuronami_quest_tree.stage_named": "段階: %s",
+  "task.kuronami_quest_tree.xp_levels": "経験値レベル",
+  "task.kuronami_quest_tree.xp_points": "経験値",
+  "task.kuronami_quest_tree.item": "アイテム",
+  "task.kuronami_quest_tree.dim.minecraft.overworld": "オーバーワールド",
+  "task.kuronami_quest_tree.dim.minecraft.the_nether": "ネザー",
+  "task.kuronami_quest_tree.dim.minecraft.the_end": "エンド"
 }

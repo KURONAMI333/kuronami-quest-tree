@@ -227,7 +227,7 @@ public final class ClientModel {
             this.hideLinesToDependents = lines.has("hide_to_dependents") && lines.get("hide_to_dependents").getAsBoolean();
             for (JsonElement t : arr(o, "tasks")) {
                 if (t.isJsonObject()) {
-                    tasks.add(new Task(t.getAsJsonObject(), o.has("repeat") && !(o.get("repeat").isJsonPrimitive() && !o.get("repeat").getAsBoolean())));
+                    tasks.add(new Task(m, t.getAsJsonObject(), o.has("repeat") && !(o.get("repeat").isJsonPrimitive() && !o.get("repeat").getAsBoolean())));
                 }
             }
             for (JsonElement r : arr(o, "rewards")) {
@@ -257,12 +257,12 @@ public final class ClientModel {
             }
             ItemStack ic = stack(o.get("icon"));
             if (ic.isEmpty() && !tasks.isEmpty()) {
-                ic = tasks.get(0).item;
+                ic = tasks.get(0).icon;
             }
             this.icon = ic;
             String base = "progression." + ch.namespace + "." + ch.path + "." + id;
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString())
-                    : !tasks.isEmpty() && !tasks.get(0).item.isEmpty() ? tasks.get(0).item.getHoverName() : Component.literal(id);
+                    : !tasks.isEmpty() ? tasks.get(0).name : Component.literal(id);
             this.title = m.component(base + ".title", fallbackTitle);
             String d = m.lookup(base + ".desc");
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);
@@ -281,18 +281,37 @@ public final class ClientModel {
 
     public static final class Task {
         public final String type;
+        /** The item to collect for item tasks; empty for every other type. */
         public final ItemStack item;
         public final long count;
         /** Item tasks that take the items (a Submit button) instead of checking the inventory. */
         public final boolean consume;
+        public final boolean optional;
+        /** What the row shows: the target (mob, advancement, biome...) rather than just the kind of task. */
+        public final ItemStack icon;
+        public final Component name;
 
-        Task(JsonObject o, boolean repeatable) {
+        Task(ClientModel m, JsonObject o, boolean repeatable) {
             this.type = o.has("type") ? o.get("type").getAsString() : "";
             // same rule as ProgressRules.consumes: repeatable quests take their items
             this.consume = (type.equals("item") && (repeatable || (o.has("consume") && o.get("consume").getAsBoolean()))) || type.equals("xp");
-            this.item = o.has("item") ? stack(o.get("item")) : (o.has("icon") ? stack(o.get("icon")) : ItemStack.EMPTY);
+            this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
+            this.item = type.equals("item") && o.has("item") ? stack(o.get("item")) : ItemStack.EMPTY;
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
             this.count = o.has("count") ? o.get("count").getAsLong() : it.has("count") ? it.get("count").getAsLong() : 1;
+            TaskText.Shown shown = TaskText.describe(type, o, item);
+            ItemStack explicitIcon = o.has("icon") ? stack(o.get("icon")) : ItemStack.EMPTY;
+            this.icon = !explicitIcon.isEmpty() ? explicitIcon : shown.icon();
+            // a title written by the pack author wins (FTB Quests task titles, from the quest or its lang files)
+            Component title = null;
+            if (o.has("text")) {
+                String t = m.lookup(o.get("text").getAsString() + ".title");
+                title = t == null ? null : parseText(t);
+            }
+            if (title == null && o.has("title") && o.get("title").isJsonPrimitive()) {
+                title = parseText(o.get("title").getAsString());
+            }
+            this.name = title != null ? title : shown.name();
         }
     }
 

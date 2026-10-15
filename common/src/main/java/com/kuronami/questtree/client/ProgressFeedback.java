@@ -42,7 +42,7 @@ final class ProgressFeedback {
             int i = Integer.parseInt(e.getKey().substring(hash + 1));
             if (i < n.tasks.size()) {
                 ClientModel.Task t = n.tasks.get(i);
-                ProgressHud.notice(t.item.isEmpty() ? n.icon : t.item, taskName(t), e.getValue(), t.count, n.title);
+                ProgressHud.notice(t.icon.isEmpty() ? n.icon : t.icon, taskName(t), e.getValue(), t.count, n.title);
             }
         }
         // experience in skill chapters: one toast per chapter that updates while experience keeps coming
@@ -105,7 +105,7 @@ final class ProgressFeedback {
     }
 
     static Component taskName(ClientModel.Task t) {
-        return t.item.isEmpty() ? Component.translatable("task.kuronami_quest_tree." + t.type) : t.item.getHoverName();
+        return t.name;
     }
 
     static void play(SoundEvent sound, float pitch, float volume) {

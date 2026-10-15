@@ -784,8 +784,14 @@ public class ProgressScreen extends Screen {
                 long have = Math.min(p.task(n.key, i), t.count);
                 boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
                 g.fill(x, y - 2, x + w, y - 1, 0x1AFFFFFF);
-                if (!t.item.isEmpty()) {
-                    g.renderItem(t.item, x, y + 2);
+                if (!t.icon.isEmpty()) {
+                    g.renderItem(t.icon, x, y + 2);
+                } else if (t.type.equals("checkmark")) {
+                    Tiles.pixels(g, Tiles.TICK, x + 4, y + 6, 2, met ? Tiles.GREEN_TEXT : 0xFFD0D0D0);
+                }
+                if (t.optional) {
+                    // optional tasks: the same broken outline as optional quests on the map
+                    dashedOutline(g, x - 1, y + 1, 18, 18, 0x66FFFFFF);
                 }
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -803,7 +809,7 @@ public class ProgressScreen extends Screen {
                 }
                 g.drawString(font, cnt, right - font.width(cnt), y + 6, met ? Tiles.GREEN_TEXT : GRAY, true);
                 g.drawString(font, trim(ProgressFeedback.taskName(t).getString(), right - font.width(cnt) - x - 26), x + 20, y + 6,
-                        met ? GRAY : 0xFFFFFFFF, true);
+                        met || t.optional ? GRAY : 0xFFFFFFFF, true);
                 g.pose().popPose();
                 y += 20;
                 if (y > actionsTop - 40) {

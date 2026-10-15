@@ -338,6 +338,8 @@ public final class FtbQuestsImporter {
             if (o.has("toast")) {
                 o.addProperty("toast", !bool(t, "disable_toast"));
             }
+            // where the task's own title lives in the language files (from the quest file or FTB's lang files)
+            o.addProperty("text", tp);
             tasks.add(o);
         }
         n.add("tasks", tasks);

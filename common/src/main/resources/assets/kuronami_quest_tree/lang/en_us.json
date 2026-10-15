@@ -54,5 +54,18 @@
   "event.kuronami_quest_tree.toast": "",
   "toast.kuronami_quest_tree.complete": "Quest complete",
   "toast.kuronami_quest_tree.level": "Level %s",
-  "commands.kuronami_quest_tree.changed": "Progress changed for %s players"
+  "commands.kuronami_quest_tree.changed": "Progress changed for %s players",
+  "task.kuronami_quest_tree.kill_named": "Defeat %s",
+  "task.kuronami_quest_tree.any_mob": "any mob",
+  "task.kuronami_quest_tree.advancement_named": "Earn %s",
+  "task.kuronami_quest_tree.biome_named": "Visit %s",
+  "task.kuronami_quest_tree.dimension_named": "Enter %s",
+  "task.kuronami_quest_tree.structure_named": "Find %s",
+  "task.kuronami_quest_tree.stage_named": "Stage: %s",
+  "task.kuronami_quest_tree.xp_levels": "Experience levels",
+  "task.kuronami_quest_tree.xp_points": "Experience points",
+  "task.kuronami_quest_tree.item": "Item",
+  "task.kuronami_quest_tree.dim.minecraft.overworld": "the Overworld",
+  "task.kuronami_quest_tree.dim.minecraft.the_nether": "the Nether",
+  "task.kuronami_quest_tree.dim.minecraft.the_end": "the End"
 }
