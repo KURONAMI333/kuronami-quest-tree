@@ -130,6 +130,10 @@ final class DevTour {
         at(t + 380, ProgressHud::toggleTracker);
         shot(t + 400, "10_tracker");
         int pt = t + 420;
+        // every shape in every look, in the game's renderer
+        at(pt, () -> Minecraft.getInstance().setScreen(new DevShapes()));
+        shot(pt + 10, "11_shapes");
+        pt += 20;
         at(pt, () -> Minecraft.getInstance().setScreen(null));
         pt += 5;
         at(pt + 5, () -> Constants.LOG.info("Dev tour finished"));

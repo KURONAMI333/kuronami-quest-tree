@@ -69,9 +69,7 @@ final class Tiles {
             // drawn row by row at the size it is shown, mirrored around the centre: scaling a 32px mask to 20 or 40 px
             // made uneven steps and lopsided diamonds
             for (int r = y0; r < y1; r++) {
-                double ny = (r + 0.5) / h * 2 - 1;
-                double hw = halfWidth(shape, ny);
-                int inset = (int) Math.round(w / 2.0 * (1 - Math.max(0, Math.min(1, hw))));
+                int inset = rowInset(shape, w, h, r);
                 if (w - 2 * inset > 0) {
                     g.fill(x + inset, y + r, x + w - inset, y + r + 1, argb);
                 }
@@ -129,13 +127,26 @@ final class Tiles {
         shape(g, shape, x, y, s, s - edge, top);
     }
 
+    /** A regular octagon cuts each corner by 1 / (2 + sqrt 2) of the width, so all eight sides are the same length. */
+    private static final double OCT_CUT = 1 / (2 + Math.sqrt(2));
+
+    /** Left (and right) inset of pixel row {@code r} of a shape drawn {@code w} wide and {@code h} tall. */
+    private static int rowInset(String shape, int w, int h, int r) {
+        if (shape.equals("octagon")) {
+            // whole-pixel corner cut, one pixel per row: clean 45 degree steps at every size
+            int cut = (int) Math.round(Math.min(w, h) * OCT_CUT);
+            return Math.max(0, cut - Math.min(r, h - 1 - r));
+        }
+        double hw = halfWidth(shape, (r + 0.5) / h * 2 - 1);
+        return (int) Math.round(w / 2.0 * (1 - Math.max(0, Math.min(1, hw))));
+    }
+
     /** Half width (0..1) of a shape at height {@code ny} (-1 top .. 1 bottom), for symmetric pixel rows. */
     private static double halfWidth(String shape, double ny) {
         double a = Math.abs(ny);
         return switch (shape) {
             case "circle" -> Math.sqrt(Math.max(0, 1 - ny * ny));
             case "diamond" -> 1 - a;
-            case "octagon" -> a > 0.58 ? 1 - (a - 0.58) : 1;
             case "pentagon" -> ny < -0.24 ? (ny + 1) / 0.76 : 1 - (ny + 0.24) / 1.24 * 0.4;
             case "rsquare" -> {
                 double rad = 0.35;
@@ -158,7 +169,8 @@ final class Tiles {
             case "square" -> new double[][]{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
             case "rsquare" -> new double[][]{{-0.9, -0.9}, {0.9, -0.9}, {0.9, 0.9}, {-0.9, 0.9}};
             case "diamond" -> new double[][]{{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-            case "octagon" -> new double[][]{{-0.58, -1}, {0.58, -1}, {1, -0.58}, {1, 0.58}, {0.58, 1}, {-0.58, 1}, {-1, 0.58}, {-1, -0.58}};
+            // the octagon's corners are its four cut edges: one clasp over each (eight vertex clasps looked like a gear)
+            case "octagon" -> new double[][]{{-k, -k}, {k, -k}, {k, k}, {-k, k}};
             case "pentagon" -> new double[][]{{0, -1}, {1, -0.24}, {0.6, 1}, {-0.6, 1}, {-1, -0.24}};
             case "circle" -> new double[][]{{-k, -k}, {k, -k}, {k, k}, {-k, k}};
             default -> new double[0][];
@@ -172,7 +184,7 @@ final class Tiles {
         return CLASPS.computeIfAbsent(shape + "/" + s + "/" + variant, key -> {
             boolean[][] in = new boolean[s][s];
             for (int r = 0; r < s; r++) {
-                int inset = (int) Math.round(s / 2.0 * (1 - Math.max(0, Math.min(1, halfWidth(shape, (r + 0.5) / s * 2 - 1)))));
+                int inset = rowInset(shape, s, s, r);
                 for (int c = inset; c < s - inset; c++) {
                     in[r][c] = true;
                 }
@@ -274,7 +286,8 @@ final class Tiles {
             return;
         }
         if (!icon.isEmpty()) {
-            float k = s / 20f;
+            // a diamond's inside is small: a full-size icon spills over its edges
+            float k = s / 20f * (shape.equals("diamond") ? 0.7f : 1f);
             g.pose().pushPose();
             float lift = look == Look.DONE_REWARD ? 0
                     : look == Look.OPEN || look == Look.AFFORDABLE || look == Look.PROGRESS ? Math.max(1, s / 16) / 2f : 0;
@@ -291,7 +304,13 @@ final class Tiles {
             int px = Math.max(1, s / 20);
             if (look == Look.LOCKED_NEAR) {
                 // the next step: what it is stays readable; a small lock in the corner says it is not open yet
-                pixels(g, LOCK, x + s - 5 * px - Math.max(1, s / 16), y + s - 5 * px - Math.max(1, s / 16), px, 0xFFD8D8D8);
+                int m = Math.max(1, s / 16);
+                if (shape.equals("diamond")) {
+                    // a diamond has no bottom-right corner: the lock sits at the bottom point instead
+                    pixels(g, LOCK, x + s / 2 - 5 * px / 2, y + s - 5 * px - 2 * m, px, 0xFFD8D8D8);
+                } else {
+                    pixels(g, LOCK, x + s - 5 * px - m, y + s - 5 * px - m, px, 0xFFD8D8D8);
+                }
             } else if (look == Look.EXCLUDED) {
                 pixels(g, CROSS, x + s / 2 - 5 * px / 2, y + s / 2 - 5 * px / 2, px, RED);
             }
