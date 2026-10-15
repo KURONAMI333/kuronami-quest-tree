@@ -131,7 +131,7 @@ final class DevTour {
         shot(t + 400, "10_tracker");
         // how rewards-waiting quests are set apart: each variant on Now and on the map (Tiles.frame, dev only)
         int pt = t + 420;
-        for (int fr = 1; fr <= 3; fr++) {
+        for (int fr = 1; fr <= 2; fr++) {
             int f = fr;
             at(pt, () -> {
                 Tiles.frame = f;
@@ -145,7 +145,7 @@ final class DevTour {
             pt += 45;
         }
         at(pt, () -> {
-            Tiles.frame = 1;
+            Tiles.frame = 2;
             Minecraft.getInstance().setScreen(null);
         });
         pt += 5;

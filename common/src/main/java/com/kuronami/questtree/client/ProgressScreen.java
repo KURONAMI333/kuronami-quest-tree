@@ -34,13 +34,25 @@ public class ProgressScreen extends Screen {
 
     private static final int GRAY = Tiles.GRAY;
     private static final int PANEL = 0xF20E0E10;
+    /**
+     * The scrim over the blurred world: dark and even, so the world's grass and sky do not show through in patches and
+     * everything on the map (closed nodes, closed lines) can sit a step lighter than it (2026-10-15 review: a 188-quest
+     * chapter zoomed out was almost black).
+     */
+    private static final int SCRIM = 0xE60C0C0E;
+    /** Flat controls (zoom buttons, search field): an opaque surface one step above the scrim. */
+    static final int CONTROL = 0xFF202024;
+    static final int CONTROL_HOVER = 0xFF2E2E34;
 
     private static final int UNIT = 24;      // GUI px per grid unit (FTB Quests positions)
     private static final int NODE = 20;      // GUI px of a size-1 node
     private static final int RAIL = 34;
     private static final int RAIL_OPEN = 150;
     private static final int BTN = 20;
-    private static final int NOW_TILE = 40;
+    private static final int NOW_TILE = 32;
+    private static final int NOW_GAP = 6;
+    /** Narrowest Now cell: the tile and room for about 15 characters of title beside it. */
+    private static final int NOW_CELL_MIN = 130;
     private static final int DOCK_MIN_WIDTH = 560;
     private static final float FAR = 0.6f;   // below this zoom, nodes are drawn as state-coloured shapes without icons
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
@@ -72,7 +84,9 @@ public class ProgressScreen extends Screen {
 
     @Override
     protected void init() {
-        searchBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 110, 16, Component.translatable("screen.kuronami_quest_tree.search"));
+        searchBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 110 - 12, 9, Component.translatable("screen.kuronami_quest_tree.search"));
+        // drawn as one of the screen's flat controls (renderSearch), not vanilla's black box with a grey border
+        searchBox.setBordered(false);
         searchBox.setHint(Component.translatable("screen.kuronami_quest_tree.search").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
         searchBox.setMaxLength(64);
         searchBox.setValue(query);
@@ -339,7 +353,7 @@ public class ProgressScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
-        g.fill(0, 0, width, height, 0xB80A0A0C);
+        g.fill(0, 0, width, height, SCRIM);
         buttons.clear();
         Motion.tick();
         // claim animations of tiles that were never drawn (scrolled away) end here, so their tiles leave the list
@@ -386,15 +400,21 @@ public class ProgressScreen extends Screen {
      */
     private void renderSearch(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         boolean map = chapter() != null;
-        int y = height - 8 - searchBox.getHeight();
-        int x = map ? RAIL + 12 : nowRight() - searchBox.getWidth();
-        searchBox.setX(x);
-        searchBox.setY(y);
+        int w = searchBox.getWidth() + 12;
+        int y = height - 8 - BTN;
+        int x = map ? RAIL + 12 : nowRight() - w;
+        boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + BTN;
+        g.fill(x, y, x + w, y + BTN, hover || searchBox.isFocused() ? CONTROL_HOVER : CONTROL);
+        if (searchBox.isFocused()) {
+            g.fill(x, y + BTN - 1, x + w, y + BTN, 0xFFFFFFFF);
+        }
+        searchBox.setX(x + 6);
+        searchBox.setY(y + 6);
         searchBox.render(g, mouseX, mouseY, partialTick);
         if (searching()) {
             String n = matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size();
-            int nx = map ? x + searchBox.getWidth() + 6 : x - font.width(n) - 6;
-            g.drawString(font, n, nx, y + 4, matches.isEmpty() ? 0xFFC86464 : GRAY, true);
+            int nx = map ? x + w + 6 : x - font.width(n) - 6;
+            g.drawString(font, n, nx, y + 6, matches.isEmpty() ? 0xFFC86464 : GRAY, true);
         }
     }
 
@@ -502,8 +522,17 @@ public class ProgressScreen extends Screen {
         return (sheetT > 0 ? sheetLeft() : width) - 12;
     }
 
+    /**
+     * Now is a grid of cells: the tile, its title in white and its chapter in grey beside it, so what each tile is can
+     * be read without hovering (2026-10-15 review: a row of same-coloured tiles said nothing about which quest is which).
+     */
     private int nowCols() {
-        return Math.max(1, (nowRight() - nowLeft() + 6) / (NOW_TILE + 6));
+        return Math.max(1, (nowRight() - nowLeft() + NOW_GAP) / (NOW_CELL_MIN + NOW_GAP));
+    }
+
+    private int nowCellWidth() {
+        int cols = nowCols();
+        return (nowRight() - nowLeft() + NOW_GAP) / cols - NOW_GAP;
     }
 
     private void renderNow(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
@@ -537,32 +566,31 @@ public class ProgressScreen extends Screen {
         int recentH = recentHeight();
         int bottom = Math.min(height - 12 - recentH, height - 34);
         int cols = nowCols();
+        int cellW = nowCellWidth();
         int rows = (nowEntries.size() + cols - 1) / cols;
-        int rowH = NOW_TILE + 6;
+        int rowH = NOW_TILE + NOW_GAP;
         nowScroll = Mth.clamp(nowScroll, 0, Math.max(0, rows * rowH - (bottom - top)));
         g.enableScissor(left - 4, top - 4, nowRight() + 4, bottom);
         long now = Util.getMillis();
-        NowEntry hovered = null;
         for (int i = 0; i < nowEntries.size(); i++) {
             NowEntry e = nowEntries.get(i);
-            int x = left + (i % cols) * (NOW_TILE + 6);
+            int x = left + (i % cols) * (cellW + NOW_GAP);
             int y = top + (i / cols) * rowH - nowScroll;
             if (y + NOW_TILE < top - 4 || y > bottom) {
                 continue;
             }
-            boolean hover = mouseX >= x && mouseX < x + NOW_TILE && mouseY >= y && mouseY < y + NOW_TILE && mouseY < bottom;
-            if (hover) {
-                hovered = e;
+            boolean hover = mouseX >= x && mouseX < x + cellW && mouseY >= y && mouseY < y + NOW_TILE && mouseY < bottom;
+            if (e.key.equals(selected) || hover) {
+                // the whole cell is the target; selected = a light band behind it, hover = a fainter one
+                g.fill(x - 2, y - 2, x + cellW + 2, y + NOW_TILE + 2, e.key.equals(selected) ? 0x33FFFFFF : 0x14FFFFFF);
             }
-            if (e.key.equals(selected)) {
-                g.renderOutline(x - 3, y - 3, NOW_TILE + 6, NOW_TILE + 6, 0xFFFFFFFF);
-            }
+            renderNowText(g, e, x + NOW_TILE + 8, y, cellW - NOW_TILE - 8);
             if (e.pointsChapter != null) {
                 Tiles.tile(g, "square", x, y, NOW_TILE, Tiles.Look.AFFORDABLE, 1, e.pointsChapter.displayIcon(), false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 String pts = String.valueOf(ClientProgress.points(e.key));
-                g.drawString(font, pts, x + NOW_TILE - 4 - font.width(pts), y + NOW_TILE - 12, Tiles.GOLD, true);
+                g.drawString(font, pts, x + NOW_TILE - 3 - font.width(pts), y + NOW_TILE - 10, Tiles.GOLD, true);
                 g.pose().popPose();
             } else {
                 Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.look(e.key), Motion.fill(e.key, ClientProgress.fraction(e.key)), ClientProgress.iconFor(e.node), false);
@@ -574,12 +602,6 @@ public class ProgressScreen extends Screen {
                 }
             }
             flash(g, e.key, x, y, NOW_TILE, now);
-            if (hover) {
-                g.pose().pushPose();
-                g.pose().translate(0, 0, OVERLAY_Z);
-                g.fill(x, y, x + NOW_TILE, y + NOW_TILE, 0x1AFFFFFF);
-                g.pose().popPose();
-            }
         }
         g.disableScissor();
         if (rows * rowH > bottom - top) {
@@ -589,18 +611,33 @@ public class ProgressScreen extends Screen {
             g.fill(nowRight() + 6, barY, nowRight() + 8, barY + barH, 0x55FFFFFF);
         }
         renderRecent(g, m, left, height - 8 - recentH);
-        if (hovered != null && !dragging) {
-            Component tip = hovered.node != null ? hovered.node.title
-                    : Component.translatable("screen.kuronami_quest_tree.points", ClientProgress.points(hovered.key));
-            g.pose().pushPose();
-            g.pose().translate(0, 0, OVERLAY_Z + 200);
-            g.renderTooltip(font, tip, mouseX, mouseY);
-            g.pose().popPose();
+    }
+
+    /** Title (white) and chapter (grey) beside a Now tile; a skill chapter shows its points to spend in gold. */
+    private void renderNowText(GuiGraphics g, NowEntry e, int x, int y, int w) {
+        Component title;
+        Component sub;
+        int subColor = GRAY;
+        if (e.pointsChapter != null) {
+            title = e.pointsChapter.title;
+            sub = Component.translatable("screen.kuronami_quest_tree.points", ClientProgress.points(e.key));
+            subColor = Tiles.GOLD;
+        } else {
+            title = e.node.title;
+            ClientModel.Chapter c = model().chapterOf.get(e.key);
+            sub = c == null ? Component.empty() : c.title;
         }
+        g.drawString(font, trim(title.getString(), w), x, y + 5, 0xFFFFFFFF, true);
+        g.drawString(font, trim(sub.getString(), w), x, y + 18, subColor, true);
+    }
+
+    /** Recent entries shown under Now: fewer on short screens, so the Now cells keep the room. */
+    private int recentRows() {
+        return height < 320 ? 3 : 5;
     }
 
     private int recentHeight() {
-        int n = Math.min(5, ClientProgress.progress().recent.size());
+        int n = Math.min(recentRows(), ClientProgress.progress().recent.size());
         return n == 0 ? 0 : 16 + n * 18;
     }
 
@@ -614,7 +651,7 @@ public class ProgressScreen extends Screen {
         int shown = 0;
         long now = System.currentTimeMillis();
         for (String r : p.recent) {
-            if (shown++ >= 5) {
+            if (shown++ >= recentRows()) {
                 break;
             }
             String[] parts = r.split("\\|");
@@ -708,17 +745,20 @@ public class ProgressScreen extends Screen {
         return new double[]{minX, minY, maxX, maxY};
     }
 
+    /** Lines, all opaque and a step above the scrim, so the tree's shape reads even where everything is closed. */
+    private static final int LINE_WALKED = 0xFF4F8A3E;
+    private static final int LINE_OPEN = 0xFFC6C6C6;
+    private static final int LINE_CLOSED = 0xFF3C3C42;
+
     private static int lineColor(State parent, State child) {
         boolean parentDone = parent == State.DONE || parent == State.CLAIM;
         if (parentDone && (child == State.DONE || child == State.CLAIM)) {
-            // the way already walked
-            return 0xB05E9E4A;
+            return LINE_WALKED;
         }
         if (parentDone && child != State.EXCLUDED && child != State.LOCKED) {
-            // the way open now
-            return 0x80E8E8E8;
+            return LINE_OPEN;
         }
-        return 0x26FFFFFF;
+        return LINE_CLOSED;
     }
 
     private void renderChapter(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
@@ -759,7 +799,9 @@ public class ProgressScreen extends Screen {
                 if (p == null || cm.chapterOf.get(r) != ch || p.hideLinesToDependents || !ClientProgress.visible(p.key)) {
                     continue;
                 }
-                line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional ? 1 : 2, lineColor(ClientProgress.state(p.key), cs));
+                int lc = lineColor(ClientProgress.state(p.key), cs);
+                // open and walked ways are thick, ways into what is still closed are thin
+                line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional || lc == LINE_CLOSED ? 1 : 3, lc);
                 float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW + 400);
                 if (grow >= 0) {
                     // unlock chain: a bright line runs from the unlocked node to each child (300ms), then fades
@@ -902,7 +944,8 @@ public class ProgressScreen extends Screen {
     }
 
     private int sheetWidth() {
-        return Math.min(200, (int) (width * 0.45f));
+        // on small screens (GUI scale 4 on 1080p is 480 wide) a third of the width, so the map keeps most of the room
+        return Math.min(200, Math.max(150, (int) (width * 0.34f)));
     }
 
     private int sheetLeft() {
@@ -1271,7 +1314,7 @@ public class ProgressScreen extends Screen {
             int x = right - (3 - i) * (BTN + 3);
             int y = height - BTN - 8;
             boolean hover = mouseX >= x && mouseX < x + BTN && mouseY >= y && mouseY < y + BTN;
-            g.fill(x, y, x + BTN, y + BTN, hover ? 0xCC28282C : 0x99000000);
+            g.fill(x, y, x + BTN, y + BTN, hover ? CONTROL_HOVER : CONTROL);
             Tiles.pixels(g, glyphs[i], x + 7, y + 7, 1, 0xFFFFFFFF);
             int which = i;
             buttons.add(new Button(x, y, BTN, BTN, () -> zoomButton(ch, v, which)));
@@ -1297,7 +1340,7 @@ public class ProgressScreen extends Screen {
         if (r == null) {
             return;
         }
-        g.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], 0x99000000);
+        g.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], PANEL);
         double[] b = bounds(ch);
         double s = Math.min((r[2] - 8) / Math.max(1, b[2] - b[0]), (r[3] - 8) / Math.max(1, b[3] - b[1]));
         for (ClientModel.Node n : ch.nodes.values()) {
@@ -1334,7 +1377,8 @@ public class ProgressScreen extends Screen {
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         ClientModel m = model();
-        if (searchBox != null && searchBox.isMouseOver(mx, my)) {
+        if (searchBox != null && mx >= searchBox.getX() - 6 && mx < searchBox.getX() + searchBox.getWidth() + 6
+                && my >= searchBox.getY() - 6 && my < searchBox.getY() - 6 + BTN) {
             setFocused(searchBox);
             searchBox.setFocused(true);
             return searchBox.mouseClicked(mx, my, button);
@@ -1399,12 +1443,13 @@ public class ProgressScreen extends Screen {
             return true;
         }
         int cols = nowCols();
-        int col = (int) ((mx - left) / (NOW_TILE + 6));
-        int row = (int) ((my - top + nowScroll) / (NOW_TILE + 6));
-        double inX = (mx - left) - col * (NOW_TILE + 6);
-        double inY = (my - top + nowScroll) - row * (NOW_TILE + 6);
+        int cellW = nowCellWidth();
+        int col = (int) ((mx - left) / (cellW + NOW_GAP));
+        int row = (int) ((my - top + nowScroll) / (NOW_TILE + NOW_GAP));
+        double inX = (mx - left) - col * (cellW + NOW_GAP);
+        double inY = (my - top + nowScroll) - row * (NOW_TILE + NOW_GAP);
         int index = row * cols + col;
-        if (col >= cols || inX >= NOW_TILE || inY >= NOW_TILE || index >= nowEntries.size()) {
+        if (col >= cols || inX >= cellW || inY >= NOW_TILE || index >= nowEntries.size()) {
             selected = null;
             return true;
         }
@@ -1443,6 +1488,9 @@ public class ProgressScreen extends Screen {
         for (ClientModel.Node n : nodes) {
             if (ClientProgress.state(n.key) == state) {
                 selected = n.key;
+                if (ch != null) {
+                    keepVisible(view(ch), n);
+                }
                 return;
             }
         }

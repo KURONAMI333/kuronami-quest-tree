@@ -21,7 +21,8 @@ final class Tiles {
     static final int GREEN_TEXT = 0xFF7BC862;
     static final int GRAY = 0xFFA8A8A8;
     static final int TILE = 0x80000000;
-    static final int TILE_LOCKED = 0x9E000000;
+    /** Not yet: an opaque dark grey a step above the screen's scrim, so closed nodes keep the tree's shape visible. */
+    static final int TILE_LOCKED = 0xFF2C2C31;
     static final int INK = 0xFF1A1A1A;
 
     static final Set<String> SHAPES = Set.of("square", "rsquare", "circle", "diamond", "hexagon", "octagon", "pentagon", "gear", "heart");
@@ -86,12 +87,12 @@ final class Tiles {
      * are drawn at {@link #OVERLAY_Z} so they sit above the item.
      */
     /**
-     * What a tile shows (2026-10-15 colour rebuild, DESIGN_NOTES). The state is a solid surface with a darker bottom
-     * edge (the treatment the player rated best); never a coloured rim around a pale tint of the same colour
-     * (negative_list section 7). Dark = not yet, light grey (Minecraft's GUI grey) = can start / can unlock, blue rising
-     * from the bottom = in progress, green = done. A done quest with rewards waiting is a raised bright green tile (a
-     * button waiting to be pressed); once claimed it lies flat in a settled green. One colour for "done", so claiming is
-     * never read as a second achievement. Gold is kept for rewards and currency elsewhere (claim button, points).
+     * What a tile shows (2026-10-15 colour rebuild, DESIGN_NOTES). The state is a solid surface (the treatment the player
+     * rated best); never a coloured rim around a pale tint of the same colour (negative_list section 7). Dark = not yet,
+     * light grey (Minecraft's GUI grey) = can start / can unlock, blue rising from the bottom = in progress, green = done.
+     * A done quest with rewards waiting keeps the green with light clasps on the shape's corners; once claimed it is a
+     * plain settled green. One colour for "done", so claiming is never read as a second achievement. Gold is kept for
+     * rewards and currency elsewhere (claim button, points).
      */
     enum Look { LOCKED_FAR, LOCKED_NEAR, EXCLUDED, OPEN, AFFORDABLE, PROGRESS, DONE, DONE_REWARD }
 
@@ -130,8 +131,9 @@ final class Tiles {
         return switch (shape) {
             case "circle" -> Math.sqrt(Math.max(0, 1 - ny * ny));
             case "diamond" -> 1 - a;
-            // points left and right, flat top and bottom, filling the square like FTB Quests' hexagon
-            case "hexagon" -> 1 - a / 2;
+            // points left and right, flat top and bottom filling the square; the top edge is 65% of the width, so it does
+            // not read as a tall narrow shape (at 50% it looked stretched upward)
+            case "hexagon" -> 1 - a * (1 - HEX_TOP);
             case "octagon" -> a > 0.58 ? 1 - (a - 0.58) : 1;
             case "pentagon" -> ny < -0.24 ? (ny + 1) / 0.76 : 1 - (ny + 0.24) / 1.24 * 0.4;
             case "rsquare" -> {
@@ -146,62 +148,112 @@ final class Tiles {
         };
     }
 
+    /** Half length of a hexagon's top and bottom edges, as a share of the half width. */
+    private static final double HEX_TOP = 0.65;
+
     /**
-     * Development only: the frame that marks a quest with rewards waiting, photographed side by side by the dev tour.
-     * All keep the green fill (no bottom shadow under a frame). 1 = rivets, 2 = corner brackets, 3 = double line.
+     * Development only: the ornament that marks a quest with rewards waiting, photographed side by side by the dev
+     * tour. Both keep the green fill with no bottom shadow and put a light clasp on each corner of the shape itself.
+     * 1 = clasps inside the outline, 2 = clasps wrapping the corner (one pixel outside, one inside).
      */
-    static int frame = 1;
+    static int frame = 2;
 
     static final int GREEN_LIGHT = 0xFFA6DA8A;
 
-    /** Left inset of a shape's row (for placing ornaments on its outline). */
-    private static int inset(String shape, int s, int row) {
-        double ny = (row + 0.5) / s * 2 - 1;
-        return (int) Math.round(s / 2.0 * (1 - Math.max(0, Math.min(1, halfWidth(shape, ny)))));
+    /** Corners of each shape in -1..1 (y down), where the reward clasps sit. Gear and heart have none. */
+    private static double[][] corners(String shape) {
+        double k = 0.707;
+        return switch (shape) {
+            case "square" -> new double[][]{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+            case "rsquare" -> new double[][]{{-0.9, -0.9}, {0.9, -0.9}, {0.9, 0.9}, {-0.9, 0.9}};
+            case "diamond" -> new double[][]{{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+            case "hexagon" -> new double[][]{{-HEX_TOP, -1}, {HEX_TOP, -1}, {1, 0}, {HEX_TOP, 1}, {-HEX_TOP, 1}, {-1, 0}};
+            case "octagon" -> new double[][]{{-0.58, -1}, {0.58, -1}, {1, -0.58}, {1, 0.58}, {0.58, 1}, {-0.58, 1}, {-1, 0.58}, {-1, -0.58}};
+            case "pentagon" -> new double[][]{{0, -1}, {1, -0.24}, {0.6, 1}, {-0.6, 1}, {-1, -0.24}};
+            case "circle" -> new double[][]{{-k, -k}, {k, -k}, {k, k}, {-k, k}};
+            default -> new double[0][];
+        };
+    }
+
+    /** Per shape, size and variant: the clasp pixels as runs {x0, y, x1, light(1)/dark(0)}, worked out once. */
+    private static final java.util.Map<String, int[]> CLASPS = new java.util.HashMap<>();
+
+    private static int[] clasps(String shape, int s, int variant) {
+        return CLASPS.computeIfAbsent(shape + "/" + s + "/" + variant, key -> {
+            boolean[][] in = new boolean[s][s];
+            for (int r = 0; r < s; r++) {
+                int inset = (int) Math.round(s / 2.0 * (1 - Math.max(0, Math.min(1, halfWidth(shape, (r + 0.5) / s * 2 - 1)))));
+                for (int c = inset; c < s - inset; c++) {
+                    in[r][c] = true;
+                }
+            }
+            int p = Math.max(1, s / 20);
+            double[][] cs = corners(shape);
+            int n = cs.length;
+            // a clasp runs along both edges from its corner, at most 30% of the tile and 38% of the shorter edge, so
+            // shapes with many corners keep a gap between clasps instead of turning into a ring
+            double[] len = new double[n];
+            for (int i = 0; i < n; i++) {
+                double[] a = cs[(i + n - 1) % n];
+                double[] b = cs[(i + 1) % n];
+                double e = Math.min(Math.hypot(cs[i][0] - a[0], cs[i][1] - a[1]), Math.hypot(cs[i][0] - b[0], cs[i][1] - b[1]));
+                len[i] = Math.min(s * 0.22, e * s / 2 * 0.30);
+            }
+            java.util.List<Integer> runs = new java.util.ArrayList<>();
+            for (int r = 0; r < s; r++) {
+                int prev = -1;
+                int start = 0;
+                for (int c = 0; c <= s; c++) {
+                    int kind = -1;
+                    if (c < s && in[r][c]) {
+                        int depth = depth(in, s, r, c, 2 * p);
+                        double near = Double.MAX_VALUE;
+                        for (int i = 0; i < n; i++) {
+                            double vx = (cs[i][0] + 1) / 2 * s;
+                            double vy = (cs[i][1] + 1) / 2 * s;
+                            near = Math.min(near, Math.hypot(c + 0.5 - vx, r + 0.5 - vy) - len[i]);
+                        }
+                        kind = depth < 2 * p && near < 0 ? 1 : -1;
+                    }
+                    if (kind != prev) {
+                        if (prev >= 0) {
+                            runs.add(start);
+                            runs.add(r);
+                            runs.add(c);
+                            runs.add(prev);
+                        }
+                        start = c;
+                        prev = kind;
+                    }
+                }
+            }
+            return runs.stream().mapToInt(Integer::intValue).toArray();
+        });
+    }
+
+    /** How many pixels a pixel of the mask lies inside its outline (0 = on the edge), capped at {@code max}. */
+    private static int depth(boolean[][] in, int s, int r, int c, int max) {
+        for (int d = 0; d < max; d++) {
+            for (int dr = -d - 1; dr <= d + 1; dr++) {
+                for (int dc = -d - 1; dc <= d + 1; dc++) {
+                    int rr = r + dr;
+                    int cc = c + dc;
+                    if (rr < 0 || cc < 0 || rr >= s || cc >= s || !in[rr][cc]) {
+                        return d;
+                    }
+                }
+            }
+        }
+        return max;
     }
 
     private static void rewardFrame(GuiGraphics g, String shape, int x, int y, int s) {
-        int p = Math.max(1, s / 20);
-        switch (frame) {
-            case 2 -> {
-                // corner brackets just outside the tile: an L at each corner of its box, whatever the shape
-                shape(g, shape, x, y, s, s, GREEN);
-                int o = 2 * p;
-                int len = Math.max(3, s / 4);
-                int x0 = x - o;
-                int y0 = y - o;
-                int x1 = x + s + o;
-                int y1 = y + s + o;
-                g.fill(x0, y0, x0 + len, y0 + p, GREEN_LIGHT);
-                g.fill(x0, y0, x0 + p, y0 + len, GREEN_LIGHT);
-                g.fill(x1 - len, y0, x1, y0 + p, GREEN_LIGHT);
-                g.fill(x1 - p, y0, x1, y0 + len, GREEN_LIGHT);
-                g.fill(x0, y1 - p, x0 + len, y1, GREEN_LIGHT);
-                g.fill(x0, y1 - len, x0 + p, y1, GREEN_LIGHT);
-                g.fill(x1 - len, y1 - p, x1, y1, GREEN_LIGHT);
-                g.fill(x1 - p, y1 - len, x1, y1, GREEN_LIGHT);
-            }
-            case 3 -> {
-                // double line: dark outer line, a band of the fill, a light inner line, then the fill
-                shape(g, shape, x, y, s, s, GREEN_DARK);
-                shape(g, shape, x + p, y + p, s - 2 * p, s - 2 * p, GREEN);
-                shape(g, shape, x + 2 * p, y + 2 * p, s - 4 * p, s - 4 * p, GREEN_LIGHT);
-                shape(g, shape, x + 3 * p, y + 3 * p, s - 6 * p, s - 6 * p, GREEN);
-            }
-            default -> {
-                // rivets: dark rim, a light line inside it, and a light rivet where the outline turns at top and bottom
-                int r = 2 * p;
-                shape(g, shape, x, y, s, s, GREEN_DARK);
-                shape(g, shape, x + r, y + r, s - 2 * r, s - 2 * r, GREEN_LIGHT);
-                shape(g, shape, x + r + p, y + r + p, s - 2 * (r + p), s - 2 * (r + p), GREEN);
-                int top = r / 2;
-                int bottom = s - 1 - r / 2 - p;
-                for (int row : new int[]{top, bottom}) {
-                    int in = inset(shape, s, row) + r / 2;
-                    g.fill(x + in, y + row, x + in + p, y + row + p, GREEN_LIGHT);
-                    g.fill(x + s - in - p, y + row, x + s - in, y + row + p, GREEN_LIGHT);
-                }
-            }
+        shape(g, shape, x, y, s, s, GREEN);
+        // variant 2 works the clasps out on the shape grown by one pixel each side, so they wrap the corner
+        int o = frame == 2 ? Math.max(1, s / 20) : 0;
+        int[] runs = clasps(shape, s + 2 * o, 1);
+        for (int i = 0; i < runs.length; i += 4) {
+            g.fill(x - o + runs[i], y - o + runs[i + 1], x - o + runs[i + 2], y - o + runs[i + 1] + 1, GREEN_LIGHT);
         }
     }
 
@@ -212,11 +264,8 @@ final class Tiles {
     static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon, boolean far) {
         shape = shapeOf(shape);
         switch (look) {
-            // done: green. Rewards still waiting = a raised bright tile, like a button to press; claimed = flat and settled
-            case DONE_REWARD -> {
-                int fw = Math.max(2, s / 10);
-                rewardFrame(g, shape, x, y, s);
-            }
+            // done: green. Rewards still waiting = clasps on the corners; claimed = flat and settled
+            case DONE_REWARD -> rewardFrame(g, shape, x, y, s);
             case DONE -> shape(g, shape, x, y, s, s, GREEN_SETTLED);
             case AFFORDABLE -> surface(g, shape, x, y, s, WHITE, GREY_DARK);
             case OPEN -> surface(g, shape, x, y, s, GREY, GREY_DARK);
@@ -246,7 +295,7 @@ final class Tiles {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z);
             // not yet: the icon stays visible but dimmed, so players see what lies ahead; only the next step carries a lock
-            shape(g, shape, x, y, s, s, look == Look.LOCKED_FAR ? 0xA6000000 : 0x5C000000);
+            shape(g, shape, x, y, s, s, withAlpha(TILE_LOCKED, look == Look.LOCKED_FAR ? 0.72f : 0.45f));
             int px = Math.max(1, s / 20);
             if (look == Look.LOCKED_NEAR) {
                 // the next step: what it is stays readable; a small lock in the corner says it is not open yet
