@@ -25,7 +25,7 @@ final class Tiles {
     static final int TILE_LOCKED = 0xFF2C2C31;
     static final int INK = 0xFF1A1A1A;
 
-    static final Set<String> SHAPES = Set.of("square", "rsquare", "circle", "diamond", "hexagon", "octagon", "pentagon", "gear", "heart");
+    static final Set<String> SHAPES = Set.of("square", "rsquare", "circle", "diamond", "octagon", "pentagon", "gear", "heart");
     static final String[] LOCK = {".###.", "#...#", "#####", "#####", "#####"};
     static final String[] CROSS = {"#...#", ".#.#.", "..#..", ".#.#.", "#...#"};
     static final String[] TICK = {"....#", "...#.", "#.#..", ".#...", "....."};
@@ -36,6 +36,10 @@ final class Tiles {
     private Tiles() {
     }
 
+    /**
+     * Shape names outside {@link #SHAPES} draw as a square. FTB Quests' hexagon is one of them: dropped on 2026-10-15
+     * (the player: it looked bad at every proportion tried), so imported hexagon quests show as squares.
+     */
     static String shapeOf(String shape) {
         return SHAPES.contains(shape) ? shape : "square";
     }
@@ -63,7 +67,7 @@ final class Tiles {
         }
         if (!shape.equals("gear") && !shape.equals("heart")) {
             // drawn row by row at the size it is shown, mirrored around the centre: scaling a 32px mask to 20 or 40 px
-            // made uneven steps and lopsided hexagons and diamonds
+            // made uneven steps and lopsided diamonds
             for (int r = y0; r < y1; r++) {
                 double ny = (r + 0.5) / h * 2 - 1;
                 double hw = halfWidth(shape, ny);
@@ -131,9 +135,6 @@ final class Tiles {
         return switch (shape) {
             case "circle" -> Math.sqrt(Math.max(0, 1 - ny * ny));
             case "diamond" -> 1 - a;
-            // points left and right, flat top and bottom filling the square; the top edge is 65% of the width, so it does
-            // not read as a tall narrow shape (at 50% it looked stretched upward)
-            case "hexagon" -> 1 - a * (1 - HEX_TOP);
             case "octagon" -> a > 0.58 ? 1 - (a - 0.58) : 1;
             case "pentagon" -> ny < -0.24 ? (ny + 1) / 0.76 : 1 - (ny + 0.24) / 1.24 * 0.4;
             case "rsquare" -> {
@@ -148,16 +149,6 @@ final class Tiles {
         };
     }
 
-    /** Half length of a hexagon's top and bottom edges, as a share of the half width. */
-    private static final double HEX_TOP = 0.65;
-
-    /**
-     * Development only: the ornament that marks a quest with rewards waiting, photographed side by side by the dev
-     * tour. Both keep the green fill with no bottom shadow and put a light clasp on each corner of the shape itself.
-     * 1 = clasps inside the outline, 2 = clasps wrapping the corner (one pixel outside, one inside).
-     */
-    static int frame = 2;
-
     static final int GREEN_LIGHT = 0xFFA6DA8A;
 
     /** Corners of each shape in -1..1 (y down), where the reward clasps sit. Gear and heart have none. */
@@ -167,7 +158,6 @@ final class Tiles {
             case "square" -> new double[][]{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
             case "rsquare" -> new double[][]{{-0.9, -0.9}, {0.9, -0.9}, {0.9, 0.9}, {-0.9, 0.9}};
             case "diamond" -> new double[][]{{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-            case "hexagon" -> new double[][]{{-HEX_TOP, -1}, {HEX_TOP, -1}, {1, 0}, {HEX_TOP, 1}, {-HEX_TOP, 1}, {-1, 0}};
             case "octagon" -> new double[][]{{-0.58, -1}, {0.58, -1}, {1, -0.58}, {1, 0.58}, {0.58, 1}, {-0.58, 1}, {-1, 0.58}, {-1, -0.58}};
             case "pentagon" -> new double[][]{{0, -1}, {1, -0.24}, {0.6, 1}, {-0.6, 1}, {-1, -0.24}};
             case "circle" -> new double[][]{{-k, -k}, {k, -k}, {k, k}, {-k, k}};
@@ -249,8 +239,10 @@ final class Tiles {
 
     private static void rewardFrame(GuiGraphics g, String shape, int x, int y, int s) {
         shape(g, shape, x, y, s, s, GREEN);
-        // variant 2 works the clasps out on the shape grown by one pixel each side, so they wrap the corner
-        int o = frame == 2 ? Math.max(1, s / 20) : 0;
+        // rewards waiting: a light clasp on each corner, worked out on the shape grown by one pixel each side so it wraps
+        // the corner (half outside, half inside). Clasps inside the outline only read as a dashed rim on 20px map tiles.
+        // Chosen by the player over rivets, double lines and brackets at the box corners (DESIGN_NOTES 2026-10-15).
+        int o = Math.max(1, s / 20);
         int[] runs = clasps(shape, s + 2 * o, 1);
         for (int i = 0; i < runs.length; i += 4) {
             g.fill(x - o + runs[i], y - o + runs[i + 1], x - o + runs[i + 2], y - o + runs[i + 1] + 1, GREEN_LIGHT);
