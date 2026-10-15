@@ -149,7 +149,7 @@ public final class ProgressHud {
         int y = g.guiHeight() / 2 - total / 2;
         for (ClientModel.Node n : rows) {
             State s = ClientProgress.state(n.key);
-            Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), n.icon, false);
+            Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
             g.drawString(font, font.plainSubstrByWidth(n.title.getString(), 110), 26, y + 1, 0xFFFFFF, true);

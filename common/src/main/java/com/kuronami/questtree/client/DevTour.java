@@ -85,6 +85,13 @@ final class DevTour {
                 ClientProgress.send("claim", nodes.get(0).key, -1);
             }
         });
+        // one open quest part done, so a blue (in progress) tile is in the photos
+        at(t + 30, () -> {
+            ClientModel.Node open = openItemQuest();
+            if (open != null) {
+                giveNow(open, 0.4);
+            }
+        });
         t += 60;
         at(t, () -> open(-1));
         shot(t + 20, "01_now");

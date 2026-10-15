@@ -73,17 +73,23 @@ final class Tiles {
      * are drawn at {@link #OVERLAY_Z} so they sit above the item.
      */
     /**
-     * What a tile shows (2026-10-15 colour rebuild, DESIGN_NOTES): each meaning gets the colour people already read that
-     * way. Grey = not yet, white = can start / can unlock, blue = in progress, green = done (quests completed, skills
-     * taken, rewards claimed or not), gold = a reward or currency waiting. Colours sit on the rim and as a light tint so
-     * the item icon in the middle stays readable (yellow items vanished on the old yellow fill).
+     * What a tile shows (2026-10-15 colour rebuild, DESIGN_NOTES). The state is a solid surface with a darker bottom
+     * edge (the treatment the player rated best); never a coloured rim around a pale tint of the same colour
+     * (negative_list section 7). Dark = not yet, light grey (Minecraft's GUI grey) = can start / can unlock, blue rising
+     * from the bottom = in progress, green = done. A done quest with rewards waiting is a raised bright green tile (a
+     * button waiting to be pressed); once claimed it lies flat in a settled green. One colour for "done", so claiming is
+     * never read as a second achievement. Gold is kept for rewards and currency elsewhere (claim button, points).
      */
     enum Look { LOCKED_FAR, LOCKED_NEAR, EXCLUDED, OPEN, AFFORDABLE, PROGRESS, DONE, DONE_REWARD }
 
     static final int WHITE = 0xFFE8E8E8;
-    static final int BLUE = 0xFF4FA3E0;
+    static final int GREEN_BRIGHT = 0xFF6DB556;
+    static final int GREEN_SETTLED = 0xFF3D6431;
+    static final int GREY = 0xFFC6C6C6;
+    static final int GREY_DARK = 0xFF8B8B8B;
+    static final int BLUE = 0xFF4F9FDB;
+    static final int BLUE_DARK = 0xFF2F6E9F;
     static final int GOLD = 0xFFF2C230;
-    static final int GOLD_DARK = 0xFFB98C10;
     static final int RED = 0xFFD05656;
 
     /** For callers that only know the state: quests' "claim" is done with a reward waiting. */
@@ -98,10 +104,11 @@ final class Tiles {
         };
     }
 
-    /** A filled shape with a rim: the rim colour, then the inside inset by {@code w}. */
-    private static void rim(GuiGraphics g, String shape, int x, int y, int s, int w, int rimColor, int inside) {
-        shape(g, shape, x, y, s, s, rimColor);
-        shape(g, shape, x + w, y + w, s - 2 * w, s - 2 * w, inside);
+    /** A solid surface with its darker bottom edge. */
+    private static void surface(GuiGraphics g, String shape, int x, int y, int s, int top, int edgeColor) {
+        int edge = Math.max(1, s / 16);
+        shape(g, shape, x, y, s, s, edgeColor);
+        shape(g, shape, x, y, s, s - edge, top);
     }
 
     static void tile(GuiGraphics g, String shape, int x, int y, int s, State state, double fraction, ItemStack icon, boolean far) {
@@ -110,43 +117,34 @@ final class Tiles {
 
     static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon, boolean far) {
         shape = shapeOf(shape);
-        int w = Math.max(1, s / 12);
         switch (look) {
-            case DONE -> rim(g, shape, x, y, s, w, GREEN, 0xD0233A1E);
+            // done: green. Rewards still waiting = a raised bright tile, like a button to press; claimed = flat and settled
             case DONE_REWARD -> {
-                rim(g, shape, x, y, s, w, GREEN, 0xD0233A1E);
-                // the reward waiting: a warm light behind the icon, where the eye goes
-                shape(g, "circle", x + s / 8, y + s / 8, s - 2 * (s / 8), s - 2 * (s / 8), 0x55FFC94A);
-                shape(g, "circle", x + s / 4, y + s / 4, s - 2 * (s / 4), s - 2 * (s / 4), 0x70FFDB7A);
+                int edge = Math.max(2, s / 8);
+                shape(g, shape, x, y, s, s, GREEN_DARK);
+                shape(g, shape, x, y, s, s - edge, GREEN_BRIGHT);
             }
+            case DONE -> shape(g, shape, x, y, s, s, GREEN_SETTLED);
+            case AFFORDABLE -> surface(g, shape, x, y, s, WHITE, GREY_DARK);
+            case OPEN -> surface(g, shape, x, y, s, GREY, GREY_DARK);
             case PROGRESS -> {
-                rim(g, shape, x, y, s, Math.max(1, w / 2), BLUE, 0xD0141C24);
-                shapeBottom(g, shape, x + 1, y + 1, s - 2, s - 2, fraction, 0x504FA3E0);
-                if (fraction > 0) {
-                    shapeBand(g, shape, x + 1, y + 1, s - 2, s - 2, 1 - fraction, 1 - fraction + (double) w / s, 0xE04FA3E0);
-                }
+                surface(g, shape, x, y, s, GREY, GREY_DARK);
+                // the blue rises with the tasks done
+                shapeBottom(g, shape, x, y, s, s, fraction, BLUE_DARK);
+                shapeBottom(g, shape, x, y, s, s - Math.max(1, s / 16), Math.max(0, fraction - 1.0 / 16), BLUE);
             }
-            case AFFORDABLE -> rim(g, shape, x, y, s, w, 0xFFFFFFFF, 0xD0262626);
-            case OPEN -> rim(g, shape, x, y, s, Math.max(1, w / 2), 0x99E8E8E8, 0xC0161616);
             case LOCKED_FAR, LOCKED_NEAR, EXCLUDED -> shape(g, shape, x, y, s, s, TILE_LOCKED);
         }
         if (far) {
-            int dot = switch (look) {
-                case DONE -> GREEN;
-                case DONE_REWARD -> GOLD;
-                case PROGRESS -> BLUE;
-                case AFFORDABLE, OPEN -> WHITE;
-                default -> 0;
-            };
-            if (dot != 0) {
-                shape(g, shape, x + s / 4, y + s / 4, s / 2, s / 2, dot);
-            }
+            // zoomed out the surface colour is the information; nothing on top
             return;
         }
         if (!icon.isEmpty()) {
             float k = s / 20f;
             g.pose().pushPose();
-            g.pose().translate(x + s / 2f - 8 * k, y + s / 2f - 8 * k, 0);
+            float lift = look == Look.DONE_REWARD ? Math.max(2, s / 8) / 2f
+                    : look == Look.OPEN || look == Look.AFFORDABLE || look == Look.PROGRESS ? Math.max(1, s / 16) / 2f : 0;
+            g.pose().translate(x + s / 2f - 8 * k, y + s / 2f - 8 * k - lift, 0);
             g.pose().scale(k, k, 1);
             g.renderItem(icon, 0, 0);
             g.pose().popPose();

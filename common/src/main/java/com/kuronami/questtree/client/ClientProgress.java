@@ -160,6 +160,11 @@ public final class ClientProgress {
         };
     }
 
+    /** The icon a node's tile shows (its own; claiming is shown by the tile, not by swapping the icon). */
+    static net.minecraft.world.item.ItemStack iconFor(ClientModel.Node n) {
+        return n.icon;
+    }
+
     public static double fraction(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
         return n == null ? 0 : rules.fraction(progress, n);

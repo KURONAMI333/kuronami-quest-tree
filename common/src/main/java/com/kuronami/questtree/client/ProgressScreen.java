@@ -565,7 +565,7 @@ public class ProgressScreen extends Screen {
                 g.drawString(font, pts, x + NOW_TILE - 4 - font.width(pts), y + NOW_TILE - 12, Tiles.GOLD, true);
                 g.pose().popPose();
             } else {
-                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.look(e.key), Motion.fill(e.key, ClientProgress.fraction(e.key)), e.node.icon, false);
+                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.look(e.key), Motion.fill(e.key, ClientProgress.fraction(e.key)), ClientProgress.iconFor(e.node), false);
                 if (Pins.has(e.key)) {
                     g.pose().pushPose();
                     g.pose().translate(0, 0, OVERLAY_Z);
@@ -789,7 +789,7 @@ public class ProgressScreen extends Screen {
                 // optional quests: a broken outline, so they read as "extra" next to the required path
                 dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
             }
-            Tiles.tile(g, shape, x, y, s, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), n.icon, far);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), ClientProgress.iconFor(n), far);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
             if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
@@ -822,7 +822,7 @@ public class ProgressScreen extends Screen {
             int x = (int) Math.round(l.x * UNIT) - s / 2;
             int y = (int) Math.round(l.y * UNIT) - s / 2;
             String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
-            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), target.icon, far);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), ClientProgress.iconFor(target), far);
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
