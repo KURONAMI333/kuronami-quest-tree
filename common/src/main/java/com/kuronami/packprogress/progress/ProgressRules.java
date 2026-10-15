@@ -80,7 +80,7 @@ public final class ProgressRules {
     }
 
     private boolean satisfied(PlayerProgress p, String key, boolean startedIsEnough) {
-        if (p.completed.contains(key) || p.taken.getOrDefault(key, 0) > 0) {
+        if (doneOnce(p, key)) {
             return true;
         }
         if (!startedIsEnough) {
@@ -91,20 +91,34 @@ public final class ProgressRules {
     }
 
     public boolean excluded(PlayerProgress p, ProgressModel.Node n) {
-        if (p.completed.contains(n.key) || p.taken.getOrDefault(n.key, 0) > 0) {
+        if (doneOnce(p, n.key)) {
             return false;
         }
         for (String other : n.exclusiveWith) {
-            if (p.taken.getOrDefault(other, 0) > 0 || p.completed.contains(other)) {
+            if (doneOnce(p, other)) {
                 return true;
             }
         }
         if (n.exclusiveGroup != null) {
             List<ProgressModel.Node> group = n.chapter.exclusiveGroups.get(n.exclusiveGroup);
-            long done = group == null ? 0 : group.stream().filter(g -> p.completed.contains(g.key) || p.taken.getOrDefault(g.key, 0) > 0).count();
+            long done = group == null ? 0 : group.stream().filter(g -> doneOnce(p, g.key)).count();
             return done >= n.exclusiveMax;
         }
         return false;
+    }
+
+    /**
+     * Completed at least once: completed now, taken (skills), or a repeatable quest that already started over. A
+     * repeat must not lock the quests after it again or reopen the other side of an exclusive choice.
+     */
+    public static boolean doneOnce(PlayerProgress p, String key) {
+        return p.completed.contains(key) || p.taken.getOrDefault(key, 0) > 0 || p.repeats.getOrDefault(key, 0) > 0;
+    }
+
+    /** Whether a node repeats: {@code "repeat": true} or an object. */
+    public static boolean repeatable(ProgressModel.Node n) {
+        JsonElement rep = n.json.get("repeat");
+        return rep != null && (rep.isJsonObject() || (rep.isJsonPrimitive() && rep.getAsJsonPrimitive().isBoolean() && rep.getAsBoolean()));
     }
 
     /** Share of the node's tasks done, 0..1 (counts weighted by their targets). */
@@ -231,16 +245,18 @@ public final class ProgressRules {
      * tasks only repeat with a cooldown, or they would complete again in the same tick forever.
      */
     public boolean repeatAfterClaim(PlayerProgress p, ProgressModel.Node n, long now) {
-        JsonElement rep = n.json.get("repeat");
-        if (rep == null || !(rep.isJsonObject() || (rep.isJsonPrimitive() && rep.getAsJsonPrimitive().isBoolean() && rep.getAsBoolean()))) {
+        if (!repeatable(n)) {
             return false;
         }
+        JsonElement rep = n.json.get("repeat");
         JsonObject r = rep.isJsonObject() ? rep.getAsJsonObject() : new JsonObject();
         long cooldown = r.has("cooldown") ? r.get("cooldown").getAsLong() : 0;
         int max = r.has("max") && r.get("max").isJsonPrimitive() ? r.get("max").getAsInt() : Integer.MAX_VALUE;
         int done = p.repeats.getOrDefault(n.key, 0);
         // max = how many times the quest can be done in total
-        if (done + 1 >= max || (n.tasks.isEmpty() && cooldown <= 0)) {
+        // without a required task that must be done again (an action, not a state), only a cooldown keeps it from
+        // completing again at once: quests with no required tasks, or with only "being somewhere / having something" tasks
+        if (done + 1 >= max || (cooldown <= 0 && !hasRepeatableWork(n))) {
             return false;
         }
         p.repeats.put(n.key, done + 1);
@@ -249,6 +265,33 @@ public final class ProgressRules {
             p.cooldown.put(n.key, now + cooldown * 1000);
         }
         return true;
+    }
+
+    /**
+     * Tasks a player must do again after a repeat: kills, checkmarks and hand-ins. Item tasks of repeatable quests are
+     * hand-ins (see {@link #consumes}); position, advancement, stat and stage tasks would be met again immediately.
+     */
+    static boolean hasRepeatableWork(ProgressModel.Node n) {
+        for (JsonObject t : n.tasks) {
+            boolean optional = t.has("optional") && t.get("optional").getAsBoolean();
+            String type = t.has("type") ? t.get("type").getAsString() : "";
+            if (!optional && (type.equals("kill") || type.equals("checkmark") || type.equals("item") || type.equals("xp"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether an item task takes the items (a Submit button) instead of checking the inventory. Repeatable quests
+     * always consume: otherwise the items still held would complete the quest again right after each repeat.
+     */
+    public static boolean consumes(ProgressModel.Node n, JsonObject task) {
+        String type = task.has("type") ? task.get("type").getAsString() : "";
+        if (type.equals("xp")) {
+            return true;
+        }
+        return type.equals("item") && (repeatable(n) || (task.has("consume") && task.get("consume").getAsBoolean()));
     }
 
     public boolean take(PlayerProgress p, ProgressModel.Node n) {

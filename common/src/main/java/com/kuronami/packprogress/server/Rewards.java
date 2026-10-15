@@ -99,7 +99,14 @@ public final class Rewards {
                 }
             }
         }
-        for (String key : p.claimed) {
+        // claimed quests, and repeatable quests claimed before (a repeat clears "claimed")
+        java.util.Set<String> claimedOnce = new java.util.HashSet<>(p.claimed);
+        p.repeats.forEach((k, v) -> {
+            if (v > 0) {
+                claimedOnce.add(k);
+            }
+        });
+        for (String key : claimedOnce) {
             ProgressModel.Node n = model.nodes.get(key);
             if (n != null) {
                 for (JsonObject rw : n.rewards) {

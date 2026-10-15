@@ -312,4 +312,42 @@ public final class PackProgressGameTests {
         helper.assertTrue(pr.level.isEmpty() && pr.bonus.isEmpty() && pr.completed.isEmpty(), "full reset failed");
         helper.succeed();
     }
+
+    /** A repeat keeps the quests after it open; item tasks of repeatable quests are hand-ins, so held items do not loop. */
+    @GameTest(template = "empty3x3x3")
+    public static void repeatKeepsDependents(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        act(p, "check", Q + "daily", 0);
+        act(p, "claim", Q + "daily", -1);
+        helper.assertTrue(!pr.completed.contains(Q + "daily"), "daily should have started over");
+        act(p, "check", Q + "after_daily", 0);
+        helper.assertTrue(pr.completed.contains(Q + "after_daily"), "quest after a repeated one got locked again");
+        p.getInventory().add(new ItemStack(Items.WHEAT, 10));
+        ProgressService.checkNow(p);
+        helper.assertTrue(!pr.completed.contains(Q + "wheat_again"), "repeatable item task completed from held items");
+        act(p, "submit", Q + "wheat_again", 0);
+        act(p, "claim", Q + "wheat_again", -1);
+        ProgressService.checkNow(p);
+        helper.assertTrue(count(p, Items.WHEAT) == 8 && !pr.completed.contains(Q + "wheat_again"), "hand-in or repeat wrong: wheat "
+                + count(p, Items.WHEAT));
+        helper.succeed();
+    }
+
+    /** Resetting one skill node gives its points back; "complete" on a task-less quest runs its automatic rewards. */
+    @GameTest(template = "empty3x3x3")
+    public static void resetNodeRefunds(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        cmd(p, "pack_progress points @s " + S + " 1");
+        act(p, "take", S + "/root", 0);
+        helper.assertTrue(pr.spent.getOrDefault(S, 0) == 1, "root not bought");
+        cmd(p, "pack_progress reset @s " + S + "/root");
+        helper.assertTrue(pr.spent.getOrDefault(S, 0) == 0 && !pr.taken.containsKey(S + "/root"), "node reset did not refund");
+        act(p, "check", Q + "left", 0);
+        cmd(p, "pack_progress reset @s " + Q + "free");
+        cmd(p, "pack_progress complete @s " + Q + "free");
+        helper.assertTrue(count(p, Items.APPLE) >= 1, "complete on a task-less quest skipped its auto reward");
+        helper.succeed();
+    }
 }

@@ -203,7 +203,7 @@ public final class ClientModel {
             }
             for (JsonElement t : arr(o, "tasks")) {
                 if (t.isJsonObject()) {
-                    tasks.add(new Task(t.getAsJsonObject()));
+                    tasks.add(new Task(t.getAsJsonObject(), o.has("repeat") && !(o.get("repeat").isJsonPrimitive() && !o.get("repeat").getAsBoolean())));
                 }
             }
             for (JsonElement r : arr(o, "rewards")) {
@@ -262,9 +262,10 @@ public final class ClientModel {
         /** Item tasks that take the items (a Submit button) instead of checking the inventory. */
         public final boolean consume;
 
-        Task(JsonObject o) {
+        Task(JsonObject o, boolean repeatable) {
             this.type = o.has("type") ? o.get("type").getAsString() : "";
-            this.consume = (type.equals("item") && o.has("consume") && o.get("consume").getAsBoolean()) || type.equals("xp");
+            // same rule as ProgressRules.consumes: repeatable quests take their items
+            this.consume = (type.equals("item") && (repeatable || (o.has("consume") && o.get("consume").getAsBoolean()))) || type.equals("xp");
             this.item = o.has("item") ? stack(o.get("item")) : (o.has("icon") ? stack(o.get("icon")) : ItemStack.EMPTY);
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
             this.count = o.has("count") ? o.get("count").getAsLong() : it.has("count") ? it.get("count").getAsLong() : 1;

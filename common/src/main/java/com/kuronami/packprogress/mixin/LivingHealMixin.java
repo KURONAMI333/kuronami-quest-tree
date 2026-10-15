@@ -15,15 +15,20 @@ public abstract class LivingHealMixin {
 
     @Unique
     private float packProgress$before;
+    /** A heal listener may heal again inside heal(): only the outermost call is measured, so nothing counts twice. */
+    @Unique
+    private int packProgress$depth;
 
     @Inject(method = "heal", at = @At("HEAD"))
     private void packProgress$beforeHeal(float amount, CallbackInfo ci) {
-        packProgress$before = ((LivingEntity) (Object) this).getHealth();
+        if (packProgress$depth++ == 0) {
+            packProgress$before = ((LivingEntity) (Object) this).getHealth();
+        }
     }
 
     @Inject(method = "heal", at = @At("RETURN"))
     private void packProgress$afterHeal(float amount, CallbackInfo ci) {
-        if ((Object) this instanceof ServerPlayer sp) {
+        if (--packProgress$depth == 0 && (Object) this instanceof ServerPlayer sp) {
             float gained = sp.getHealth() - packProgress$before;
             if (gained > 0) {
                 SkillExperience.onHeal(sp, gained);

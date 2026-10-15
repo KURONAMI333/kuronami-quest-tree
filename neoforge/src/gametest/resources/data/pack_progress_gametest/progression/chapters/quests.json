@@ -162,6 +162,42 @@
         "cooldown": 0,
         "max": 2
       }
+    },
+    "after_daily": {
+      "x": 4,
+      "y": 0,
+      "requires": {
+        "nodes": [
+          "daily"
+        ]
+      },
+      "tasks": [
+        {
+          "type": "checkmark"
+        }
+      ]
+    },
+    "wheat_again": {
+      "x": 5,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:wheat"
+          },
+          "count": 2
+        }
+      ],
+      "rewards": [
+        {
+          "type": "xp",
+          "amount": 1
+        }
+      ],
+      "repeat": {
+        "cooldown": 0
+      }
     }
   }
 }

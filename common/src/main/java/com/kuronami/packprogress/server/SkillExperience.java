@@ -116,6 +116,10 @@ public final class SkillExperience {
     }
 
     public static void onStat(ServerPlayer player, net.minecraft.stats.Stat<?> stat, int amount) {
+        // statistics change every tick while moving; skip before allocating anything when no chapter uses them
+        if (!usedSources(ProgressService.rules().model()).contains("increase_stat")) {
+            return;
+        }
         Map<String, Object> ctx = base(player);
         ctx.put("stat", stat);
         ctx.put("increase_amount", (double) amount);

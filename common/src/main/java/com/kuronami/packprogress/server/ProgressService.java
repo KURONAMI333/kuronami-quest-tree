@@ -157,7 +157,7 @@ public final class ProgressService {
                 }
             }
             case "submit" -> {
-                if (n != null && working(r, p, n) && validTask(n, a.index())) {
+                if (n != null && working(r, p, n) && validTask(n, a.index()) && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
                     submit(player, p, n, a.index());
                 }
             }
@@ -195,7 +195,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (!type(t).equals("item") || ProgressModel.boolOf(t, "consume")) {
+                if (!type(t).equals("item") || ProgressRules.consumes(n, t)) {
                     continue;
                 }
                 if (counts == null) {
@@ -334,7 +334,7 @@ public final class ProgressService {
         }
     }
 
-    private static void autoRewards(ServerPlayer player, PlayerProgress p, ProgressModel.Node n) {
+    static void autoRewards(ServerPlayer player, PlayerProgress p, ProgressModel.Node n) {
         if (n.rewards.isEmpty()) {
             return;
         }

@@ -54,17 +54,7 @@ public class PackProgress implements ModInitializer {
             }
         });
         net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> CommonClass.onRespawn(newPlayer, !alive));
-        net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, base, taken, blocked) -> {
-            if (taken <= 0) {
-                return;
-            }
-            if (entity instanceof ServerPlayer sp) {
-                CommonClass.onTakeDamage(sp, source, taken);
-            }
-            if (source.getEntity() instanceof ServerPlayer sp && entity != sp) {
-                CommonClass.onDealDamage(sp, entity, source, taken);
-            }
-        });
+        // damage experience: FabricActuallyHurtMixin (health actually lost, same as NeoForge)
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> CommonClass.onLogout(handler.player));
     }
 }

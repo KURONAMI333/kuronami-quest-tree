@@ -145,8 +145,12 @@ final class PlayerCommands {
     }
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {
-        if (pr.claimed.contains(n.key) || pr.taken.containsKey(n.key)) {
-            Rewards.removeAttributes(p, n);
+        // removing an id that is not there is harmless, and repeats may have cleared "claimed"
+        Rewards.removeAttributes(p, n);
+        Integer taken = pr.taken.get(n.key);
+        if (taken != null && n.chapter.isSkills()) {
+            // give the points back, as a chapter reset or respec would
+            pr.spent.computeIfPresent(n.chapter.id, (k, v) -> Math.max(0, v - Math.max(0, n.cost) * taken));
         }
         pr.clearNode(n.key);
         pr.repeats.remove(n.key);
@@ -162,8 +166,11 @@ final class PlayerCommands {
         for (int i = 0; i < n.tasks.size(); i++) {
             pr.setTask(n.key, i, com.kuronami.packprogress.progress.ProgressRules.target(n.tasks.get(i)));
         }
-        if (n.tasks.isEmpty() && !n.chapter.isSkills()) {
+        if (n.tasks.isEmpty() && !n.chapter.isSkills() && !pr.completed.contains(n.key)) {
+            // task-less quests: complete with their automatic rewards, like a normal completion
             pr.completed.add(n.key);
+            ProgressService.event(p, pr, "complete", n.key);
+            ProgressService.autoRewards(p, pr, n);
         }
     }
 
