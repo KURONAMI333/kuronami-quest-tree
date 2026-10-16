@@ -88,6 +88,22 @@ class ImporterTest {
         assertTrue(Files.exists(dir.resolve("data/fixture/progression/chapters/skill_ftb_mining.json")));
     }
 
+    /**
+     * Dev tool: converts a real pack's FTB Quests folder into a data pack without starting the game. Runs only when
+     * -Dqt.importDir=<.../config/ftbquests/quests> is given; writes to build/import-pack with namespace qt.importNs.
+     */
+    @Test
+    void importsExternalPackWhenAsked() throws Exception {
+        String dir = System.getProperty("qt.importDir");
+        if (dir == null || dir.isBlank()) {
+            return;
+        }
+        ImportOutput out = new ImportOutput(System.getProperty("qt.importNs", "pack"));
+        FtbQuestsImporter.convert(Path.of(dir), out);
+        out.writeTo(Path.of("build/import-pack"));
+        System.out.println("IMPORT counts=" + out.counts + " unmapped=" + out.unmapped);
+    }
+
     @Test
     void puffishCategoryConverts() throws Exception {
         Map<String, JsonElement> files = new LinkedHashMap<>();

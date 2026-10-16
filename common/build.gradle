@@ -49,4 +49,7 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // dev tool: ImporterTest.importsExternalPackWhenAsked converts a real pack when these are passed on the command line
+    ['qt.importDir', 'qt.importNs'].each { k -> if (System.getProperty(k)) systemProperty k, System.getProperty(k) }
+    testLogging { showStandardStreams = System.getProperty('qt.importDir') != null }
 }
