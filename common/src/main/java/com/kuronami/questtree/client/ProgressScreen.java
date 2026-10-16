@@ -59,8 +59,8 @@ public class ProgressScreen extends Screen {
     private static final int FIT_LEFT = 40;
     private static final int NOW_TILE = 32;
     private static final int NOW_GAP = 6;
-    /** Narrowest Now cell: the tile and room for about 15 characters of title beside it. */
-    private static final int NOW_CELL_MIN = 130;
+    /** Narrowest Now cell: the tile and room for about 20 characters of title beside it (15 read cramped, review 2026-10-16). */
+    private static final int NOW_CELL_MIN = 180;
     private static final int DOCK_MIN_WIDTH = 560;
     private static final float FAR = 0.6f;   // below this zoom, arrowheads and optional outlines are left out (icons stay)
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
@@ -208,8 +208,12 @@ public class ProgressScreen extends Screen {
         }
     }
 
-    /** A tile on the Now screen: a node, or a skill chapter with points to spend. */
-    private record NowEntry(String key, ClientModel.Node node, ClientModel.Chapter pointsChapter) {
+    /** A tile on the Now screen: a node, or a skill chapter with points to spend. {@code allSkills} marks the one cell
+     *  that stands for every skill chapter at once (its value is the total, it opens the first). */
+    private record NowEntry(String key, ClientModel.Node node, ClientModel.Chapter pointsChapter, int points, boolean allSkills) {
+        NowEntry(String key, ClientModel.Node node, ClientModel.Chapter pointsChapter) {
+            this(key, node, pointsChapter, 0, false);
+        }
     }
 
     /**
@@ -313,6 +317,8 @@ public class ProgressScreen extends Screen {
         List<NowEntry> claim = new ArrayList<>();
         List<NowEntry> points = new ArrayList<>();
         List<NowEntry> moving = new ArrayList<>();
+        // chapters the player has started or finished something in: their startable quests come first in Now
+        java.util.Set<String> started = new java.util.HashSet<>();
         railChapters.clear();
         railRows.clear();
         railWidest = 0;
@@ -335,6 +341,9 @@ public class ProgressScreen extends Screen {
                 if (s == State.DONE || s == State.CLAIM) {
                     // completed, rewards waiting or not
                     done++;
+                }
+                if (s == State.DONE || s == State.CLAIM || s == State.PROGRESS) {
+                    started.add(c.id);
                 }
                 if (c.skills) {
                     continue;
@@ -364,7 +373,7 @@ public class ProgressScreen extends Screen {
             if (c.skills) {
                 badge = ClientProgress.points(c.id);
                 if (badge > 0 && hasTakeable(c)) {
-                    points.add(new NowEntry(c.id, null, c));
+                    points.add(new NowEntry(c.id, null, c, badge, false));
                 } else {
                     badge = 0;
                 }
@@ -385,12 +394,52 @@ public class ProgressScreen extends Screen {
             lastGroup = c.group;
             railRows.add(new RailRow(c, null));
         }
+        // many skill chapters (ATM-style, Artisan Life's 11 jobs) would fill the grid with "N points" tiles: one cell
+        // stands for all of them, its value their total, and it opens the first (review 2026-10-16)
+        if (points.size() >= 2) {
+            int total = 0;
+            for (NowEntry e : points) {
+                total += e.points;
+            }
+            ClientModel.Chapter first = points.get(0).pointsChapter;
+            points.clear();
+            points.add(new NowEntry(first.id, null, first, total, true));
+        }
         // the required path first, optional quests after it, each closest-to-done first
         moving.sort(Comparator.comparing((NowEntry e) -> e.node.optional).thenComparingDouble(e -> -ClientProgress.fraction(e.key)));
+        // what can be started next: chapters the player is already in first, then chapter order and map position. A
+        // new world's Now was almost empty without these; six is enough to point the way without a second list.
+        List<NowEntry> open = new ArrayList<>();
+        java.util.Set<String> listed = new java.util.HashSet<>();
+        for (NowEntry e : pinned) {
+            listed.add(e.key);
+        }
+        for (NowEntry e : claim) {
+            listed.add(e.key);
+        }
+        for (NowEntry e : moving) {
+            listed.add(e.key);
+        }
+        for (ClientModel.Chapter c : m.chapters) {
+            if (c.skills || ClientProgress.chapterHidden(c.id)) {
+                continue;
+            }
+            for (ClientModel.Node n : c.nodes.values()) {
+                if (n.optional || listed.contains(n.key) || !ClientProgress.visible(n.key) || ClientProgress.state(n.key) != State.OPEN) {
+                    continue;
+                }
+                open.add(new NowEntry(n.key, n, null));
+            }
+        }
+        open.sort(Comparator.comparingInt((NowEntry e) -> started.contains(m.chapterOf.get(e.key).id) ? 0 : 1)
+                .thenComparingInt(e -> m.chapters.indexOf(m.chapterOf.get(e.key)))
+                .thenComparingDouble(e -> e.node.x)
+                .thenComparingDouble(e -> e.node.y));
         nowEntries.addAll(pinned);
         nowEntries.addAll(claim);
-        nowEntries.addAll(points);
         nowEntries.addAll(moving.subList(0, Math.min(moving.size(), 40)));
+        nowEntries.addAll(open.subList(0, Math.min(open.size(), 6)));
+        nowEntries.addAll(points);
     }
 
     private static boolean hasTakeable(ClientModel.Chapter c) {
@@ -724,7 +773,7 @@ public class ProgressScreen extends Screen {
                 Tiles.tile(g, "square", x, y, NOW_TILE, Tiles.Look.AFFORDABLE, 1, e.pointsChapter.displayIcon(), false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
-                String pts = String.valueOf(ClientProgress.points(e.key));
+                String pts = String.valueOf(e.points);
                 g.drawString(font, pts, x + NOW_TILE - 3 - font.width(pts), y + NOW_TILE - 10, Tiles.GOLD, true);
                 g.pose().popPose();
             } else {
@@ -754,8 +803,9 @@ public class ProgressScreen extends Screen {
         Component sub;
         int subColor = GRAY;
         if (e.pointsChapter != null) {
-            title = e.pointsChapter.title;
-            sub = Component.translatable("screen.kuronami_quest_tree.points", ClientProgress.points(e.key));
+            // the one cell for every skill chapter cannot show a single chapter's title
+            title = e.allSkills ? Component.translatable("screen.kuronami_quest_tree.now.skill_points") : e.pointsChapter.title;
+            sub = pointsLabel(e.points);
             subColor = Tiles.GOLD;
         } else {
             title = e.node.title;
@@ -763,7 +813,21 @@ public class ProgressScreen extends Screen {
             sub = c == null ? Component.empty() : c.title;
         }
         g.drawString(font, trim(title.getString(), w), x, y + 5, 0xFFFFFFFF, true);
-        g.drawString(font, trim(sub.getString(), w), x, y + 18, subColor, true);
+        g.drawString(font, trimChapter(sub.getString(), w), x, y + 18, subColor, true);
+    }
+
+    /** "%s points", but "%s point" in the singular: "1 points" read wrong (review 2026-10-16). */
+    private static Component pointsLabel(int n) {
+        return Component.translatable(n == 1 ? "screen.kuronami_quest_tree.points_one" : "screen.kuronami_quest_tree.points", n);
+    }
+
+    /** A chapter name in a narrow cell: "Chapter 1: The Beginning" reads as "The Beginning" rather than "Chapter 1: T...". */
+    private String trimChapter(String s, int w) {
+        if (font.width(s) <= w) {
+            return s;
+        }
+        int colon = s.indexOf(": ");
+        return trim(colon >= 0 ? s.substring(colon + 2) : s, w);
     }
 
     /** Recent entries shown under Now: fewer on short screens, so the Now cells keep the room. */
@@ -1105,7 +1169,7 @@ public class ProgressScreen extends Screen {
         g.fill(bx, y + 3, bx + (int) (60 * frac), y + 6, Tiles.GREEN_TEXT);
         int pts = ClientProgress.points(ch.id);
         if (pts > 0) {
-            Component t = Component.translatable("screen.kuronami_quest_tree.points", pts);
+            Component t = pointsLabel(pts);
             g.drawString(font, t, bx + 68, y, Tiles.GOLD, true);
         }
     }
@@ -1271,7 +1335,7 @@ public class ProgressScreen extends Screen {
                 } else {
                     g.drawString(font, cnt, right - font.width(cnt), y + 6, met ? Tiles.GREEN_TEXT : GRAY, true);
                 }
-                g.drawString(font, trim(ProgressFeedback.taskName(t).getString(), right - font.width(cnt) - x - 26), x + 20, y + 6,
+                g.drawString(font, trim(ProgressFeedback.taskLine(t).getString(), right - font.width(cnt) - x - 26), x + 20, y + 6,
                         met || t.optional ? GRAY : 0xFFFFFFFF, true);
                 g.pose().popPose();
                 y += 20;

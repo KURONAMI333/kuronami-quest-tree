@@ -106,8 +106,8 @@ public final class ProgressHud {
         String quest = font.plainSubstrByWidth(noticeQuest.getString(), 120);
         int w = 20 + font.width(task) + 6 + font.width(count) + 10 + font.width(quest) + 6;
         int x = (g.guiWidth() - w) / 2;
-        // above the hotbar, hearts and the action bar line
-        int y = g.guiHeight() - 82 + (int) ((1 - Math.min(1, t / (float) FADE_IN)) * 3);
+        // above the hotbar, hearts and the vanilla action bar: -82 ran into the action bar text at -72 (review 2026-10-16)
+        int y = g.guiHeight() - 96 + (int) ((1 - Math.min(1, t / (float) FADE_IN)) * 3);
         g.pose().pushPose();
         g.pose().translate(0, 0, -50);
         g.fill(x, y, x + w, y + 20, Tiles.withAlpha(0x66000000, alpha));
@@ -154,16 +154,24 @@ public final class ProgressHud {
         int y = g.guiHeight() / 2 - total / 2;
         for (ClientModel.Node n : rows) {
             State s = ClientProgress.state(n.key);
+            List<long[]> mats = materials(n);
+            String title = font.plainSubstrByWidth(n.title.getString(), 110);
+            String line = progressLine(n);
+            // a band behind the entry: the tracker sits over terrain (snow, sky) where plain text is unreadable
+            int bw = Math.max(26 + font.width(title), 26 + font.width(line));
+            for (long[] mat : mats) {
+                bw = Math.max(bw, 38 + font.width(Math.min(mat[1], mat[2]) + "/" + mat[2]));
+            }
+            g.fill(2, y - 2, bw + 2, y + 22 + 12 * mats.size() + 2, Tiles.withAlpha(0x66000000, 1));
             Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
-            g.drawString(font, font.plainSubstrByWidth(n.title.getString(), 110), 26, y + 1, 0xFFFFFF, true);
-            String line = progressLine(n);
+            g.drawString(font, title, 26, y + 1, 0xFFFFFF, true);
             g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.GOLD : 0xFFE0E0E0, true);
             g.pose().popPose();
             y += 22;
             // the items still needed, with what is in the inventory now (Satisfactory's to-do list, kept per quest)
-            for (long[] mat : materials(n)) {
+            for (long[] mat : mats) {
                 ClientModel.Task t = n.tasks.get((int) mat[0]);
                 g.pose().pushPose();
                 g.pose().translate(26, y, 0);
@@ -212,7 +220,7 @@ public final class ProgressHud {
             long have = p.task(n.key, i);
             ClientModel.Task t = n.tasks.get(i);
             if (have < t.count) {
-                return Math.min(have, t.count) + "/" + t.count + (n.tasks.size() > 1 ? "  " + ProgressFeedback.taskName(t).getString() : "");
+                return Math.min(have, t.count) + "/" + t.count + (n.tasks.size() > 1 ? "  " + ProgressFeedback.taskLine(t).getString() : "");
             }
         }
         return n.tasks.size() + "/" + n.tasks.size();

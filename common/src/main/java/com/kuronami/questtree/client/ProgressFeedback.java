@@ -187,6 +187,14 @@ final class ProgressFeedback {
         return t.name();
     }
 
+    /**
+     * The label of a task in a task line (tracker, details sheet). A checkmark task shows what to do, not its type
+     * name: "Iron Ingot / 0/1 Checkmark" told the player nothing (review 2026-10-16).
+     */
+    static Component taskLine(ClientModel.Task t) {
+        return t.type.equals("checkmark") ? Component.translatable("task.kuronami_quest_tree.checkmark_action") : t.name();
+    }
+
     static void play(SoundEvent sound, float pitch, float volume) {
         Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(sound, pitch, volume));
     }
