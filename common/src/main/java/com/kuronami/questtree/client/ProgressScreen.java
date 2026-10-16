@@ -814,15 +814,21 @@ public class ProgressScreen extends Screen {
     }
 
     /** Lines, all opaque and a step above the scrim, so the tree's shape reads even where everything is closed. */
+    /**
+     * Lines (2026-10-16 rebuild, the player picked proposal C of lines_v1.html): one width for every state, the state in
+     * the colour only, and one moving part: an angular arrowhead. Every line carries it at its middle, so direction is
+     * always readable; on the node under the mouse (or the selected one) its lines brighten and the arrowheads slide
+     * towards the later node; when a way opens, the colour runs in behind the arrowhead.
+     */
     private static final int LINE_WALKED = 0xFF4F8A3E;
-    private static final int LINE_OPEN = 0xFFC6C6C6;
-    private static final int LINE_CLOSED = 0xFF3C3C42;
-    /** Hovered node: lines to what it needs, and to what it leads to (FTB Quests' cyan and yellow, a little softer). */
-    private static final int LINE_NEEDS = 0xFF3CC4D0;
-    private static final int LINE_LEADS = 0xFFE2CC48;
-    /** Arrow spacing on a highlighted line (map units) and how fast the arrows run (map units per second). */
-    private static final float FLOW_GAP = 9;
-    private static final float FLOW_SPEED = 18;
+    private static final int LINE_OPEN = 0xFF9C9CA3;
+    private static final int LINE_CLOSED = 0xFF3A3A41;
+    private static final float LINE_W = 2;
+    private static final float LINE_W_ON = 3;
+    /** Arrowhead size (map units) and how long one slide along a highlighted line takes. */
+    private static final float ARROW = 6;
+    private static final float ARROW_ON = 7;
+    private static final float SLIDE_MS = 1400;
 
     private static int lineColor(State parent, State child) {
         boolean parentDone = parent == State.DONE || parent == State.CLAIM;
@@ -885,22 +891,10 @@ public class ProgressScreen extends Screen {
                     }
                 }
                 int lc = lineColor(ClientProgress.state(p.key), cs);
-                // open and walked ways are thick, ways into what is still closed are thin
-                line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional || lc == LINE_CLOSED ? 1 : 3, lc);
-                // the node under the mouse: what it needs in one colour, what it leads to in another, with arrows
-                // running towards the later quest (FTB Quests does the same, and the player liked it)
-                if (focus != null && (n.key.equals(focus) || p.key.equals(focus))) {
-                    flowLine(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.key.equals(focus) ? LINE_NEEDS : LINE_LEADS, now);
-                }
-                float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW + 400);
-                if (grow >= 0) {
-                    // unlock chain: a bright line runs from the unlocked node to each child (300ms), then fades
-                    long ms = (long) (grow * (Motion.LINE_GROW + 400));
-                    float reach = Math.min(1, ms / (float) Motion.LINE_GROW);
-                    float fade = ms < Motion.LINE_GROW ? 1 : 1 - (ms - Motion.LINE_GROW) / 400f;
-                    line(g, p.x * UNIT, p.y * UNIT, p.x * UNIT + (n.x - p.x) * UNIT * reach, p.y * UNIT + (n.y - p.y) * UNIT * reach,
-                            3, Tiles.withAlpha(0xFFFFFFFF, fade));
-                }
+                boolean on = focus != null && (n.key.equals(focus) || p.key.equals(focus));
+                // the way just opened: colour runs in from the earlier node with the arrow at its head (300ms)
+                float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW);
+                arrowLine(g, p, n, on ? brighter(lc) : lc, on, grow >= 0 ? grow : -1, far, now);
             }
         }
         // nodes
@@ -917,7 +911,9 @@ public class ProgressScreen extends Screen {
             int grow = Math.round(s * 0.12f * ease(hoverGrow.getOrDefault(n.key, 0f)) / 2) * 2;
             if (n.key.equals(selected)) {
                 // the selection ring hugs the tile at its current size, so the gap stays even while it grows and shrinks
-                Tiles.ring(g, shape, x - grow / 2 - 3, y - grow / 2 - 3, s + grow + 6, s + grow + 6, 0xFFFFFFFF);
+                int rs = Tiles.drawnSize(shape, s + grow);
+                int ro = (rs - s) / 2;
+                Tiles.ring(g, shape, x - ro - 3, y - ro - 3, rs + 6, rs + 6, 0xFFFFFFFF);
             }
             if (n.optional && !far) {
                 // optional quests: a broken outline, so they read as "extra" next to the required path
@@ -1877,23 +1873,6 @@ public class ProgressScreen extends Screen {
 
     // ------------------------------------------------------------------ drawing helpers
 
-    /** Draws a line of {@code thickness} GUI px between two points in the current pose. */
-    private static void line(GuiGraphics g, double x1, double y1, double x2, double y2, int thickness, int argb) {
-        double dx = x2 - x1;
-        double dy = y2 - y1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy);
-        if (len < 1) {
-            return;
-        }
-        g.pose().pushPose();
-        g.pose().translate(x1, y1, 0);
-        g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
-        // centred on the path (an odd width used to sit half a pixel low, off the arrows drawn over it)
-        g.pose().translate(0, -thickness / 2f, 0);
-        g.fill(0, 0, (int) len, thickness, argb);
-        g.pose().popPose();
-    }
-
     private final Map<String, Map<String, Integer>> depthCache = new HashMap<>();
 
     /** Steps from the chapter's start (root nodes, else nodes needing nothing), walking links in either direction. */
@@ -1926,24 +1905,60 @@ public class ProgressScreen extends Screen {
         });
     }
 
-    /** A highlighted line: a wide translucent band with arrows running from the first point to the second. */
-    private static void flowLine(GuiGraphics g, double x1, double y1, double x2, double y2, int argb, long now) {
-        double dx = x2 - x1;
-        double dy = y2 - y1;
+    private static int brighter(int lc) {
+        return lc == LINE_WALKED ? 0xFF7BC862 : lc == LINE_OPEN ? 0xFFEDEDEF : 0xFF64646D;
+    }
+
+    /**
+     * One line from {@code p} (earlier) to {@code n}. The arrowhead sits midway between the two tiles' edges, slides
+     * along while {@code on}, and leads the colour while {@code open} (0..1) runs. Zoomed out, or where tiles almost
+     * touch, the arrowhead is left out so busy maps stay calm.
+     */
+    private static void arrowLine(GuiGraphics g, ClientModel.Node p, ClientModel.Node n, int argb, boolean on, float open,
+                                  boolean far, long now) {
+        double x1 = p.x * UNIT;
+        double y1 = p.y * UNIT;
+        double dx = n.x * UNIT - x1;
+        double dy = n.y * UNIT - y1;
         float len = (float) Math.sqrt(dx * dx + dy * dy);
         if (len < 1) {
             return;
         }
+        float w = on ? LINE_W_ON : LINE_W;
         g.pose().pushPose();
         g.pose().translate(x1, y1, 0);
         g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
-        g.fill(0, -3, (int) len, 3, Tiles.withAlpha(argb, 0.4f));
-        // wrap the clock before it becomes a float: after days of uptime the raw milliseconds lose precision and the
-        // arrows step. 10 s x 18 units/s = 180, a whole number of gaps, so the wrap is seamless
-        float shift = ((now % 10_000L) / 1000f * FLOW_SPEED) % FLOW_GAP;
-        for (float at = shift; at < len - 2; at += FLOW_GAP) {
-            Tiles.icon(g, "chevron", at - 3, -3, 6, argb);
+        float head;
+        if (open >= 0) {
+            float e = ease(open);
+            fillLine(g, 0, len, w, LINE_CLOSED);
+            fillLine(g, 0, len * e, w, argb);
+            head = len * e;
+        } else {
+            fillLine(g, 0, len, w, argb);
+            float from = (float) (NODE * p.size / 2) + 2;
+            float to = len - (float) (NODE * n.size / 2) - 2;
+            float t = on ? ((now % 100_000L) / SLIDE_MS) % 1f : 0.5f;
+            head = from + (to - from) * t;
+            if (far || to - from < 10) {
+                g.pose().popPose();
+                return;
+            }
         }
+        float a = on || open >= 0 ? ARROW_ON : ARROW;
+        Tiles.icon(g, "chevron", head - a / 2, -a / 2, a, argb);
+        g.pose().popPose();
+    }
+
+    /** A straight run along the x axis of the current pose, centred on it. */
+    private static void fillLine(GuiGraphics g, float from, float to, float w, int argb) {
+        if (to <= from) {
+            return;
+        }
+        g.pose().pushPose();
+        g.pose().translate(from, -w / 2f, 0);
+        g.pose().scale((to - from) / 64f, w / 4f, 1);
+        g.fill(0, 0, 64, 4, argb);
         g.pose().popPose();
     }
 

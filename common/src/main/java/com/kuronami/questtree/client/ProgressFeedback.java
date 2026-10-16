@@ -134,6 +134,10 @@ final class ProgressFeedback {
                     Motion.soundLater(QtSounds.FILL, 360, 1f);
                 }
             }
+            if (kind.equals("complete")) {
+                // a quest done: its ways out take the new colour the same way a skill's do
+                Motion.UNLOCKED.put(key, t);
+            }
             if (kind.equals("take")) {
                 Motion.UNLOCKED.put(key, t);
                 int i = 0;

@@ -147,8 +147,20 @@ final class Tiles {
         tile(g, shape, x, y, s, look(state), fraction, icon, far);
     }
 
+    /**
+     * A diamond in the same box as a square has half its area and reads smaller (the player, 2026-10-16), so it is drawn
+     * 1.25x larger around the same centre. Use this for anything that hugs a tile (selection ring).
+     */
+    static int drawnSize(String shape, int s) {
+        return shapeOf(shape).equals("diamond") ? Math.round(s * 1.25f / 2) * 2 : s;
+    }
+
     static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon, boolean far) {
         shape = shapeOf(shape);
+        int big = drawnSize(shape, s);
+        x -= (big - s) / 2;
+        y -= (big - s) / 2;
+        s = big;
         switch (look) {
             // done: green. Rewards still waiting = a gold rim; claimed = flat and settled
             case DONE_REWARD -> rewardFrame(g, shape, x, y, s);
@@ -171,7 +183,7 @@ final class Tiles {
             // a diamond's and a pentagon's insides are small: a full-size icon spills over their slopes. The pentagon's
             // widest part is below its middle, so its icon sits a little lower
             boolean penta = shape.equals("pentagon");
-            float k = s / 20f * (shape.equals("diamond") ? 0.7f : penta ? 0.8f : 1f);
+            float k = s / 20f * (shape.equals("diamond") ? 0.62f : penta ? 0.8f : 1f);
             float drop = penta ? s * 0.06f : 0;
             g.pose().pushPose();
             float lift = look == Look.DONE_REWARD ? 0
