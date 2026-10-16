@@ -5,6 +5,7 @@
   "screen.kuronami_quest_tree.empty": "このワールドにはまだクエストもスキルもありません",
   "screen.kuronami_quest_tree.now": "いま",
   "screen.kuronami_quest_tree.nodes": "%s",
+  "screen.kuronami_quest_tree.hidden": "隠れたクエスト %s",
   "screen.kuronami_quest_tree.needs": "必要",
   "screen.kuronami_quest_tree.tasks": "やること",
   "screen.kuronami_quest_tree.rewards": "報酬",

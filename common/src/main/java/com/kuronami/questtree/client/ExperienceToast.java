@@ -9,6 +9,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Experience gained in a skill chapter. One toast per chapter that is updated while experience keeps coming in (mining
  * gives experience per block), with a bar that eases to the new value. No sound for experience; level-ups sound once.
@@ -26,11 +31,22 @@ final class ExperienceToast implements Toast, OwnSoundToast {
     private boolean changed = true;
     private long lastChange;
 
+    /** The latest experience per chapter while the progress screen was open, shown when it closes. */
+    private static final Map<String, Pending> PENDING = new LinkedHashMap<>();
+
+    private record Pending(ClientModel.Chapter chapter, double xp, int level, boolean levelled) {
+    }
+
     private ExperienceToast(ClientModel.Chapter chapter) {
         this.chapter = chapter;
     }
 
     static void show(ClientModel.Chapter chapter, double xp, int level, boolean levelled) {
+        if (PendingToasts.suppressed()) {
+            // one toast per chapter: a newer value replaces the queued one, as the live toast would be updated
+            PENDING.put(chapter.id, new Pending(chapter, xp, level, levelled));
+            return;
+        }
         var toasts = Minecraft.getInstance().getToasts();
         ExperienceToast t = toasts.getToast(ExperienceToast.class, chapter.id);
         boolean fresh = t == null;
@@ -48,6 +64,18 @@ final class ExperienceToast implements Toast, OwnSoundToast {
         t.changed = true;
         if (fresh) {
             toasts.addToast(t);
+        }
+    }
+
+    /** Shows the experience toasts queued while the progress screen was open (called as it closes). */
+    static void flushPending() {
+        if (PENDING.isEmpty()) {
+            return;
+        }
+        List<Pending> queued = new ArrayList<>(PENDING.values());
+        PENDING.clear();
+        for (Pending p : queued) {
+            show(p.chapter(), p.xp(), p.level(), p.levelled());
         }
     }
 

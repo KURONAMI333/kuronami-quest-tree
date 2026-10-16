@@ -231,6 +231,8 @@ public final class ClientModel {
         public final List<String> rewardLines = new ArrayList<>();
         public final int cost;
         public final Component title;
+        /** FTB Quests' subtitle: one step under the title in the sheet and on the map's hover tooltip, or null. */
+        public final Component subtitle;
         public final List<String> description;
 
         Node(ClientModel m, Chapter ch, String id, JsonObject o) {
@@ -309,6 +311,9 @@ public final class ClientModel {
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString())
                     : !tasks.isEmpty() ? tasks.get(0).name() : Component.literal(id);
             this.title = m.component(base + ".title", fallbackTitle);
+            // the importer keeps FTB Quests' subtitle under the same prefix; it is optional, so null when absent
+            String sub = m.lookup(base + ".subtitle");
+            this.subtitle = sub == null ? null : parseText(sub);
             String d = m.lookup(base + ".desc");
             // Pufferfish descriptions are JSON text components ({"translate": ..., "fallback": ...}): resolve them first,
             // or the raw JSON shows in the details sheet

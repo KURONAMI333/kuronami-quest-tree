@@ -8,6 +8,7 @@ import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
@@ -232,6 +233,12 @@ public class ProgressScreen extends Screen {
     private int nowScroll;
     private float railT;
     private float sheetT;
+    /** Details sheet scroll: the shown value easing to the wheel's target, and the max of the last drawn frame. */
+    private float sheetScroll;
+    private float sheetScrollTarget;
+    private int sheetContentMax;
+    /** The node the current scroll belongs to; a new node starts at the top. */
+    private String sheetScrollFor;
     private long lastFrame;
     /** A tooltip asked for while drawing (icon buttons), drawn last so nothing covers it. */
     private Component pendingTip;
@@ -438,7 +445,7 @@ public class ProgressScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 50);
         if (sheetT > 0) {
-            renderSheet(g, m, mouseX, mouseY);
+            renderSheet(g, m, mouseX, mouseY, dt);
         }
         g.pose().popPose();
         g.pose().pushPose();
@@ -668,15 +675,12 @@ public class ProgressScreen extends Screen {
 
     private void renderNow(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
         int left = nowLeft();
-        g.pose().pushPose();
-        g.pose().translate(left, 12, 0);
-        g.pose().scale(2, 2, 1);
+        // the title at the font's own size, like the chapter header (drawn twice as large it crowded the grid)
         Component title = Component.translatable("screen.kuronami_quest_tree.now");
-        g.drawString(font, title, 0, 0, 0xFFFFFFFF, true);
-        g.pose().popPose();
-        int tx = left + font.width(title) * 2 + 10;
+        g.drawString(font, title, left, 14, 0xFFFFFFFF, true);
+        int tx = left + font.width(title) + 10;
         if (questTotal > 0) {
-            g.drawString(font, doneTotal + "/" + questTotal, tx, 20, GRAY, true);
+            g.drawString(font, doneTotal + "/" + questTotal, tx, 16, GRAY, true);
         }
         if (claimableNoChoice > 0) {
             Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
@@ -1044,6 +1048,8 @@ public class ProgressScreen extends Screen {
         // everything below sits above the map's item icons
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
+        // a band behind the header: the title never sits directly on map tiles (fades out by y=40)
+        g.fillGradient(railRight(), 0, sheetT > 0 ? sheetLeft() : width, 40, 0xCC0C0C0E, 0x000C0C0E);
         // the header moves aside with the chapter list when it opens, instead of showing through it
         int hx0 = railRight() + 10;
         // the title at the font's own size: drawn twice as large it crowded big maps (the player, ATM10 2026-10-16)
@@ -1055,10 +1061,10 @@ public class ProgressScreen extends Screen {
             String count = cnt[0] + "/" + cnt[1];
             g.drawString(font, count, hx0, 21, GRAY, true);
             if (cnt[2] > 0) {
-                // more is hidden (Steam's "n hidden achievements remaining"): a lock and the number, never what it is
+                // more is hidden (Steam's "n hidden achievements remaining"): the count, never what it is. The lock
+                // icon is used for "not open yet" elsewhere, so a word is unambiguous.
                 int hx = hx0 + font.width(count) + 6;
-                Tiles.icon(g, "lock", hx, 21, 7, 0xFF707070);
-                g.drawString(font, "+" + cnt[2], hx + 7, 21, 0xFF707070, true);
+                g.drawString(font, Component.translatable("screen.kuronami_quest_tree.hidden", cnt[2]), hx, 21, 0xFF707070, true);
             }
         }
         renderMinimap(g, ch, v);
@@ -1067,7 +1073,14 @@ public class ProgressScreen extends Screen {
         if (hovered != null && !dragging && selected == null) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 200);
-            g.renderTooltip(font, model().nodesByKey.get(hovered).title, mouseX, mouseY);
+            ClientModel.Node hn = model().nodesByKey.get(hovered);
+            List<Component> tip = new ArrayList<>();
+            tip.add(hn.title);
+            if (hn.subtitle != null) {
+                // the subtitle one step under the title, the same grey the details sheet uses
+                tip.add(hn.subtitle.copy().withStyle(Style.EMPTY.withColor(0xFFA8A8A8)));
+            }
+            g.renderComponentTooltip(font, tip, mouseX, mouseY);
             g.pose().popPose();
         } else if (decoTip != null && !decoTip.isEmpty()) {
             g.pose().pushPose();
@@ -1103,8 +1116,10 @@ public class ProgressScreen extends Screen {
     }
 
     private int sheetWidth() {
-        // on small screens (GUI scale 4 on 1080p is 480 wide) a third of the width, so the map keeps most of the room
-        return Math.min(200, Math.max(150, (int) (width * 0.34f)));
+        // wider than before (ATM10's texts need the room), but never narrower than the old width on small screens
+        // (GUI scale 4 on 1080p is 480 wide), where the map still needs most of the room
+        int before = Math.min(200, Math.max(150, (int) (width * 0.34f)));
+        return Math.max(before, Math.min(280, (int) (width * 0.4f)));
     }
 
     private int sheetLeft() {
@@ -1113,13 +1128,19 @@ public class ProgressScreen extends Screen {
 
     // ------------------------------------------------------------------ details sheet
 
-    private void renderSheet(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
+    private void renderSheet(GuiGraphics g, ClientModel m, int mouseX, int mouseY, float dt) {
         int sw = sheetWidth();
         int x0 = sheetLeft();
         g.fill(x0, 0, x0 + sw, height, PANEL);
         ClientModel.Node n = selected == null ? null : m.nodesByKey.get(selected);
         if (n == null) {
             return;
+        }
+        if (!n.key.equals(sheetScrollFor)) {
+            // a newly selected quest starts at its top (the content's height is only known after it is drawn)
+            sheetScrollFor = n.key;
+            sheetScroll = 0;
+            sheetScrollTarget = 0;
         }
         ClientModel.Chapter ch = m.chapterOf.get(n.key);
         State state = ClientProgress.state(n.key);
@@ -1131,34 +1152,39 @@ public class ProgressScreen extends Screen {
         buttons.add(new Button(x0 + sw - 20, 4, 18, 18, () -> selected = null));
         g.drawString(font, trim(ch.title.getString(), w - 16), x, y, GRAY, true);
         y += 12;
-        List<FormattedCharSequence> titleLines = font.split(n.title, w / 2);
-        if (titleLines.size() <= 2) {
-            for (FormattedCharSequence line : titleLines) {
-                g.pose().pushPose();
-                g.pose().translate(x, y, 0);
-                g.pose().scale(2, 2, 1);
-                g.drawString(font, line, 0, 0, 0xFFFFFFFF, true);
-                g.pose().popPose();
-                y += 20;
-            }
-        } else {
-            for (FormattedCharSequence line : font.split(n.title, w)) {
-                g.drawString(font, line, x, y, 0xFFFFFFFF, true);
+        // the title at the font's own size, like the chapter header (drawn twice as large it crowded the sheet)
+        for (FormattedCharSequence line : font.split(n.title, w)) {
+            g.drawString(font, line, x, y, 0xFFFFFFFF, true);
+            y += 10;
+        }
+        if (n.subtitle != null) {
+            // the pack's subtitle, one step under the title, two lines at most
+            List<FormattedCharSequence> sub = font.split(n.subtitle, w);
+            for (int i = 0; i < sub.size() && i < 2; i++) {
+                g.drawString(font, sub.get(i), x, y, 0xFFA8A8A8, true);
                 y += 10;
             }
         }
-        int actionsTop = height - 34;
-        y += 4;
+        // the content scrolls between the header and the fixed action row; the scissor clips it to the sheet
+        int contentTop = Math.max(y + 4, 8);
+        int contentBottom = height - 34;
+        sheetScrollTarget = Mth.clamp(sheetScrollTarget, 0, sheetContentMax);
+        sheetScroll = Mth.clamp(sheetScroll + (sheetScrollTarget - sheetScroll) * Math.min(1, dt / 70f), 0, sheetContentMax);
+        int scroll = Math.round(sheetScroll);
+        y = contentTop - scroll;
+        g.enableScissor(x0, contentTop, x0 + sw, contentBottom);
         // pack authors can keep a quest's details secret until it can be started, and its text until it is done
         boolean details = !(n.hideDetailsUntilStartable && state == State.LOCKED);
         boolean text = details && !(n.hideTextUntilComplete && state != State.DONE && state != State.CLAIM);
         for (String d : text ? n.description : List.<String>of()) {
+            if (d.isBlank()) {
+                // an empty source line: a paragraph break (font.split("") returns no lines, which dropped it)
+                y += 6;
+                continue;
+            }
             for (FormattedCharSequence line : font.split(Component.literal(d), w)) {
-                if (y > actionsTop - 70) {
-                    break;
-                }
-                g.drawString(font, line, x, y, GRAY, true);
-                y += 10;
+                g.drawString(font, line, x, y, 0xFFE0E0E0, true);
+                y += 12;
             }
         }
         if (!n.requires.isEmpty() && state == State.LOCKED) {
@@ -1189,15 +1215,15 @@ public class ProgressScreen extends Screen {
                     g.drawString(font, trim(p.title.getString(), w - 22), x + 22, y, 0xFFFFFFFF, true);
                     g.drawString(font, trim(other.title.getString(), w - 22), x + 22, y + 9, GRAY, true);
                     String key = r;
-                    buttons.add(new Button(x, y, w, 18, () -> goTo(key)));
+                    // only a row still inside the sheet may catch a click (a scrolled-away row must not)
+                    if (y + 18 > contentTop && y < contentBottom) {
+                        buttons.add(new Button(x, y, w, 18, () -> goTo(key)));
+                    }
                 } else {
                     g.drawString(font, trim(p.title.getString(), w - 22), x + 22, y + 4, 0xFFFFFFFF, true);
                 }
                 g.pose().popPose();
                 y += 20;
-                if (y > actionsTop - 50) {
-                    break;
-                }
             }
         }
         if (!n.tasks.isEmpty() && details) {
@@ -1223,7 +1249,7 @@ public class ProgressScreen extends Screen {
                 g.pose().translate(0, 0, OVERLAY_Z);
                 String cnt = (met ? t.count : have) + "/" + t.count;
                 int right = x + w;
-                if (!met && working && (t.consume || t.type.equals("checkmark"))) {
+                if (!met && working && (t.consume || t.type.equals("checkmark")) && y + 20 > contentTop && y < contentBottom) {
                     Component label = Component.translatable(t.type.equals("checkmark") ? "screen.kuronami_quest_tree.check" : "screen.kuronami_quest_tree.submit");
                     int bw = font.width(label) + 10;
                     int index = i;
@@ -1249,9 +1275,6 @@ public class ProgressScreen extends Screen {
                         met || t.optional ? GRAY : 0xFFFFFFFF, true);
                 g.pose().popPose();
                 y += 20;
-                if (y > actionsTop - 40) {
-                    break;
-                }
             }
         }
         if ((!n.rewards.isEmpty() || !n.rewardLines.isEmpty()) && details) {
@@ -1283,7 +1306,7 @@ public class ProgressScreen extends Screen {
                 int index = i;
                 boolean pickable = state == State.CLAIM;
                 slot(g, n.choice.get(i), rx, y, index == choicePick);
-                if (pickable) {
+                if (pickable && y + 22 > contentTop && y < contentBottom) {
                     buttons.add(new Button(rx, y, 22, 22, () -> {
                         choicePick = index;
                         ProgressFeedback.click();
@@ -1296,6 +1319,21 @@ public class ProgressScreen extends Screen {
                 }
             }
         }
+        g.disableScissor();
+        int contentEnd = y + scroll;
+        sheetContentMax = Math.max(0, (contentEnd - contentTop) - (contentBottom - contentTop));
+        boolean overflow = sheetContentMax > 0;
+        if (overflow) {
+            // the scrollbar on the sheet's right edge, in the chapter list's look (only while the content overflows)
+            int trackH = contentBottom - contentTop;
+            int thumb = Math.max(12, Math.round((float) trackH * trackH / (trackH + sheetContentMax)));
+            int ty = contentTop + Math.round((trackH - thumb) * (sheetScroll / Math.max(1, sheetContentMax)));
+            boolean over = mouseX >= x0 && mouseX < x0 + sw && mouseY >= contentTop && mouseY < contentBottom;
+            g.fill(x0 + sw - 3, ty, x0 + sw - 1, ty + thumb, over ? 0x99FFFFFF : 0x55FFFFFF);
+        }
+        // the actions sit just under short content instead of pinned to the bottom; while the content overflows they
+        // stay at the bottom, where the scrollbar ends
+        int actionsTop = overflow ? height - 34 : Math.min(contentEnd + 12, height - 34);
         renderActions(g, n, ch, state, x, actionsTop, w, mouseX, mouseY);
     }
 
@@ -1898,6 +1936,7 @@ public class ProgressScreen extends Screen {
             return true;
         }
         if (sheetT > 0 && selected != null && mx >= sheetLeft()) {
+            sheetScrollTarget = Mth.clamp(sheetScrollTarget - (float) scrollY * 24, 0, sheetContentMax);
             return true;
         }
         ClientModel.Chapter ch = chapter();
@@ -1951,6 +1990,15 @@ public class ProgressScreen extends Screen {
     @Override
     public void removed() {
         lastChapter = chapterIndex;
+        // release the toasts queued while this screen was up; the flush bypasses the suppression (the screen is
+        // still the current one when removed() runs)
+        PendingToasts.beginFlush();
+        try {
+            QuestToast.flushPending();
+            ExperienceToast.flushPending();
+        } finally {
+            PendingToasts.endFlush();
+        }
         super.removed();
     }
 

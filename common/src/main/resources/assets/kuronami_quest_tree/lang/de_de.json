@@ -5,6 +5,7 @@
   "screen.kuronami_quest_tree.empty": "In dieser Welt gibt es noch keine Quests oder Fertigkeiten",
   "screen.kuronami_quest_tree.now": "Jetzt",
   "screen.kuronami_quest_tree.nodes": "%s",
+  "screen.kuronami_quest_tree.hidden": "%s verborgen",
   "screen.kuronami_quest_tree.needs": "Benötigt",
   "screen.kuronami_quest_tree.tasks": "Aufgaben",
   "screen.kuronami_quest_tree.rewards": "Belohnungen",
