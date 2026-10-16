@@ -196,9 +196,12 @@ final class Tiles {
         if (look == Look.LOCKED_FAR || look == Look.LOCKED_NEAR || look == Look.EXCLUDED) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z);
-            // not yet: the icon stays visible but dimmed, so players see what lies ahead. No lock mark: the grey already
-            // says it is closed (the player, 2026-10-16)
-            shape(g, shape, x, y, s, s, withAlpha(TILE_LOCKED, look == Look.LOCKED_FAR ? 0.72f : 0.45f));
+            // not yet: the dark tile under it already says "closed", so the icon on top only needs a light dim. The
+            // player compared our map with FTB Quests on ATM10 (2026-10-16): the old 0.72/0.45 overlay read as rows of
+            // black squares, where FTB Quests keeps a locked quest's icon clearly visible. EXCLUDED keeps the 0.45 dim
+            // because its red cross is what matters. No lock mark: the grey tile says it is closed.
+            shape(g, shape, x, y, s, s, withAlpha(TILE_LOCKED,
+                    look == Look.LOCKED_FAR ? 0.30f : look == Look.LOCKED_NEAR ? 0.15f : 0.45f));
             if (look == Look.EXCLUDED) {
                 float c = s * 0.36f;
                 icon(g, "cross", x + (s - c) / 2f, y + (s - c) / 2f, c, RED);

@@ -481,7 +481,11 @@ public final class FtbQuestsImporter {
                             String pre = out.textPrefix.get(oid.toLowerCase(Locale.ROOT));
                             out.text(locale, (pre != null ? pre : "progression." + ns + "." + kind + "." + oid.toLowerCase(Locale.ROOT)) + "." + fld, kv.getValue());
                         }
-                        case "chapter_group", "file", "reward_table", "image" ->
+                        case "chapter_group" ->
+                                // the group list (convert(), chapter_groups.snbt) writes the title under
+                                // progression.<ns>.group.<gid>.title, so a lang entry must land on that same key
+                                out.text(locale, "progression." + ns + ".group." + oid.toLowerCase(Locale.ROOT) + "." + fld, kv.getValue());
+                        case "file", "reward_table", "image" ->
                                 out.text(locale, "progression." + ns + "." + kind + "." + oid.toLowerCase(Locale.ROOT) + "." + fld, kv.getValue());
                         default -> out.note("lang key kind " + kind);
                     }

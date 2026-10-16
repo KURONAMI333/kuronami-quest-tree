@@ -96,6 +96,14 @@ public final class ClientModel {
         return orElse;
     }
 
+    /** The title of the chapter's group, or null when it has no group or the group has no title. */
+    public Component groupTitle(Chapter c) {
+        if (c.group == null) {
+            return null;
+        }
+        return component("progression." + c.namespace + ".group." + c.group + ".title", null);
+    }
+
     /** Plain text with FTB colour codes, or a JSON text component (Pufferfish titles often are {"translate": ...}). */
     static Component parseText(String v) {
         String t = v.trim();
@@ -121,6 +129,8 @@ public final class ClientModel {
         public final ItemStack icon;
         public final int order;
         public final int groupOrder;
+        /** The chapter's group id (as written by the pack, lower-cased), or null when it has none. */
+        public final String group;
         public final boolean skills;
         public final Component title;
         public final Map<String, Node> nodes = new LinkedHashMap<>();
@@ -143,6 +153,7 @@ public final class ClientModel {
             this.icon = stack(o.get("icon"));
             this.order = o.has("order") ? o.get("order").getAsInt() : 0;
             this.groupOrder = o.has("group") ? groupOrder.getOrDefault(o.get("group").getAsString(), 999) : 999;
+            this.group = o.has("group") ? o.get("group").getAsString() : null;
             this.skills = o.has("points") && o.get("points").isJsonObject();
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;

@@ -211,6 +211,17 @@ public class ProgressScreen extends Screen {
     private record NowEntry(String key, ClientModel.Node node, ClientModel.Chapter pointsChapter) {
     }
 
+    /**
+     * A rail entry: a group's header (title while open, a divider while closed; never clickable) or a chapter row.
+     * {@code chapter} is null on a header. Mixed heights (chapter rows use railPitch(), headers HEADER_H) keep groups
+     * readable the way FTB Quests' chapter list does.
+     */
+    private record RailRow(ClientModel.Chapter chapter, Component header) {
+        boolean isHeader() {
+            return chapter == null;
+        }
+    }
+
     private int chapterIndex = lastChapter;
     /** Selected node, global key. */
     private String selected;
@@ -248,6 +259,8 @@ public class ProgressScreen extends Screen {
     private final Map<String, int[]> chapterCounts = new LinkedHashMap<>();
     /** Chapters listed in the rail (chapters hidden as a whole are left out). */
     private final List<ClientModel.Chapter> railChapters = new ArrayList<>();
+    /** The rail's rows: a header before the first chapter of each titled group, then the chapter rows. */
+    private final List<RailRow> railRows = new ArrayList<>();
     private int claimableNoChoice;
     private int doneTotal;
     private int questTotal;
@@ -294,6 +307,7 @@ public class ProgressScreen extends Screen {
         List<NowEntry> points = new ArrayList<>();
         List<NowEntry> moving = new ArrayList<>();
         railChapters.clear();
+        railRows.clear();
         railWidest = 0;
         for (ClientModel.Chapter c : m.chapters) {
             if (!ClientProgress.chapterHidden(c.id)) {
@@ -350,6 +364,19 @@ public class ProgressScreen extends Screen {
             }
             badges.put(c.id, badge);
             chapterCounts.put(c.id, new int[]{done, shown, hidden});
+        }
+        // chapters are sorted by group order, so a group's chapters are contiguous: drop its header before the first.
+        // A group without a title (or chapters with no group) simply gets no header, keeping the old rail.
+        String lastGroup = null;
+        for (ClientModel.Chapter c : railChapters) {
+            if (c.group != null && !c.group.equals(lastGroup)) {
+                Component header = m.groupTitle(c);
+                if (header != null) {
+                    railRows.add(new RailRow(null, header));
+                }
+            }
+            lastGroup = c.group;
+            railRows.add(new RailRow(c, null));
         }
         // the required path first, optional quests after it, each closest-to-done first
         moving.sort(Comparator.comparing((NowEntry e) -> e.node.optional).thenComparingDouble(e -> -ClientProgress.fraction(e.key)));
@@ -460,6 +487,8 @@ public class ProgressScreen extends Screen {
     }
 
     private static final int RAIL_LIST_TOP = 30;
+    /** Height of a group header row in the rail; chapter rows use {@link #railPitch()} instead. */
+    private static final int HEADER_H = 14;
 
     private int railListBottom() {
         return height - 8;
@@ -480,7 +509,11 @@ public class ProgressScreen extends Screen {
     }
 
     private float railMaxScroll() {
-        return Math.max(0, railChapters.size() * railPitch() - (railListBottom() - RAIL_LIST_TOP) + 4);
+        float content = 0;
+        for (RailRow row : railRows) {
+            content += row.isHeader() ? HEADER_H : railPitch();
+        }
+        return Math.max(0, content - (railListBottom() - RAIL_LIST_TOP) + 4);
     }
 
     private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, boolean docked, float dt) {
@@ -502,24 +535,31 @@ public class ProgressScreen extends Screen {
         int top = RAIL_LIST_TOP;
         int bottom = railListBottom();
         g.enableScissor(4, top, 4 + w, bottom);
-        int first = Math.max(0, (int) Math.floor(railScroll / pitch));
-        for (int i = first; i < railChapters.size(); i++) {
-            int y = Math.round(top + i * pitch - railScroll);
-            if (y >= bottom) {
+        // rows have mixed heights (chapter pitch, header HEADER_H), so walk a running y instead of indexing by pitch
+        float ry = top - railScroll;
+        for (RailRow row : railRows) {
+            float hgt = row.isHeader() ? HEADER_H : pitch;
+            if (ry >= bottom) {
                 break;
             }
-            ClientModel.Chapter c = railChapters.get(i);
-            int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
-            String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
-                    ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
-            if (searching()) {
-                // while searching, the rail shows where the matches are instead
-                int hits = matchCount.getOrDefault(c.id, 0);
-                rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, 0, String.valueOf(hits));
-                continue;
+            if (row.isHeader()) {
+                drawRailHeader(g, ry, row.header(), w);
+            } else if (ry + hgt > top) {
+                ClientModel.Chapter c = row.chapter();
+                int y = Math.round(ry);
+                int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
+                String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
+                        ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
+                if (searching()) {
+                    // while searching, the rail shows where the matches are instead
+                    int hits = matchCount.getOrDefault(c.id, 0);
+                    rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, 0, String.valueOf(hits));
+                } else {
+                    rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
+                            !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
+                }
             }
-            rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
-                    !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
+            ry += hgt;
         }
         if (max > 0) {
             g.pose().pushPose();
@@ -586,6 +626,21 @@ public class ProgressScreen extends Screen {
             g.drawString(font, s, 34, y + 6, (on ? 0xFFFFFF : 0xD0D0D0) | alpha, true);
         }
         g.pose().popPose();
+    }
+
+    /**
+     * A group header. Open rail: the title in grey, at the same fade the chapter labels use. Closed rail: a thin
+     * divider so the groups still read as separate blocks while only icons are shown.
+     */
+    private void drawRailHeader(GuiGraphics g, float y, Component title, int w) {
+        if (railT > 0.6f) {
+            int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
+            String s = trim(title.getString(), w - 24);
+            g.drawString(font, s, 14, Math.round(y + (HEADER_H - 8) / 2f), 0x8A8A92 | alpha, true);
+        } else {
+            int my = Math.round(y + HEADER_H / 2f);
+            g.fill(4, my, 4 + w, my + 1, 0x40FFFFFF);
+        }
     }
 
     // ------------------------------------------------------------------ Now
@@ -1511,9 +1566,17 @@ public class ProgressScreen extends Screen {
                     select(-1);
                 }
             } else if (my < railListBottom()) {
-                int index = (int) Math.floor((my - RAIL_LIST_TOP + railScroll) / railPitch());
-                if (index >= 0 && index < railChapters.size()) {
-                    select(m.chapters.indexOf(railChapters.get(index)));
+                float rowY = RAIL_LIST_TOP - railScroll;
+                for (RailRow row : railRows) {
+                    float hgt = row.isHeader() ? HEADER_H : railPitch();
+                    if (my >= rowY && my < rowY + hgt) {
+                        // a header is a label, not a target
+                        if (!row.isHeader()) {
+                            select(m.chapters.indexOf(row.chapter()));
+                        }
+                        break;
+                    }
+                    rowY += hgt;
                 }
             }
             return true;
