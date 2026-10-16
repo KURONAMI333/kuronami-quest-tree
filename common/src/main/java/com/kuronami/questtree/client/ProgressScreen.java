@@ -47,8 +47,13 @@ public class ProgressScreen extends Screen {
     private static final int UNIT = 24;      // GUI px per grid unit (FTB Quests positions)
     private static final int NODE = 20;      // GUI px of a size-1 node
     private static final int RAIL = 34;
-    private static final int RAIL_OPEN = 150;
+    private static final int RAIL_OPEN_MIN = 150;
+    /** Open width of the chapter list: as wide as its longest name needs (ATM10's names were cut to "Chapter 2:..."). */
+    private int railOpenW = RAIL_OPEN_MIN;
+    private int railWidest;
     private static final int BTN = 20;
+    /** FTB Quests' default zoom (16): 28 GUI px per grid step, against our UNIT of 24. */
+    private static final float FTB_SCALE = 28f / 24f;
     /** Extra room left of a fitted map, beyond the closed chapter list. */
     private static final int FIT_LEFT = 40;
     private static final int NOW_TILE = 32;
@@ -56,7 +61,7 @@ public class ProgressScreen extends Screen {
     /** Narrowest Now cell: the tile and room for about 15 characters of title beside it. */
     private static final int NOW_CELL_MIN = 130;
     private static final int DOCK_MIN_WIDTH = 560;
-    private static final float FAR = 0.6f;   // below this zoom, nodes are drawn as state-coloured shapes without icons
+    private static final float FAR = 0.6f;   // below this zoom, arrowheads and optional outlines are left out (icons stay)
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
 
     /** Per-chapter camera, kept for the session (players asked for the position to be remembered). */
@@ -289,9 +294,11 @@ public class ProgressScreen extends Screen {
         List<NowEntry> points = new ArrayList<>();
         List<NowEntry> moving = new ArrayList<>();
         railChapters.clear();
+        railWidest = 0;
         for (ClientModel.Chapter c : m.chapters) {
             if (!ClientProgress.chapterHidden(c.id)) {
                 railChapters.add(c);
+                railWidest = Math.max(railWidest, font.width(c.title));
             }
             int done = 0;
             int badge = 0;
@@ -382,10 +389,12 @@ public class ProgressScreen extends Screen {
         }
         refresh(m);
         refreshMatches(m);
+        // icon, gaps and a count like "12/127" beside the longest name, within a third of the screen
+        railOpenW = Mth.clamp(railWidest + 38 + 34, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width / 3));
         ClientModel.Chapter ch = chapter();
         // the chapter list stays open on Now, except on small screens (GUI scale 4 on 1080p is 480 wide) where the tiles need the room
         boolean docked = ch == null && width >= DOCK_MIN_WIDTH;
-        boolean overRail = mouseX < (railT > 0.5f ? RAIL_OPEN : RAIL) + 8;
+        boolean overRail = mouseX < (railT > 0.5f ? railOpenW : RAIL) + 8;
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
         lastFrame = nowMs;
@@ -475,7 +484,7 @@ public class ProgressScreen extends Screen {
     }
 
     private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, boolean docked, float dt) {
-        int w = (int) Mth.lerp(ease(railT), RAIL, RAIL_OPEN);
+        int w = (int) Mth.lerp(ease(railT), RAIL, railOpenW);
         int bg = docked ? 0x40000000 : railT > 0.01f ? lerpColor(0x73000000, PANEL, railT) : 0x73000000;
         g.fill(4, 4, 4 + w, height - 4, bg);
         g.enableScissor(4, 4, 4 + w, height - 4);
@@ -582,7 +591,7 @@ public class ProgressScreen extends Screen {
     // ------------------------------------------------------------------ Now
 
     private int nowLeft() {
-        return (width >= DOCK_MIN_WIDTH ? RAIL_OPEN : RAIL) + 20;
+        return (width >= DOCK_MIN_WIDTH ? railOpenW : RAIL) + 20;
     }
 
     private int nowRight() {
@@ -785,7 +794,10 @@ public class ProgressScreen extends Screen {
         // a margin on the left: a pointer that overshoots a tile at the very edge would open the chapter list over it
         float availW = width - RAIL - 24 - FIT_LEFT;
         float availH = height - 40;
-        float z = (float) Mth.clamp(Math.min(availW / (b[2] - b[0] + 2 * UNIT), availH / (b[3] - b[1] + 2 * UNIT)), 0.3, 1.5);
+        float fit = (float) Math.min(availW / (b[2] - b[0] + 2 * UNIT), availH / (b[3] - b[1] + 2 * UNIT));
+        // never smaller than FTB Quests' default (a big book opens at the size its author laid it out, centred, as in FTB
+        // Quests; shrinking ATM10's 127-quest chapter to fit made every tile tiny); small chapters still grow to fill
+        float z = Mth.clamp(fit, FTB_SCALE, 1.5f);
         float cx = (float) (b[0] + b[2]) / 2f;
         float cy = (float) (b[1] + b[3]) / 2f;
         return new float[]{RAIL + 12 + FIT_LEFT + availW / 2f - cx * z, 30 + availH / 2f - cy * z, z};
@@ -920,7 +932,7 @@ public class ProgressScreen extends Screen {
                 dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
             }
             Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)),
-                    ClientProgress.iconFor(n), far);
+                    ClientProgress.iconFor(n), false);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
             if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
@@ -953,7 +965,7 @@ public class ProgressScreen extends Screen {
             int x = (int) Math.round(l.x * UNIT) - s / 2;
             int y = (int) Math.round(l.y * UNIT) - s / 2;
             String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
-            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), ClientProgress.iconFor(target), far);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), ClientProgress.iconFor(target), false);
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -979,22 +991,19 @@ public class ProgressScreen extends Screen {
         g.pose().translate(0, 0, OVERLAY_Z);
         // the header moves aside with the chapter list when it opens, instead of showing through it
         int hx0 = railRight() + 10;
-        g.pose().pushPose();
-        g.pose().translate(hx0, 10, 0);
-        g.pose().scale(2, 2, 1);
-        g.drawString(font, ch.title, 0, 0, 0xFFFFFFFF, true);
-        g.pose().popPose();
+        // the title at the font's own size: drawn twice as large it crowded big maps (the player, ATM10 2026-10-16)
+        g.drawString(font, ch.title, hx0, 9, 0xFFFFFFFF, true);
         if (ch.skills) {
-            renderSkillHeader(g, ch, hx0, 30);
+            renderSkillHeader(g, ch, hx0, 21);
         } else {
             int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size(), 0});
             String count = cnt[0] + "/" + cnt[1];
-            g.drawString(font, count, hx0, 30, GRAY, true);
+            g.drawString(font, count, hx0, 21, GRAY, true);
             if (cnt[2] > 0) {
                 // more is hidden (Steam's "n hidden achievements remaining"): a lock and the number, never what it is
                 int hx = hx0 + font.width(count) + 6;
-                Tiles.icon(g, "lock", hx, 30, 7, 0xFF707070);
-                g.drawString(font, "+" + cnt[2], hx + 7, 30, 0xFF707070, true);
+                Tiles.icon(g, "lock", hx, 21, 7, 0xFF707070);
+                g.drawString(font, "+" + cnt[2], hx + 7, 21, 0xFF707070, true);
             }
         }
         renderMinimap(g, ch, v);
@@ -1033,9 +1042,9 @@ public class ProgressScreen extends Screen {
         }
     }
 
-    /** Right edge of the rail as currently drawn (it opens to RAIL_OPEN on hover). */
+    /** Right edge of the rail as currently drawn (it opens to railOpenW on hover). */
     private int railRight() {
-        return (int) Mth.lerp(ease(railT), RAIL, RAIL_OPEN) + 4;
+        return (int) Mth.lerp(ease(railT), RAIL, railOpenW) + 4;
     }
 
     private int sheetWidth() {
@@ -1427,15 +1436,16 @@ public class ProgressScreen extends Screen {
         if (cw <= width - RAIL - 24 && chh <= height - 40) {
             return null;
         }
-        int mw = 110;
-        int mh = 70;
+        int mw = 84;
+        int mh = 54;
         int right = (sheetT > 0 ? sheetLeft() : width) - 8;
         return new int[]{right - mw, height - BTN - 16 - mh, mw, mh};
     }
 
     private void renderMinimap(GuiGraphics g, ClientModel.Chapter ch, float[] v) {
         int[] r = minimapRect(ch, v);
-        if (r == null) {
+        // shown while the map moves (drag, zoom) and for a moment after, then gone: it covered large maps all the time
+        if (r == null || !minimapShown()) {
             return;
         }
         g.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], PANEL);
@@ -1494,7 +1504,7 @@ public class ProgressScreen extends Screen {
                 return true;
             }
         }
-        int railW = railT > 0.5f ? RAIL_OPEN : RAIL;
+        int railW = railT > 0.5f ? railOpenW : RAIL;
         if (mx < railW + 4) {
             if (my < RAIL_LIST_TOP) {
                 if (my >= 8) {
@@ -1516,7 +1526,7 @@ public class ProgressScreen extends Screen {
             return clickNow(m, mx, my);
         }
         float[] v = view(ch);
-        int[] r = minimapRect(ch, v);
+        int[] r = minimapShown() ? minimapRect(ch, v) : null;
         if (r != null && mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3]) {
             double[] b = bounds(ch);
             double s = Math.min((r[2] - 8) / Math.max(1, b[2] - b[0]), (r[3] - 8) / Math.max(1, b[3] - b[1]));
@@ -1672,12 +1682,20 @@ public class ProgressScreen extends Screen {
     }
 
     private void zoomButton(ClientModel.Chapter ch, float[] v, int which) {
+        lastMapMove = Util.getMillis();
         switch (which) {
             case 0 -> VIEWS.put(ch.id, fitView(ch));
             case 1 -> zoomAt(v, width / 2.0, height / 2.0, 1 / 1.25f);
             default -> zoomAt(v, width / 2.0, height / 2.0, 1.25f);
         }
     }
+
+    private long lastMapMove = -100_000;
+
+    private boolean minimapShown() {
+        return (dragging && moved) || Util.getMillis() - lastMapMove <= MINIMAP_HOLD;
+    }
+    private static final long MINIMAP_HOLD = 1200;
 
     private static void zoomAt(float[] v, double cx, double cy, float f) {
         float z = Mth.clamp(v[2] * f, 0.3f, 3f);
@@ -1698,6 +1716,7 @@ public class ProgressScreen extends Screen {
                 float[] v = view(ch);
                 v[0] += (float) dx;
                 v[1] += (float) dy;
+                lastMapMove = Util.getMillis();
             }
             return true;
         }
@@ -1824,6 +1843,7 @@ public class ProgressScreen extends Screen {
             return true;
         }
         float[] v = view(ch);
+        lastMapMove = Util.getMillis();
         if (scrollX != 0) {
             // trackpads send both axes: pan (FTB Quests issue #2059 asked for this)
             v[0] += (float) (scrollX * 12);
