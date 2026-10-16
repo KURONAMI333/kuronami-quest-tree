@@ -458,11 +458,12 @@ public class ProgressScreen extends Screen {
                     !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
             y += 22;
         }
+        // more chapters above or below: the edge fades out; below, an arrow sits in the free space under the rows
         if (railScroll > 0) {
-            g.fill(8, 30, w, 31, 0x55FFFFFF);
+            g.fillGradient(4, 30, 4 + w, 40, 0xAA000000, 0x00000000);
         }
         if (railScroll + railRows() < railChapters.size()) {
-            g.fill(8, height - 9, w, height - 8, 0x55FFFFFF);
+            g.drawCenteredString(font, "▼", 4 + RAIL / 2, height - 16, 0xFFFFFFFF);
         }
         g.disableScissor();
     }
