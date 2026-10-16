@@ -8,8 +8,8 @@ import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-/** "Quest complete" in the vanilla advancement toast frame, with the quest's state tile. Toast sounds come from vanilla. */
-final class QuestToast implements Toast {
+/** "Quest complete" in the vanilla advancement toast frame, with the quest's state tile and the mod's own toast sounds. */
+final class QuestToast implements Toast, OwnSoundToast {
 
     private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("toast/advancement");
     private static final long SHOW = 3000;

@@ -1,7 +1,7 @@
 package com.kuronami.questtree.client;
 
 import net.minecraft.Util;
-import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundEvent;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,7 +24,7 @@ final class Motion {
     /** Node key -> when it lit up as newly open after an unlock (a short brightening). */
     static final Map<String, Long> OPENED = new HashMap<>();
 
-    private record Sound(long at, float pitch) {
+    private record Sound(SoundEvent sound, long at, float pitch) {
     }
 
     private static final List<Sound> SOUNDS = new ArrayList<>();
@@ -37,9 +37,9 @@ final class Motion {
     private Motion() {
     }
 
-    /** Schedules a pling, used for each skill a unlock opens (rising a little each time). */
-    static void plingLater(long delay, float pitch) {
-        SOUNDS.add(new Sound(Util.getMillis() + delay, pitch));
+    /** Schedules a sound: the fill of a hand-in, and each skill an unlock opens (rising a little each time). */
+    static void soundLater(SoundEvent sound, long delay, float pitch) {
+        SOUNDS.add(new Sound(sound, Util.getMillis() + delay, pitch));
     }
 
     /** Called every frame by the screen and the HUD: plays due sounds. */
@@ -48,7 +48,7 @@ final class Motion {
         for (Iterator<Sound> it = SOUNDS.iterator(); it.hasNext(); ) {
             Sound s = it.next();
             if (s.at <= now) {
-                ProgressFeedback.play(SoundEvents.NOTE_BLOCK_PLING.value(), s.pitch, 0.35f);
+                ProgressFeedback.play(s.sound, s.pitch, 0.8f);
                 it.remove();
             }
         }

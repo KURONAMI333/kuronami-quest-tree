@@ -1,0 +1,62 @@
+{
+  "ui.chapter": {
+    "sounds": [
+      "kuronami_quest_tree:ui/chapter"
+    ]
+  },
+  "ui.claim": {
+    "sounds": [
+      "kuronami_quest_tree:ui/claim"
+    ]
+  },
+  "ui.click": {
+    "sounds": [
+      "kuronami_quest_tree:ui/click"
+    ]
+  },
+  "ui.exclude": {
+    "sounds": [
+      "kuronami_quest_tree:ui/exclude"
+    ]
+  },
+  "ui.fill": {
+    "sounds": [
+      "kuronami_quest_tree:ui/fill"
+    ]
+  },
+  "ui.level": {
+    "sounds": [
+      "kuronami_quest_tree:ui/level"
+    ]
+  },
+  "ui.locked": {
+    "sounds": [
+      "kuronami_quest_tree:ui/locked"
+    ]
+  },
+  "ui.open": {
+    "sounds": [
+      "kuronami_quest_tree:ui/open"
+    ]
+  },
+  "ui.submit": {
+    "sounds": [
+      "kuronami_quest_tree:ui/submit"
+    ]
+  },
+  "ui.toast_in": {
+    "sounds": [
+      "kuronami_quest_tree:ui/toast_in"
+    ]
+  },
+  "ui.toast_out": {
+    "sounds": [
+      "kuronami_quest_tree:ui/toast_out"
+    ]
+  },
+  "ui.unlock": {
+    "sounds": [
+      "kuronami_quest_tree:ui/unlock"
+    ]
+  }
+}

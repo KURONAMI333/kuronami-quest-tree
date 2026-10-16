@@ -29,6 +29,7 @@ public final class ProgressHud {
     private static long noticeHave;
     private static long noticeNeed;
     private static long noticeAt;
+    private static boolean noticeHeld;
     private static boolean tracker;
     /** Closest unfinished quests, recomputed only when new progress arrives (scanning every node per frame is too slow). */
     private static final List<ClientModel.Node> CLOSEST = new ArrayList<>();
@@ -37,7 +38,7 @@ public final class ProgressHud {
     private ProgressHud() {
     }
 
-    static void notice(ItemStack icon, Component task, long have, long need, Component quest) {
+    static void notice(ItemStack icon, Component task, long have, long need, Component quest, boolean held) {
         long now = Util.getMillis();
         // a new notice while one is showing replaces it without fading in again
         if (noticeTask == null || now - noticeAt > FADE_IN + HOLD) {
@@ -50,6 +51,7 @@ public final class ProgressHud {
         noticeQuest = quest;
         noticeHave = Math.min(have, need);
         noticeNeed = need;
+        noticeHeld = held;
     }
 
     static void toggleTracker() {
@@ -97,6 +99,9 @@ public final class ProgressHud {
             return;
         }
         String count = noticeHave + "/" + noticeNeed;
+        if (noticeHeld) {
+            count = Component.translatable("hud.kuronami_quest_tree.held", count).getString();
+        }
         String task = font.plainSubstrByWidth(noticeTask.getString(), 120);
         String quest = font.plainSubstrByWidth(noticeQuest.getString(), 120);
         int w = 20 + font.width(task) + 6 + font.width(count) + 10 + font.width(quest) + 6;

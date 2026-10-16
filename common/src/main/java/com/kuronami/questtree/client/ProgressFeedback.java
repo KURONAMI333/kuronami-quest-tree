@@ -6,7 +6,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
@@ -42,7 +41,9 @@ final class ProgressFeedback {
             int i = Integer.parseInt(e.getKey().substring(hash + 1));
             if (i < n.tasks.size()) {
                 ClientModel.Task t = n.tasks.get(i);
-                ProgressHud.notice(t.icon().isEmpty() ? n.icon : t.icon(), taskName(t), e.getValue(), t.count, n.title);
+                // item tasks count what is held right now; say so, or a count that follows the inventory reads as a tally
+                boolean held = t.type.equals("item") && !t.consume;
+                ProgressHud.notice(t.icon().isEmpty() ? n.icon : t.icon(), taskName(t), e.getValue(), t.count, n.title, held);
             }
         }
         // experience in skill chapters: one toast per chapter that updates while experience keeps coming
@@ -82,20 +83,20 @@ final class ProgressFeedback {
                 }
                 case "claim" -> {
                     if (played.add(kind)) {
-                        play(SoundEvents.ITEM_PICKUP, 0.8f + (float) Math.random() * 0.6f, 0.5f);
+                        play(QtSounds.CLAIM, 0.97f + (float) Math.random() * 0.06f, 0.8f);
                     }
                 }
-                case "submit" -> play(SoundEvents.BUNDLE_INSERT, 1, 0.8f);
-                case "take" -> play(SoundEvents.ENCHANTMENT_TABLE_USE, 1, 0.8f);
-                case "level" -> play(SoundEvents.PLAYER_LEVELUP, 1, 0.6f);
+                case "submit" -> play(QtSounds.SUBMIT, 1, 0.8f);
+                case "take" -> play(QtSounds.UNLOCK, 1, 0.8f);
+                case "level" -> play(QtSounds.LEVEL, 1, 0.8f);
                 default -> { }
             }
         }
     }
 
     /**
-     * Starts the result animations of MOTION_SOUND.md: the count bump and the fill-up pling of a hand-in, the unlock
-     * chain (lines grow, newly opened skills light up one by one with a rising pling) and the stamp on choices an
+     * Starts the result animations of MOTION_SOUND.md: the count bump and the fill-up sound of a hand-in, the unlock
+     * chain (lines grow, newly opened skills light up one by one with a rising note) and the stamp on choices an
      * exclusive pick closed.
      */
     private static void motions(ClientModel m, PlayerProgress old, PlayerProgress now, List<String> events) {
@@ -130,7 +131,7 @@ final class ProgressFeedback {
                 }
                 if (completed.contains(key)) {
                     // after the fill has run up (360ms)
-                    Motion.plingLater(360, 1.6f);
+                    Motion.soundLater(QtSounds.FILL, 360, 1f);
                 }
             }
             if (kind.equals("take")) {
@@ -141,7 +142,7 @@ final class ProgressFeedback {
                             && rules.state(now, child) != ProgressRules.State.LOCKED) {
                         long delay = Motion.LINE_GROW + Motion.CHILD_STEP * i;
                         Motion.OPENED.put(child.key, t + delay);
-                        Motion.plingLater(delay, Math.min(2f, 1f + 0.1f * i));
+                        Motion.soundLater(QtSounds.OPEN, delay, Math.min(1.5f, 1f + 0.06f * i));
                         i++;
                     }
                 }
@@ -162,11 +163,11 @@ final class ProgressFeedback {
             }
         }
         if (stamped) {
-            play(SoundEvents.IRON_DOOR_CLOSE, 1, 0.3f);
+            play(QtSounds.EXCLUDE, 1, 0.7f);
         }
     }
 
-    /** All quests of the chapter done: the vanilla challenge sound, as FTB Quests does for chapters only. */
+    /** All quests of the chapter done: the chapter fanfare, kept for chapters only as FTB Quests does. */
     private static void chapterCompleted(ClientModel m, String key) {
         ClientModel.Chapter c = m.chapterOf.get(key);
         for (ClientModel.Node n : c.nodes.values()) {
@@ -175,7 +176,7 @@ final class ProgressFeedback {
                 return;
             }
         }
-        play(SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, 1, 0.6f);
+        play(QtSounds.CHAPTER, 1, 0.8f);
     }
 
     static Component taskName(ClientModel.Task t) {
@@ -192,11 +193,11 @@ final class ProgressFeedback {
 
     /** Short sound for clicks on locked nodes. */
     static void locked() {
-        play(SoundEvents.CHEST_LOCKED, 1, 0.4f);
+        play(QtSounds.LOCKED, 1, 0.6f);
     }
 
     static void click() {
-        play(SoundEvents.UI_BUTTON_CLICK, 1, 0.25f);
+        play(QtSounds.CLICK, 1, 0.5f);
     }
 
     static ItemStack iconOr(ItemStack a, ItemStack b) {

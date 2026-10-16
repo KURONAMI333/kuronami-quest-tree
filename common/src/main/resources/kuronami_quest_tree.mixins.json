@@ -12,7 +12,9 @@
         "ResultSlotMixin",
         "StatsCounterMixin"
     ],
-    "client": [],
+    "client": [
+        "ToastInstanceMixin"
+    ],
     "server": [],
     "injectors": {
         "defaultRequire": 1

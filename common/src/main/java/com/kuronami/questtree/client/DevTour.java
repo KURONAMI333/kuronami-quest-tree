@@ -102,6 +102,9 @@ final class DevTour {
             shot(t + 80, "03_chapter");
             at(t + 90, () -> selectFirst(State.CLAIM));
             shot(t + 110, "04_chapter_claim");
+            // a selected open node: its lines in and out are coloured, with arrows running along them
+            at(t + 112, () -> selectFirst(State.OPEN));
+            shot(t + 118, "12_lines");
         }
         ClientModel.Chapter big = m.chapters.stream().filter(c -> !c.skills).max((a, b) -> a.nodes.size() - b.nodes.size()).orElse(null);
         if (big != null && big != quests) {

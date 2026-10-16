@@ -207,9 +207,14 @@ public final class ProgressService {
                     held = countItems(player, spec);
                     counts.put(spec, held);
                 }
-                // never goes back down: once you had the items the task is done, like FTB Quests
-                long now = Math.min(held, ProgressRules.target(t));
-                if (now > p.task(n.key, i)) {
+                // the count is what you hold now: it goes down when items are crafted away, so it never looks as if
+                // every log picked up added to it (2026-10-16, the player read a stuck 8/16 that way). Counting items
+                // "obtained" instead was rejected: drops, chests, machines and reversible recipes all give ways to
+                // inflate it that no one can foresee. Reaching the target once still finishes the task, like FTB Quests
+                long target = ProgressRules.target(t);
+                long had = p.task(n.key, i);
+                long now = Math.min(held, target);
+                if (had < target && now != had) {
                     bump(player, p, n, i, now);
                 }
             }

@@ -56,7 +56,6 @@ public class ProgressScreen extends Screen {
     private static final int DOCK_MIN_WIDTH = 560;
     private static final float FAR = 0.6f;   // below this zoom, nodes are drawn as state-coloured shapes without icons
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
-    private static final String[] NOW_ICON = {"##.#####", "##......", "........", "##.#####", "##......", "........", "##.####."};
 
     /** Per-chapter camera, kept for the session (players asked for the position to be remembered). */
     private static final Map<String, float[]> VIEWS = new HashMap<>();
@@ -213,6 +212,14 @@ public class ProgressScreen extends Screen {
     private int nowScroll;
     private float railT;
     private float sheetT;
+    private long lastFrame;
+    /** The node under the mouse last frame; lines are drawn before nodes, so they use this one. */
+    private String hoveredNode;
+    /** Per node, how far its hover growth has run (0..1). */
+    private final Map<String, Float> hoverGrow = new HashMap<>();
+    private static final float RAIL_MS = 180;
+    private static final float SHEET_MS = 200;
+    private static final float HOVER_MS = 120;
     private boolean dragging;
     private boolean moved;
     private double dragStartX;
@@ -372,8 +379,13 @@ public class ProgressScreen extends Screen {
         // the chapter list stays open on Now, except on small screens (GUI scale 4 on 1080p is 480 wide) where the tiles need the room
         boolean docked = ch == null && width >= DOCK_MIN_WIDTH;
         boolean overRail = mouseX < (railT > 0.5f ? RAIL_OPEN : RAIL) + 8;
-        railT = docked ? 1 : Mth.clamp(railT + (overRail ? 0.25f : -0.25f), 0, 1);
-        sheetT = Mth.clamp(sheetT + (selected != null ? 0.3f : -0.35f), 0, 1);
+        // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
+        float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
+        lastFrame = nowMs;
+        railT = docked ? 1 : Mth.clamp(railT + (overRail ? dt : -dt) / RAIL_MS, 0, 1);
+        sheetT = Mth.clamp(sheetT + (selected != null ? dt : -dt) / SHEET_MS, 0, 1);
+        hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
+        hoverGrow.values().removeIf(t -> t <= 0);
 
         if (ch == null) {
             renderNow(g, m, mouseX, mouseY);
@@ -482,7 +494,7 @@ public class ProgressScreen extends Screen {
             g.fill(6, y, 2 + w, y + 20, 0x12FFFFFF);
         }
         if (icon == null) {
-            Tiles.pixels(g, NOW_ICON, 13, y + 6, 1, on ? 0xFFFFFFFF : 0xFFD8D8D8);
+            Tiles.icon(g, "now", 13, y + 4, 12, on ? 0xFFFFFFFF : 0xFFD8D8D8);
         } else {
             g.renderItem(icon, 13, y + 2);
         }
@@ -490,7 +502,7 @@ public class ProgressScreen extends Screen {
         g.pose().translate(0, 0, OVERLAY_Z);
         if (railT <= 0.6f && badge > 0) {
             // closed rail: a dot on the icon's corner
-            g.fill(25, y + 1, 31, y + 7, Tiles.GOLD);
+            Tiles.icon(g, "dot", 25, y + 1, 7, Tiles.GOLD);
         }
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
@@ -499,11 +511,11 @@ public class ProgressScreen extends Screen {
                 String b = String.valueOf(badge);
                 rightW = font.width(b) + 6;
                 int bx = w - rightW;
-                g.fill(bx, y + 5, bx + rightW, y + 15, Tiles.GOLD);
+                pill(g, bx, y + 5, rightW, 10, Tiles.GOLD);
                 g.drawString(font, b, bx + 3, y + 6, Tiles.INK, false);
             } else if (right != null && right.isEmpty()) {
                 rightW = 8;
-                Tiles.pixels(g, Tiles.TICK, w - 7, y + 8, 1, Tiles.GREEN_TEXT);
+                Tiles.icon(g, "tick", w - 8, y + 6, 8, Tiles.GREEN_TEXT);
             } else if (right != null) {
                 rightW = font.width(right) + 2;
                 g.drawString(font, right, w - rightW, y + 6, 0x808080 | alpha, true);
@@ -751,6 +763,12 @@ public class ProgressScreen extends Screen {
     private static final int LINE_WALKED = 0xFF4F8A3E;
     private static final int LINE_OPEN = 0xFFC6C6C6;
     private static final int LINE_CLOSED = 0xFF3C3C42;
+    /** Hovered node: lines to what it needs, and to what it leads to (FTB Quests' cyan and yellow, a little softer). */
+    private static final int LINE_NEEDS = 0xFF3CC4D0;
+    private static final int LINE_LEADS = 0xFFE2CC48;
+    /** Arrow spacing on a highlighted line (map units) and how fast the arrows run (map units per second). */
+    private static final float FLOW_GAP = 9;
+    private static final float FLOW_SPEED = 18;
 
     private static int lineColor(State parent, State child) {
         boolean parentDone = parent == State.DONE || parent == State.CLAIM;
@@ -788,9 +806,9 @@ public class ProgressScreen extends Screen {
             g.setColor(1, 1, 1, 1);
             g.pose().popPose();
         }
-        // lines
         // lines; authors hide some to keep busy maps readable (chapter default, or per node in either direction)
         ClientModel cm = model();
+        String focus = hoveredNode != null ? hoveredNode : selected;
         for (ClientModel.Node n : ch.nodes.values()) {
             if (ch.hideLines || n.hideLinesToRequired || !ClientProgress.visible(n.key)) {
                 continue;
@@ -804,6 +822,11 @@ public class ProgressScreen extends Screen {
                 int lc = lineColor(ClientProgress.state(p.key), cs);
                 // open and walked ways are thick, ways into what is still closed are thin
                 line(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.optional || lc == LINE_CLOSED ? 1 : 3, lc);
+                // the node under the mouse: what it needs in one colour, what it leads to in another, with arrows
+                // running towards the later quest (FTB Quests does the same, and the player liked it)
+                if (focus != null && (n.key.equals(focus) || p.key.equals(focus))) {
+                    flowLine(g, p.x * UNIT, p.y * UNIT, n.x * UNIT, n.y * UNIT, n.key.equals(focus) ? LINE_NEEDS : LINE_LEADS, now);
+                }
                 float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW + 400);
                 if (grow >= 0) {
                     // unlock chain: a bright line runs from the unlocked node to each child (300ms), then fades
@@ -833,7 +856,10 @@ public class ProgressScreen extends Screen {
                 // optional quests: a broken outline, so they read as "extra" next to the required path
                 dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
             }
-            Tiles.tile(g, shape, x, y, s, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)), ClientProgress.iconFor(n), far);
+            // the node under the mouse grows a little (120ms), so the map answers the pointer
+            int grow = Math.round(s * 0.12f * ease(hoverGrow.getOrDefault(n.key, 0f)) / 2) * 2;
+            Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)),
+                    ClientProgress.iconFor(n), far);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
             if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
@@ -870,7 +896,7 @@ public class ProgressScreen extends Screen {
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
-                Tiles.pixels(g, LINK_ARROW, x + s - 6, y + 1, 1, 0xFFFFFFFF);
+                Tiles.icon(g, "link", x + s - 7, y + 1, 6, 0xFFFFFFFF);
                 g.pose().popPose();
             }
             double sx = v[0] + l.x * UNIT * v[2];
@@ -881,6 +907,10 @@ public class ProgressScreen extends Screen {
             }
         }
         g.pose().popPose();
+        hoveredNode = dragging ? null : hovered;
+        if (hoveredNode != null) {
+            hoverGrow.putIfAbsent(hoveredNode, 0f);
+        }
         List<Component> decoTip = hovered == null && !dragging ? decorationAt(ch, v, mouseX, mouseY, true) : null;
 
         // everything below sits above the map's item icons
@@ -902,7 +932,7 @@ public class ProgressScreen extends Screen {
             if (cnt[2] > 0) {
                 // more is hidden (Steam's "n hidden achievements remaining"): a lock and the number, never what it is
                 int hx = hx0 + font.width(count) + 6;
-                Tiles.pixels(g, Tiles.LOCK, hx, 31, 1, 0xFF707070);
+                Tiles.icon(g, "lock", hx, 30, 7, 0xFF707070);
                 g.drawString(font, "+" + cnt[2], hx + 7, 30, 0xFF707070, true);
             }
         }
@@ -972,7 +1002,7 @@ public class ProgressScreen extends Screen {
         int x = x0 + 12;
         int w = sw - 24;
         int y = 14;
-        Tiles.pixels(g, Tiles.CROSS, x0 + sw - 14, 10, 1, 0xFFC8C8C8);
+        Tiles.icon(g, "cross", x0 + sw - 15, 9, 7, 0xFFC8C8C8);
         buttons.add(new Button(x0 + sw - 20, 4, 18, 18, () -> selected = null));
         g.drawString(font, trim(ch.title.getString(), w - 16), x, y, GRAY, true);
         y += 12;
@@ -1058,7 +1088,7 @@ public class ProgressScreen extends Screen {
                 if (!t.icon().isEmpty()) {
                     g.renderItem(t.icon(), x, y + 2);
                 } else if (t.type.equals("checkmark")) {
-                    Tiles.pixels(g, Tiles.TICK, x + 4, y + 6, 2, met ? Tiles.GREEN_TEXT : 0xFFD0D0D0);
+                    Tiles.icon(g, "tick", x + 3, y + 5, 11, met ? Tiles.GREEN_TEXT : 0xFFD0D0D0);
                 }
                 if (t.optional) {
                     // optional tasks: the same broken outline as optional quests on the map
@@ -1289,8 +1319,8 @@ public class ProgressScreen extends Screen {
         }
         if (stamp >= 0) {
             // the cross lands: from twice its size down to its place
-            int px = Math.max(1, Math.round(s / 20f * (2 - stamp)));
-            Tiles.pixels(g, Tiles.CROSS, x + s / 2 - 5 * px / 2, y + s / 2 - 5 * px / 2, px, Tiles.withAlpha(0xFFFFFFFF, 0.4f + 0.6f * stamp));
+            float c = s * 0.36f * (2 - stamp);
+            Tiles.icon(g, "cross", x + (s - c) / 2f, y + (s - c) / 2f, c, Tiles.withAlpha(0xFFFFFFFF, 0.4f + 0.6f * stamp));
         }
         g.pose().popPose();
     }
@@ -1310,16 +1340,13 @@ public class ProgressScreen extends Screen {
 
     private void renderZoomButtons(GuiGraphics g, ClientModel.Chapter ch, float[] v, int mouseX, int mouseY) {
         int right = (sheetT > 0 ? sheetLeft() : width) - 8;
-        String[][] glyphs = {
-                {"..#..", "#####", "#.#.#", "#####", "..#.."},
-                {".....", ".....", "#####", ".....", "....."},
-                {"..#..", "..#..", "#####", "..#..", "..#.."}};
+        String[] glyphs = {"center", "minus", "plus"};
         for (int i = 0; i < 3; i++) {
             int x = right - (3 - i) * (BTN + 3);
             int y = height - BTN - 8;
             boolean hover = mouseX >= x && mouseX < x + BTN && mouseY >= y && mouseY < y + BTN;
             g.fill(x, y, x + BTN, y + BTN, hover ? CONTROL_HOVER : CONTROL);
-            Tiles.pixels(g, glyphs[i], x + 7, y + 7, 1, 0xFFFFFFFF);
+            Tiles.icon(g, glyphs[i], x + 5, y + 5, BTN - 10, 0xFFFFFFFF);
             int which = i;
             buttons.add(new Button(x, y, BTN, BTN, () -> zoomButton(ch, v, which)));
         }
@@ -1500,7 +1527,6 @@ public class ProgressScreen extends Screen {
         }
     }
 
-    private static final String[] LINK_ARROW = {"..###", "...##", "..#.#", ".#...", "#...."};
 
     private boolean decorationVisible(ClientModel.Decoration d) {
         if (d.dev || d.image == null) {
@@ -1758,6 +1784,34 @@ public class ProgressScreen extends Screen {
         g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
         g.fill(0, -thickness / 2, (int) len, thickness - thickness / 2, argb);
         g.pose().popPose();
+    }
+
+    /** A highlighted line: a wide translucent band with arrows running from the first point to the second. */
+    private static void flowLine(GuiGraphics g, double x1, double y1, double x2, double y2, int argb, long now) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 1) {
+            return;
+        }
+        g.pose().pushPose();
+        g.pose().translate(x1, y1, 0);
+        g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
+        g.fill(0, -3, (int) len, 3, Tiles.withAlpha(argb, 0.4f));
+        // wrap the clock before it becomes a float: after days of uptime the raw milliseconds lose precision and the
+        // arrows step. 10 s x 18 units/s = 180, a whole number of gaps, so the wrap is seamless
+        float shift = ((now % 10_000L) / 1000f * FLOW_SPEED) % FLOW_GAP;
+        for (float at = shift; at < len - 2; at += FLOW_GAP) {
+            Tiles.icon(g, "chevron", at - 3, -3, 6, argb);
+        }
+        g.pose().popPose();
+    }
+
+    /** A rounded badge (the gold counts in the chapter list). */
+    private static void pill(GuiGraphics g, int x, int y, int w, int h, int argb) {
+        Tiles.icon(g, "dot", x, y, h, argb);
+        Tiles.icon(g, "dot", x + w - h, y, h, argb);
+        g.fill(x + h / 2, y, x + w - h / 2, y + h, argb);
     }
 
     private String trim(String s, int w) {

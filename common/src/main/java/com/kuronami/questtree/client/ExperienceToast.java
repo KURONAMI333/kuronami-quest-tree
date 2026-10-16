@@ -13,7 +13,7 @@ import net.minecraft.util.Mth;
  * Experience gained in a skill chapter. One toast per chapter that is updated while experience keeps coming in (mining
  * gives experience per block), with a bar that eases to the new value. No sound for experience; level-ups sound once.
  */
-final class ExperienceToast implements Toast {
+final class ExperienceToast implements Toast, OwnSoundToast {
 
     private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("toast/advancement");
     private static final long SHOW = 3000;
