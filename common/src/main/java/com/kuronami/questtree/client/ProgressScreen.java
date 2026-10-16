@@ -951,7 +951,7 @@ public class ProgressScreen extends Screen {
     /** Lines, all opaque and a step above the scrim, so the tree's shape reads even where everything is closed. */
     /**
      * Lines (2026-10-16 rebuild, the player picked proposal C of lines_v1.html): one width for every state, the state in
-     * the colour only, and one moving part: an angular arrowhead. Every line carries it at its middle, so direction is
+     * the colour only, and one moving part: a solid triangular arrowhead (an open chevron read as a forked twig). Every line carries it at its middle, so direction is
      * always readable; on the node under the mouse (or the selected one) its lines brighten and the arrowheads slide
      * towards the later node; when a way opens, the colour runs in behind the arrowhead.
      */
@@ -961,8 +961,8 @@ public class ProgressScreen extends Screen {
     private static final float LINE_W = 2;
     private static final float LINE_W_ON = 3;
     /** Arrowhead size (map units) and how long one slide along a highlighted line takes. */
-    private static final float ARROW = 6;
-    private static final float ARROW_ON = 7;
+    private static final float ARROW = 7;
+    private static final float ARROW_ON = 8;
     private static final float SLIDE_MS = 1400;
 
     private static int lineColor(State parent, State child) {
@@ -2141,7 +2141,7 @@ public class ProgressScreen extends Screen {
             }
         }
         float a = on || open >= 0 ? ARROW_ON : ARROW;
-        Tiles.icon(g, "chevron", head - a / 2, -a / 2, a, argb);
+        Tiles.icon(g, "arrow", head - a / 2, -a / 2, a, argb);
         g.pose().popPose();
     }
 
