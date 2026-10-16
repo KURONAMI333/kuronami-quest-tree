@@ -25,10 +25,10 @@ import java.util.zip.GZIPInputStream;
 public final class ClientProgress {
 
     public static final KeyMapping OPEN_KEY = new KeyMapping("key.kuronami_quest_tree.open", InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_U, "key.categories.kuronami_quest_tree");
+            GLFW.GLFW_KEY_K, "key.categories.kuronami_quest_tree");
     /** Shows or hides the pinned quests at the side of the game screen. */
     public static final KeyMapping TRACK_KEY = new KeyMapping("key.kuronami_quest_tree.track", InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_Y, "key.categories.kuronami_quest_tree");
+            GLFW.GLFW_KEY_J, "key.categories.kuronami_quest_tree");
 
     private static ClientModel model;
     private static ProgressRules rules;
