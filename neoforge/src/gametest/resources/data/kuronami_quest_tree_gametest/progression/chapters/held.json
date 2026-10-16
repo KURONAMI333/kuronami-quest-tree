@@ -1,0 +1,20 @@
+{
+  "icon": {
+    "id": "minecraft:oak_log"
+  },
+  "nodes": {
+    "logs": {
+      "x": 0,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "item",
+          "item": {
+            "id": "minecraft:oak_log"
+          },
+          "count": 4
+        }
+      ]
+    }
+  }
+}

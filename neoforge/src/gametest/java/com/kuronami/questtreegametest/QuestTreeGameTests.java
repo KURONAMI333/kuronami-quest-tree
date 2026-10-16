@@ -27,6 +27,7 @@ public final class QuestTreeGameTests {
 
     private static final String Q = "kuronami_quest_tree_gametest:quests/";
     private static final String S = "kuronami_quest_tree_gametest:skills";
+    private static final String HELD = "kuronami_quest_tree_gametest:held/logs";
     private static final BlockPos POS = new BlockPos(1, 1, 1);
 
     private static ServerPlayer player(GameTestHelper helper) {
@@ -43,6 +44,19 @@ public final class QuestTreeGameTests {
 
     private static int count(ServerPlayer p, net.minecraft.world.item.Item item) {
         return p.getInventory().countItem(item);
+    }
+
+    /** Removes up to {@code amount} of an item from the player's inventory (main slots and hotbar). */
+    private static void take(ServerPlayer p, net.minecraft.world.item.Item item, int amount) {
+        var inv = p.getInventory();
+        for (int s = 0; s < inv.getContainerSize() && amount > 0; s++) {
+            ItemStack st = inv.getItem(s);
+            if (!st.isEmpty() && st.is(item)) {
+                int n = Math.min(st.getCount(), amount);
+                st.shrink(n);
+                amount -= n;
+            }
+        }
     }
 
     /** Holding the items completes the quest; the reward waits for the claim; requirements open the next quests. */
@@ -376,6 +390,39 @@ public final class QuestTreeGameTests {
         act(p, "check", Q + "trophy_q", 0);
         act(p, "claim", Q + "trophy_q", -1);
         helper.assertTrue(pr.claimed.contains(Q + "trophy_q") && count(p, Items.STICK) == 1, "claim with a trophy reward failed");
+        helper.succeed();
+    }
+
+    /** A non-consuming item task shows what is held now: it falls when items leave the inventory. */
+    @GameTest(template = "empty3x3x3")
+    public static void heldItemTaskGoesDown(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        p.getInventory().add(new ItemStack(Items.OAK_LOG, 2));
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(HELD, 0) == 2, "counter should be 2, was " + pr.task(HELD, 0));
+        take(p, Items.OAK_LOG, 1);
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(HELD, 0) == 1, "counter should fall to 1 after removing a log, was " + pr.task(HELD, 0));
+        p.getInventory().add(new ItemStack(Items.OAK_LOG, 2));
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(HELD, 0) == 3, "counter should be 3 after holding 3, was " + pr.task(HELD, 0));
+        helper.succeed();
+    }
+
+    /** Once the target is reached the task stays done at the target even after the items are removed. */
+    @GameTest(template = "empty3x3x3")
+    public static void heldItemTaskStaysAtTarget(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        p.getInventory().add(new ItemStack(Items.OAK_LOG, 4));
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(HELD, 0) == 4, "counter should be 4, was " + pr.task(HELD, 0));
+        helper.assertTrue(pr.completed.contains(HELD), "quest not completed at 4 held");
+        take(p, Items.OAK_LOG, 4);
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(HELD, 0) == 4, "counter moved after completion, was " + pr.task(HELD, 0));
+        helper.assertTrue(pr.completed.contains(HELD), "quest un-completed by removing the items");
         helper.succeed();
     }
 }
