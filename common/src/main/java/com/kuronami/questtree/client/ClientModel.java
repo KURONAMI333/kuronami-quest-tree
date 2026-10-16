@@ -207,6 +207,8 @@ public final class ClientModel {
         public final List<String> requires = new ArrayList<>();
         /** Requirements as global keys (may point into other chapters). */
         public final List<String> requireKeys = new ArrayList<>();
+        /** A skill tree's starting node (Pufferfish's "root"); lines flow outward from these. */
+        public final boolean root;
         /** FTB Quests' "hide dependency lines" / "hide dependent lines": authors thin out busy maps with these. */
         public final boolean hideLinesToRequired;
         /** FTB Quests: show only the title until the quest can be started / show the text only once done. */
@@ -226,6 +228,7 @@ public final class ClientModel {
             this.x = o.has("x") ? o.get("x").getAsDouble() : 0;
             this.y = o.has("y") ? o.get("y").getAsDouble() : 0;
             boolean milestone = ProgressModel.boolOf(o, "milestone");
+            this.root = ProgressModel.boolOf(o, "root");
             this.size = o.has("size") ? Math.max(0.3, o.get("size").getAsDouble())
                     : milestone && !ch.defaultSizeSet ? MILESTONE_SIZE : Math.max(0.3, ch.defaultSize);
             String sh = o.has("shape") ? o.get("shape").getAsString() : "";
@@ -296,6 +299,21 @@ public final class ClientModel {
                     : !tasks.isEmpty() ? tasks.get(0).name() : Component.literal(id);
             this.title = m.component(base + ".title", fallbackTitle);
             String d = m.lookup(base + ".desc");
+            // Pufferfish descriptions are JSON text components ({"translate": ..., "fallback": ...}): resolve them first,
+            // or the raw JSON shows in the details sheet
+            String dt = d == null ? null : d.trim();
+            if (dt != null && ((dt.startsWith("{") && dt.endsWith("}")) || (dt.startsWith("[") && dt.endsWith("]")))) {
+                // JSON only: a failed parse keeps the text as it was (parseText's fallback would apply colour codes twice)
+                try {
+                    var level = Minecraft.getInstance().level;
+                    Component c = Component.Serializer.fromJson(dt, level != null ? level.registryAccess() : net.minecraft.core.RegistryAccess.EMPTY);
+                    if (c != null) {
+                        d = c.getString();
+                    }
+                } catch (RuntimeException ignored) {
+                    // not JSON after all
+                }
+            }
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);
         }
 

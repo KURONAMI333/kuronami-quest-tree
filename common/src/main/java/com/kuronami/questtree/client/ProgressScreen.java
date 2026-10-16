@@ -49,6 +49,8 @@ public class ProgressScreen extends Screen {
     private static final int RAIL = 34;
     private static final int RAIL_OPEN = 150;
     private static final int BTN = 20;
+    /** Extra room left of a fitted map, beyond the closed chapter list. */
+    private static final int FIT_LEFT = 40;
     private static final int NOW_TILE = 32;
     private static final int NOW_GAP = 6;
     /** Narrowest Now cell: the tile and room for about 15 characters of title beside it. */
@@ -208,11 +210,15 @@ public class ProgressScreen extends Screen {
     /** Selected node, global key. */
     private String selected;
     private int choicePick = -1;
-    private int railScroll;
+    /** Chapter list scroll in GUI px: shown value easing to the target the wheel sets. */
+    private float railScroll;
+    private float railScrollTarget;
     private int nowScroll;
     private float railT;
     private float sheetT;
     private long lastFrame;
+    /** A tooltip asked for while drawing (icon buttons), drawn last so nothing covers it. */
+    private Component pendingTip;
     /** The node under the mouse last frame; lines are drawn before nodes, so they use this one. */
     private String hoveredNode;
     /** Per node, how far its hover growth has run (0..1). */
@@ -362,6 +368,7 @@ public class ProgressScreen extends Screen {
         super.render(g, mouseX, mouseY, partialTick);
         g.fill(0, 0, width, height, SCRIM);
         buttons.clear();
+        pendingTip = null;
         Motion.tick();
         // claim animations of tiles that were never drawn (scrolled away) end here, so their tiles leave the list
         long nowMs = Util.getMillis();
@@ -400,9 +407,15 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 100);
-        renderRail(g, m, mouseX, mouseY, docked);
+        renderRail(g, m, mouseX, mouseY, docked, dt);
         renderSearch(g, mouseX, mouseY, partialTick);
         g.pose().popPose();
+        if (pendingTip != null) {
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 300);
+            g.renderTooltip(font, pendingTip, mouseX, mouseY);
+            g.pose().popPose();
+        }
     }
 
     /**
@@ -437,24 +450,55 @@ public class ProgressScreen extends Screen {
         this.renderBlurredBackground(partialTick);
     }
 
-    private int railRows() {
-        return Math.max(1, (height - 8 - 30 - 26) / 22);
+    private static final int RAIL_LIST_TOP = 30;
+
+    private int railListBottom() {
+        return height - 8;
     }
 
-    private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, boolean docked) {
+    /**
+     * Row pitch of the chapter list. When it overflows, the pitch is stretched a little so the last visible row is cut
+     * in half: a half row says "there is more" (NN/g's illusion of completeness: lists that end on a whole row look
+     * finished). When everything fits, rows keep their normal 22 px.
+     */
+    private float railPitch() {
+        float h = railListBottom() - RAIL_LIST_TOP;
+        if (railChapters.size() * 22 <= h) {
+            return 22;
+        }
+        int k = Math.max(1, (int) Math.floor(h / 22f - 0.5f));
+        return h / (k + 0.5f);
+    }
+
+    private float railMaxScroll() {
+        return Math.max(0, railChapters.size() * railPitch() - (railListBottom() - RAIL_LIST_TOP) + 4);
+    }
+
+    private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, boolean docked, float dt) {
         int w = (int) Mth.lerp(ease(railT), RAIL, RAIL_OPEN);
         int bg = docked ? 0x40000000 : railT > 0.01f ? lerpColor(0x73000000, PANEL, railT) : 0x73000000;
         g.fill(4, 4, 4 + w, height - 4, bg);
         g.enableScissor(4, 4, 4 + w, height - 4);
-        int y = 8;
         int nowBadge = 0;
         for (int b : badges.values()) {
             nowBadge += b;
         }
-        rowRail(g, y, -1, null, Component.translatable("screen.kuronami_quest_tree.now"), w, mouseX, mouseY, nowBadge, null);
-        y += 22;
-        railScroll = Mth.clamp(railScroll, 0, Math.max(0, railChapters.size() - railRows()));
-        for (int i = railScroll; i < railChapters.size() && i < railScroll + railRows(); i++) {
+        rowRail(g, 8, -1, null, Component.translatable("screen.kuronami_quest_tree.now"), w, mouseX, mouseY, nowBadge, null);
+        g.disableScissor();
+        // the chapter list scrolls smoothly under the Now row
+        float max = railMaxScroll();
+        railScrollTarget = Mth.clamp(railScrollTarget, 0, max);
+        railScroll = Mth.clamp(railScroll + (railScrollTarget - railScroll) * Math.min(1, dt / 70f), 0, max);
+        float pitch = railPitch();
+        int top = RAIL_LIST_TOP;
+        int bottom = railListBottom();
+        g.enableScissor(4, top, 4 + w, bottom);
+        int first = Math.max(0, (int) Math.floor(railScroll / pitch));
+        for (int i = first; i < railChapters.size(); i++) {
+            int y = Math.round(top + i * pitch - railScroll);
+            if (y >= bottom) {
+                break;
+            }
             ClientModel.Chapter c = railChapters.get(i);
             int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
             String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
@@ -463,19 +507,28 @@ public class ProgressScreen extends Screen {
                 // while searching, the rail shows where the matches are instead
                 int hits = matchCount.getOrDefault(c.id, 0);
                 rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, 0, String.valueOf(hits));
-                y += 22;
                 continue;
             }
             rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
                     !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
-            y += 22;
         }
-        // more chapters above or below: the edge fades out; below, an arrow sits in the free space under the rows
-        if (railScroll > 0) {
-            g.fillGradient(4, 30, 4 + w, 40, 0xAA000000, 0x00000000);
-        }
-        if (railScroll + railRows() < railChapters.size()) {
-            g.drawCenteredString(font, "▼", 4 + RAIL / 2, height - 16, 0xFFFFFFFF);
+        if (max > 0) {
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 1);
+            // soft edges where rows run under, and a scrollbar that is always there while the list overflows
+            if (railScroll > 1) {
+                g.fillGradient(4, top, 4 + w, top + 10, 0x66000000, 0x00000000);
+            }
+            if (railScroll < max - 1) {
+                g.fillGradient(4, bottom - 14, 4 + w, bottom, 0x00000000, 0x66000000);
+            }
+            float h = bottom - top;
+            float content = h + max;
+            int thumb = Math.max(12, Math.round(h * h / content));
+            int ty = top + Math.round((h - thumb) * (railScroll / max));
+            boolean over = mouseX < 4 + w && mouseX >= 4 && mouseY >= top && mouseY < bottom;
+            g.fill(4 + w - 3, ty, 4 + w - 1, ty + thumb, over ? 0x99FFFFFF : 0x55FFFFFF);
+            g.pose().popPose();
         }
         g.disableScissor();
     }
@@ -729,12 +782,13 @@ public class ProgressScreen extends Screen {
 
     private float[] fitView(ClientModel.Chapter ch) {
         double[] b = bounds(ch);
-        float availW = width - RAIL - 24;
+        // a margin on the left: a pointer that overshoots a tile at the very edge would open the chapter list over it
+        float availW = width - RAIL - 24 - FIT_LEFT;
         float availH = height - 40;
         float z = (float) Mth.clamp(Math.min(availW / (b[2] - b[0] + 2 * UNIT), availH / (b[3] - b[1] + 2 * UNIT)), 0.3, 1.5);
         float cx = (float) (b[0] + b[2]) / 2f;
         float cy = (float) (b[1] + b[3]) / 2f;
-        return new float[]{RAIL + 12 + availW / 2f - cx * z, 30 + availH / 2f - cy * z, z};
+        return new float[]{RAIL + 12 + FIT_LEFT + availW / 2f - cx * z, 30 + availH / 2f - cy * z, z};
     }
 
     private static double[] bounds(ClientModel.Chapter ch) {
@@ -783,6 +837,7 @@ public class ProgressScreen extends Screen {
 
     private void renderChapter(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
         float[] v = view(ch);
+        stepPan(v);
         boolean far = v[2] < FAR;
         long now = Util.getMillis();
         g.pose().pushPose();
@@ -809,6 +864,7 @@ public class ProgressScreen extends Screen {
         // lines; authors hide some to keep busy maps readable (chapter default, or per node in either direction)
         ClientModel cm = model();
         String focus = hoveredNode != null ? hoveredNode : selected;
+        Map<String, Integer> depth = depths(ch);
         for (ClientModel.Node n : ch.nodes.values()) {
             if (ch.hideLines || n.hideLinesToRequired || !ClientProgress.visible(n.key)) {
                 continue;
@@ -818,6 +874,15 @@ public class ProgressScreen extends Screen {
                 ClientModel.Node p = cm.nodesByKey.get(r);
                 if (p == null || cm.chapterOf.get(r) != ch || p.hideLinesToDependents || !ClientProgress.visible(p.key)) {
                     continue;
+                }
+                if (p.requireKeys.contains(n.key) && !p.hideLinesToRequired && !n.hideLinesToDependents) {
+                    // a two-way link (skill trees from Pufferfish's Skills, whose connections have no direction): draw it
+                    // once, from the side nearer the tree's start, so its arrows run outward and not both ways
+                    int dp = depth.getOrDefault(p.key, Integer.MAX_VALUE);
+                    int dn = depth.getOrDefault(n.key, Integer.MAX_VALUE);
+                    if (dp > dn || (dp == dn && p.key.compareTo(n.key) > 0)) {
+                        continue;
+                    }
                 }
                 int lc = lineColor(ClientProgress.state(p.key), cs);
                 // open and walked ways are thick, ways into what is still closed are thin
@@ -848,16 +913,16 @@ public class ProgressScreen extends Screen {
             int x = (int) Math.round(n.x * UNIT) - s / 2 + shake(n.key, now);
             int y = (int) Math.round(n.y * UNIT) - s / 2;
             String shape = Tiles.shapeOf(n.shape);
+            // the node under the mouse grows a little (120ms), so the map answers the pointer
+            int grow = Math.round(s * 0.12f * ease(hoverGrow.getOrDefault(n.key, 0f)) / 2) * 2;
             if (n.key.equals(selected)) {
-                Tiles.shape(g, shape, x - 3, y - 3, s + 6, s + 6, 0xFFFFFFFF);
-                Tiles.shape(g, shape, x - 1, y - 1, s + 2, s + 2, 0xFF141416);
+                // the selection ring hugs the tile at its current size, so the gap stays even while it grows and shrinks
+                Tiles.ring(g, shape, x - grow / 2 - 3, y - grow / 2 - 3, s + grow + 6, s + grow + 6, 0xFFFFFFFF);
             }
             if (n.optional && !far) {
                 // optional quests: a broken outline, so they read as "extra" next to the required path
                 dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
             }
-            // the node under the mouse grows a little (120ms), so the map answers the pointer
-            int grow = Math.round(s * 0.12f * ease(hoverGrow.getOrDefault(n.key, 0f)) / 2) * 2;
             Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)),
                     ClientProgress.iconFor(n), far);
             flash(g, n.key, x, y, s, now);
@@ -1224,13 +1289,19 @@ public class ProgressScreen extends Screen {
             bx += bw + 6;
         }
         if (state != State.DONE && state != State.EXCLUDED) {
-            Component pin = Component.translatable(Pins.has(n.key) ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
-            int bw = font.width(pin) + 16;
-            button(g, pin, bx, y, bw, 0, true, mouseX, mouseY, () -> {
+            // a pin mark instead of the word; gold while pinned, the name in a tooltip
+            boolean pinned = Pins.has(n.key);
+            boolean hover = mouseX >= bx && mouseX < bx + 20 && mouseY >= y && mouseY < y + 20;
+            g.fill(bx, y, bx + 20, y + 20, pinned ? (hover ? 0xFF4A4232 : 0xFF3A3428) : (hover ? 0xCC323236 : 0x99000000));
+            Tiles.icon(g, "pin", bx + 4, y + 4, 12, pinned ? Tiles.GOLD : 0xFFE0E0E0);
+            buttons.add(new Button(bx, y, 20, 20, () -> {
                 Pins.toggle(n.key);
                 ProgressFeedback.click();
                 cachedFor = null;
-            });
+            }));
+            if (hover) {
+                pendingTip = Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
+            }
         }
     }
 
@@ -1429,12 +1500,13 @@ public class ProgressScreen extends Screen {
         }
         int railW = railT > 0.5f ? RAIL_OPEN : RAIL;
         if (mx < railW + 4) {
-            int row = (int) Math.floor((my - 8) / 22);
-            if (row == 0) {
-                select(-1);
-            } else if (row >= 1 && row <= railRows()) {
-                int index = railScroll + row - 1;
-                if (index < railChapters.size()) {
+            if (my < RAIL_LIST_TOP) {
+                if (my >= 8) {
+                    select(-1);
+                }
+            } else if (my < railListBottom()) {
+                int index = (int) Math.floor((my - RAIL_LIST_TOP + railScroll) / railPitch());
+                if (index >= 0 && index < railChapters.size()) {
                     select(m.chapters.indexOf(railChapters.get(index)));
                 }
             }
@@ -1595,6 +1667,7 @@ public class ProgressScreen extends Screen {
     }
 
     private void select(int index) {
+        panView = null;
         chapterIndex = index;
         lastChapter = index;
         selected = null;
@@ -1694,12 +1767,45 @@ public class ProgressScreen extends Screen {
         return super.mouseReleased(mx, my, button);
     }
 
-    /** Shift the map so the selected node is not hidden under the sheet. */
+    /**
+     * Slide the map just far enough that the selected node clears the sheet (240ms). It used to jump the node to the
+     * middle of the free space, which threw the whole tree left on a click (the player found that jarring).
+     */
     private void keepVisible(float[] v, ClientModel.Node n) {
+        double half = NODE * n.size * v[2] / 2;
         double sx = v[0] + n.x * UNIT * v[2];
-        int limit = width - sheetWidth() - 24;
-        if (sx > limit) {
-            v[0] -= (float) (sx - (RAIL + (limit - RAIL) / 2.0));
+        double limit = width - sheetWidth() - 16;
+        if (sx + half > limit) {
+            panView = v;
+            panDistance = (float) -(sx + half - limit);
+            panDone = 0;
+            panStart = Util.getMillis();
+        }
+    }
+
+    private float[] panView;
+    /** Total slide and the part already applied: the slide is added frame by frame, so zoom, scroll and minimap input
+     *  during it combine with it instead of being overwritten. */
+    private float panDistance;
+    private float panDone;
+    private long panStart;
+    private static final float PAN_MS = 240;
+
+    /** Advances a running keepVisible slide; dragging the map stops it. */
+    private void stepPan(float[] v) {
+        if (panView != v) {
+            return;
+        }
+        if (dragging) {
+            panView = null;
+            return;
+        }
+        float t = Math.min(1, (Util.getMillis() - panStart) / PAN_MS);
+        float target = panDistance * ease(t);
+        v[0] += target - panDone;
+        panDone = target;
+        if (t >= 1) {
+            panView = null;
         }
     }
 
@@ -1710,7 +1816,7 @@ public class ProgressScreen extends Screen {
             return super.mouseScrolled(mx, my, scrollX, scrollY);
         }
         if (mx < railRight()) {
-            railScroll = Mth.clamp(railScroll - (int) Math.signum(scrollY), 0, Math.max(0, railChapters.size() - railRows()));
+            railScrollTarget = Mth.clamp(railScrollTarget - (float) scrollY * railPitch() * 1.5f, 0, railMaxScroll());
             return true;
         }
         if (sheetT > 0 && selected != null && mx >= sheetLeft()) {
@@ -1782,8 +1888,42 @@ public class ProgressScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(x1, y1, 0);
         g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
-        g.fill(0, -thickness / 2, (int) len, thickness - thickness / 2, argb);
+        // centred on the path (an odd width used to sit half a pixel low, off the arrows drawn over it)
+        g.pose().translate(0, -thickness / 2f, 0);
+        g.fill(0, 0, (int) len, thickness, argb);
         g.pose().popPose();
+    }
+
+    private final Map<String, Map<String, Integer>> depthCache = new HashMap<>();
+
+    /** Steps from the chapter's start (root nodes, else nodes needing nothing), walking links in either direction. */
+    private Map<String, Integer> depths(ClientModel.Chapter ch) {
+        return depthCache.computeIfAbsent(ch.id, k -> {
+            Map<String, java.util.List<String>> links = new HashMap<>();
+            java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
+            Map<String, Integer> d = new HashMap<>();
+            boolean anyRoot = ch.nodes.values().stream().anyMatch(n -> n.root);
+            for (ClientModel.Node n : ch.nodes.values()) {
+                for (String r : n.requireKeys) {
+                    links.computeIfAbsent(n.key, x -> new ArrayList<>()).add(r);
+                    links.computeIfAbsent(r, x -> new ArrayList<>()).add(n.key);
+                }
+                if (anyRoot ? n.root : n.requireKeys.isEmpty()) {
+                    d.put(n.key, 0);
+                    queue.add(n.key);
+                }
+            }
+            while (!queue.isEmpty()) {
+                String at = queue.poll();
+                for (String next : links.getOrDefault(at, List.of())) {
+                    if (!d.containsKey(next)) {
+                        d.put(next, d.get(at) + 1);
+                        queue.add(next);
+                    }
+                }
+            }
+            return d;
+        });
     }
 
     /** A highlighted line: a wide translucent band with arrows running from the first point to the second. */

@@ -116,6 +116,9 @@ final class DevTour {
             shot(t + 170, "06_skills");
             at(t + 180, () -> selectFirst(State.CLAIM));
             shot(t + 200, "07_skills_take");
+            // a skill tree's lines (two-way in the data) with a node selected: arrows run outward only
+            at(t + 202, () -> selectFirst(State.OPEN));
+            shot(t + 208, "13_skill_lines");
         }
         at(t + 210, () -> Minecraft.getInstance().setScreen(null));
         // a task that moves while playing: the HUD line, then the quest-complete toast
