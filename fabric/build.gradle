@@ -29,6 +29,15 @@ loom {
             ideConfigGenerated(true)
             runDir('runs/client')
         }
+        // opens the test world and walks the screens with screenshots (client/DevTour), like the NeoForge clientTest run
+        clientTest {
+            client()
+            setConfigName('Fabric Client Test')
+            ideConfigGenerated(false)
+            runDir('runs/client')
+            programArgs('--quickPlaySingleplayer', 'ppworld')
+            property('quest_tree.devTour', 'true')
+        }
         server {
             server()
             setConfigName('Fabric Server')
