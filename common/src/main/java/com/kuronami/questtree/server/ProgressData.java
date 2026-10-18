@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -65,10 +66,12 @@ public final class ProgressData {
         Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>();
         readProblems.clear();
         List<ProgressValidator.Problem> problems = new ArrayList<>();
+        // chapters whose file would not parse: a reference into one cannot be called missing (DATA_MODEL.md "検査")
+        Set<String> unreadable = new LinkedHashSet<>();
 
-        readAll(rm, ROOT + "/chapters", chapters, sources);
-        readAll(rm, ROOT + "/reward_tables", tables, sources);
-        readAll(rm, ROOT + "/patches", patches, null);
+        readAll(rm, ROOT + "/chapters", chapters, sources, unreadable);
+        readAll(rm, ROOT + "/reward_tables", tables, sources, null);
+        readAll(rm, ROOT + "/patches", patches, null, null);
         for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(ROOT, id -> id.getPath().equals(ROOT + "/groups.json")).entrySet()) {
             JsonElement g = read(e.getKey(), e.getValue());
             if (g != null && g.isJsonArray()) {
@@ -100,10 +103,32 @@ public final class ProgressData {
         bundle.add("groups", groups);
 
         // check the data before it becomes a model: a broken node is dropped, the rest of the pack keeps working
-        ProgressValidator.Result result = ProgressValidator.validate(bundle, sources, GameRegistry.INSTANCE);
+        ProgressValidator.Result result;
+        try {
+            result = ProgressValidator.validate(bundle, sources, GameRegistry.INSTANCE, unreadable);
+        } catch (RuntimeException ex) {
+            // the check must never take a reload down with it: keep the data as it is and report that it happened
+            Constants.LOG.error("Could not check the progression data", ex);
+            result = new ProgressValidator.Result();
+            result.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, "", "",
+                    "the progression data could not be checked: " + ex, 0));
+        }
         problems.addAll(readProblems);
         problems.addAll(result.problems);
         prune(chapters, result.droppedNodes);
+
+        // The model build is the last reader of the bundle, and the pruning above is what makes it safe. If something
+        // still gets through, keep the data that is already loaded: publishing a bundle the server cannot model would
+        // leave the client holding progression the server does not have.
+        com.kuronami.questtree.data.ProgressModel built;
+        try {
+            built = com.kuronami.questtree.data.ProgressModel.of(bundle);
+        } catch (RuntimeException ex) {
+            Constants.LOG.error("Could not build the progression model", ex);
+            problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, "", "",
+                    "the progression data could not be read as a model: " + ex, 0));
+            built = null;
+        }
 
         ProgressData.problems = List.copyOf(problems);
         errorCount = 0;
@@ -121,11 +146,14 @@ public final class ProgressData {
                 Constants.LOG.warn("{}", p.format());
             }
         }
+        if (built == null) {
+            return;
+        }
 
         base = bundle;
         langs = byLocale;
         COMPRESSED.clear();
-        model = com.kuronami.questtree.data.ProgressModel.of(bundle);
+        model = built;
         generation++;
         chapterCount = chapters.size();
         Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount, bundleFor("en_us").length / 1024, lang.size());
@@ -137,10 +165,16 @@ public final class ProgressData {
             return;
         }
         for (Map.Entry<String, JsonElement> c : chapters.entrySet()) {
-            if (!c.getValue().isJsonObject() || !c.getValue().getAsJsonObject().has("nodes")) {
+            if (!c.getValue().isJsonObject()) {
                 continue;
             }
-            JsonObject nodes = c.getValue().getAsJsonObject().getAsJsonObject("nodes");
+            JsonElement nodesElement = c.getValue().getAsJsonObject().get("nodes");
+            // a "nodes" that is not an object holds nothing to remove: the readers read it with obj(...), which hands
+            // back an empty object, and the validator reports it
+            if (nodesElement == null || !nodesElement.isJsonObject()) {
+                continue;
+            }
+            JsonObject nodes = nodesElement.getAsJsonObject();
             List<String> remove = new ArrayList<>();
             for (String id : nodes.keySet()) {
                 if (dropped.contains(c.getKey() + "/" + id)) {
@@ -202,9 +236,10 @@ public final class ProgressData {
     /**
      * Reads every {@code .json} under {@code dir} into {@code into}, keyed {@code <namespace>:<name>}. The raw text is
      * kept in {@code sources} (for the validator's line numbers) and a file that will not parse becomes a problem
-     * instead of just a log line.
+     * instead of just a log line. When {@code unreadable} is given, such a file's id is added to it.
      */
-    private static void readAll(ResourceManager rm, String dir, JsonObject into, Map<String, ProgressValidator.Source> sources) {
+    private static void readAll(ResourceManager rm, String dir, JsonObject into,
+                                Map<String, ProgressValidator.Source> sources, Set<String> unreadable) {
         String kind = dir.substring(ROOT.length() + 1);
         for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(dir, id -> id.getPath().endsWith(".json")).entrySet()) {
             String path = e.getKey().getPath();
@@ -219,6 +254,9 @@ public final class ProgressData {
                 el = JsonParser.parseString(text);
             } catch (Exception ex) {
                 readProblems.add(ProgressValidator.parseError(file, text, ex));
+                if (unreadable != null) {
+                    unreadable.add(e.getKey().getNamespace() + ":" + name);
+                }
                 Constants.LOG.error("Could not read progression file {}: {}", e.getKey(), ex.getMessage());
                 continue;
             }

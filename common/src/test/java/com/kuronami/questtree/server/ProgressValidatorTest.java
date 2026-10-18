@@ -147,11 +147,22 @@ class ProgressValidatorTest {
     }
 
     @Test
-    void anIdWithoutANamespaceIsAWarning() {
+    void anItemIdWithoutANamespaceIsNotReported() {
+        // ResourceLocation.tryParse supplies "minecraft" when the namespace is left out, so "stone" is the same id
         ProgressValidator.Registry registry = (kind, id) -> true;
         ProgressValidator.Result r = validate(chapter(
                 "{\"type\": \"item\", \"count\": 1, \"item\": {\"id\": \"stone\"}}", ""), registry);
-        assertTrue(says(r, "has no namespace"));
+        assertEquals(List.of(), r.problems);
+    }
+
+    @Test
+    void aBlockIdWithoutANamespaceIsAWarning() {
+        // blockMatches compares the raw text against the block's full id, so "stone" never matches "minecraft:stone"
+        ProgressValidator.Registry registry = (kind, id) -> true;
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"break\", \"count\": 1, \"block\": \"stone\"}", ""), registry);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "has no namespace, so it never matches"));
     }
 
     @Test
@@ -167,14 +178,16 @@ class ProgressValidatorTest {
     }
 
     @Test
-    void aDependencyCycleIsAnErrorAndDropsEveryNodeInIt() {
+    void aRequirementCycleThatNothingReachesIsAnErrorAndDropsEveryNodeInIt() {
+        // neither node can open from anywhere, whatever the player does
         String json = """
                 {"chapters": {"t:basics": {"nodes": {
                     "a": {"id": "a", "requires": {"nodes": ["b"]}},
                     "b": {"id": "b", "requires": {"nodes": ["a"]}}}}},
                  "reward_tables": {}}""";
         ProgressValidator.Result r = validate(json);
-        assertTrue(says(r, "dependency cycle"));
+        assertEquals(2, errors(r));
+        assertTrue(says(r, "can never be unlocked"));
         assertTrue(r.droppedNodes.contains("t:basics/a"));
         assertTrue(r.droppedNodes.contains("t:basics/b"));
     }
@@ -188,21 +201,37 @@ class ProgressValidatorTest {
                     "s0": {"id": "s0", "requires": {"nodes": ["root"], "mode": "any"}}}}},
                  "reward_tables": {}}""";
         ProgressValidator.Result r = validate(json);
-        assertFalse(says(r, "dependency cycle"));
-        assertTrue(r.droppedNodes.isEmpty());
+        assertEquals(List.of(), r.problems);
     }
 
     @Test
-    void aCycleWithAnyRequirementsIsOnlyAWarning() {
+    void aPuffishChainOfBothWayAnyLinksHasNoProblems() {
+        // PuffishImporter writes both directions of a link with mode "any" (PuffishImporter), so a chain like this is
+        // normal: each node opens from the one before it. A cycle search alone would call this a problem
+        String json = """
+                {"chapters": {"t:skills": {"nodes": {
+                    "root": {"id": "root", "root": true, "requires": {"nodes": ["s0"], "mode": "any"}},
+                    "s0": {"id": "s0", "requires": {"nodes": ["root", "s1"], "mode": "any"}},
+                    "s1": {"id": "s1", "requires": {"nodes": ["s0", "s2"], "mode": "any"}},
+                    "s2": {"id": "s2", "requires": {"nodes": ["s1"], "mode": "any"}}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(List.of(), r.problems);
+    }
+
+    @Test
+    void anAnyLoopThatNothingElseReachesIsStillAnError() {
+        // "any" does not save a loop that no open node ever enters
         String json = """
                 {"chapters": {"t:basics": {"nodes": {
                     "a": {"id": "a", "requires": {"nodes": ["b"], "mode": "any"}},
                     "b": {"id": "b", "requires": {"nodes": ["a"], "mode": "any"}}}}},
                  "reward_tables": {}}""";
         ProgressValidator.Result r = validate(json);
-        assertEquals(0, errors(r));
-        assertTrue(says(r, "possible dependency cycle"));
-        assertTrue(r.droppedNodes.isEmpty());
+        assertEquals(2, errors(r));
+        assertTrue(says(r, "can never be unlocked"));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+        assertTrue(r.droppedNodes.contains("t:basics/b"));
     }
 
     @Test
@@ -220,10 +249,12 @@ class ProgressValidatorTest {
     }
 
     @Test
-    void aRewardThatPointsAtAMissingTableIsAnError() {
+    void aRewardThatPointsAtAMissingTableIsOnlyAWarning() {
+        // Rewards.give catches what its readers throw, so a reward that cannot be given only skips itself
         ProgressValidator.Result r = validate(chapter("", "{\"type\": \"table\", \"table\": \"t:nope\"}"));
-        assertEquals(1, errors(r));
+        assertEquals(0, errors(r));
         assertTrue(says(r, "does not exist"));
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
     }
 
     @Test
@@ -262,6 +293,292 @@ class ProgressValidatorTest {
         bundle.add("reward_tables", new JsonObject());
         ProgressValidator.Result r = ProgressValidator.validate(bundle, sources);
         assertTrue(says(r, "declared more than once"));
+    }
+
+    @Test
+    void aCountThatIsNotANumberIsAnError() {
+        // ProgressRules.target reads count with getAsLong on the server tick and nothing above it catches that
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": \"many\", \"item\": {\"id\": \"minecraft:stone\"}}", ""));
+        assertTrue(says(r, "\"count\" is not a whole number"), () -> "problems: " + r.problems);
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aCountWrittenAsAStringIsFine() {
+        // Gson parses a string that holds a number, and so do the readers
+        assertEquals(List.of(), validate(chapter(
+                "{\"type\": \"item\", \"count\": \"16\", \"item\": {\"id\": \"minecraft:stone\"}}", "")).problems);
+    }
+
+    @Test
+    void aRequirementThatIsAnObjectIsAnError() {
+        // ProgressModel reads each name with getAsString, which throws on an object, an array or null
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "requires": {"nodes": [{"a": 1}]}, "tasks": []}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertTrue(says(r, "is not a node name"));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aRequirementWrittenAsANumberIsResolvedAsItsText() {
+        // getAsString turns 7 into "7", so it is a name like any other: this one is missing, not malformed
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "requires": {"nodes": [7]}, "tasks": []}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertTrue(says(r, "requires node \"7\", which does not exist"), () -> "problems: " + r.problems);
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aRequirementWrittenAsANumberCanStillResolve() {
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "7": {"id": "7", "tasks": []},
+                    "a": {"id": "a", "requires": {"nodes": [7]}, "tasks": []}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(List.of(), r.problems);
+    }
+
+    @Test
+    void aNonNumericRewardAmountIsOnlyAWarning() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"checkmark\", \"count\": 1}",
+                "{\"type\": \"xp\", \"amount\": \"lots\"}"));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "\"amount\" is not a number"));
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void nonNumericRewardTableNumbersAreOnlyWarnings() {
+        // rolls, weight and empty_weight are read with getAsDouble inside Rewards.give, which catches
+        String json = """
+                {"chapters": {},
+                 "reward_tables": {"t:gems": {"rolls": "two", "empty_weight": {}, "entries": [
+                    {"weight": "heavy", "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}}]}}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "\"rolls\" is not a number"));
+        assertTrue(says(r, "\"weight\" is not a number"));
+        assertTrue(says(r, "\"empty_weight\" is not a number"));
+    }
+
+    @Test
+    void aNonNumericMinIsAWarningAndTheNodeStillOpens() {
+        // ProgressModel.intOf falls back to its default, which for min means "not used"
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "requires": {"nodes": ["b"], "min": "two"}, "tasks": []},
+                    "b": {"id": "b", "tasks": []}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertTrue(says(r, "\"min\" is not a number"));
+        assertEquals(0, errors(r));
+    }
+
+    @Test
+    void anExclusiveWithThatNamesAMissingNodeIsOnlyAWarning() {
+        // the node still opens and completes; only the rivalry the author meant is lost (ProgressRules.excluded)
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "exclusive_with": ["ghost"], "tasks": []}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "exclusive_with node \"ghost\", which does not exist"));
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aRewardTableThatContainsItselfIsAnErrorAndDropsTheNodeThatGivesIt() {
+        // the readers recurse until the stack runs out, and that Error is not caught; the table cannot be dropped,
+        // so the node that hands it out is
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "tasks": [], "rewards": [{"type": "table", "table": "t:loop"}]}}}},
+                 "reward_tables": {"t:loop": {"rolls": 1, "entries": [
+                    {"weight": 1.0, "reward": {"type": "table", "table": "t:loop"}}]}}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(2, errors(r));
+        assertTrue(says(r, "contains itself"));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aReferenceIntoAChapterThatWouldNotParseIsOnlyAWarning() {
+        // the chapter file failed to parse, so whether the node is there cannot be known
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "requires": {"nodes": ["broken/x"]}, "tasks": []}}}},
+                 "reward_tables": {}}""";
+        JsonObject bundle = JsonParser.parseString(json).getAsJsonObject();
+        ProgressValidator.Result r = ProgressValidator.validate(
+                bundle, Map.of(), ProgressValidator.Registry.NONE, java.util.Set.of("t:broken"));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "could not be read"));
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aCountThatIsNotEvenANumberShapeIsOnlyAWarning() {
+        // ProgressRules.target guards count and ticks with isJsonPrimitive and skips what it cannot read, so the node
+        // still works and only means something different from what was written
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": [], \"item\": {\"id\": \"minecraft:stone\"}}", ""));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "\"count\" is not a number, so it is not read"), () -> "problems: " + r.problems);
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void anOptionalFlagThatIsNotABooleanIsAWarning() {
+        // ProgressRules.tasksDone reads optional with getAsBoolean, which reads a number or a word as false
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"optional\": \"yes\", \"item\": {\"id\": \"minecraft:stone\"}}", ""));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "\"optional\" is not true or false, so it is read as false"), () -> "problems: " + r.problems);
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void anOptionalFlagThatIsNotPrimitiveIsAnError() {
+        // getAsBoolean on an object throws on the tick, and nothing above it catches that
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"optional\": {}, \"item\": {\"id\": \"minecraft:stone\"}}", ""));
+        assertEquals(1, errors(r));
+        assertTrue(says(r, "so the server would stop reading this node"), () -> "problems: " + r.problems);
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aRepeatWithAMaxBelowTwoNeverRepeats() {
+        // ProgressRules.repeatAfterClaim asks "done + 1 >= max", so max 1 never comes round again
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "repeat": {"max": 1},
+                          "tasks": [{"type": "item", "count": 1, "item": {"id": "minecraft:stone"}}]}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "\"max\" is 1, so the node never repeats"), () -> "problems: " + r.problems);
+    }
+
+    @Test
+    void aRepeatCooldownThatIsNotANumberIsAnError() {
+        // ProgressRules.repeatAfterClaim reads cooldown with getAsLong while the claim settles, on the tick
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "repeat": {"cooldown": "soon"},
+                          "tasks": [{"type": "item", "count": 1, "item": {"id": "minecraft:stone"}}]}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(1, errors(r), () -> "problems: " + r.problems);
+        assertTrue(says(r, "\"cooldown\" is not a whole number"), () -> "problems: " + r.problems);
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aBreakTaskOnAnEmptyTagIsAnError() {
+        // blockTagMatches parses the text after "#" with tryParse, which is null for "", so the task never counts
+        ProgressValidator.Result r = validate(chapter("{\"type\": \"break\", \"count\": 1, \"block\": \"#\"}", ""));
+        assertEquals(1, errors(r));
+        assertTrue(says(r, "is empty, so it never matches"), () -> "problems: " + r.problems);
+    }
+
+    @Test
+    void aBreakTaskOnATagIsNotReported() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"break\", \"count\": 1, \"block\": \"#minecraft:logs\"}", ""));
+        assertEquals(List.of(), r.problems);
+    }
+
+    @Test
+    void anItemRewardThatNamesAFluidGivesNothing() {
+        // Rewards.item reads only "id" (ProgressService.itemSpec), so a fluid-only object has no item to give
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": {\"id\": \"minecraft:stone\"}}",
+                "{\"type\": \"item\", \"item\": {\"fluid\": \"minecraft:water\"}}"));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "item reward has no item id, so nothing is given"), () -> "problems: " + r.problems);
+    }
+
+    @Test
+    void aTableRewardWithAModeThatIsNotAStringIsAWarning() {
+        // Rewards.table reads mode with getAsString inside give, which catches it and loses the reward
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "count": 1, "rewards": [{"type": "table", "table": "t:gems", "mode": 2}]}}}},
+                 "reward_tables": {"t:gems": {"rolls": 1, "entries": [
+                    {"weight": 1.0, "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}}]}}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "\"mode\" is not a string"), () -> "problems: " + r.problems);
+    }
+
+    @Test
+    void anUnresolvedRequireOnlyDropsTheNodeWhenItLosesTheGate() {
+        // mode "any" asks for one of its names either way, so losing one leaves a gate that still asks for something
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "requires": {"nodes": ["ghost"], "mode": "any"}, "tasks": []}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "does not exist"), () -> "problems: " + r.problems);
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aRequireOfADroppedNodeFollowsWhatItCostsTheGate() {
+        // "b" is dropped for its own error, and "a" then names a node that is not there any more: with mode "any" the
+        // gate still asks for one of two names, so it only warns and both nodes stay in the data
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "requires": {"nodes": ["b"], "mode": "any"}, "tasks": []},
+                    "b": {"id": "b", "tasks": [{"type": "nope"}]}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertTrue(r.droppedNodes.contains("t:basics/b"));
+        assertTrue(says(r, "was dropped, so this node opens earlier than written"), () -> "problems: " + r.problems);
+        assertEquals(1, errors(r), () -> "problems: " + r.problems);
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aRequireOfADroppedNodeThatLosesTheGateIsAnError() {
+        String json = """
+                {"chapters": {"t:basics": {"nodes": {
+                    "a": {"id": "a", "requires": {"nodes": ["b"]}, "tasks": []},
+                    "b": {"id": "b", "tasks": [{"type": "nope"}]}}}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(2, errors(r), () -> "problems: " + r.problems);
+        assertFalse(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void aChapterWhoseNodesAreNotAnObjectIsAnError() {
+        // the readers take "nodes" with obj(...), which hands back an empty object, so the chapter is empty
+        String json = """
+                {"chapters": {"t:basics": {"nodes": []}},
+                 "reward_tables": {}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(1, errors(r));
+        assertTrue(says(r, "the chapter has no nodes"), () -> "problems: " + r.problems);
+    }
+
+    @Test
+    void aDeeplyNestedFileDoesNotTakeTheLineScanDown() {
+        // the scan recurses once per level, and a stack overflow is an Error that its catch cannot see
+        String deep = "{\"a\":".repeat(400) + "1" + "}".repeat(400);
+        assertEquals(1, ProgressValidator.lineOf(deep, "a.a"));
     }
 
     @Test
