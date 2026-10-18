@@ -119,6 +119,18 @@ public class ProgressScreen extends Screen {
         });
         // input only: drawn by render() above the scrim
         addWidget(searchBox);
+        if (pendingGoTo != null && model() != null) {
+            goTo(pendingGoTo);
+            pendingGoTo = null;
+        }
+    }
+
+    /** Opens the screen on one quest (the open key over an item that a quest wants). */
+    static void openAt(String key) {
+        ProgressScreen screen = new ProgressScreen();
+        screen.pendingGoTo = key;
+        query = "";
+        net.minecraft.client.Minecraft.getInstance().setScreen(screen);
     }
 
     private boolean searching() {
@@ -281,6 +293,12 @@ public class ProgressScreen extends Screen {
     private PlayerProgress cachedFor;
     private ClientModel cachedModel;
     private int cachedSeen = -1;
+    /** The item under the pointer in the detail panel (a task or a reward), for the recipe viewer's keys. */
+    private ItemStack hoverStack = ItemStack.EMPTY;
+    private int lastMouseX;
+    private int lastMouseY;
+    /** A quest to show once the screen is laid out (opened from an item, see {@link #openAt}). */
+    private String pendingGoTo;
     /** Chapters holding at least one unread (newly startable, not yet opened) quest. */
     private final java.util.Set<String> unread = new java.util.HashSet<>();
     private final List<NowEntry> nowEntries = new ArrayList<>();
@@ -483,6 +501,9 @@ public class ProgressScreen extends Screen {
         if (selected != null) {
             Seen.markSeen(selected);
         }
+        hoverStack = ItemStack.EMPTY;
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         if (tourResting) {
             mouseX = width + 8;
             mouseY = height + 8;
@@ -1375,6 +1396,14 @@ public class ProgressScreen extends Screen {
                 long have = Math.min(p.task(n.key, i), t.count);
                 boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
                 Ui.divider(g, x, y - 2, w);
+                if (!t.item.isEmpty() && lastMouseX >= x && lastMouseX < x + 16 && lastMouseY >= y + 2 && lastMouseY < y + 18) {
+                    hoverStack = t.item;
+                    RecipeViewer viewer = RecipeViewer.Holder.get();
+                    if (viewer != null) {
+                        ItemStack it = t.item;
+                        buttons.add(new Button(x, y + 2, 16, 16, () -> viewer.showRecipes(it)));
+                    }
+                }
                 if (!t.icon().isEmpty()) {
                     g.renderItem(t.icon(), x, y + 2);
                 } else if (t.type.equals("checkmark")) {
@@ -1545,6 +1574,9 @@ public class ProgressScreen extends Screen {
     }
 
     private void slot(GuiGraphics g, ItemStack r, int x, int y, boolean picked) {
+        if (lastMouseX >= x && lastMouseX < x + 22 && lastMouseY >= y && lastMouseY < y + 22) {
+            hoverStack = r;
+        }
         Ui.surface(g, x, y, 22, 22, Ui.R2, picked ? Ui.OVERLAY_3 : Ui.OVERLAY_1);
         if (picked) {
             Ui.outline(g, x, y, 22, 22, Ui.R2, Ui.SELECTION);
@@ -2157,6 +2189,18 @@ public class ProgressScreen extends Screen {
         }
         if ((key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) && searching()) {
             nextMatch();
+            return true;
+        }
+        RecipeViewer viewer = RecipeViewer.Holder.get();
+        if (viewer != null && !hoverStack.isEmpty()
+                && (key == org.lwjgl.glfw.GLFW.GLFW_KEY_R || key == org.lwjgl.glfw.GLFW.GLFW_KEY_U)) {
+            // the viewer's own keys: R for how it is made, U for what it is used in
+            ItemStack it = hoverStack;
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_R) {
+                viewer.showRecipes(it);
+            } else {
+                viewer.showUses(it);
+            }
             return true;
         }
         if (ClientProgress.OPEN_KEY.matches(key, scan)) {

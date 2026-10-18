@@ -52,6 +52,14 @@ public final class QuestTreeClient {
             }
         }
 
+        /** The open key over an item in another screen opens the quest that wants it. */
+        @SubscribeEvent
+        public static void screenKey(net.neoforged.neoforge.client.event.ScreenEvent.KeyPressed.Pre event) {
+            if (ClientProgress.onScreenKey(event.getScreen(), event.getKeyCode(), event.getScanCode())) {
+                event.setCanceled(true);
+            }
+        }
+
         @SubscribeEvent
         public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
             ClientProgress.onLogout();

@@ -80,3 +80,8 @@ neoForge {
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+dependencies {
+    // JEI is optional: compiled against its API only, never required at runtime (client/RecipeViewer)
+    compileOnly "mezz.jei:jei-1.21.1-common-api:19.57.0.447"
+}

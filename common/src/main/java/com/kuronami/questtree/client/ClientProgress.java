@@ -194,6 +194,33 @@ public final class ClientProgress {
     }
 
     /** Leaving a server: forget its data so another server never shows it. */
+    /**
+     * A key pressed in any other screen. The open key over an item (in an inventory, or in the recipe viewer's lists)
+     * opens the quest that wants that item; with no such quest the key is left alone.
+     */
+    public static boolean onScreenKey(net.minecraft.client.gui.screens.Screen screen, int key, int scan) {
+        if (screen instanceof ProgressScreen || !OPEN_KEY.matches(key, scan) || model == null) {
+            return false;
+        }
+        net.minecraft.world.item.ItemStack stack = net.minecraft.world.item.ItemStack.EMPTY;
+        RecipeViewer viewer = RecipeViewer.Holder.get();
+        if (viewer != null) {
+            stack = viewer.underMouse();
+        }
+        if (stack.isEmpty() && screen instanceof com.kuronami.questtree.mixin.AbstractContainerScreenAccessor a) {
+            var slot = a.questTree$hoveredSlot();
+            if (slot != null && slot.hasItem()) {
+                stack = slot.getItem();
+            }
+        }
+        String quest = ItemTooltips.questFor(stack);
+        if (quest == null) {
+            return false;
+        }
+        ProgressScreen.openAt(quest);
+        return true;
+    }
+
     public static void onLogout() {
         Seen.flush();
         model = null;

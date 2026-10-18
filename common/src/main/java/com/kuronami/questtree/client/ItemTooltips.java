@@ -79,6 +79,34 @@ public final class ItemTooltips {
         }
     }
 
+    /**
+     * The quest that wants this item most (pinned first, then open ones), or null: the open key over an item opens it.
+     * Uses the same index as the tooltips.
+     */
+    public static String questFor(ItemStack stack) {
+        ProgressRules rules = ClientProgress.rules();
+        if (rules == null || ClientProgress.model() == null || stack.isEmpty()) {
+            return null;
+        }
+        PlayerProgress p = ClientProgress.progress();
+        if (builtFor != p || builtPins != Pins.version()) {
+            build(rules, p);
+            builtFor = p;
+            builtPins = Pins.version();
+        }
+        List<Want> wants = BY_ITEM.getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), List.of());
+        if (!wants.isEmpty()) {
+            return wants.get(0).node;
+        }
+        for (Want w : BY_TAG) {
+            ResourceLocation tag = ResourceLocation.tryParse(w.spec.substring(1));
+            if (tag != null && stack.is(TagKey.create(Registries.ITEM, tag))) {
+                return w.node;
+            }
+        }
+        return null;
+    }
+
     /** Index of the items that pinned quests and quests open right now still need. */
     private static void build(ProgressRules rules, PlayerProgress p) {
         BY_ITEM.clear();

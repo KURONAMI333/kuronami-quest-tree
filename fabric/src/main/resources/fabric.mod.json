@@ -19,6 +19,9 @@
         ],
         "client": [
             "com.kuronami.questtree.QuestTreeClient"
+        ],
+        "jei_mod_plugin": [
+            "com.kuronami.questtree.client.compat.QuestTreeJeiPlugin"
         ]
     },
     "mixins": [

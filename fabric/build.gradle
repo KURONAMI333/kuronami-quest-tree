@@ -3,6 +3,8 @@ plugins {
     id 'fabric-loom'
 }
 dependencies {
+    // JEI is optional: compiled against its API only, never required at runtime (client/RecipeViewer)
+    compileOnly "mezz.jei:jei-1.21.1-common-api:19.57.0.447"
     minecraft "com.mojang:minecraft:${minecraft_version}"
     mappings loom.layered {
         officialMojangMappings()

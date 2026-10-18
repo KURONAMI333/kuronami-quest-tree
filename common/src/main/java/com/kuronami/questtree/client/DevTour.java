@@ -152,7 +152,37 @@ final class DevTour {
             at(pt + 24, () -> screen.tourSearch("qqqzzz"));
             shot(pt + 30, "15_search_none");
         }
-        at(pt + 40, () -> {
+        // the recipe viewer both ways: an item a quest wants opens that quest; the quest's item opens its recipes
+        at(pt + 34, () -> Minecraft.getInstance().setScreen(null));
+        at(pt + 36, () -> {
+            net.minecraft.world.item.ItemStack item = net.minecraft.world.item.ItemStack.EMPTY;
+            String quest = null;
+            for (ClientModel.Node n : ClientProgress.model().nodesByKey.values()) {
+                for (ClientModel.Task task : n.tasks) {
+                    if (!task.item.isEmpty() && (quest = ItemTooltips.questFor(task.item)) != null) {
+                        item = task.item;
+                        break;
+                    }
+                }
+                if (quest != null) {
+                    break;
+                }
+            }
+            Constants.LOG.info("Dev tour: recipe viewer {}, item {} wanted by {}", RecipeViewer.Holder.get() != null, item, quest);
+            if (quest != null) {
+                ProgressScreen.openAt(quest);
+            }
+        });
+        shot(pt + 46, "16_item_to_quest");
+        at(pt + 50, () -> {
+            ClientModel.Node want = openItemQuest();
+            RecipeViewer viewer = RecipeViewer.Holder.get();
+            if (viewer != null && want != null) {
+                viewer.showRecipes(want.tasks.get(0).item);
+            }
+        });
+        shot(pt + 60, "17_quest_to_recipes");
+        at(pt + 70, () -> {
             ProgressScreen.tourResting(false);
             Constants.LOG.info("Dev tour finished");
         });
