@@ -24,7 +24,10 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Stream;
@@ -56,8 +59,38 @@ public final class ProgressCommands {
                 .then(Commands.literal("status").executes(c -> {
                     c.getSource().sendSuccess(() -> Component.literal(ProgressData.chapterCount() + " chapters loaded"), false);
                     return ProgressData.chapterCount();
-                })));
+                }))
+                .then(Commands.literal("validate").executes(ProgressCommands::validate)));
         PlayerCommands.register(dispatcher);
+    }
+
+    /**
+     * Reports what the last data pack reload found wrong (ERRORs drop the node; see DATA_MODEL.md "検査"). Shows the
+     * count and the first 20 problems; the full list is in the log.
+     */
+    private static int validate(CommandContext<CommandSourceStack> c) {
+        CommandSourceStack src = c.getSource();
+        List<ProgressValidator.Problem> problems = new ArrayList<>(ProgressData.problems());
+        int errors = ProgressData.errorCount();
+        int warnings = ProgressData.warningCount();
+        if (problems.isEmpty()) {
+            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.none"), false);
+            return 1;
+        }
+        src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.summary", errors, warnings), false);
+        // ERRORs first: they are the ones a pack author has to act on
+        problems.sort(Comparator.comparing(ProgressValidator.Problem::severity)
+                .thenComparing(ProgressValidator.Problem::file)
+                .thenComparing(ProgressValidator.Problem::path));
+        int shown = Math.min(20, problems.size());
+        for (int i = 0; i < shown; i++) {
+            String line = problems.get(i).format();
+            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.problem", line), false);
+        }
+        if (problems.size() > shown) {
+            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.more", problems.size() - shown), false);
+        }
+        return Math.max(0, errors);
     }
 
     private static int importFtb(CommandContext<CommandSourceStack> c, String ns) {
