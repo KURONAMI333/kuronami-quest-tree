@@ -1059,7 +1059,11 @@ public class ProgressScreen extends Screen {
                 boolean on = focus != null && (n.key.equals(focus) || p.key.equals(focus));
                 // the way just opened: colour runs in from the earlier node with the arrow at its head (300ms)
                 float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW);
-                arrowLine(g, p, n, on ? brighter(lc) : lc, on, grow >= 0 ? grow : -1, far, now, occ);
+                if (ELBOW_LINES) {
+                    elbowLine(g, p, n, on ? brighter(lc) : lc, on, grow >= 0 ? grow : -1, far, ch.skills);
+                } else {
+                    arrowLine(g, p, n, on ? brighter(lc) : lc, on, grow >= 0 ? grow : -1, far, now, occ);
+                }
             }
         }
         // nodes
@@ -2218,6 +2222,145 @@ public class ProgressScreen extends Screen {
             Tiles.icon(g, "arrow", head - a / 2, -a / 2, a, argb);
         }
         g.pose().popPose();
+    }
+
+    /**
+     * Quest lines drawn as elbows (2026-10-18 trial, after Thaumaturge's research book): leave the earlier node along
+     * one axis, turn once on a rounded corner, and enter the later node along the axis it is mostly reached by, with
+     * an arrowhead at the line's end, just outside that node's edge, like any arrow (2026-10-18, the player: the open
+     * chevron only read as a twig while it sat mid-line). Nodes that share a parent share its first leg, so a fan reads
+     * as one trunk. Skill trees keep straight lines with the same end arrowhead: their layouts are free-form, often radial.
+     */
+    static final boolean ELBOW_LINES = !Boolean.getBoolean("quest_tree.straightLines");
+    /** The largest corner radius, in map units: one grid unit, as in a book laid out on a grid. */
+    private static final float ELBOW_R = UNIT;
+    /** Neighbours closer than this (map units) keep a straight line: an elbow between touching tiles is only a curl. */
+    private static final float ELBOW_MIN = 1.5f * UNIT;
+    /**
+     * Where the chevron's tip and its inner corner sit, as fractions of the icon from its centre (icon/chevron is 64px:
+     * tip at 57, inner corner at 37). The tip lands on the line's end and the line stops inside the inner corner, so no
+     * line shows past the point.
+     */
+    private static final float CHEVRON_TIP = 0.39f;
+    private static final float CHEVRON_NOTCH = 0.12f;
+    /**
+     * The straight run a line keeps after its corner, beyond the tile's edge and the arrowhead, so the arrowhead sits on
+     * a straight piece and points the way the line arrives instead of along the end of the curve.
+     */
+    private static final float ELBOW_RUN_IN = 4;
+    /** Segments per rounded corner; enough that the joins do not show at the widest zoom. */
+    private static final int ELBOW_ARC_STEPS = 8;
+
+    private static void elbowLine(GuiGraphics g, ClientModel.Node p, ClientModel.Node n, int argb, boolean on, float open,
+                                  boolean far, boolean straight) {
+        float x1 = (float) (p.x * UNIT);
+        float y1 = (float) (p.y * UNIT);
+        float x2 = (float) (n.x * UNIT);
+        float y2 = (float) (n.y * UNIT);
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+            return;
+        }
+        float a = on || open >= 0 ? ARROW_ON : ARROW;
+        float half = (float) (NODE * n.size) / 2f * (Tiles.shapeOf(n.shape).equals("diamond") ? 1.25f : 1f);
+        float stop = half + ARROW_PAD;
+        float[] pts = straight ? new float[]{x1, y1, x2, y2} : elbowPath(x1, y1, dx, dy, stop + a + ELBOW_RUN_IN);
+        int last = pts.length - 2;
+        float ex = pts[last] - pts[last - 2];
+        float ey = pts[last + 1] - pts[last - 1];
+        float el = (float) Math.sqrt(ex * ex + ey * ey);
+        float ux = ex / el;
+        float uy = ey / el;
+        float w = on ? LINE_W_ON : LINE_W;
+        float total = polylineLength(pts) - stop;
+        boolean head = !far && total > a;
+        if (head) {
+            total -= CHEVRON_TIP * a - CHEVRON_NOTCH * a;
+        }
+        if (open >= 0) {
+            float e = ease(open);
+            polyline(g, pts, total, w, LINE_CLOSED);
+            polyline(g, pts, total * e, w, argb);
+        } else {
+            polyline(g, pts, total, w, argb);
+        }
+        if (head) {
+            g.pose().pushPose();
+            g.pose().translate(x2 - ux * (stop + CHEVRON_TIP * a), y2 - uy * (stop + CHEVRON_TIP * a), 0);
+            g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(uy, ux)));
+            Tiles.icon(g, "chevron", -a / 2, -a / 2, a, argb);
+            g.pose().popPose();
+        }
+    }
+
+    /**
+     * The elbow's points: a straight pair when the nodes share a row or column, otherwise first leg, a quarter circle
+     * sampled into short chords, and the leg into the later node. The leg into the node runs along the larger offset, and
+     * the corner shrinks so that leg keeps at least {@code straightIn} straight.
+     */
+    private static float[] elbowPath(float x1, float y1, float dx, float dy, float straightIn) {
+        if (Math.abs(dx) < 1 || Math.abs(dy) < 1 || dx * dx + dy * dy < ELBOW_MIN * ELBOW_MIN) {
+            return new float[]{x1, y1, x1 + dx, y1 + dy};
+        }
+        boolean enterSideways = Math.abs(dx) >= Math.abs(dy);
+        float sx = Math.signum(dx);
+        float sy = Math.signum(dy);
+        float cx = enterSideways ? x1 : x1 + dx;
+        float cy = enterSideways ? y1 + dy : y1;
+        float d1x = enterSideways ? 0 : sx;
+        float d1y = enterSideways ? sy : 0;
+        float d2x = enterSideways ? sx : 0;
+        float d2y = enterSideways ? 0 : sy;
+        float r = Math.min(ELBOW_R, Math.min(Math.abs(dx), Math.abs(dy)));
+        float secondLeg = enterSideways ? Math.abs(dx) : Math.abs(dy);
+        r = Math.max(0, Math.min(r, secondLeg - straightIn));
+        float[] pts = new float[(ELBOW_ARC_STEPS + 3) * 2];
+        int k = 0;
+        pts[k++] = x1;
+        pts[k++] = y1;
+        float ox = cx - d1x * r + d2x * r;
+        float oy = cy - d1y * r + d2y * r;
+        for (int i = 0; i <= ELBOW_ARC_STEPS; i++) {
+            double t = Math.PI / 2 * i / ELBOW_ARC_STEPS;
+            float c = (float) Math.cos(t);
+            float s = (float) Math.sin(t);
+            pts[k++] = ox - d2x * r * c + d1x * r * s;
+            pts[k++] = oy - d2y * r * c + d1y * r * s;
+        }
+        pts[k++] = x1 + dx;
+        pts[k] = y1 + dy;
+        return pts;
+    }
+
+    private static float polylineLength(float[] pts) {
+        float len = 0;
+        for (int i = 0; i + 3 < pts.length; i += 2) {
+            float ax = pts[i + 2] - pts[i];
+            float ay = pts[i + 3] - pts[i + 1];
+            len += (float) Math.sqrt(ax * ax + ay * ay);
+        }
+        return len;
+    }
+
+    /** Draws a polyline up to {@code upTo} map units of its length; each chord overlaps the next so joins stay closed. */
+    private static void polyline(GuiGraphics g, float[] pts, float upTo, float w, int argb) {
+        float done = 0;
+        for (int i = 0; i + 3 < pts.length && done < upTo; i += 2) {
+            float ax = pts[i + 2] - pts[i];
+            float ay = pts[i + 3] - pts[i + 1];
+            float l = (float) Math.sqrt(ax * ax + ay * ay);
+            if (l < 0.01f) {
+                continue;
+            }
+            float draw = Math.min(l, upTo - done);
+            g.pose().pushPose();
+            g.pose().translate(pts[i], pts[i + 1], 0);
+            g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(ay, ax)));
+            fillLine(g, done == 0 ? 0 : -w / 2, draw + (draw < l ? 0 : w / 2), w, argb);
+            g.pose().popPose();
+            done += l;
+        }
     }
 
     /** The footprints of a chapter's tiles in map units. A line knows these so it can keep its arrowhead off them. */
