@@ -71,7 +71,7 @@ public final class ProgressRules {
         }
         String mode = n.json.has("progression_mode") && n.json.get("progression_mode").isJsonPrimitive()
                 ? n.json.get("progression_mode").getAsString() : "default";
-        if (mode.equals("default") && n.chapter.defaults.has("progression_mode")) {
+        if (mode.equals("default") && n.chapter.defaults.has("progression_mode") && n.chapter.defaults.get("progression_mode").isJsonPrimitive()) {
             mode = n.chapter.defaults.get("progression_mode").getAsString();
         }
         return mode.equals("flexible");
@@ -145,11 +145,36 @@ public final class ProgressRules {
      * {@code visibility.requires} names nodes that must be done first. Hidden nodes still track progress.
      */
     public boolean visible(PlayerProgress p, ProgressModel.Node n) {
-        return visible(p, n, 0);
+        return visible(p, n, new java.util.HashMap<>());
     }
 
-    private boolean visible(PlayerProgress p, ProgressModel.Node n, int depth) {
-        if (doneOnce(p, n.key) || depth > 32) {
+    /**
+     * The same, sharing {@code memo} (node key to answer) with other calls for the same progress. The answer for one
+     * node can depend on a whole web of requirements, so a caller that asks about many nodes (the map, item tooltips)
+     * passes one memo and each node is worked out once; without it, dense hidden chapters cost exponential time
+     * (2026-10-19 review).
+     */
+    public boolean visible(PlayerProgress p, ProgressModel.Node n, java.util.Map<String, Boolean> memo) {
+        return visible(p, n, memo, new java.util.HashSet<>());
+    }
+
+    private boolean visible(PlayerProgress p, ProgressModel.Node n, java.util.Map<String, Boolean> memo, java.util.Set<String> path) {
+        Boolean known = memo.get(n.key);
+        if (known != null) {
+            return known;
+        }
+        if (!path.add(n.key)) {
+            // a loop of requirements shows nothing by itself
+            return false;
+        }
+        boolean v = visibleNow(p, n, memo, path);
+        path.remove(n.key);
+        memo.put(n.key, v);
+        return v;
+    }
+
+    private boolean visibleNow(PlayerProgress p, ProgressModel.Node n, java.util.Map<String, Boolean> memo, java.util.Set<String> path) {
+        if (doneOnce(p, n.key)) {
             return true;
         }
         JsonObject vis = n.json.has("visibility") && n.json.get("visibility").isJsonObject() ? n.json.getAsJsonObject("visibility") : new JsonObject();
@@ -185,7 +210,7 @@ public final class ProgressRules {
             case "deps_visible":
                 for (String r : n.requires) {
                     ProgressModel.Node d = model.nodes.get(r);
-                    if (d != null && !visible(p, d, depth + 1)) {
+                    if (d != null && !visible(p, d, memo, path)) {
                         return false;
                     }
                 }
@@ -198,7 +223,7 @@ public final class ProgressRules {
                 }
                 for (String r : n.requires) {
                     ProgressModel.Node d = model.nodes.get(r);
-                    if (d == null || visible(p, d, depth + 1)) {
+                    if (d == null || visible(p, d, memo, path)) {
                         return true;
                     }
                 }

@@ -42,13 +42,17 @@ public final class Seen {
     private static String worldKey() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.getSingleplayerServer() != null) {
-            return "local_" + mc.getSingleplayerServer().getWorldData().getLevelName();
+            // the save's folder, not its display name: two worlds called "New World" are two folders
+            Path dir = mc.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize();
+            return "local_" + dir.getFileName();
         }
         var server = mc.getCurrentServer();
         return server != null ? "server_" + server.ip : "unknown";
     }
 
     static void load() {
+        // a resync (/reload) must not lose what was opened since the last save
+        flush();
         world = worldKey();
         SEEN.clear();
         version++;
@@ -121,7 +125,10 @@ public final class Seen {
         Path f = file(world);
         try {
             Files.createDirectories(f.getParent());
-            Files.writeString(f, new Gson().toJson(a), StandardCharsets.UTF_8);
+            // written beside and moved over, so a crash mid-write leaves the old file instead of half a file
+            Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
+            Files.writeString(tmp, new Gson().toJson(a), StandardCharsets.UTF_8);
+            Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException ex) {
             Constants.LOG.warn("Could not save seen quests: {}", ex.toString());
         }

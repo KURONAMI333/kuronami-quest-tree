@@ -39,6 +39,11 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
 
             @Override
+            public boolean typing() {
+                return runtime.getIngredientListOverlay().hasKeyboardFocus();
+            }
+
+            @Override
             public ItemStack underMouse() {
                 ItemStack s = stackOf(runtime.getIngredientListOverlay().getIngredientUnderMouse());
                 if (s.isEmpty()) {

@@ -31,13 +31,10 @@ public class QuestTreeClient implements ClientModInitializer {
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientProgress.onLogout());
         // the open key over an item in another screen opens the quest that wants it
-        // init runs again on every resize, so each screen gets the listener once
-        java.util.Set<net.minecraft.client.gui.screens.Screen> hooked = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
-        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.BEFORE_INIT.register((client, screen, w, h) -> {
-            if (hooked.add(screen)) {
+        // Fabric makes a screen's key events anew on every init (resize, coming back from another screen), so the
+        // listener is added on every init, not once per screen
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.BEFORE_INIT.register((client, screen, w, h) ->
                 net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents.allowKeyPress(screen).register((s, key, scan, mods) ->
-                        !ClientProgress.onScreenKey(s, key, scan));
-            }
-        });
+                        !ClientProgress.onScreenKey(s, key, scan)));
     }
 }

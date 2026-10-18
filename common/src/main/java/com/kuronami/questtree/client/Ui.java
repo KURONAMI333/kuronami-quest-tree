@@ -118,6 +118,7 @@ final class Ui {
      * change applies the next time it is opened.
      */
     static void loadPalette(net.minecraft.server.packs.resources.ResourceManager rm) {
+        restoreDefaults();
         com.google.gson.JsonObject o = new com.google.gson.JsonObject();
         try {
             var res = rm.getResource(PALETTE);
@@ -180,6 +181,71 @@ final class Ui {
         HUD_MUTED = color(o, "hud_muted", HUD_MUTED);
         TOAST_TRACK = color(o, "toast_track", TOAST_TRACK);
         ProgressScreen.paletteChanged();
+    }
+
+    /** The colours as compiled, so switching from a pack to one that sets fewer keys does not keep the first pack's. */
+    private static int[] defaults;
+
+    private static int[] current() {
+        return new int[]{TEXT, MUTED, DIM, BRIGHT, GROUND, PANEL, PANEL_TRANSLUCENT, RAIL_CLOSED, FLOATING, ACCENT, BADGE, BADGE_TEXT, OVERLAY_1, OVERLAY_2, OVERLAY_3, HAIRLINE, DIVIDER, FOCUS, DISABLED, Tiles.GREEN, Tiles.GREEN_DARK, Tiles.GREEN_TEXT, Tiles.TILE_LOCKED, Tiles.INK, Tiles.WHITE, Tiles.GREEN_BRIGHT, Tiles.GREEN_SETTLED, Tiles.GREY, Tiles.GREY_DARK, Tiles.BLUE, Tiles.BLUE_DARK, Tiles.GOLD, Tiles.RED, ProgressScreen.LINE_OPEN, ProgressScreen.LINE_CLOSED, ProgressScreen.LINE_CLOSED_ON, TEXT_ERROR, SCROLLBAR, SCROLLBAR_HOVER, MARK, SELECTION, OPTIONAL_OUTLINE, FLASH, MINIMAP_VIEW, MINIMAP_OPEN, LINE_OPEN_HOVER, HUD_BACK, HUD_TEXT, HUD_MUTED, TOAST_TRACK};
+    }
+
+    private static void restoreDefaults() {
+        if (defaults == null) {
+            defaults = current();
+            return;
+        }
+        int i = 0;
+        TEXT = defaults[i++];
+        MUTED = defaults[i++];
+        DIM = defaults[i++];
+        BRIGHT = defaults[i++];
+        GROUND = defaults[i++];
+        PANEL = defaults[i++];
+        PANEL_TRANSLUCENT = defaults[i++];
+        RAIL_CLOSED = defaults[i++];
+        FLOATING = defaults[i++];
+        ACCENT = defaults[i++];
+        BADGE = defaults[i++];
+        BADGE_TEXT = defaults[i++];
+        OVERLAY_1 = defaults[i++];
+        OVERLAY_2 = defaults[i++];
+        OVERLAY_3 = defaults[i++];
+        HAIRLINE = defaults[i++];
+        DIVIDER = defaults[i++];
+        FOCUS = defaults[i++];
+        DISABLED = defaults[i++];
+        Tiles.GREEN = defaults[i++];
+        Tiles.GREEN_DARK = defaults[i++];
+        Tiles.GREEN_TEXT = defaults[i++];
+        Tiles.TILE_LOCKED = defaults[i++];
+        Tiles.INK = defaults[i++];
+        Tiles.WHITE = defaults[i++];
+        Tiles.GREEN_BRIGHT = defaults[i++];
+        Tiles.GREEN_SETTLED = defaults[i++];
+        Tiles.GREY = defaults[i++];
+        Tiles.GREY_DARK = defaults[i++];
+        Tiles.BLUE = defaults[i++];
+        Tiles.BLUE_DARK = defaults[i++];
+        Tiles.GOLD = defaults[i++];
+        Tiles.RED = defaults[i++];
+        ProgressScreen.LINE_OPEN = defaults[i++];
+        ProgressScreen.LINE_CLOSED = defaults[i++];
+        ProgressScreen.LINE_CLOSED_ON = defaults[i++];
+        TEXT_ERROR = defaults[i++];
+        SCROLLBAR = defaults[i++];
+        SCROLLBAR_HOVER = defaults[i++];
+        MARK = defaults[i++];
+        SELECTION = defaults[i++];
+        OPTIONAL_OUTLINE = defaults[i++];
+        FLASH = defaults[i++];
+        MINIMAP_VIEW = defaults[i++];
+        MINIMAP_OPEN = defaults[i++];
+        LINE_OPEN_HOVER = defaults[i++];
+        HUD_BACK = defaults[i++];
+        HUD_TEXT = defaults[i++];
+        HUD_MUTED = defaults[i++];
+        TOAST_TRACK = defaults[i++];
     }
 
     private static int color(com.google.gson.JsonObject o, String key, int fallback) {

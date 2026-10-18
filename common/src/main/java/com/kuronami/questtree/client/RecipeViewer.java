@@ -14,6 +14,9 @@ public interface RecipeViewer {
 
     void showUses(ItemStack stack);
 
+    /** Whether the viewer's own search field is being typed in. */
+    boolean typing();
+
     /** The item under the pointer in the viewer's own lists, or empty. */
     ItemStack underMouse();
 

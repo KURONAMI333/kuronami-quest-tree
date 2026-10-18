@@ -111,10 +111,11 @@ public final class ItemTooltips {
     private static void build(ProgressRules rules, PlayerProgress p) {
         BY_ITEM.clear();
         BY_TAG.clear();
+        Map<String, Boolean> seen = new HashMap<>();
         for (ProgressModel.Node n : rules.model().nodes.values()) {
             State s = rules.state(p, n);
             boolean wanted = Pins.has(n.key) ? s != State.DONE : (s == State.OPEN || s == State.PROGRESS);
-            if (!wanted || !rules.visible(p, n)) {
+            if (!wanted || !rules.visible(p, n, seen)) {
                 continue;
             }
             for (int i = 0; i < n.tasks.size(); i++) {

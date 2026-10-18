@@ -552,14 +552,17 @@ class ProgressValidatorTest {
     }
 
     @Test
-    void aRequireOfADroppedNodeThatLosesTheGateIsAnError() {
+    void aRequireOfADroppedNodeThatLosesTheGateIsAWarning() {
+        // the node that named the dropped one is kept, so it is reported as a warning: an error would say "dropped"
+        // (2026-10-19 review)
         String json = """
                 {"chapters": {"t:basics": {"nodes": {
                     "a": {"id": "a", "requires": {"nodes": ["b"]}, "tasks": []},
                     "b": {"id": "b", "tasks": [{"type": "nope"}]}}}},
                  "reward_tables": {}}""";
         ProgressValidator.Result r = validate(json);
-        assertEquals(2, errors(r), () -> "problems: " + r.problems);
+        assertEquals(1, errors(r), () -> "problems: " + r.problems);
+        assertTrue(says(r, "was dropped, so this node opens earlier than written"), () -> "problems: " + r.problems);
         assertFalse(r.droppedNodes.contains("t:basics/a"));
     }
 

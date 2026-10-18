@@ -128,7 +128,9 @@ public final class ClientProgress {
             visibleFor = progress;
             visibleRules = rules;
         }
-        return VISIBLE.computeIfAbsent(key, k -> rules.visible(progress, n));
+        Boolean v = VISIBLE.get(key);
+        // the rules fill the map themselves as they work through a node's requirements (one memo per progress)
+        return v != null ? v : rules.visible(progress, n, VISIBLE);
     }
 
     private static final java.util.Map<String, Boolean> VISIBLE = new java.util.HashMap<>();
@@ -202,8 +204,16 @@ public final class ClientProgress {
         if (screen instanceof ProgressScreen || !OPEN_KEY.matches(key, scan) || model == null) {
             return false;
         }
+        // a key typed into a text field is a letter, not a shortcut (the creative search, an anvil, the viewer's search)
+        if (screen.getFocused() instanceof net.minecraft.client.gui.components.EditBox
+                || screen.getFocused() instanceof net.minecraft.client.gui.components.MultiLineEditBox) {
+            return false;
+        }
         net.minecraft.world.item.ItemStack stack = net.minecraft.world.item.ItemStack.EMPTY;
         RecipeViewer viewer = RecipeViewer.Holder.get();
+        if (viewer != null && viewer.typing()) {
+            return false;
+        }
         if (viewer != null) {
             stack = viewer.underMouse();
         }

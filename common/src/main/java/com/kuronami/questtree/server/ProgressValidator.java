@@ -267,7 +267,8 @@ public final class ProgressValidator {
                 for (Ref target : refsOf(chapter, e.getValue(), field)) {
                     if (nodes.containsKey(target.target()) && out.droppedNodes.contains(target.target())) {
                         if (field.equals("requires")) {
-                            problem(out, gateSeverity(e.getValue()), refs.get(chapter), path + ".requires.nodes",
+                            // a warning: this node is kept (dropping it as well would only spread the loss)
+                            problem(out, Severity.WARNING, refs.get(chapter), path + ".requires.nodes",
                                     "names node " + quote(target.raw()) + ", which was dropped, so this node opens earlier than written");
                         } else {
                             problem(out, Severity.WARNING, refs.get(chapter), path + ".exclusive_with",
@@ -920,7 +921,11 @@ public final class ProgressValidator {
                 continue;
             }
             String mode = str(rw, "mode");
-            if (!mode.equals("all") && !mode.equals("choice")) {
+            if (mode.equals("choice")) {
+                // a choice inside a table is handed out as nothing (Rewards.give with no pick), so it never recurses
+                continue;
+            }
+            if (!mode.equals("all")) {
                 // the default branch rolls for an entry, so one with no weight left to roll is never taken
                 JsonElement w = entry.get("weight");
                 if (w != null) {

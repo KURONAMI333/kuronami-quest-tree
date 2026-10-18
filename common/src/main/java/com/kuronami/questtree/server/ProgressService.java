@@ -360,11 +360,17 @@ public final class ProgressService {
             case "block", "block_tag", "block_state" -> {
                 double reach = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE);
                 HitResult hit = player.pick(reach, 1.0F, false);
-                yield hit instanceof BlockHitResult b && blockMatches(player, kind, target, player.level().getBlockState(b.getBlockPos()));
+                yield hit.getType() == HitResult.Type.BLOCK && hit instanceof BlockHitResult b
+                        && blockMatches(player, kind, target, player.level().getBlockState(b.getBlockPos()));
             }
             case "entity_type", "entity_type_tag" -> {
                 double reach = player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
                 Vec3 eye = player.getEyePosition();
+                // a wall in between hides the entity: stop the look where the first block is
+                HitResult wall = player.pick(reach, 1.0F, false);
+                if (wall.getType() == HitResult.Type.BLOCK) {
+                    reach = Math.min(reach, wall.getLocation().distanceTo(eye));
+                }
                 Vec3 end = eye.add(player.getViewVector(1.0F).scale(reach));
                 EntityHitResult hit = ProjectileUtil.getEntityHitResult(player, eye, end, new AABB(eye, end).inflate(1.0),
                         e -> !e.isSpectator() && e.isPickable(), reach * reach);
