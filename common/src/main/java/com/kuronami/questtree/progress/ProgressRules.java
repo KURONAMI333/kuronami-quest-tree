@@ -54,10 +54,27 @@ public final class ProgressRules {
         if (p.completed.contains(n.key)) {
             return !n.rewards.isEmpty() && !p.claimed.contains(n.key) ? State.CLAIM : State.DONE;
         }
-        if (!unlocked(p, n)) {
+        if (!unlocked(p, n) && !flexible(n)) {
             return State.LOCKED;
         }
         return fraction(p, n) > 0 ? State.PROGRESS : State.OPEN;
+    }
+
+    /**
+     * Whether a node's tasks count before its requirements are met (FTB Quests' "flexible" progression): set on the
+     * node ({@code progression_mode}, or the older {@code tasks_ignore_requires}) or as the chapter default. Such a
+     * node can be worked on at any time but only completes once its requirements are met.
+     */
+    public static boolean flexible(ProgressModel.Node n) {
+        if (ProgressModel.boolOf(n.json, "tasks_ignore_requires")) {
+            return true;
+        }
+        String mode = n.json.has("progression_mode") && n.json.get("progression_mode").isJsonPrimitive()
+                ? n.json.get("progression_mode").getAsString() : "default";
+        if (mode.equals("default") && n.chapter.defaults.has("progression_mode")) {
+            mode = n.chapter.defaults.get("progression_mode").getAsString();
+        }
+        return mode.equals("flexible");
     }
 
     /** Whether the requirements are met (not considering exclusivity). */
@@ -164,12 +181,7 @@ public final class ProgressRules {
             case "complete":
                 return false;
             case "deps_complete":
-                for (String r : n.requires) {
-                    if (!doneOnce(p, r)) {
-                        return false;
-                    }
-                }
-                return true;
+                return unlocked(p, n);
             case "deps_visible":
                 for (String r : n.requires) {
                     ProgressModel.Node d = model.nodes.get(r);
@@ -179,7 +191,18 @@ public final class ProgressRules {
                 }
                 return true;
             default:
-                return true;
+                // like FTB Quests: a node behind requirements shows while at least one of them shows, so a hidden
+                // branch keeps what grows from it hidden too (skill trees are exempt: their links run both ways)
+                if (n.requires.isEmpty() || n.root || n.chapter.isSkills()) {
+                    return true;
+                }
+                for (String r : n.requires) {
+                    ProgressModel.Node d = model.nodes.get(r);
+                    if (d == null || visible(p, d, depth + 1)) {
+                        return true;
+                    }
+                }
+                return false;
         }
     }
 

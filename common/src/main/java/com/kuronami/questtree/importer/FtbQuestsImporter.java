@@ -114,6 +114,10 @@ public final class FtbQuestsImporter {
                 out.groups.add(o);
             }
         }
+        Path data = questsDir.resolve("data.snbt");
+        if (Files.exists(data)) {
+            out.settings = read(data).getAsJsonObject();
+        }
         for (Map.Entry<String, JsonObject> e : raw.entrySet()) {
             try {
                 out.chapters.put(e.getKey(), chapter(e.getKey(), e.getValue(), idToNode, out));
@@ -121,10 +125,6 @@ public final class FtbQuestsImporter {
                 // one broken chapter must not stop the rest of the book from coming over
                 out.note("chapter skipped (" + e.getKey() + "): " + ex.getMessage());
             }
-        }
-        Path data = questsDir.resolve("data.snbt");
-        if (Files.exists(data)) {
-            out.settings = read(data).getAsJsonObject();
         }
         tables(questsDir.resolve("reward_tables"), out);
         lang(questsDir.resolve("lang"), raw, idToNode, out);
@@ -257,7 +257,29 @@ public final class FtbQuestsImporter {
             nodes.add(nid, quest(cid, nid, q, idToNode, out));
         }
         o.add("nodes", nodes);
+        inheritProgressionMode(o, out.settings);
         return o;
+    }
+
+    /**
+     * FTB Quests' progression mode is set on the whole book (data.snbt), a chapter, or a quest, and "default" means
+     * "ask the level above". The book's mode is written into each chapter that does not choose its own, so a pack set
+     * to "flexible" as a whole (All the Mods 10 is) lets tasks count before the quests they depend on are done.
+     */
+    private static void inheritProgressionMode(JsonObject chapter, JsonObject settings) {
+        JsonObject defaults = chapter.has("defaults") ? chapter.getAsJsonObject("defaults") : null;
+        String own = defaults != null && defaults.has("progression_mode") ? defaults.get("progression_mode").getAsString() : "default";
+        if (!own.equals("default")) {
+            return;
+        }
+        String book = settings != null && settings.has("progression_mode") ? settings.get("progression_mode").getAsString() : "default";
+        if (book.equals("default")) {
+            if (defaults != null) {
+                defaults.remove("progression_mode");
+            }
+            return;
+        }
+        put(chapter, "defaults.progression_mode", new JsonPrimitive(book));
     }
 
     private static JsonObject quest(String cid, String nid, JsonObject q, Map<String, String[]> idToNode, ImportOutput out) {

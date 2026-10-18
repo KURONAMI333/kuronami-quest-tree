@@ -102,6 +102,12 @@ public final class ClientProgress {
     }
 
     /** State of a node for this player; nodes the rules do not know (should not happen) count as open. */
+    /** Whether a node's requirements are met; a "flexible" node can be open without it. */
+    public static boolean unlocked(String key) {
+        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        return n == null || rules.unlocked(progress, n);
+    }
+
     public static ProgressRules.State state(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
         return n == null ? ProgressRules.State.OPEN : rules.state(progress, n);

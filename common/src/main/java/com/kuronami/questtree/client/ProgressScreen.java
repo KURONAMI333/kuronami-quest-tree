@@ -440,7 +440,8 @@ public class ProgressScreen extends Screen {
                 continue;
             }
             for (ClientModel.Node n : c.nodes.values()) {
-                if (n.optional || listed.contains(n.key) || !ClientProgress.visible(n.key) || ClientProgress.state(n.key) != State.OPEN) {
+                if (n.optional || listed.contains(n.key) || !ClientProgress.visible(n.key) || ClientProgress.state(n.key) != State.OPEN
+                        || !ClientProgress.unlocked(n.key)) {
                     continue;
                 }
                 open.add(new NowEntry(n.key, n, null));

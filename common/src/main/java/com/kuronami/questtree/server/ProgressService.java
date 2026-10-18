@@ -224,7 +224,7 @@ public final class ProgressService {
         if (s == State.EXCLUDED) {
             return false;
         }
-        return s != State.LOCKED || ProgressModel.boolOf(n.json, "tasks_ignore_requires");
+        return s != State.LOCKED;
     }
 
     private static void scanItems(ServerPlayer player, PlayerProgress p) {
@@ -480,7 +480,7 @@ public final class ProgressService {
                     continue;
                 }
                 State s = r.state(p, n);
-                if (s == State.LOCKED || s == State.EXCLUDED) {
+                if (s == State.LOCKED || s == State.EXCLUDED || !r.unlocked(p, n)) {
                     continue;
                 }
                 if (r.tasksDone(p, n)) {
