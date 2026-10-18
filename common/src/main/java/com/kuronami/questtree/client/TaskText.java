@@ -1,5 +1,6 @@
 package com.kuronami.questtree.client;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
 import net.minecraft.advancements.AdvancementHolder;
@@ -79,6 +80,20 @@ final class TaskText {
             }
             case "stage":
                 return new Shown(new ItemStack(Items.NAME_TAG), Component.translatable("task." + p + ".stage_named", pretty(str(o, "stage"))));
+            case "break":
+                return new Shown(new ItemStack(Items.IRON_PICKAXE),
+                        Component.translatable("task." + p + ".break_named", targetName(spec(o, "block"), "block")));
+            case "fluid":
+                return new Shown(new ItemStack(Items.WATER_BUCKET),
+                        Component.translatable("task." + p + ".fluid_named", targetName(spec(o, "fluid"), "block", "fluid")));
+            case "energy":
+                return new Shown(new ItemStack(Items.REDSTONE), Component.translatable("task." + p + ".energy"));
+            case "observation":
+                return new Shown(new ItemStack(Items.SPYGLASS), Component.translatable("task." + p + ".observation_named",
+                        targetName(spec(o, "target"), switch (str(o, "observe_type")) {
+                            case "entity_type", "entity_type_tag" -> "entity";
+                            default -> "block";
+                        })));
             case "xp":
                 return new Shown(new ItemStack(Items.EXPERIENCE_BOTTLE), Component.translatable(o.has("points") && o.get("points").getAsBoolean()
                         ? "task." + p + ".xp_points" : "task." + p + ".xp_levels"));
@@ -100,6 +115,47 @@ final class TaskText {
         }
         String key = kind + "." + rl.getNamespace() + "." + rl.getPath().replace('/', '.');
         return I18n.exists(key) ? Component.translatable(key) : pretty(id);
+    }
+
+    /**
+     * Name of a matched target ("minecraft:water", "#minecraft:logs", "minecraft:oak_stairs[facing=east]"): the first
+     * vanilla translation among the given key kinds, else a tidy id.
+     */
+    private static Component targetName(String spec, String... kinds) {
+        String id = spec.startsWith("#") ? spec.substring(1) : spec;
+        int bracket = id.indexOf('[');
+        if (bracket >= 0) {
+            id = id.substring(0, bracket);
+        }
+        ResourceLocation rl = ResourceLocation.tryParse(id);
+        if (rl != null) {
+            for (String kind : kinds) {
+                String key = kind + "." + rl.getNamespace() + "." + rl.getPath().replace('/', '.');
+                if (I18n.exists(key)) {
+                    return Component.translatable(key);
+                }
+            }
+        }
+        return pretty(id);
+    }
+
+    /** A task's matcher field ("block", "fluid") as one string, taking a plain id, {@code #tag}, {@code {id:..}} or {@code {tag:..}}. */
+    private static String spec(JsonObject o, String k) {
+        JsonElement e = o.get(k);
+        if (e == null) {
+            return "";
+        }
+        if (e.isJsonPrimitive()) {
+            return e.getAsString();
+        }
+        JsonObject j = e.getAsJsonObject();
+        if (j.has("tag")) {
+            return "#" + j.get("tag").getAsString();
+        }
+        if (j.has("id")) {
+            return j.get("id").getAsString();
+        }
+        return j.has("fluid") ? j.get("fluid").getAsString() : "";
     }
 
     private static Component dimensionName(String id) {

@@ -1,5 +1,6 @@
 package com.kuronami.questtree.importer;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -120,5 +121,29 @@ class ImporterTest {
         assertEquals(1, out.counts.get("skill_exclusive_pairs"));
         assertTrue(out.unmapped.isEmpty(), "unmapped: " + out.unmapped);
         assertEquals("any", ch.getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonObject("requires").get("mode").getAsString());
+    }
+
+    /** The block, fluid, forge_energy and observation tasks each keep their own counter field after conversion. */
+    @Test
+    void taskTypesConvertToTheirOwnCounters() throws Exception {
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(fixture("ftbquests_tasks/quests"), out);
+        JsonArray tasks = out.chapters.get("tasks").getAsJsonObject("nodes").getAsJsonObject("2000000000000001").getAsJsonArray("tasks");
+        JsonObject brk = tasks.get(0).getAsJsonObject();
+        assertEquals("break", brk.get("type").getAsString(), "FTB block task should become break");
+        assertEquals("minecraft:stone", brk.get("block").getAsString());
+        assertEquals(4, brk.get("count").getAsInt());
+        JsonObject fluid = tasks.get(1).getAsJsonObject();
+        assertEquals("fluid", fluid.get("type").getAsString());
+        assertEquals("minecraft:water", fluid.get("fluid").getAsString());
+        assertEquals(1000, fluid.get("amount").getAsInt());
+        JsonObject energy = tasks.get(2).getAsJsonObject();
+        assertEquals("energy", energy.get("type").getAsString(), "FTB forge_energy should become energy");
+        assertEquals(5000, energy.get("amount").getAsInt(), "FTB value should become amount");
+        JsonObject obs = tasks.get(3).getAsJsonObject();
+        assertEquals("observation", obs.get("type").getAsString());
+        assertEquals("minecraft:stone", obs.get("target").getAsString(), "FTB to_observe should become target");
+        assertEquals(20, obs.get("ticks").getAsInt(), "FTB timer should become ticks");
+        assertTrue(out.unmapped.isEmpty(), "unmapped: " + out.unmapped);
     }
 }

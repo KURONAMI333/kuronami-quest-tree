@@ -12,8 +12,10 @@ import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
+import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -25,9 +27,18 @@ import net.minecraft.stats.Stats;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -50,6 +61,8 @@ public final class ProgressService {
     private static final Map<UUID, List<String>> PENDING = new HashMap<>();
     /** true = send this tick; false = only experience changed, sent at most every 10 ticks (mining gives XP per block). */
     private static final Map<UUID, Boolean> DIRTY = new HashMap<>();
+    /** Observation tasks being watched right now: player → {@code <node key>#<task index>} → consecutive ticks. */
+    private static final Map<UUID, Map<String, Integer>> OBSERVED = new HashMap<>();
 
     private ProgressService() {
     }
@@ -95,6 +108,9 @@ public final class ProgressService {
 
     public static void onPlayerTick(ServerPlayer player) {
         long t = player.server.getTickCount();
+        // "observation" counts consecutive ticks of looking at the target, so it is read every tick and only written
+        // every 10 ticks (writing every tick would send a progress packet every tick)
+        scanObservation(player, t % 10 == 0);
         if (t % 10 == 0) {
             PlayerProgress p = progress(player);
             scanItems(player, p);
@@ -110,6 +126,7 @@ public final class ProgressService {
     public static void checkNow(ServerPlayer player) {
         PlayerProgress p = progress(player);
         scanItems(player, p);
+        scanObservation(player, true);
         scanWorld(player, p);
         recheck(player, p);
         flush(player);
@@ -130,6 +147,29 @@ public final class ProgressService {
             }
         }
         SkillExperience.onKill(player, p, killed);
+        recheck(player, p);
+    }
+
+    /** A block was broken (survival or creative). Counts "break" tasks, capped at the target. */
+    public static void onBlockBreak(ServerPlayer player, BlockState state) {
+        PlayerProgress p = progress(player);
+        ProgressRules r = rules();
+        for (ProgressModel.Node n : r.model().nodes.values()) {
+            if (!working(r, p, n)) {
+                continue;
+            }
+            for (int i = 0; i < n.tasks.size(); i++) {
+                JsonObject t = n.tasks.get(i);
+                if (!type(t).equals("break") || !blockMatches(blockSpec(t), state)) {
+                    continue;
+                }
+                long target = ProgressRules.target(t);
+                long had = p.task(n.key, i);
+                if (had < target) {
+                    bump(player, p, n, i, Math.min(had + 1, target));
+                }
+            }
+        }
         recheck(player, p);
     }
 
@@ -188,37 +228,123 @@ public final class ProgressService {
 
     private static void scanItems(ServerPlayer player, PlayerProgress p) {
         ProgressRules r = rules();
-        Map<String, Integer> counts = null;
+        Map<String, Long> held = null;
         for (ProgressModel.Node n : r.model().nodes.values()) {
             if (!working(r, p, n)) {
                 continue;
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (!type(t).equals("item") || ProgressRules.consumes(n, t)) {
+                if (ProgressRules.consumes(n, t)) {
                     continue;
                 }
-                if (counts == null) {
-                    counts = new HashMap<>();
+                String ty = type(t);
+                // what the task measures right now: items held, fluid held, or the largest single energy store carried
+                String key;
+                long target = ProgressRules.target(t);
+                switch (ty) {
+                    case "item" -> key = "i:" + itemSpec(t);
+                    case "fluid" -> key = "f:" + fluidSpec(t);
+                    case "energy" -> key = "e";
+                    default -> {
+                        continue;
+                    }
                 }
-                String spec = itemSpec(t);
-                Integer held = counts.get(spec);
                 if (held == null) {
-                    held = countItems(player, spec);
-                    counts.put(spec, held);
+                    held = new HashMap<>();
+                }
+                Long now = held.get(key);
+                if (now == null) {
+                    now = switch (ty) {
+                        case "fluid" -> inventoryFluid(player, fluidSpec(t));
+                        case "energy" -> inventoryEnergy(player);
+                        default -> (long) countItems(player, itemSpec(t));
+                    };
+                    held.put(key, now);
                 }
                 // the count is what you hold now: it goes down when items are crafted away, so it never looks as if
                 // every log picked up added to it (2026-10-16, the player read a stuck 8/16 that way). Counting items
                 // "obtained" instead was rejected: drops, chests, machines and reversible recipes all give ways to
                 // inflate it that no one can foresee. Reaching the target once still finishes the task, like FTB Quests
-                long target = ProgressRules.target(t);
                 long had = p.task(n.key, i);
-                long now = Math.min(held, target);
-                if (had < target && now != had) {
-                    bump(player, p, n, i, now);
+                long capped = Math.min(now, target);
+                if (had < target && capped != had) {
+                    bump(player, p, n, i, capped);
                 }
             }
         }
+    }
+
+    /**
+     * Watches "observation" tasks: how many ticks in a row the player has kept the target under the crosshair. A miss
+     * resets the run, like FTB Quests. Progress is written every 10 ticks ({@code persist}), and immediately once a
+     * run reaches the target so the task finishes without the player having to look away.
+     */
+    private static void scanObservation(ServerPlayer player, boolean persist) {
+        ProgressRules r = rules();
+        PlayerProgress p = progress(player);
+        for (ProgressModel.Node n : r.model().nodes.values()) {
+            if (!working(r, p, n)) {
+                continue;
+            }
+            for (int i = 0; i < n.tasks.size(); i++) {
+                JsonObject t = n.tasks.get(i);
+                if (!type(t).equals("observation")) {
+                    continue;
+                }
+                long target = ProgressRules.target(t);
+                if (p.task(n.key, i) >= target) {
+                    continue;
+                }
+                String key = n.key + "#" + i;
+                Map<String, Integer> seen = OBSERVED.computeIfAbsent(player.getUUID(), k -> new HashMap<>());
+                int run = observing(player, t) ? Math.min(seen.getOrDefault(key, 0) + 1, (int) target) : 0;
+                seen.put(key, run);
+                if (persist || run >= target) {
+                    if (p.task(n.key, i) != run) {
+                        // quiet write: a look that lasts a while would otherwise send a packet every tick
+                        p.setTask(n.key, i, run);
+                        ProgressStore.get(player.server).setDirty();
+                        markExperienceDirty(player);
+                    }
+                    if (run >= target) {
+                        recheck(player, p);
+                    }
+                }
+            }
+        }
+    }
+
+    /** Whether the player is looking at the task's target right now. */
+    private static boolean observing(ServerPlayer player, JsonObject t) {
+        String kind = str(t, "observe_type");
+        String target = str(t, "target");
+        if (target.isEmpty()) {
+            return false;
+        }
+        if (kind.isEmpty()) {
+            kind = "block";
+        }
+        return switch (kind) {
+            case "block", "block_tag", "block_state" -> {
+                double reach = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE);
+                HitResult hit = player.pick(reach, 1.0F, false);
+                yield hit instanceof BlockHitResult b && blockMatches(player, kind, target, player.level().getBlockState(b.getBlockPos()));
+            }
+            case "entity_type", "entity_type_tag" -> {
+                double reach = player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
+                Vec3 eye = player.getEyePosition();
+                Vec3 end = eye.add(player.getViewVector(1.0F).scale(reach));
+                EntityHitResult hit = ProjectileUtil.getEntityHitResult(player, eye, end, new AABB(eye, end).inflate(1.0),
+                        e -> !e.isSpectator() && e.isPickable(), reach * reach);
+                if (hit == null) {
+                    yield false;
+                }
+                EntityType<?> type = hit.getEntity().getType();
+                yield kind.equals("entity_type_tag") ? entityTypeTagMatches(target, type) : entityMatches(target, type);
+            }
+            default -> false;
+        };
     }
 
     private static void scanWorld(ServerPlayer player, PlayerProgress p) {
@@ -413,6 +539,7 @@ public final class ProgressService {
     public static void onLogout(ServerPlayer player) {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
+        OBSERVED.remove(player.getUUID());
     }
 
     // ------------------------------------------------------------------ matching helpers
@@ -445,6 +572,33 @@ public final class ProgressService {
         return o.has("id") ? o.get("id").getAsString() : "";
     }
 
+    /** A fluid task's matcher as one string: a fluid id, or {@code #tag}. */
+    static String fluidSpec(JsonObject task) {
+        return spec(task.get("fluid"));
+    }
+
+    /** A block task's matcher as one string: a block id, or {@code #tag} (empty = any block). */
+    static String blockSpec(JsonObject task) {
+        return spec(task.get("block"));
+    }
+
+    private static String spec(JsonElement e) {
+        if (e == null) {
+            return "";
+        }
+        if (e.isJsonPrimitive()) {
+            return e.getAsString();
+        }
+        JsonObject o = e.getAsJsonObject();
+        if (o.has("tag")) {
+            return "#" + o.get("tag").getAsString();
+        }
+        if (o.has("id")) {
+            return o.get("id").getAsString();
+        }
+        return o.has("fluid") ? o.get("fluid").getAsString() : "";
+    }
+
     static boolean itemMatches(String spec, ItemStack st) {
         if (spec.isEmpty()) {
             return false;
@@ -471,6 +625,73 @@ public final class ProgressService {
             }
         }
         return c;
+    }
+
+    /** Fluid in mB held across the inventory (buckets count as 1000). */
+    private static long inventoryFluid(ServerPlayer player, String spec) {
+        if (spec.isEmpty()) {
+            return 0;
+        }
+        long total = 0;
+        var inv = player.getInventory();
+        for (int s = 0; s < inv.getContainerSize(); s++) {
+            ItemStack st = inv.getItem(s);
+            if (!st.isEmpty()) {
+                total += Services.ITEM_STORAGE.fluidAmount(st, spec);
+            }
+        }
+        return total;
+    }
+
+    /** The energy of the fullest single carried item (FE), not the sum: FTB Quests reads one battery at a time. */
+    private static long inventoryEnergy(ServerPlayer player) {
+        long max = 0;
+        var inv = player.getInventory();
+        for (int s = 0; s < inv.getContainerSize(); s++) {
+            ItemStack st = inv.getItem(s);
+            if (!st.isEmpty()) {
+                max = Math.max(max, Services.ITEM_STORAGE.energyStored(st));
+            }
+        }
+        return max;
+    }
+
+    /** A "break" task's block matcher; an empty spec matches any block. */
+    static boolean blockMatches(String spec, BlockState state) {
+        if (spec.isEmpty()) {
+            return true;
+        }
+        if (spec.startsWith("#")) {
+            return blockTagMatches(spec, state.getBlock());
+        }
+        return BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString().equals(spec);
+    }
+
+    /** An "observation" task's block matcher, where {@code kind} picks id, tag or exact block state. */
+    private static boolean blockMatches(ServerPlayer player, String kind, String spec, BlockState state) {
+        return switch (kind) {
+            case "block_tag" -> blockTagMatches(spec, state.getBlock());
+            case "block_state" -> {
+                try {
+                    yield BlockStateParser.parseForBlock(player.level().holderLookup(Registries.BLOCK), spec, false).blockState() == state;
+                } catch (CommandSyntaxException e) {
+                    yield false;
+                }
+            }
+            default -> blockMatches(spec, state);
+        };
+    }
+
+    private static boolean blockTagMatches(String spec, Block block) {
+        String id = spec.startsWith("#") ? spec.substring(1) : spec;
+        ResourceLocation rl = ResourceLocation.tryParse(id);
+        return rl != null && block.builtInRegistryHolder().is(TagKey.create(Registries.BLOCK, rl));
+    }
+
+    private static boolean entityTypeTagMatches(String spec, EntityType<?> type) {
+        String id = spec.startsWith("#") ? spec.substring(1) : spec;
+        ResourceLocation rl = ResourceLocation.tryParse(id);
+        return rl != null && type.is(TagKey.create(Registries.ENTITY_TYPE, rl));
     }
 
     static boolean entityMatches(String spec, EntityType<?> type) {

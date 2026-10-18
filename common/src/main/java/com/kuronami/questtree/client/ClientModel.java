@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.data.ProgressModel;
+import com.kuronami.questtree.progress.ProgressRules;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -367,7 +368,7 @@ public final class ClientModel {
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             this.item = type.equals("item") && o.has("item") ? stack(o.get("item")) : ItemStack.EMPTY;
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
-            this.count = o.has("count") ? o.get("count").getAsLong() : it.has("count") ? it.get("count").getAsLong() : 1;
+            this.count = ProgressRules.target(o);
             this.source = o;
             TaskText.Shown shown = TaskText.describe(type, o, item);
             ItemStack explicitIcon = o.has("icon") ? stack(o.get("icon")) : ItemStack.EMPTY;

@@ -227,6 +227,9 @@ public final class ProgressRules {
         if (task.has("amount")) {
             return Math.max(1, task.get("amount").getAsLong());
         }
+        if (task.has("ticks") && task.get("ticks").isJsonPrimitive()) {
+            return Math.max(1, task.get("ticks").getAsLong());
+        }
         return 1;
     }
 

@@ -1,0 +1,46 @@
+{
+	id: "10000000000TASKS"
+	filename: "tasks"
+	group: ""
+	icon: {
+		id: "minecraft:stone"
+	}
+	order_index: 0
+	default_quest_shape: ""
+	default_hide_dependency_lines: false
+	quest_links: [ ]
+	images: [ ]
+	quests: [
+		{
+			id: "2000000000000001"
+			x: 0.0d
+			y: 0.0d
+			tasks: [
+				{
+					id: "3000000000000001"
+					type: "block"
+					block: "minecraft:stone"
+					count: 4
+				}
+				{
+					id: "3000000000000002"
+					type: "fluid"
+					fluid: "minecraft:water"
+					amount: 1000
+				}
+				{
+					id: "3000000000000003"
+					type: "forge_energy"
+					value: 5000
+				}
+				{
+					id: "3000000000000004"
+					type: "observation"
+					observe_type: "block"
+					to_observe: "minecraft:stone"
+					timer: 20
+				}
+			]
+		}
+	]
+}

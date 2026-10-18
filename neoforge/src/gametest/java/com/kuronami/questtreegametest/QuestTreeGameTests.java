@@ -28,6 +28,7 @@ public final class QuestTreeGameTests {
     private static final String Q = "kuronami_quest_tree_gametest:quests/";
     private static final String S = "kuronami_quest_tree_gametest:skills";
     private static final String HELD = "kuronami_quest_tree_gametest:held/logs";
+    private static final String T = "kuronami_quest_tree_gametest:types/";
     private static final BlockPos POS = new BlockPos(1, 1, 1);
 
     private static ServerPlayer player(GameTestHelper helper) {
@@ -410,19 +411,83 @@ public final class QuestTreeGameTests {
         helper.succeed();
     }
 
-    /** Once the target is reached the task stays done at the target even after the items are removed. */
+    /** A fluid task counts the fluid held: an empty bucket is nothing, a water bucket is 1000 mB (one bucket). */
     @GameTest(template = "empty3x3x3")
-    public static void heldItemTaskStaysAtTarget(GameTestHelper helper) {
+    public static void fluidTask(GameTestHelper helper) {
         ServerPlayer p = player(helper);
         PlayerProgress pr = ProgressService.progress(p);
-        p.getInventory().add(new ItemStack(Items.OAK_LOG, 4));
+        p.getInventory().add(new ItemStack(Items.BUCKET));
         ProgressService.checkNow(p);
-        helper.assertTrue(pr.task(HELD, 0) == 4, "counter should be 4, was " + pr.task(HELD, 0));
-        helper.assertTrue(pr.completed.contains(HELD), "quest not completed at 4 held");
-        take(p, Items.OAK_LOG, 4);
+        helper.assertTrue(pr.task(T + "fluid_q", 0) == 0 && !pr.completed.contains(T + "fluid_q"),
+                "an empty bucket counted as water: " + pr.task(T + "fluid_q", 0));
+        p.getInventory().add(new ItemStack(Items.WATER_BUCKET));
         ProgressService.checkNow(p);
-        helper.assertTrue(pr.task(HELD, 0) == 4, "counter moved after completion, was " + pr.task(HELD, 0));
-        helper.assertTrue(pr.completed.contains(HELD), "quest un-completed by removing the items");
+        helper.assertTrue(pr.task(T + "fluid_q", 0) == 1000, "a water bucket should be 1000 mB, was " + pr.task(T + "fluid_q", 0));
+        helper.assertTrue(pr.completed.contains(T + "fluid_q"), "fluid task not completed at 1000 mB");
+        helper.succeed();
+    }
+
+    /** An energy task reads the fullest carried store; the companion mod gives a redstone block a full 1000 FE. */
+    @GameTest(template = "empty3x3x3")
+    public static void energyTask(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        p.getInventory().add(new ItemStack(Items.REDSTONE));
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(T + "energy_q", 0) == 0 && !pr.completed.contains(T + "energy_q"),
+                "an item without energy counted: " + pr.task(T + "energy_q", 0));
+        p.getInventory().add(new ItemStack(Items.REDSTONE_BLOCK));
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(T + "energy_q", 0) == 1000, "the 1000 FE store should count, was " + pr.task(T + "energy_q", 0));
+        helper.assertTrue(pr.completed.contains(T + "energy_q"), "energy task not completed at 1000 FE");
+        helper.succeed();
+    }
+
+    /** An observation task needs the target under the crosshair for its ticks in a row; looking away resets the run. */
+    @GameTest(template = "empty3x3x3")
+    public static void observationTask(GameTestHelper helper) {
+        ServerPlayer p = helper.makeMockServerPlayerInLevel();
+        p.setGameMode(GameType.SURVIVAL);
+        BlockPos stone = new BlockPos(1, 2, 1);
+        helper.setBlock(stone, Blocks.STONE);
+        // stand half a block south of the stone with the eyes at its middle (eye height 1.62), looking straight north
+        BlockPos abs = helper.absolutePos(stone);
+        p.moveTo(abs.getX() + 0.5, abs.getY() - 1.12, abs.getZ() - 0.5, 0.0F, 0.0F);
+        PlayerProgress pr = ProgressService.progress(p);
+        ProgressService.checkNow(p);
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(T + "observe_q", 0) == 2 && pr.completed.contains(T + "observe_q"),
+                "two ticks in a row should complete the task, was " + pr.task(T + "observe_q", 0));
+        // a miss starts the run over instead of leaving it to finish later
+        ProgressService.checkNow(p);
+        long run = pr.task(T + "observe_reset_q", 0);
+        helper.assertTrue(run >= 1 && !pr.completed.contains(T + "observe_reset_q"),
+                "looking at the block should count towards the 200 tick task, was " + run);
+        p.moveTo(abs.getX() + 0.5, abs.getY() - 1.12, abs.getZ() + 1.5, 0.0F, 0.0F);
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(T + "observe_reset_q", 0) == 0, "a miss should start the run over, was " + pr.task(T + "observe_reset_q", 0));
+        helper.succeed();
+    }
+
+    /** A break task counts blocks broken in the real game path, and stops at its target. */
+    @GameTest(template = "empty3x3x3")
+    public static void breakTask(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PlayerProgress pr = ProgressService.progress(p);
+        helper.setBlock(POS, Blocks.DIRT);
+        p.gameMode.destroyBlock(helper.absolutePos(POS));
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(T + "break_q", 0) == 0, "dirt counted for a stone task: " + pr.task(T + "break_q", 0));
+        for (int i = 0; i < 2; i++) {
+            helper.setBlock(POS, Blocks.STONE);
+            p.gameMode.destroyBlock(helper.absolutePos(POS));
+        }
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.completed.contains(T + "break_q"), "break task not completed after 2 stone: " + pr.task(T + "break_q", 0));
+        helper.setBlock(POS, Blocks.STONE);
+        p.gameMode.destroyBlock(helper.absolutePos(POS));
+        ProgressService.checkNow(p);
+        helper.assertTrue(pr.task(T + "break_q", 0) == 2, "the counter should stay at the target, was " + pr.task(T + "break_q", 0));
         helper.succeed();
     }
 }

@@ -1,0 +1,63 @@
+{
+  "icon": {
+    "id": "minecraft:water_bucket"
+  },
+  "nodes": {
+    "fluid_q": {
+      "x": 0,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "fluid",
+          "fluid": "minecraft:water",
+          "amount": 1000
+        }
+      ]
+    },
+    "energy_q": {
+      "x": 1,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "energy",
+          "amount": 1000
+        }
+      ]
+    },
+    "observe_q": {
+      "x": 2,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "observation",
+          "observe_type": "block",
+          "target": "minecraft:stone",
+          "ticks": 2
+        }
+      ]
+    },
+    "observe_reset_q": {
+      "x": 3,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "observation",
+          "observe_type": "block",
+          "target": "minecraft:stone",
+          "ticks": 200
+        }
+      ]
+    },
+    "break_q": {
+      "x": 4,
+      "y": 0,
+      "tasks": [
+        {
+          "type": "break",
+          "block": "minecraft:stone",
+          "count": 2
+        }
+      ]
+    }
+  }
+}

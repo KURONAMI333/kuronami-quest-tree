@@ -49,6 +49,7 @@ public final class CommonClass {
     /** A player broke a block (survival or creative; the block is already gone). */
     public static void onBlockBroken(ServerPlayer player, BlockState state) {
         SkillExperience.onMine(player, state);
+        ProgressService.onBlockBreak(player, state);
     }
 
     /** A screen action from the client, on the server thread. */

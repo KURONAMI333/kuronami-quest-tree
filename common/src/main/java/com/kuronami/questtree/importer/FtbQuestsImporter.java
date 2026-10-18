@@ -55,8 +55,9 @@ public final class FtbQuestsImporter {
             Map.entry("stat", Map.of("stat", "stat", "value", "count")), Map.entry("xp", Map.of("value", "count", "points", "points")),
             Map.entry("fluid", Map.of("fluid", "fluid", "amount", "amount")), Map.entry("forge_energy", Map.of("value", "amount", "max_input", "max_input")),
             Map.entry("gamestage", Map.of("stage", "stage", "team_stage", "team")), Map.entry("stage", Map.of("stage", "stage")),
-            Map.entry("interaction", Map.of()), Map.entry("custom", Map.of()));
-    private static final Map<String, String> TASK_RENAME = Map.of("forge_energy", "energy", "gamestage", "stage");
+            Map.entry("interaction", Map.of()), Map.entry("custom", Map.of()),
+            Map.entry("block", Map.of("block", "block", "count", "count")));
+    private static final Map<String, String> TASK_RENAME = Map.of("forge_energy", "energy", "gamestage", "stage", "block", "break");
     private static final Map<String, String> REWARD_COMMON = Map.of("id", "", "type", "", "icon", "icon", "title", "lang:title",
             "team_reward", "team", "auto", "auto", "exclude_from_claim_all", "exclude_from_claim_all", "ignore_reward_blocking", "ignore_reward_blocking");
     private static final Map<String, Map<String, String>> REWARD = Map.ofEntries(
