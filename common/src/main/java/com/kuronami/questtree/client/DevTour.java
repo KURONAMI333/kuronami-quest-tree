@@ -93,6 +93,7 @@ final class DevTour {
             }
         });
         t += 60;
+        at(t - 4, DevTour::parkMouse);
         at(t, () -> open(-1));
         shot(t + 20, "01_now");
         at(t + 30, () -> selectFirst(State.PROGRESS));
@@ -142,7 +143,19 @@ final class DevTour {
         pt += 20;
         at(pt, () -> Minecraft.getInstance().setScreen(null));
         pt += 5;
-        at(pt + 5, () -> Constants.LOG.info("Dev tour finished"));
+        if (big != null) {
+            // the zoom buttons and the minimap (it shows while the map moves), then the search over the whole book,
+            // with everything it does not match sunk into the ground
+            at(pt + 10, () -> open(m.chapters.indexOf(big)));
+            at(pt + 14, () -> screen.tourZoom());
+            shot(pt + 18, "14_minimap_zoom");
+            at(pt + 24, () -> screen.tourSearch("qqqzzz"));
+            shot(pt + 30, "15_search_none");
+        }
+        at(pt + 40, () -> {
+            ProgressScreen.tourResting(false);
+            Constants.LOG.info("Dev tour finished");
+        });
     }
 
     private static ClientModel.Node openItemQuest() {
@@ -166,6 +179,11 @@ final class DevTour {
         Minecraft mc = Minecraft.getInstance();
         Screenshot.grab(mc.gameDirectory, "questtree_" + name + ".png", mc.getMainRenderTarget(),
                 msg -> Constants.LOG.info("Dev tour screenshot {}", name));
+    }
+
+    /** Parks the pointer's idea of hovering: see {@link ProgressScreen#tourResting(boolean)}. */
+    private static void parkMouse() {
+        ProgressScreen.tourResting(true);
     }
 
     private static ClientModel.Chapter first(ClientModel m, boolean skills) {

@@ -19,10 +19,11 @@ final class Tiles {
     static final int GREEN = 0xFF5E9E4A;
     static final int GREEN_DARK = 0xFF3F7231;
     static final int GREEN_TEXT = 0xFF7BC862;
-    static final int GRAY = 0xFFA8A8A8;
-    static final int TILE = 0x80000000;
-    /** Not yet: an opaque dark grey a step above the screen's scrim, so closed nodes keep the tree's shape visible. */
-    static final int TILE_LOCKED = 0xFF2C2C31;
+    /**
+     * Not yet: an opaque grey a step above the screen's ground, so closed nodes keep the tree's shape visible. Picked
+     * with the ground on 2026-10-17: the old near-black pair left a 196-quest chapter hard to read.
+     */
+    static final int TILE_LOCKED = 0xFF6B707A;
     static final int INK = 0xFF1A1A1A;
 
     static final Set<String> SHAPES = Set.of("square", "rsquare", "circle", "diamond", "octagon", "pentagon", "gear", "heart");
@@ -107,7 +108,7 @@ final class Tiles {
 
     static final int WHITE = 0xFFE8E8E8;
     static final int GREEN_BRIGHT = 0xFF6DB556;
-    static final int GREEN_SETTLED = 0xFF3D6431;
+    static final int GREEN_SETTLED = 0xFF54883F;
     static final int GREY = 0xFFC6C6C6;
     static final int GREY_DARK = 0xFF8B8B8B;
     static final int BLUE = 0xFF4F9FDB;
