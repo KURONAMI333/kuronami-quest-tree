@@ -146,4 +146,13 @@ class ImporterTest {
         assertEquals(20, obs.get("ticks").getAsInt(), "FTB timer should become ticks");
         assertTrue(out.unmapped.isEmpty(), "unmapped: " + out.unmapped);
     }
+
+    /** FTB Quests points at reward tables by a decimal long; the table files carry the same id as 16 hex digits. */
+    @org.junit.jupiter.api.Test
+    void tableIdMatchesTheTableFileName() {
+        org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("6996929552069196378"));
+        org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("6996929552069196378L"));
+        org.junit.jupiter.api.Assertions.assertEquals("ffffffffffffffff", FtbQuestsImporter.tableId("-1"));
+        org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("611A165B35847A5A"));
+    }
 }

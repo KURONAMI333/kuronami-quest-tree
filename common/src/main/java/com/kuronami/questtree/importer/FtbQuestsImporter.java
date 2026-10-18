@@ -358,6 +358,9 @@ public final class FtbQuestsImporter {
             if (o.has("toast")) {
                 o.addProperty("toast", !bool(t, "disable_toast"));
             }
+            if (ty.equals("observation")) {
+                o.addProperty("observe_type", observeType(t));
+            }
             // where the task's own title lives in the language files (from the quest file or FTB's lang files)
             o.addProperty("text", tp);
             tasks.add(o);
@@ -400,13 +403,54 @@ public final class FtbQuestsImporter {
         if (TABLE_MODE.containsKey(ty)) {
             o.addProperty("mode", TABLE_MODE.get(ty));
             if (o.has("table")) {
-                o.addProperty("table", out.namespace + ":" + slug(o.get("table").getAsString()));
+                o.addProperty("table", out.namespace + ":" + tableId(o.get("table").getAsString()));
             }
         }
         if (ty.equals("item") && o.has("count") && o.has("item")) {
             o.getAsJsonObject("item").add("count", o.remove("count"));
         }
         return o;
+    }
+
+    /** FTB Quests' observation kinds in the order of its enum; older files store the position, newer ones the name. */
+    private static final List<String> OBSERVE_ORDER = List.of("block", "block_tag", "block_state", "block_entity",
+            "block_entity_type", "entity_type", "entity_type_tag");
+
+    /**
+     * FTB Quests writes both {@code observation_type} (the name) and {@code observe_type} (the enum position), so the
+     * name wins and the number is only read when it is the only one (All the Mods 10 has 0 next to "block").
+     */
+    private static String observeType(JsonObject t) {
+        if (t.has("observation_type") && t.get("observation_type").isJsonPrimitive()
+                && !t.get("observation_type").getAsJsonPrimitive().isNumber()) {
+            return t.get("observation_type").getAsString().toLowerCase(Locale.ROOT);
+        }
+        if (t.has("observe_type") && t.get("observe_type").isJsonPrimitive()) {
+            JsonPrimitive v = t.get("observe_type").getAsJsonPrimitive();
+            if (v.isNumber()) {
+                int i = v.getAsInt();
+                return i >= 0 && i < OBSERVE_ORDER.size() ? OBSERVE_ORDER.get(i) : "block";
+            }
+            return v.getAsString().toLowerCase(Locale.ROOT);
+        }
+        return "block";
+    }
+
+    /**
+     * A reward table's id as its file is named. FTB Quests points at tables with {@code table_id}, a number (a long),
+     * while each table file carries the same id as 16 hex digits; the number has to be turned into that form or no
+     * table is ever found (All the Mods 10's 1,403 random rewards all missed before 2026-10-18).
+     */
+    static String tableId(String raw) {
+        String s = raw.trim();
+        if (s.endsWith("L") || s.endsWith("l")) {
+            s = s.substring(0, s.length() - 1);
+        }
+        try {
+            return String.format(Locale.ROOT, "%016x", Long.parseLong(s));
+        } catch (NumberFormatException notDecimal) {
+            return slug(raw);
+        }
     }
 
     private static void tables(Path dir, ImportOutput out) throws IOException {
