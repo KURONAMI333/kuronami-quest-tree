@@ -13,6 +13,11 @@ public final class QuestTreeGameTestMod {
 
     public QuestTreeGameTestMod(IEventBus bus) {
         bus.addListener(this::registerEnergy);
+        String diffSteps = System.getProperty("quest_tree.ftbqDiff");
+        if (diffSteps != null) {
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                    (net.neoforged.neoforge.event.server.ServerStartedEvent e) -> FtbqDiff.run(e.getServer(), Integer.parseInt(diffSteps)));
+        }
     }
 
     /**

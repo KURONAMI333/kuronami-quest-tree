@@ -60,6 +60,16 @@ neoForge {
         server {
             server()
         }
+        // plays a pack's FTB Quests questline through FTB Quests and through the import side by side (FtbqDiff);
+        // needs FTB Quests and its libraries in runs/ftbqdiff/mods and the quests in runs/ftbqdiff/config/ftbquests
+        ftbqDiff {
+            server()
+            sourceSet = sourceSets.gametest
+            gameDirectory = project.file('runs/ftbqdiff')
+            programArgument '--nogui'
+            systemProperty 'quest_tree.ftbqDiff', (project.findProperty('ftbqDiffSteps') ?: '400').toString()
+            loadedMods = [project.neoForge.mods.getByName(mod_id), project.neoForge.mods.getByName("${mod_id}_gametest")]
+        }
         gameTestServer {
             type = 'gameTestServer'
             sourceSet = sourceSets.gametest
