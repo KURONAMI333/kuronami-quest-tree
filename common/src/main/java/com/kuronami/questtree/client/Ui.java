@@ -43,8 +43,12 @@ final class Ui {
     static final int FLOATING = 0xF2111214;
     /** The one saturated colour of the chrome: selection marks, focus and the spend action. */
     static final int ACCENT = 0xFF5865F2;
-    /** Notification badges: a solid round chip with white digits, as on a phone's app icon. */
+    /**
+     * Notification badges: a solid round chip, as on a phone's app icon. The digits are dark, not white: white on this
+     * yellow reads at about 1.6:1 (2026-10-18, the player found it hard to read); the dark grey gives about 10:1.
+     */
     static final int BADGE = 0xFFF2C230;
+    static final int BADGE_TEXT = 0xFF1E1F22;
 
     /** Overlays laid on whatever is behind them: rows, cards, hover and selection (Discord's hover and selected greys). */
     static final int OVERLAY_1 = 0x4D4E5058;
@@ -142,14 +146,14 @@ final class Ui {
     static final int BADGE_H = 11;
 
     /**
-     * A count badge whose right edge is {@code right}: round for one digit, a pill for more, white digits on solid
+     * A count badge whose right edge is {@code right}: round for one digit, a pill for more, dark digits on solid
      * {@link #BADGE}. Returns the width it took.
      */
     static int badge(GuiGraphics g, Font font, String count, int right, int y) {
         int w = Math.max(BADGE_H, font.width(count) + 4);
         int x = right - w;
         surface(g, x, y, w, BADGE_H, BADGE_H / 2 + 1, BADGE);
-        text(g, font, count, x + (w - font.width(count) + 1) / 2, y + 2, 0xFFFFFFFF);
+        text(g, font, count, x + (w - font.width(count) + 1) / 2, y + 2, BADGE_TEXT);
         return w;
     }
 
