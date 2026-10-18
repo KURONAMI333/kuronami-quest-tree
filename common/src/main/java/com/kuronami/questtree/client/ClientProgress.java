@@ -64,6 +64,7 @@ public final class ClientProgress {
                 model = new ClientModel(bundle);
                 rules = new ProgressRules(ProgressModel.of(bundle));
                 Pins.load();
+                Seen.load();
                 Constants.LOG.info("Received {} progression chapters", model.chapters.size());
             } catch (Exception ex) {
                 Constants.LOG.error("Could not read progression data from server", ex);
@@ -87,6 +88,7 @@ public final class ClientProgress {
             ProgressFeedback.onUpdate(old, next, p.events());
         }
         haveProgress = true;
+        Seen.onProgress();
     }
 
     public static PlayerProgress progress() {
@@ -192,6 +194,7 @@ public final class ClientProgress {
 
     /** Leaving a server: forget its data so another server never shows it. */
     public static void onLogout() {
+        Seen.flush();
         model = null;
         rules = null;
         progress = new PlayerProgress();
