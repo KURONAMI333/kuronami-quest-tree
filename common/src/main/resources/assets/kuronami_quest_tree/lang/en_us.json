@@ -79,5 +79,10 @@
   "task.kuronami_quest_tree.dim.minecraft.the_end": "the End",
   "screen.kuronami_quest_tree.search": "Search",
   "screen.kuronami_quest_tree.unlock_path": "Unlock %s (%s)",
-  "hud.kuronami_quest_tree.held": "Held %s"
+  "hud.kuronami_quest_tree.held": "Held %s",
+  "commands.kuronami_quest_tree.validate.summary": "%s errors, %s warnings in the progression data",
+  "commands.kuronami_quest_tree.validate.none": "No problems found in the progression data",
+  "commands.kuronami_quest_tree.validate.problem": "%s",
+  "commands.kuronami_quest_tree.validate.more": "...and %s more (see the log)",
+  "commands.kuronami_quest_tree.validate.hint": "The progression data has %s errors; run /quest_tree validate to see them"
 }

@@ -9,6 +9,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 
@@ -34,6 +35,10 @@ public final class CommonClass {
     public static void onSyncToPlayer(ServerPlayer player) {
         ProgressData.sync(player);
         ProgressService.onJoin(player);
+        // an operator gets one line when the pack has errors, so a broken pack is not silent; the details need a command
+        if (ProgressData.errorCount() > 0 && player.hasPermissions(2)) {
+            player.sendSystemMessage(Component.translatable("commands.kuronami_quest_tree.validate.hint", ProgressData.errorCount()));
+        }
     }
 
     /** Server-side player tick (end of tick). */

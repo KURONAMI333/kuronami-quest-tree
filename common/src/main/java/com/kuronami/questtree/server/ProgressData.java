@@ -17,8 +17,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.zip.GZIPOutputStream;
 
@@ -40,6 +44,12 @@ public final class ProgressData {
     private static final Map<String, byte[]> COMPRESSED = new java.util.concurrent.ConcurrentHashMap<>();
     private static int generation;
     private static int chapterCount;
+    /** What the last reload found wrong (DATA_MODEL.md "検査"), for the log, {@code /quest_tree validate} and the join hint. */
+    private static List<ProgressValidator.Problem> problems = List.of();
+    private static int errorCount;
+    private static int warningCount;
+    /** Problems found while reading files; filled during {@link #reload} and drained into {@link #problems}. */
+    private static final List<ProgressValidator.Problem> readProblems = new ArrayList<>();
 
     private ProgressData() {
     }
@@ -52,9 +62,13 @@ public final class ProgressData {
         JsonArray groups = new JsonArray();
         JsonObject lang = new JsonObject();
 
-        readAll(rm, ROOT + "/chapters", chapters);
-        readAll(rm, ROOT + "/reward_tables", tables);
-        readAll(rm, ROOT + "/patches", patches);
+        Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>();
+        readProblems.clear();
+        List<ProgressValidator.Problem> problems = new ArrayList<>();
+
+        readAll(rm, ROOT + "/chapters", chapters, sources);
+        readAll(rm, ROOT + "/reward_tables", tables, sources);
+        readAll(rm, ROOT + "/patches", patches, null);
         for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(ROOT, id -> id.getPath().equals(ROOT + "/groups.json")).entrySet()) {
             JsonElement g = read(e.getKey(), e.getValue());
             if (g != null && g.isJsonArray()) {
@@ -85,6 +99,29 @@ public final class ProgressData {
         bundle.add("reward_tables", tables);
         bundle.add("groups", groups);
 
+        // check the data before it becomes a model: a broken node is dropped, the rest of the pack keeps working
+        ProgressValidator.Result result = ProgressValidator.validate(bundle, sources, GameRegistry.INSTANCE);
+        problems.addAll(readProblems);
+        problems.addAll(result.problems);
+        prune(chapters, result.droppedNodes);
+
+        ProgressData.problems = List.copyOf(problems);
+        errorCount = 0;
+        warningCount = 0;
+        for (ProgressValidator.Problem p : problems) {
+            if (p.severity() == ProgressValidator.Severity.ERROR) {
+                errorCount++;
+            } else {
+                warningCount++;
+            }
+        }
+        if (!problems.isEmpty()) {
+            Constants.LOG.warn("{} errors, {} warnings in progression data", errorCount, warningCount);
+            for (ProgressValidator.Problem p : problems) {
+                Constants.LOG.warn("{}", p.format());
+            }
+        }
+
         base = bundle;
         langs = byLocale;
         COMPRESSED.clear();
@@ -92,6 +129,39 @@ public final class ProgressData {
         generation++;
         chapterCount = chapters.size();
         Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount, bundleFor("en_us").length / 1024, lang.size());
+    }
+
+    /** Removes the nodes the validator marked as ERROR, so one bad node cannot take the whole pack down. */
+    private static void prune(JsonObject chapters, Set<String> dropped) {
+        if (dropped.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, JsonElement> c : chapters.entrySet()) {
+            if (!c.getValue().isJsonObject() || !c.getValue().getAsJsonObject().has("nodes")) {
+                continue;
+            }
+            JsonObject nodes = c.getValue().getAsJsonObject().getAsJsonObject("nodes");
+            List<String> remove = new ArrayList<>();
+            for (String id : nodes.keySet()) {
+                if (dropped.contains(c.getKey() + "/" + id)) {
+                    remove.add(id);
+                }
+            }
+            remove.forEach(nodes::remove);
+        }
+    }
+
+    /** Problems the last reload found (DATA_MODEL.md "検査"), newest first is not needed: the order is the walk order. */
+    public static List<ProgressValidator.Problem> problems() {
+        return problems;
+    }
+
+    public static int errorCount() {
+        return errorCount;
+    }
+
+    public static int warningCount() {
+        return warningCount;
     }
 
     /** Patch files carry {"target": "<ns>:<chapter>", ...fields}; nodes merge by id, other fields replace. */
@@ -129,23 +199,61 @@ public final class ProgressData {
         }
     }
 
-    private static void readAll(ResourceManager rm, String dir, JsonObject into) {
+    /**
+     * Reads every {@code .json} under {@code dir} into {@code into}, keyed {@code <namespace>:<name>}. The raw text is
+     * kept in {@code sources} (for the validator's line numbers) and a file that will not parse becomes a problem
+     * instead of just a log line.
+     */
+    private static void readAll(ResourceManager rm, String dir, JsonObject into, Map<String, ProgressValidator.Source> sources) {
+        String kind = dir.substring(ROOT.length() + 1);
         for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(dir, id -> id.getPath().endsWith(".json")).entrySet()) {
-            JsonElement el = read(e.getKey(), e.getValue());
-            if (el == null) {
-                continue;
-            }
             String path = e.getKey().getPath();
             String name = path.substring(dir.length() + 1, path.length() - 5);
+            String file = "data/" + path;
+            String text = readText(e.getValue());
+            if (text == null) {
+                continue;
+            }
+            JsonElement el;
+            try {
+                el = JsonParser.parseString(text);
+            } catch (Exception ex) {
+                readProblems.add(ProgressValidator.parseError(file, text, ex));
+                Constants.LOG.error("Could not read progression file {}: {}", e.getKey(), ex.getMessage());
+                continue;
+            }
             into.add(e.getKey().getNamespace() + ":" + name, el);
+            if (sources != null) {
+                sources.put(kind + "/" + e.getKey().getNamespace() + ":" + name, new ProgressValidator.Source(file, text));
+            }
         }
     }
 
     private static JsonElement read(ResourceLocation id, Resource res) {
-        try (Reader r = res.openAsReader()) {
-            return JsonParser.parseReader(r);
+        String text = readText(res);
+        if (text == null) {
+            return null;
+        }
+        try {
+            return JsonParser.parseString(text);
         } catch (Exception ex) {
+            readProblems.add(ProgressValidator.parseError("data/" + id.getPath(), text, ex));
             Constants.LOG.error("Could not read progression file {}: {}", id, ex.getMessage());
+            return null;
+        }
+    }
+
+    private static String readText(Resource res) {
+        try (Reader r = res.openAsReader()) {
+            StringBuilder b = new StringBuilder();
+            char[] buf = new char[4096];
+            int n;
+            while ((n = r.read(buf)) >= 0) {
+                b.append(buf, 0, n);
+            }
+            return b.toString();
+        } catch (Exception ex) {
+            Constants.LOG.error("Could not read progression file: {}", ex.getMessage());
             return null;
         }
     }
