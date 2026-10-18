@@ -65,6 +65,7 @@ public final class ClientProgress {
                 rules = new ProgressRules(ProgressModel.of(bundle));
                 Pins.load();
                 Seen.load();
+                Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
                 Constants.LOG.info("Received {} progression chapters", model.chapters.size());
             } catch (Exception ex) {
                 Constants.LOG.error("Could not read progression data from server", ex);

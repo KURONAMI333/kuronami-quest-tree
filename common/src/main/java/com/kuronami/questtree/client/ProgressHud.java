@@ -110,7 +110,7 @@ public final class ProgressHud {
         int y = g.guiHeight() - 96 + (int) ((1 - Math.min(1, t / (float) FADE_IN)) * 3);
         g.pose().pushPose();
         g.pose().translate(0, 0, -50);
-        g.fill(x, y, x + w, y + 20, Tiles.withAlpha(0x66000000, alpha));
+        g.fill(x, y, x + w, y + 20, Tiles.withAlpha(Ui.HUD_BACK, alpha));
         if (alpha > 0.5f) {
             g.renderItem(noticeIcon, x + 2, y + 2);
         }
@@ -162,12 +162,12 @@ public final class ProgressHud {
             for (long[] mat : mats) {
                 bw = Math.max(bw, 38 + font.width(Math.min(mat[1], mat[2]) + "/" + mat[2]));
             }
-            g.fill(2, y - 2, bw + 2, y + 22 + 12 * mats.size() + 2, Tiles.withAlpha(0x66000000, 1));
+            g.fill(2, y - 2, bw + 2, y + 22 + 12 * mats.size() + 2, Tiles.withAlpha(Ui.HUD_BACK, 1));
             Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
             g.drawString(font, title, 26, y + 1, 0xFFFFFF, true);
-            g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.GOLD : 0xFFE0E0E0, true);
+            g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT, true);
             g.pose().popPose();
             y += 22;
             // the items still needed, with what is in the inventory now (Satisfactory's to-do list, kept per quest)
@@ -181,7 +181,7 @@ public final class ProgressHud {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, Tiles.OVERLAY_Z);
                 String c = Math.min(mat[1], mat[2]) + "/" + mat[2];
-                g.drawString(font, c, 38, y + 1, mat[1] >= mat[2] ? Tiles.GREEN_TEXT : 0xFFB0B0B0, true);
+                g.drawString(font, c, 38, y + 1, mat[1] >= mat[2] ? Tiles.GREEN_TEXT : Ui.HUD_MUTED, true);
                 g.pose().popPose();
                 y += 12;
             }

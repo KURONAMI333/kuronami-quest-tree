@@ -39,11 +39,11 @@ public class ProgressScreen extends Screen {
      * above it (2026-10-17, picked from renders of the same 196-quest chapter at five grounds: the old near-black left
      * the zoomed-out map almost black). Since 2026-10-18 it is Discord's main surface (see {@link Ui}).
      */
-    private static final int SCRIM = Ui.GROUND;
+    private static int SCRIM = Ui.GROUND;
     /** The band behind the chapter title, in the ground's own tone so it covers the map without a seam. */
-    private static final int FADE = 0xCC313338;
+    private static int FADE = 0xCC000000 | (Ui.GROUND & 0xFFFFFF);
     /** What a node the search does not match wears, so it sinks into the ground instead of going dark. */
-    private static final int SINK = 0xC0313338;
+    private static int SINK = 0xC0000000 | (Ui.GROUND & 0xFFFFFF);
 
     private static final int UNIT = 24;      // GUI px per grid unit (FTB Quests positions)
     private static final int NODE = 20;      // GUI px of a size-1 node
@@ -105,6 +105,7 @@ public class ProgressScreen extends Screen {
 
     @Override
     protected void init() {
+        Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
         imageCache.clear();
         searchBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 120 - 2 * Ui.S2, EDIT_H, Component.translatable("screen.kuronami_quest_tree.search"));
         // drawn as one of the screen's flat controls (renderSearch), not vanilla's black box with a grey border
@@ -561,7 +562,7 @@ public class ProgressScreen extends Screen {
         if (searching()) {
             String n = matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size();
             int nx = map ? x + w + 6 : x - font.width(n) - 6;
-            Ui.text(g, font, n, nx, y + (BTN - 9) / 2 + 1, matches.isEmpty() ? 0xFFFF8A8A : Ui.MUTED);
+            Ui.text(g, font, n, nx, y + (BTN - 9) / 2 + 1, matches.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
         }
     }
 
@@ -653,17 +654,17 @@ public class ProgressScreen extends Screen {
             g.pose().translate(0, 0, OVERLAY_Z + 1);
             // soft edges where rows run under, and a scrollbar that is always there while the list overflows
             if (railScroll > 1) {
-                g.fillGradient(4, top, 4 + w, top + 10, 0x66000000, 0x00000000);
+                g.fillGradient(4, top, 4 + w, top + 10, 0xCC000000 | (Ui.PANEL & 0xFFFFFF), Ui.PANEL & 0xFFFFFF);
             }
             if (railScroll < max - 1) {
-                g.fillGradient(4, bottom - 14, 4 + w, bottom, 0x00000000, 0x66000000);
+                g.fillGradient(4, bottom - 14, 4 + w, bottom, Ui.PANEL & 0xFFFFFF, 0xCC000000 | (Ui.PANEL & 0xFFFFFF));
             }
             float h = bottom - top;
             float content = h + max;
             int thumb = Math.max(12, Math.round(h * h / content));
             int ty = top + Math.round((h - thumb) * (railScroll / max));
             boolean over = mouseX < 4 + w && mouseX >= 4 && mouseY >= top && mouseY < bottom;
-            Ui.surface(g, 4 + w - 7, ty, 3, thumb, 2, over ? 0x99FFFFFF : 0x5FFFFFFF);
+            Ui.surface(g, 4 + w - 7, ty, 3, thumb, 2, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
             g.pose().popPose();
         }
         g.disableScissor();
@@ -816,7 +817,7 @@ public class ProgressScreen extends Screen {
                 if (Pins.has(e.key)) {
                     g.pose().pushPose();
                     g.pose().translate(0, 0, OVERLAY_Z);
-                    g.fill(x + 3, y + 3, x + 7, y + 7, 0xFFFFFFFF);
+                    g.fill(x + 3, y + 3, x + 7, y + 7, Ui.MARK);
                     g.pose().popPose();
                 }
             }
@@ -827,7 +828,7 @@ public class ProgressScreen extends Screen {
             int trackH = bottom - top;
             int barH = Math.max(10, trackH * trackH / (rows * rowH));
             int barY = top + (trackH - barH) * nowScroll / Math.max(1, rows * rowH - trackH);
-            Ui.surface(g, nowRight() + 6, barY, 3, barH, 2, 0x5FFFFFFF);
+            Ui.surface(g, nowRight() + 6, barY, 3, barH, 2, Ui.SCROLLBAR);
         }
         renderRecent(g, m, left, height - 8 - recentH, mouseX, mouseY);
     }
@@ -996,11 +997,11 @@ public class ProgressScreen extends Screen {
      * always readable; on the node under the mouse (or the selected one) its lines brighten and the arrowheads slide
      * towards the later node; when a way opens, the colour runs in behind the arrowhead.
      */
-    private static final int LINE_WALKED = Tiles.GREEN;
-    private static final int LINE_OPEN = 0xFF9C9CA3;
-    private static final int LINE_CLOSED = 0xFF797E89;
+    private static int LINE_WALKED = Tiles.GREEN;
+    static int LINE_OPEN = 0xFF9C9CA3;
+    static int LINE_CLOSED = 0xFF797E89;
     /** The closed line on a node under the mouse: brighter than {@link #LINE_OPEN}, which is brighter than closed. */
-    private static final int LINE_CLOSED_ON = 0xFFA9AFB9;
+    static int LINE_CLOSED_ON = 0xFFA9AFB9;
     private static final float LINE_W = 2;
     private static final float LINE_W_ON = 3;
     /** Arrowhead size (map units) and how long one slide along a highlighted line takes. */
@@ -1011,6 +1012,14 @@ public class ProgressScreen extends Screen {
     private static final float ARROW_PAD = 1.5f;
     /** Zoomed out no arrowhead is drawn, so no free stretch is measured either. */
     private static final float[] NO_RUNS = new float[0];
+
+    /** Colours worked out from the palette, refreshed when it is read again. */
+    static void paletteChanged() {
+        SCRIM = Ui.GROUND;
+        FADE = 0xCC000000 | (Ui.GROUND & 0xFFFFFF);
+        SINK = 0xC0000000 | (Ui.GROUND & 0xFFFFFF);
+        LINE_WALKED = Tiles.GREEN;
+    }
 
     private static int lineColor(State parent, State child) {
         boolean parentDone = parent == State.DONE || parent == State.CLAIM;
@@ -1101,11 +1110,11 @@ public class ProgressScreen extends Screen {
                 // the selection ring hugs the tile at its current size, so the gap stays even while it grows and shrinks
                 int rs = Tiles.drawnSize(shape, s + grow);
                 int ro = (rs - s) / 2;
-                Tiles.ring(g, shape, x - ro - 3, y - ro - 3, rs + 6, rs + 6, 0xCCFFFFFF);
+                Tiles.ring(g, shape, x - ro - 3, y - ro - 3, rs + 6, rs + 6, Ui.SELECTION);
             }
             if (n.optional && !far) {
                 // optional quests: a broken outline, so they read as "extra" next to the required path
-                dashedOutline(g, x - 2, y - 2, s + 4, s + 4, 0x66FFFFFF);
+                dashedOutline(g, x - 2, y - 2, s + 4, s + 4, Ui.OPTIONAL_OUTLINE);
             }
             Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)),
                     ClientProgress.iconFor(n), false);
@@ -1123,7 +1132,7 @@ public class ProgressScreen extends Screen {
                 // the unfinished requirements on the way to the selected node
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z + 15);
-                dashedOutline(g, x - 3, y - 3, s + 6, s + 6, 0xCCFFFFFF);
+                dashedOutline(g, x - 3, y - 3, s + 6, s + 6, Ui.SELECTION);
                 g.pose().popPose();
             }
             if (searching() && !matchSet.contains(n.key)) {
@@ -1153,7 +1162,7 @@ public class ProgressScreen extends Screen {
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
-                Tiles.icon(g, "link", x + s - 7, y + 1, 6, 0xFFFFFFFF);
+                Tiles.icon(g, "link", x + s - 7, y + 1, 6, Ui.MARK);
                 g.pose().popPose();
             }
             double sx = v[0] + l.x * UNIT * v[2];
@@ -1373,7 +1382,7 @@ public class ProgressScreen extends Screen {
                 }
                 if (t.optional) {
                     // optional tasks: the same broken outline as optional quests on the map
-                    dashedOutline(g, x - 1, y + 1, 18, 18, 0x66FFFFFF);
+                    dashedOutline(g, x - 1, y + 1, 18, 18, Ui.OPTIONAL_OUTLINE);
                 }
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -1459,7 +1468,7 @@ public class ProgressScreen extends Screen {
             int thumb = Math.max(12, Math.round((float) trackH * trackH / (trackH + sheetContentMax)));
             int ty = contentTop + Math.round((trackH - thumb) * (sheetScroll / Math.max(1, sheetContentMax)));
             boolean over = mouseX >= x0 && mouseX < x0 + sw && mouseY >= contentTop && mouseY < contentBottom;
-            Ui.surface(g, x0 + pw - Ui.S1 - 3, ty, 3, thumb, 2, over ? 0x99FFFFFF : 0x5FFFFFFF);
+            Ui.surface(g, x0 + pw - Ui.S1 - 3, ty, 3, thumb, 2, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
         }
         // the actions sit just under short content instead of pinned to the bottom; while the content overflows they
         // stay at the bottom, where the scrollbar ends
@@ -1521,7 +1530,7 @@ public class ProgressScreen extends Screen {
             // a pin mark instead of the word; gold while pinned, the name in a tooltip
             boolean pinned = Pins.has(n.key);
             boolean hover = mouseX >= bx && mouseX < bx + BTN && mouseY >= y && mouseY < y + BTN;
-            Ui.surface(g, bx, y, BTN, BTN, Ui.R2, pinned ? (hover ? 0x4DF2C230 : 0x33F2C230) : (hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1));
+            Ui.surface(g, bx, y, BTN, BTN, Ui.R2, pinned || hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
             Ui.outline(g, bx, y, BTN, BTN, Ui.R2, Ui.HAIRLINE);
             Tiles.icon(g, "pin", bx + (BTN - 12) / 2, y + (BTN - 12) / 2, 12, pinned ? Tiles.GOLD : Ui.MUTED);
             buttons.add(new Button(bx, y, BTN, BTN, () -> {
@@ -1538,7 +1547,7 @@ public class ProgressScreen extends Screen {
     private void slot(GuiGraphics g, ItemStack r, int x, int y, boolean picked) {
         Ui.surface(g, x, y, 22, 22, Ui.R2, picked ? Ui.OVERLAY_3 : Ui.OVERLAY_1);
         if (picked) {
-            Ui.outline(g, x, y, 22, 22, Ui.R2, 0xCCFFFFFF);
+            Ui.outline(g, x, y, 22, 22, Ui.R2, Ui.SELECTION);
         }
         g.renderItem(r, x + 3, y + 3);
         g.renderItemDecorations(font, r, x + 3, y + 3);
@@ -1553,9 +1562,9 @@ public class ProgressScreen extends Screen {
         boolean primary = accent != 0;
         boolean hover = enabled && mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
         if (primary) {
-            Ui.surface(g, x, y, w, h, Ui.R2, enabled ? (hover ? lerpColor(accent, 0xFFFFFFFF, 0.25f) : accent) : 0x66000000);
+            Ui.surface(g, x, y, w, h, Ui.R2, enabled ? (hover ? lerpColor(accent, 0xFFFFFFFF, 0.25f) : accent) : Ui.DISABLED);
         } else {
-            Ui.surface(g, x, y, w, h, Ui.R2, enabled ? (hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1) : 0x66000000);
+            Ui.surface(g, x, y, w, h, Ui.R2, enabled ? (hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1) : Ui.DISABLED);
             Ui.outline(g, x, y, w, h, Ui.R2, Ui.HAIRLINE);
         }
         Ui.textCenter(g, font, label, x + w / 2, y + (h - 8) / 2, !enabled ? Ui.DIM : accent == Ui.ACCENT ? Ui.BRIGHT : primary ? Tiles.INK : Ui.TEXT);
@@ -1587,7 +1596,7 @@ public class ProgressScreen extends Screen {
         if (t < 380) {
             // press 160ms, then a white flash that fades over 220ms
             float a = t < 160 ? 0.15f : 0.85f * (1 - (t - 160) / 220f);
-            g.fill(x, y, x + s, y + s, Tiles.withAlpha(0xFFFFFFFF, a));
+            g.fill(x, y, x + s, y + s, Tiles.withAlpha(Ui.FLASH, a));
         }
         for (int i = 0; i < icons.size(); i++) {
             long ti = t - 160 - 70L * i;
@@ -1616,12 +1625,12 @@ public class ProgressScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 10);
         if (open >= 0) {
-            Tiles.shape(g, shape, x, y, s, s, Tiles.withAlpha(0xFFFFFFFF, 0.6f * (1 - open)));
+            Tiles.shape(g, shape, x, y, s, s, Tiles.withAlpha(Ui.FLASH, 0.6f * (1 - open)));
         }
         if (stamp >= 0) {
             // the cross lands: from twice its size down to its place
             float c = s * 0.36f * (2 - stamp);
-            Tiles.icon(g, "cross", x + (s - c) / 2f, y + (s - c) / 2f, c, Tiles.withAlpha(0xFFFFFFFF, 0.4f + 0.6f * stamp));
+            Tiles.icon(g, "cross", x + (s - c) / 2f, y + (s - c) / 2f, c, Tiles.withAlpha(Ui.FLASH, 0.4f + 0.6f * stamp));
         }
         g.pose().popPose();
     }
@@ -1702,14 +1711,14 @@ public class ProgressScreen extends Screen {
         int y0 = Mth.clamp(r[1] + 4 + (int) ((vy0 - b[1]) * s), r[1], r[1] + r[3]);
         int x1 = Mth.clamp(r[0] + 4 + (int) ((vx1 - b[0]) * s), r[0], r[0] + r[2]);
         int y1 = Mth.clamp(r[1] + 4 + (int) ((vy1 - b[1]) * s), r[1], r[1] + r[3]);
-        g.renderOutline(x0, y0, Math.max(2, x1 - x0), Math.max(2, y1 - y0), 0xAAFFFFFF);
+        g.renderOutline(x0, y0, Math.max(2, x1 - x0), Math.max(2, y1 - y0), Ui.MINIMAP_VIEW);
     }
 
     private static int minimapColor(State s) {
         return switch (s) {
             case DONE -> Tiles.GREEN;
             case CLAIM -> Tiles.GOLD;
-            case OPEN, PROGRESS -> 0xFF9A9A9A;
+            case OPEN, PROGRESS -> Ui.MINIMAP_OPEN;
             default -> Tiles.TILE_LOCKED;
         };
     }
@@ -2208,7 +2217,7 @@ public class ProgressScreen extends Screen {
     }
 
     private static int brighter(int lc) {
-        return lc == LINE_WALKED ? Tiles.GREEN_TEXT : lc == LINE_OPEN ? 0xFFEDEDEF : LINE_CLOSED_ON;
+        return lc == LINE_WALKED ? Tiles.GREEN_TEXT : lc == LINE_OPEN ? Ui.LINE_OPEN_HOVER : LINE_CLOSED_ON;
     }
 
     /**

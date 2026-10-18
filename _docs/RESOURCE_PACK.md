@@ -1,0 +1,35 @@
+# Restyling Kuronami's Quest Tree with a resource pack
+
+Everything the progression screen draws comes from files a resource pack can replace. Nothing visual is fixed in code.
+
+## Colours: `assets/kuronami_quest_tree/gui/palette.json`
+
+One JSON object of colour names to `"#RRGGBB"` or `"#AARRGGBB"`. A pack only needs the keys it changes; the rest keep
+the mod's values. The shipped file lists every key with its default. The screen reads the palette when the book
+arrives and every time it opens, so after `F3 + T` reopen the screen to see a change.
+
+| Keys | What they colour |
+|---|---|
+| `text`, `text_muted`, `text_dim`, `text_bright`, `text_error` | Text, from main to quietest; the selected row; a search with no match |
+| `ground`, `panel`, `panel_translucent`, `rail_closed`, `floating` | The map behind the tree; the chapter list and detail panel; the closed chapter list; tooltips |
+| `accent` | The selected chapter's mark and the button that spends skill points |
+| `badge`, `badge_text` | Count badges (rewards waiting, points to spend) |
+| `overlay_hover`, `overlay_selected`, `overlay_pressed`, `hairline`, `divider`, `focus`, `disabled` | Rows and buttons under the pointer or selected, panel edges, separators, the focused search field, disabled buttons |
+| `tile_locked`, `tile_open`, `tile_open_dark`, `tile_white`, `progress`, `progress_dark`, `done`, `done_dark`, `done_bright`, `done_settled`, `done_text`, `reward`, `excluded`, `ink` | Quest and skill tiles by state: not yet, can start, in progress, done, rewards waiting, shut by an exclusive choice; dark text on light tiles |
+| `line_open`, `line_closed`, `line_closed_hover`, `line_open_hover` | Dependency lines (walked lines use `done`) |
+| `selection`, `optional_outline`, `mark`, `flash`, `scrollbar`, `scrollbar_hover`, `minimap_view`, `minimap_open` | Selection ring, optional quests' dashed outline, small marks on tiles, state-change flash, scrollbars, minimap |
+| `hud_back`, `hud_text`, `hud_muted`, `toast_track` | The pinned-quest overlay over the world, and the experience toast's bar |
+
+## Shapes and icons: `assets/kuronami_quest_tree/textures/gui/`
+
+- `shape/<name>.png` and `shape/<name>_ring.png`: white masks for tiles (`square`, `rsquare`, `circle`, `diamond`,
+  `octagon`, `pentagon`, `gear`, `heart`) and their outlines. They are tinted by the palette, so draw them white.
+  `rsquare.png` is also nine-sliced for every rounded panel (corners take 23 of its 128 pixels); `rsquare_edge.png` is
+  the 1-pixel panel edge (corners 12 of 32).
+- `icon/<name>.png`: small white glyphs (`chevron` is the line arrowhead, `dot` the badge and unread dot, `pin`,
+  `lock`, `tick`, `cross`, `link`, `now`, `plus`, `minus`, `center`, `arrow`).
+
+## Sounds
+
+`assets/kuronami_quest_tree/sounds.json` names every interface sound (`ui.claim`, `ui.unlock`, `ui.open`, …); a pack
+can point them at its own files.

@@ -16,15 +16,15 @@ import java.util.Set;
  */
 final class Tiles {
 
-    static final int GREEN = 0xFF5E9E4A;
-    static final int GREEN_DARK = 0xFF3F7231;
-    static final int GREEN_TEXT = 0xFF7BC862;
+    static int GREEN = 0xFF5E9E4A;
+    static int GREEN_DARK = 0xFF3F7231;
+    static int GREEN_TEXT = 0xFF7BC862;
     /**
      * Not yet: an opaque grey a step above the screen's ground, so closed nodes keep the tree's shape visible. Picked
      * with the ground on 2026-10-17: the old near-black pair left a 196-quest chapter hard to read.
      */
-    static final int TILE_LOCKED = 0xFF6B707A;
-    static final int INK = 0xFF1A1A1A;
+    static int TILE_LOCKED = 0xFF6B707A;
+    static int INK = 0xFF1A1A1A;
 
     static final Set<String> SHAPES = Set.of("square", "rsquare", "circle", "diamond", "octagon", "pentagon", "gear", "heart");
 
@@ -106,15 +106,15 @@ final class Tiles {
      */
     enum Look { LOCKED_FAR, LOCKED_NEAR, EXCLUDED, OPEN, AFFORDABLE, PROGRESS, DONE, DONE_REWARD }
 
-    static final int WHITE = 0xFFE8E8E8;
-    static final int GREEN_BRIGHT = 0xFF6DB556;
-    static final int GREEN_SETTLED = 0xFF54883F;
-    static final int GREY = 0xFFC6C6C6;
-    static final int GREY_DARK = 0xFF8B8B8B;
-    static final int BLUE = 0xFF4F9FDB;
-    static final int BLUE_DARK = 0xFF2F6E9F;
-    static final int GOLD = 0xFFF2C230;
-    static final int RED = 0xFFD05656;
+    static int WHITE = 0xFFE8E8E8;
+    static int GREEN_BRIGHT = 0xFF6DB556;
+    static int GREEN_SETTLED = 0xFF54883F;
+    static int GREY = 0xFFC6C6C6;
+    static int GREY_DARK = 0xFF8B8B8B;
+    static int BLUE = 0xFF4F9FDB;
+    static int BLUE_DARK = 0xFF2F6E9F;
+    static int GOLD = 0xFFF2C230;
+    static int RED = 0xFFD05656;
 
     /** For callers that only know the state: quests' "claim" is done with a reward waiting. */
     static Look look(State state) {

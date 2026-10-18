@@ -25,38 +25,66 @@ final class Ui {
      * dark theme (2026-10-18, the player: the screen read "too grey" and Discord is the app players already know):
      * neutral greys with a faint violet cast instead of slate blue, brighter text, and one saturated accent.
      */
-    static final int TEXT = 0xFFDBDEE1;
-    static final int MUTED = 0xFFB5BAC1;
-    static final int DIM = 0xFF949BA4;
+    static int TEXT = 0xFFDBDEE1;
+    static int MUTED = 0xFFB5BAC1;
+    static int DIM = 0xFF949BA4;
     /** Text on a selected row, one step brighter than {@link #TEXT}. */
-    static final int BRIGHT = 0xFFF2F3F5;
+    static int BRIGHT = 0xFFF2F3F5;
 
     /** The map's ground: Discord's main surface. */
-    static final int GROUND = 0xFF313338;
+    static int GROUND = 0xFF313338;
     /** Sidebars and the detail sheet sit one step below the ground, as Discord's channel list does. */
-    static final int PANEL = 0xFF2B2D31;
+    static int PANEL = 0xFF2B2D31;
     /** Nearly opaque: the world behind only tints the panel, it must not show through as texture. */
-    static final int PANEL_TRANSLUCENT = 0xF22B2D31;
+    static int PANEL_TRANSLUCENT = 0xF22B2D31;
     /** The closed icon rail: Discord's server column, the darkest layer. */
-    static final int RAIL_CLOSED = 0xF21E1F22;
+    static int RAIL_CLOSED = 0xF21E1F22;
     /** Floating surfaces (tooltips) go darkest, so they read over anything they land on. */
-    static final int FLOATING = 0xF2111214;
+    static int FLOATING = 0xF2111214;
     /** The one saturated colour of the chrome: selection marks, focus and the spend action. */
-    static final int ACCENT = 0xFF5865F2;
+    static int ACCENT = 0xFF5865F2;
     /**
      * Notification badges: a solid round chip, as on a phone's app icon. The digits are dark, not white: white on this
      * yellow reads at about 1.6:1 (2026-10-18, the player found it hard to read); the dark grey gives about 10:1.
      */
-    static final int BADGE = 0xFFF2C230;
-    static final int BADGE_TEXT = 0xFF1E1F22;
+    static int BADGE = 0xFFF2C230;
+    static int BADGE_TEXT = 0xFF1E1F22;
 
     /** Overlays laid on whatever is behind them: rows, cards, hover and selection (Discord's hover and selected greys). */
-    static final int OVERLAY_1 = 0x4D4E5058;
-    static final int OVERLAY_2 = 0x994E5058;
-    static final int OVERLAY_3 = 0xCC5C5E66;
-    static final int HAIRLINE = 0x1FFFFFFF;
-    static final int DIVIDER = 0x14FFFFFF;
-    static final int FOCUS = 0xFF5865F2;
+    static int OVERLAY_1 = 0x4D4E5058;
+    static int OVERLAY_2 = 0x994E5058;
+    static int OVERLAY_3 = 0xCC5C5E66;
+    static int HAIRLINE = 0x1FFFFFFF;
+    static int DIVIDER = 0x14FFFFFF;
+    /** The focused field: white, not the accent, so the accent stays on two things (selection and the spend action). */
+    static int FOCUS = 0x66FFFFFF;
+    /** Whatever is switched off (a disabled button), and the fade where a list runs under its edge: the panel's own hue. */
+    static int DISABLED = 0x4D1E1F22;
+
+    /** A search that matched nothing. */
+    static int TEXT_ERROR = 0xFFFF8A8A;
+    /** Scrollbar thumb, and while the pointer is over its list. */
+    static int SCROLLBAR = 0x5FFFFFFF;
+    static int SCROLLBAR_HOVER = 0x99FFFFFF;
+    /** Small white marks on tiles (quest link arrow, the Now list dot). */
+    static int MARK = 0xFFFFFFFF;
+    /** The selected tile ring, the path to it, the picked reward. */
+    static int SELECTION = 0xCCFFFFFF;
+    /** Dashed outline of optional quests. */
+    static int OPTIONAL_OUTLINE = 0x66FFFFFF;
+    /** The flash when a tile changes state. */
+    static int FLASH = 0xFFFFFFFF;
+    /** Minimap: the frame of the visible area, and a startable quest. */
+    static int MINIMAP_VIEW = 0xAAFFFFFF;
+    static int MINIMAP_OPEN = 0xFF9A9A9A;
+    /** An open line under the pointer. */
+    static int LINE_OPEN_HOVER = 0xFFEDEDEF;
+    /** Behind the pinned-quest overlay and its notices (over the world). */
+    static int HUD_BACK = 0x66111214;
+    static int HUD_TEXT = 0xFFE0E0E0;
+    static int HUD_MUTED = 0xFFB0B0B0;
+    /** The empty part of the experience toast bar. */
+    static int TOAST_TRACK = 0xFF2A2A2A;
 
     /** Spacing on a 4/8 grid. */
     static final int S1 = 4;
@@ -66,7 +94,7 @@ final class Ui {
 
     /** Radii: marks and chips, controls and rows, cards and fields, panels. */
     static final int R1 = 4;
-    static final int R2 = 6;
+    static final int R2 = 8;
     static final int R3 = 8;
     static final int R4 = 12;
 
@@ -79,6 +107,94 @@ final class Ui {
     private static final int EDGE_CORNER = 12;
 
     private Ui() {
+    }
+
+    private static final ResourceLocation PALETTE = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "gui/palette.json");
+
+    /**
+     * Reads {@code assets/kuronami_quest_tree/gui/palette.json} so a resource pack can recolour the whole screen
+     * (CRAFT_GUI_RULES: the look is replaceable, no colour lives only in code). Missing keys keep their current value;
+     * colours are "#RRGGBB" or "#AARRGGBB". Called when the book arrives and whenever the screen opens, so a pack
+     * change applies the next time it is opened.
+     */
+    static void loadPalette(net.minecraft.server.packs.resources.ResourceManager rm) {
+        com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+        try {
+            var res = rm.getResource(PALETTE);
+            if (res.isPresent()) {
+                try (var reader = res.get().openAsReader()) {
+                    o = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+                }
+            }
+        } catch (Exception ex) {
+            Constants.LOG.warn("Could not read {}: {}", PALETTE, ex.toString());
+        }
+        TEXT = color(o, "text", TEXT);
+        MUTED = color(o, "text_muted", MUTED);
+        DIM = color(o, "text_dim", DIM);
+        BRIGHT = color(o, "text_bright", BRIGHT);
+        GROUND = color(o, "ground", GROUND);
+        PANEL = color(o, "panel", PANEL);
+        PANEL_TRANSLUCENT = color(o, "panel_translucent", PANEL_TRANSLUCENT);
+        RAIL_CLOSED = color(o, "rail_closed", RAIL_CLOSED);
+        FLOATING = color(o, "floating", FLOATING);
+        ACCENT = color(o, "accent", ACCENT);
+        BADGE = color(o, "badge", BADGE);
+        BADGE_TEXT = color(o, "badge_text", BADGE_TEXT);
+        OVERLAY_1 = color(o, "overlay_hover", OVERLAY_1);
+        OVERLAY_2 = color(o, "overlay_selected", OVERLAY_2);
+        OVERLAY_3 = color(o, "overlay_pressed", OVERLAY_3);
+        HAIRLINE = color(o, "hairline", HAIRLINE);
+        DIVIDER = color(o, "divider", DIVIDER);
+        FOCUS = color(o, "focus", FOCUS);
+        DISABLED = color(o, "disabled", DISABLED);
+        Tiles.GREEN = color(o, "done", Tiles.GREEN);
+        Tiles.GREEN_DARK = color(o, "done_dark", Tiles.GREEN_DARK);
+        Tiles.GREEN_TEXT = color(o, "done_text", Tiles.GREEN_TEXT);
+        Tiles.TILE_LOCKED = color(o, "tile_locked", Tiles.TILE_LOCKED);
+        Tiles.INK = color(o, "ink", Tiles.INK);
+        Tiles.WHITE = color(o, "tile_white", Tiles.WHITE);
+        Tiles.GREEN_BRIGHT = color(o, "done_bright", Tiles.GREEN_BRIGHT);
+        Tiles.GREEN_SETTLED = color(o, "done_settled", Tiles.GREEN_SETTLED);
+        Tiles.GREY = color(o, "tile_open", Tiles.GREY);
+        Tiles.GREY_DARK = color(o, "tile_open_dark", Tiles.GREY_DARK);
+        Tiles.BLUE = color(o, "progress", Tiles.BLUE);
+        Tiles.BLUE_DARK = color(o, "progress_dark", Tiles.BLUE_DARK);
+        Tiles.GOLD = color(o, "reward", Tiles.GOLD);
+        Tiles.RED = color(o, "excluded", Tiles.RED);
+        ProgressScreen.LINE_OPEN = color(o, "line_open", ProgressScreen.LINE_OPEN);
+        ProgressScreen.LINE_CLOSED = color(o, "line_closed", ProgressScreen.LINE_CLOSED);
+        ProgressScreen.LINE_CLOSED_ON = color(o, "line_closed_hover", ProgressScreen.LINE_CLOSED_ON);
+        TEXT_ERROR = color(o, "text_error", TEXT_ERROR);
+        SCROLLBAR = color(o, "scrollbar", SCROLLBAR);
+        SCROLLBAR_HOVER = color(o, "scrollbar_hover", SCROLLBAR_HOVER);
+        MARK = color(o, "mark", MARK);
+        SELECTION = color(o, "selection", SELECTION);
+        OPTIONAL_OUTLINE = color(o, "optional_outline", OPTIONAL_OUTLINE);
+        FLASH = color(o, "flash", FLASH);
+        MINIMAP_VIEW = color(o, "minimap_view", MINIMAP_VIEW);
+        MINIMAP_OPEN = color(o, "minimap_open", MINIMAP_OPEN);
+        LINE_OPEN_HOVER = color(o, "line_open_hover", LINE_OPEN_HOVER);
+        HUD_BACK = color(o, "hud_back", HUD_BACK);
+        HUD_TEXT = color(o, "hud_text", HUD_TEXT);
+        HUD_MUTED = color(o, "hud_muted", HUD_MUTED);
+        TOAST_TRACK = color(o, "toast_track", TOAST_TRACK);
+        ProgressScreen.paletteChanged();
+    }
+
+    private static int color(com.google.gson.JsonObject o, String key, int fallback) {
+        if (!o.has(key)) {
+            return fallback;
+        }
+        try {
+            String s = o.get(key).getAsString().trim();
+            String hex = s.startsWith("#") ? s.substring(1) : s;
+            long v = Long.parseLong(hex, 16);
+            return (int) (hex.length() <= 6 ? 0xFF000000L | v : v);
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("Bad colour for {} in {}: {}", key, PALETTE, o.get(key));
+            return fallback;
+        }
     }
 
     private static ResourceLocation texture(String path) {
@@ -157,21 +273,13 @@ final class Ui {
         return w;
     }
 
-    /** A lifted panel with its shadow, for the surfaces that float over the rest (sheet, minimap, tooltip). */
-    static void floating(GuiGraphics g, int x, int y, int w, int h, int argb) {
-        shadow(g, x, y, w, h);
-        surface(g, x, y, w, h, R4, argb);
-        outline(g, x, y, w, h, R4, HAIRLINE);
-    }
-
     /**
-     * A soft shadow under a panel: three rounded layers that overlap, so the dark part hugs the panel and fades out.
-     * Cheap on purpose (no blur pass, 21 blits), and only drawn for the few floating surfaces.
+     * A surface that floats over the rest (sheet, minimap): fill and hairline only. It had a shadow as well until
+     * 2026-10-18; border, shadow and fill on one element is one grouping device too many (negative_list §7), and the
+     * shadow was pure black, which the same list rules out.
      */
-    static void shadow(GuiGraphics g, int x, int y, int w, int h) {
-        for (int i = 3; i >= 1; i--) {
-            surface(g, x - i, y - i + 1, w + 2 * i, h + 2 * i, R4, 0x11000000);
-        }
+    static void floating(GuiGraphics g, int x, int y, int w, int h, int argb) {
+        panel(g, x, y, w, h, argb);
     }
 
     /** A 1px separator inside a panel. */
@@ -227,7 +335,6 @@ final class Ui {
             y = g.guiHeight() - h - 4;
         }
         y = Math.max(4, y);
-        shadow(g, x, y, w, h);
         surface(g, x, y, w, h, R3, FLOATING);
         outline(g, x, y, w, h, R3, HAIRLINE);
         int ty = y + S1 - 1;

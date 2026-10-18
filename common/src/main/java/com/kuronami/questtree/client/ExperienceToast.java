@@ -105,7 +105,7 @@ final class ExperienceToast implements Toast, OwnSoundToast {
         g.drawString(font, font.plainSubstrByWidth(top.getString(), width() - 38), 32, 7, levelled ? 0xFFFF55 : 0xFFFFFF, false);
         int x0 = 32;
         int x1 = width() - 10;
-        g.fill(x0, 20, x1, 23, 0xFF2A2A2A);
+        g.fill(x0, 20, x1, 23, Ui.TOAST_TRACK);
         g.fill(x0, 20, x0 + (int) ((x1 - x0) * shown), 23, Tiles.GREEN_TEXT);
         return time - lastChange >= SHOW * toasts.getNotificationDisplayTimeMultiplier() ? Visibility.HIDE : Visibility.SHOW;
     }
