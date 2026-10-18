@@ -152,22 +152,23 @@ public final class ProgressService {
 
     /** A block was broken (survival or creative). Counts "break" tasks, capped at the target. */
     public static void onBlockBreak(ServerPlayer player, BlockState state) {
-        PlayerProgress p = progress(player);
         ProgressRules r = rules();
-        for (ProgressModel.Node n : r.model().nodes.values()) {
-            if (!working(r, p, n)) {
+        List<TaskRef> refs = tasksOfType(r, "break");
+        if (refs.isEmpty()) {
+            return;
+        }
+        PlayerProgress p = progress(player);
+        for (TaskRef ref : refs) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
+            if (!working(r, p, n) || !blockMatches(blockSpec(t), state)) {
                 continue;
             }
-            for (int i = 0; i < n.tasks.size(); i++) {
-                JsonObject t = n.tasks.get(i);
-                if (!type(t).equals("break") || !blockMatches(blockSpec(t), state)) {
-                    continue;
-                }
-                long target = ProgressRules.target(t);
-                long had = p.task(n.key, i);
-                if (had < target) {
-                    bump(player, p, n, i, Math.min(had + 1, target));
-                }
+            long target = ProgressRules.target(t);
+            long had = p.task(n.key, i);
+            if (had < target) {
+                bump(player, p, n, i, Math.min(had + 1, target));
             }
         }
         recheck(player, p);
@@ -282,37 +283,67 @@ public final class ProgressService {
      */
     private static void scanObservation(ServerPlayer player, boolean persist) {
         ProgressRules r = rules();
+        List<TaskRef> refs = tasksOfType(r, "observation");
+        if (refs.isEmpty()) {
+            return;
+        }
         PlayerProgress p = progress(player);
-        for (ProgressModel.Node n : r.model().nodes.values()) {
+        for (TaskRef ref : refs) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
             if (!working(r, p, n)) {
                 continue;
             }
-            for (int i = 0; i < n.tasks.size(); i++) {
-                JsonObject t = n.tasks.get(i);
-                if (!type(t).equals("observation")) {
-                    continue;
+            long target = ProgressRules.target(t);
+            if (p.task(n.key, i) >= target) {
+                continue;
+            }
+            String key = n.key + "#" + i;
+            Map<String, Integer> seen = OBSERVED.computeIfAbsent(player.getUUID(), k -> new HashMap<>());
+            int run = observing(player, t) ? Math.min(seen.getOrDefault(key, 0) + 1, (int) target) : 0;
+            seen.put(key, run);
+            if (persist || run >= target) {
+                if (p.task(n.key, i) != run) {
+                    // quiet write: a look that lasts a while would otherwise send a packet every tick
+                    p.setTask(n.key, i, run);
+                    ProgressStore.get(player.server).setDirty();
+                    markExperienceDirty(player);
                 }
-                long target = ProgressRules.target(t);
-                if (p.task(n.key, i) >= target) {
-                    continue;
-                }
-                String key = n.key + "#" + i;
-                Map<String, Integer> seen = OBSERVED.computeIfAbsent(player.getUUID(), k -> new HashMap<>());
-                int run = observing(player, t) ? Math.min(seen.getOrDefault(key, 0) + 1, (int) target) : 0;
-                seen.put(key, run);
-                if (persist || run >= target) {
-                    if (p.task(n.key, i) != run) {
-                        // quiet write: a look that lasts a while would otherwise send a packet every tick
-                        p.setTask(n.key, i, run);
-                        ProgressStore.get(player.server).setDirty();
-                        markExperienceDirty(player);
-                    }
-                    if (run >= target) {
-                        recheck(player, p);
-                    }
+                if (run >= target) {
+                    recheck(player, p);
                 }
             }
         }
+    }
+
+    /** One task of one node. */
+    private record TaskRef(ProgressModel.Node node, int index) {
+    }
+
+    private static ProgressModel taskIndexModel;
+    private static final Map<String, List<TaskRef>> TASKS_BY_TYPE = new HashMap<>();
+
+    /**
+     * The tasks of one type across the loaded data, rebuilt when the data reloads. Observation is read every tick and a
+     * break on every block, so they walk this short list instead of every node of a pack (ATM10 has about 4,800).
+     */
+    private static List<TaskRef> tasksOfType(ProgressRules r, String type) {
+        if (taskIndexModel != r.model()) {
+            TASKS_BY_TYPE.clear();
+            taskIndexModel = r.model();
+        }
+        return TASKS_BY_TYPE.computeIfAbsent(type, ty -> {
+            List<TaskRef> out = new ArrayList<>();
+            for (ProgressModel.Node n : r.model().nodes.values()) {
+                for (int i = 0; i < n.tasks.size(); i++) {
+                    if (type(n.tasks.get(i)).equals(ty)) {
+                        out.add(new TaskRef(n, i));
+                    }
+                }
+            }
+            return out;
+        });
     }
 
     /** Whether the player is looking at the task's target right now. */
