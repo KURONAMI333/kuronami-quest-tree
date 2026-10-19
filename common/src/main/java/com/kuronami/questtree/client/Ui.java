@@ -77,6 +77,8 @@ final class Ui {
     /** Minimap: the frame of the visible area, and a startable quest. */
     static int MINIMAP_VIEW = 0xAAFFFFFF;
     static int MINIMAP_OPEN = 0xFF9A9A9A;
+    /** The glass minimap's tint, multiplied into the picture behind it. */
+    static int GLASS_TINT = 0xFFD6E0F5;
     /** An open line under the pointer. */
     static int LINE_OPEN_HOVER = 0xFFEDEDEF;
     /** Behind the pinned-quest overlay and its notices (over the world). */
@@ -158,9 +160,10 @@ final class Ui {
         Tiles.GREEN_BRIGHT = color(o, "done_bright", Tiles.GREEN_BRIGHT);
         Tiles.GREEN_SETTLED = color(o, "done_settled", Tiles.GREEN_SETTLED);
         Tiles.GREY = color(o, "tile_open", Tiles.GREY);
-        Tiles.GREY_DARK = color(o, "tile_open_dark", Tiles.GREY_DARK);
         Tiles.BLUE = color(o, "progress", Tiles.BLUE);
         Tiles.BLUE_DARK = color(o, "progress_dark", Tiles.BLUE_DARK);
+        // the waterline follows "progress" unless a pack sets its own
+        Tiles.SURFACE = o.has("progress_surface") ? color(o, "progress_surface", Tiles.SURFACE) : Tiles.surfaceOf(Tiles.BLUE);
         Tiles.GOLD = color(o, "reward", Tiles.GOLD);
         Tiles.RED = color(o, "excluded", Tiles.RED);
         ProgressScreen.LINE_OPEN = color(o, "line_open", ProgressScreen.LINE_OPEN);
@@ -175,6 +178,7 @@ final class Ui {
         FLASH = color(o, "flash", FLASH);
         MINIMAP_VIEW = color(o, "minimap_view", MINIMAP_VIEW);
         MINIMAP_OPEN = color(o, "minimap_open", MINIMAP_OPEN);
+        GLASS_TINT = color(o, "glass_tint", GLASS_TINT);
         LINE_OPEN_HOVER = color(o, "line_open_hover", LINE_OPEN_HOVER);
         HUD_BACK = color(o, "hud_back", HUD_BACK);
         HUD_TEXT = color(o, "hud_text", HUD_TEXT);
@@ -187,7 +191,7 @@ final class Ui {
     private static int[] defaults;
 
     private static int[] current() {
-        return new int[]{TEXT, MUTED, DIM, BRIGHT, GROUND, PANEL, PANEL_TRANSLUCENT, RAIL_CLOSED, FLOATING, ACCENT, BADGE, BADGE_TEXT, OVERLAY_1, OVERLAY_2, OVERLAY_3, HAIRLINE, DIVIDER, FOCUS, DISABLED, Tiles.GREEN, Tiles.GREEN_DARK, Tiles.GREEN_TEXT, Tiles.TILE_LOCKED, Tiles.INK, Tiles.WHITE, Tiles.GREEN_BRIGHT, Tiles.GREEN_SETTLED, Tiles.GREY, Tiles.GREY_DARK, Tiles.BLUE, Tiles.BLUE_DARK, Tiles.GOLD, Tiles.RED, ProgressScreen.LINE_OPEN, ProgressScreen.LINE_CLOSED, ProgressScreen.LINE_CLOSED_ON, TEXT_ERROR, SCROLLBAR, SCROLLBAR_HOVER, MARK, SELECTION, OPTIONAL_OUTLINE, FLASH, MINIMAP_VIEW, MINIMAP_OPEN, LINE_OPEN_HOVER, HUD_BACK, HUD_TEXT, HUD_MUTED, TOAST_TRACK};
+        return new int[]{TEXT, MUTED, DIM, BRIGHT, GROUND, PANEL, PANEL_TRANSLUCENT, RAIL_CLOSED, FLOATING, ACCENT, BADGE, BADGE_TEXT, OVERLAY_1, OVERLAY_2, OVERLAY_3, HAIRLINE, DIVIDER, FOCUS, DISABLED, Tiles.GREEN, Tiles.GREEN_DARK, Tiles.GREEN_TEXT, Tiles.TILE_LOCKED, Tiles.INK, Tiles.WHITE, Tiles.GREEN_BRIGHT, Tiles.GREEN_SETTLED, Tiles.GREY, Tiles.BLUE, Tiles.BLUE_DARK, Tiles.GOLD, Tiles.RED, ProgressScreen.LINE_OPEN, ProgressScreen.LINE_CLOSED, ProgressScreen.LINE_CLOSED_ON, TEXT_ERROR, SCROLLBAR, SCROLLBAR_HOVER, MARK, SELECTION, OPTIONAL_OUTLINE, FLASH, MINIMAP_VIEW, MINIMAP_OPEN, LINE_OPEN_HOVER, HUD_BACK, HUD_TEXT, HUD_MUTED, TOAST_TRACK, GLASS_TINT};
     }
 
     private static void restoreDefaults() {
@@ -224,7 +228,6 @@ final class Ui {
         Tiles.GREEN_BRIGHT = defaults[i++];
         Tiles.GREEN_SETTLED = defaults[i++];
         Tiles.GREY = defaults[i++];
-        Tiles.GREY_DARK = defaults[i++];
         Tiles.BLUE = defaults[i++];
         Tiles.BLUE_DARK = defaults[i++];
         Tiles.GOLD = defaults[i++];
@@ -246,6 +249,7 @@ final class Ui {
         HUD_TEXT = defaults[i++];
         HUD_MUTED = defaults[i++];
         TOAST_TRACK = defaults[i++];
+        GLASS_TINT = defaults[i++];
     }
 
     private static int color(com.google.gson.JsonObject o, String key, int fallback) {

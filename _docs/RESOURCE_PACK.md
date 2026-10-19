@@ -15,9 +15,9 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
 | `accent` | The selected chapter's mark and the button that spends skill points |
 | `badge`, `badge_text` | Count badges (rewards waiting, points to spend) |
 | `overlay_hover`, `overlay_selected`, `overlay_pressed`, `hairline`, `divider`, `focus`, `disabled` | Rows and buttons under the pointer or selected, panel edges, separators, the focused search field, disabled buttons |
-| `tile_locked`, `tile_open`, `tile_open_dark`, `tile_white`, `progress`, `progress_dark`, `done`, `done_dark`, `done_bright`, `done_settled`, `done_text`, `reward`, `excluded`, `ink` | Quest and skill tiles by state: not yet, can start, in progress, done, rewards waiting, shut by an exclusive choice; dark text on light tiles |
+| `tile_locked`, `tile_open`, `tile_white`, `progress`, `progress_dark`, `done`, `done_dark`, `done_bright`, `done_settled`, `done_text`, `reward`, `excluded`, `ink` | Quest and skill tiles by state: not yet, can start, in progress, done, rewards waiting, shut by an exclusive choice; dark text on light tiles. `progress_surface` (not in the shipped file) sets the waterline of a quest in progress; without it the line is a lighter `progress` |
 | `line_open`, `line_closed`, `line_closed_hover`, `line_open_hover` | Dependency lines (walked lines use `done`) |
-| `selection`, `optional_outline`, `mark`, `flash`, `scrollbar`, `scrollbar_hover`, `minimap_view`, `minimap_open` | Selection ring, optional quests' dashed outline, small marks on tiles, state-change flash, scrollbars, minimap |
+| `selection`, `optional_outline`, `mark`, `flash`, `scrollbar`, `scrollbar_hover`, `minimap_view`, `minimap_open`, `glass_tint` | Selection ring, optional quests' dashed outline, small marks on tiles, state-change flash, scrollbars, minimap, the glass minimap's tint |
 | `hud_back`, `hud_text`, `hud_muted`, `toast_track` | The pinned-quest overlay over the world, and the experience toast's bar |
 
 ## Shapes and icons: `assets/kuronami_quest_tree/textures/gui/`
@@ -26,7 +26,9 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
   `octagon`, `pentagon`, `gear`, `heart`) and their outlines. They are tinted by the palette, so draw them white.
   `rsquare.png` is also nine-sliced for every rounded panel (corners take 23 of its 128 pixels); `rsquare_edge.png` is
   the 1-pixel panel edge (corners 12 of 32).
-- `icon/<name>.png`: small white glyphs (`chevron` is the line arrowhead, `dot` the badge and unread dot, `pin`,
+- `glass_mask.png`: what lies outside the glass minimap's rounded corners, opaque outside and clear inside (corners 23
+  of 128, nine-sliced).
+- `icon/<name>.png`: small white glyphs (`chevron` is the line arrowhead, `dot` the badge, `pin`,
   `lock`, `tick`, `cross`, `link`, `now`, `plus`, `minus`, `center`, `arrow`).
 
 ## Sounds

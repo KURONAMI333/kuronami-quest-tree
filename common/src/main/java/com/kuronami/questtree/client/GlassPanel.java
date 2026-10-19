@@ -15,6 +15,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fStack;
 
 /**
  * The minimap drawn as a glass slab over whatever is behind it.
@@ -34,15 +35,14 @@ public final class GlassPanel {
     private static final double BEZEL = 9.0;
     /** How far the bezel pushes the picture at the outer edge, in GUI pixels. */
     private static final double REFRACT = 8.1;
-    /** The rounded mask, the same shape as {@code shape/rsquare}, nine-sliced so the corners stay round. */
+    /**
+     * What lies outside the rounded panel: opaque in the corners, clear inside, nine-sliced like {@code shape/rsquare}.
+     * Stored inverted because the game's textured shader drops fully clear texels, which then multiply nothing.
+     */
     private static final ResourceLocation MASK =
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/glass_mask.png");
     private static final int MASK_TEX = 128;
     private static final int MASK_CORNER = 23;
-    /** The slab's tint per channel: a little cool without washing the picture out. */
-    private static final float TINT_R = 0.84f;
-    private static final float TINT_G = 0.88f;
-    private static final float TINT_B = 0.96f;
 
     private static TextureTarget copy;
     private static TextureTarget half;
@@ -83,14 +83,15 @@ public final class GlassPanel {
             return;
         }
 
+        // everything drawn behind the panel has to be on the screen before it can be copied, and before a target is
+        // made or resized: both rebind the framebuffer and the viewport
+        g.flush();
         copy = target(copy, tw, th);
         half = target(half, Math.max(1, tw / 2), Math.max(1, th / 2));
         quarter = target(quarter, Math.max(1, tw / 4), Math.max(1, th / 4));
         eighth = target(eighth, Math.max(1, tw / 8), Math.max(1, th / 8));
         panel = target(panel, pw, ph);
 
-        // everything drawn behind the panel has to be on the screen before it can be copied
-        g.flush();
         GlStateManager._glBindFramebuffer(36008, main.frameBufferId);
         GlStateManager._glBindFramebuffer(36009, copy.frameBufferId);
         GlStateManager._glBlitFrameBuffer(x0, y0, x1, y1, 0, 0, tw, th, 0x4000, 0x2600);
@@ -100,8 +101,14 @@ public final class GlassPanel {
         RenderSystem.disableBlend();
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         RenderSystem.backupProjectionMatrix();
-        Matrix4f projection = new Matrix4f().setOrtho(0f, 1f, 1f, 0f, 1000f, 21000f);
+        Matrix4f projection = new Matrix4f().setOrtho(0f, 1f, 1f, 0f, -1f, 1f);
         RenderSystem.setProjectionMatrix(projection, VertexSorting.ORTHOGRAPHIC_Z);
+        // the passes draw in 0..1 with nothing else applied; the GUI's model-view pushes z back by a loader-dependent
+        // amount, which a fixed far plane would not always cover
+        Matrix4fStack modelView = RenderSystem.getModelViewStack();
+        modelView.pushMatrix();
+        modelView.identity();
+        RenderSystem.applyModelViewMatrix();
         try {
             // the copied frame may have any alpha in it; the passes below want the picture's alpha out of the way
             opaque(copy);
@@ -117,12 +124,15 @@ public final class GlassPanel {
 
             bend(px0 - x0, py0 - top, pw, ph, tw, th, scale, quarter.getColorTextureId(), panel);
 
-            GlStateManager._colorMask(true, true, true, true);
-            RenderSystem.blendFunc(GlStateManager.SourceFactor.ZERO, GlStateManager.DestFactor.SRC_ALPHA);
+            // only the coverage is cut: the colour is multiplied by it once, when the panel is drawn onto the screen
+            GlStateManager._colorMask(false, false, false, true);
+            RenderSystem.blendFunc(GlStateManager.SourceFactor.ZERO, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
             mask(pw, ph, scale);
         } finally {
             GlStateManager._colorMask(true, true, true, true);
             RenderSystem.defaultBlendFunc();
+            modelView.popMatrix();
+            RenderSystem.applyModelViewMatrix();
             RenderSystem.restoreProjectionMatrix();
             main.bindWrite(true);
         }
@@ -146,6 +156,16 @@ public final class GlassPanel {
         // a hairline instead of a solid white edge; the body's own rim already carries most of the highlight
         Ui.outline(g, x, y, w, h, Ui.R4, (Ui.BRIGHT & 0xFFFFFF) | 0x50000000);
         RenderSystem.disableBlend();
+    }
+
+    /** Frees the off-screen copies; the next panel makes them again. */
+    public static void release() {
+        for (TextureTarget t : new TextureTarget[]{copy, half, quarter, eighth, panel}) {
+            if (t != null) {
+                t.destroyBuffers();
+            }
+        }
+        copy = half = quarter = eighth = panel = null;
     }
 
     private static TextureTarget target(TextureTarget target, int w, int h) {
@@ -276,7 +296,8 @@ public final class GlassPanel {
         RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
         RenderSystem.setShaderTexture(0, texture);
         RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
-        float[] base = {TINT_R, TINT_G, TINT_B};
+        int tintArgb = Ui.GLASS_TINT;
+        float[] base = {((tintArgb >> 16) & 255) / 255f, ((tintArgb >> 8) & 255) / 255f, (tintArgb & 255) / 255f};
         for (int channel = 0; channel < 3; channel++) {
             GlStateManager._colorMask(channel == 0, channel == 1, channel == 2, false);
             grid(gx, gy, uu, vv, tint, alpha, vw, vh, channel, base[channel]);
@@ -315,7 +336,7 @@ public final class GlassPanel {
         }
     }
 
-    /** Nine-slices the rounded mask, which cuts the slab's coverage at the corners without touching its colour. */
+    /** Nine-slices the corner mask, which cuts the slab's coverage outside the rounded corners. */
     private static void mask(int pw, int ph, double scale) {
         double r = Math.min(Ui.R4 * scale, Math.min(pw, ph) * 0.5);
         double sx0 = r / pw;

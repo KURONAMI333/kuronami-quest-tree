@@ -110,11 +110,10 @@ final class Tiles {
     static int GREEN_BRIGHT = 0xFF6DB556;
     static int GREEN_SETTLED = 0xFF54883F;
     static int GREY = 0xFFC6C6C6;
-    static int GREY_DARK = 0xFF8B8B8B;
     static int BLUE = 0xFF4F9FDB;
     static int BLUE_DARK = 0xFF2F6E9F;
     /** The waterline: {@link #BLUE} lifted and pulled towards white, the way a surface catches the light. */
-    static int SURFACE = shade(BLUE, 1.22f, 0.90f);
+    static int SURFACE = surfaceOf(BLUE);
     static int GOLD = 0xFFF2C230;
     static int RED = 0xFFD05656;
 
@@ -138,12 +137,16 @@ final class Tiles {
      */
     private static void rim(GuiGraphics g, String shape, int x, int y, int s, int face) {
         int e = Math.max(1, s / 16);
+        // every layer is sized to end inside the rim instead of being cut with a scissor: a scissor takes screen
+        // coordinates and ignores the pose, so on the map (translated and scaled) it cut away everything but the rim
         shape(g, shape, x, y, s, s, shade(face, 0.58f, 1f));
-        g.enableScissor(x + e, y + e, x + s - e, y + s - e);
         shape(g, shape, x + e, y + e, s - 2 * e, s - 2 * e, shade(face, 1.30f, 0.92f));
-        shape(g, shape, x + 2 * e, y + 2 * e, s - 2 * e, s - 2 * e, shade(face, 0.74f, 1f));
+        shape(g, shape, x + 2 * e, y + 2 * e, s - 3 * e, s - 3 * e, shade(face, 0.74f, 1f));
         shape(g, shape, x + 2 * e, y + 2 * e, s - 4 * e, s - 4 * e, face);
-        g.disableScissor();
+    }
+
+    static int surfaceOf(int progress) {
+        return shade(progress, 1.22f, 0.90f);
     }
 
     /** A tone of {@code argb}: value scaled by {@code v}, saturation by {@code s} (both clamped). */
@@ -275,7 +278,11 @@ final class Tiles {
         if (look == Look.PROGRESS) {
             // the item stands in the water: the fill goes over the part below the surface, so the tile reads as depth
             // and not as a bar clipped into the shape
+            // above the item's depth (renderItem writes depth at z+150), or the depth test drops the tint on the icon
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z);
             water(g, shape, x, y, s, fraction, 0.30f);
+            g.pose().popPose();
         }
         if (look == Look.LOCKED_FAR || look == Look.LOCKED_NEAR || look == Look.EXCLUDED) {
             g.pose().pushPose();
