@@ -64,7 +64,6 @@ public final class ClientProgress {
                 model = new ClientModel(bundle);
                 rules = new ProgressRules(ProgressModel.of(bundle));
                 Pins.load();
-                Seen.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
                 Constants.LOG.info("Received {} progression chapters", model.chapters.size());
             } catch (Exception ex) {
@@ -89,7 +88,6 @@ public final class ClientProgress {
             ProgressFeedback.onUpdate(old, next, p.events());
         }
         haveProgress = true;
-        Seen.onProgress();
     }
 
     public static PlayerProgress progress() {
@@ -232,7 +230,6 @@ public final class ClientProgress {
     }
 
     public static void onLogout() {
-        Seen.flush();
         model = null;
         rules = null;
         progress = new PlayerProgress();

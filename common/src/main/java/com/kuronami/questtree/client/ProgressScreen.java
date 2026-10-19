@@ -59,14 +59,23 @@ public class ProgressScreen extends Screen {
     /** Height of a chapter row and its pitch; 20/22 read cramped next to the panel's own padding. */
     private static final int RAIL_ROW = 24;
     private static final int RAIL_PITCH = 26;
+    /** Pin slot at the right end of a chapter row: reserved in the open list, so hovering never shifts a row. */
+    private static final int RAIL_PIN_W = 16;
     /** FTB Quests' default zoom (16): 28 GUI px per grid step, against our UNIT of 24. */
     private static final float FTB_SCALE = 28f / 24f;
     /** Extra room left of a fitted map, beyond the closed chapter list. */
     private static final int FIT_LEFT = 40;
     private static final int NOW_TILE = 32;
     private static final int NOW_GAP = 6;
+    /** How many of a quest's rewards a Now cell shows at its right edge; the rest are in the detail sheet. */
+    private static final int NOW_REWARDS = 2;
     /** Narrowest Now cell: the tile and room for about 20 characters of title beside it (15 read cramped, review 2026-10-16). */
     private static final int NOW_CELL_MIN = 180;
+    /** Gap between the Now grid and the 最新 log column that holds the right edge. */
+    private static final int LOG_GAP = 12;
+    /** In-progress quests Now lists: it answers "what can I do now", and forty of them buried the claimable ones
+     *  (the player, 2026-10-19). A chapter still shows every quest. */
+    private static final int NOW_MOVING_MAX = 6;
     private static final int DOCK_MIN_WIDTH = 560;
     private static final float FAR = 0.6f;   // below this zoom, arrowheads and optional outlines are left out (icons stay)
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
@@ -292,15 +301,14 @@ public class ProgressScreen extends Screen {
     // derived from the progress; rebuilt when a new progress object arrives
     private PlayerProgress cachedFor;
     private ClientModel cachedModel;
-    private int cachedSeen = -1;
+    /** Pin version the rows were built from: pinning reorders them without any progress changing. */
+    private int railPins = -1;
     /** The item under the pointer in the detail panel (a task or a reward), for the recipe viewer's keys. */
     private ItemStack hoverStack = ItemStack.EMPTY;
     private int lastMouseX;
     private int lastMouseY;
     /** A quest to show once the screen is laid out (opened from an item, see {@link #openAt}). */
     private String pendingGoTo;
-    /** Chapters holding at least one unread (newly startable, not yet opened) quest. */
-    private final java.util.Set<String> unread = new java.util.HashSet<>();
     private final List<NowEntry> nowEntries = new ArrayList<>();
     private final Map<String, Integer> badges = new LinkedHashMap<>();
     /** done, visible, hidden node counts per chapter. */
@@ -339,13 +347,12 @@ public class ProgressScreen extends Screen {
 
     private void refresh(ClientModel m) {
         PlayerProgress p = ClientProgress.progress();
-        if (p == cachedFor && m == cachedModel && Seen.version() == cachedSeen) {
+        if (p == cachedFor && m == cachedModel && railPins == ClientConfig.railPinVersion()) {
             return;
         }
         cachedFor = p;
         cachedModel = m;
-        cachedSeen = Seen.version();
-        unread.clear();
+        railPins = ClientConfig.railPinVersion();
         nowEntries.clear();
         badges.clear();
         chapterCounts.clear();
@@ -376,9 +383,6 @@ public class ProgressScreen extends Screen {
                     continue;
                 }
                 shown++;
-                if (!c.skills && Seen.isNew(n.key)) {
-                    unread.add(c.id);
-                }
                 State s = ClientProgress.state(n.key);
                 if (s == State.DONE || s == State.CLAIM) {
                     // completed, rewards waiting or not
@@ -423,10 +427,29 @@ public class ProgressScreen extends Screen {
             badges.put(c.id, badge);
             chapterCounts.put(c.id, new int[]{done, shown, hidden});
         }
+        // pinned chapters form their own block at the top, in pin order: quick access to the few a player works in
+        List<ClientModel.Chapter> pinnedRail = new ArrayList<>();
+        for (String id : ClientConfig.railPinned) {
+            for (ClientModel.Chapter c : railChapters) {
+                if (c.id.equals(id)) {
+                    pinnedRail.add(c);
+                    break;
+                }
+            }
+        }
+        if (!pinnedRail.isEmpty()) {
+            railRows.add(new RailRow(null, Component.translatable("screen.kuronami_quest_tree.pin")));
+            for (ClientModel.Chapter c : pinnedRail) {
+                railRows.add(new RailRow(c, null));
+            }
+        }
         // chapters are sorted by group order, so a group's chapters are contiguous: drop its header before the first.
         // A group without a title (or chapters with no group) simply gets no header, keeping the old rail.
         String lastGroup = null;
         for (ClientModel.Chapter c : railChapters) {
+            if (ClientConfig.railPinned(c.id)) {
+                continue;
+            }
             if (c.group != null && !c.group.equals(lastGroup)) {
                 Component header = m.groupTitle(c);
                 if (header != null) {
@@ -480,7 +503,7 @@ public class ProgressScreen extends Screen {
                 .thenComparingDouble(e -> e.node.y));
         nowEntries.addAll(pinned);
         nowEntries.addAll(claim);
-        nowEntries.addAll(moving.subList(0, Math.min(moving.size(), 40)));
+        nowEntries.addAll(moving.subList(0, Math.min(moving.size(), NOW_MOVING_MAX)));
         nowEntries.addAll(open.subList(0, Math.min(open.size(), 6)));
         nowEntries.addAll(points);
     }
@@ -498,9 +521,6 @@ public class ProgressScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        if (selected != null) {
-            Seen.markSeen(selected);
-        }
         hoverStack = ItemStack.EMPTY;
         lastMouseX = mouseX;
         lastMouseY = mouseY;
@@ -525,8 +545,8 @@ public class ProgressScreen extends Screen {
         }
         refresh(m);
         refreshMatches(m);
-        // icon, gaps and a count like "12/127" beside the longest name, within a third of the screen
-        railOpenW = Mth.clamp(railWidest + 38 + 34, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width / 3));
+        // icon, gaps, a count like "12/127" and the pin slot beside the longest name, within a third of the screen
+        railOpenW = Mth.clamp(railWidest + 38 + 34 + RAIL_PIN_W, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width / 3));
         ClientModel.Chapter ch = chapter();
         // the chapter list stays open on Now, except on small screens (GUI scale 4 on 1080p is 480 wide) where the tiles need the room
         boolean docked = ch == null && width >= DOCK_MIN_WIDTH;
@@ -608,7 +628,11 @@ public class ProgressScreen extends Screen {
      */
     private float railPitch() {
         float h = railListBottom() - RAIL_LIST_TOP;
-        if (railChapters.size() * RAIL_PITCH <= h) {
+        float content = 0;
+        for (RailRow row : railRows) {
+            content += row.isHeader() ? HEADER_H : RAIL_PITCH;
+        }
+        if (content <= h) {
             return RAIL_PITCH;
         }
         int k = Math.max(1, (int) Math.floor(h / (float) RAIL_PITCH - 0.5f));
@@ -624,7 +648,7 @@ public class ProgressScreen extends Screen {
     }
 
     private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, boolean docked, float dt) {
-        int w = (int) Mth.lerp(ease(railT), RAIL, railOpenW);
+        int w = railWidth();
         int bg = docked ? Ui.PANEL_TRANSLUCENT
                 : railT > 0.01f ? lerpColor(Ui.RAIL_CLOSED, Ui.PANEL_TRANSLUCENT, railT) : Ui.RAIL_CLOSED;
         Ui.surface(g, 4, 4, w, height - 8, Ui.R4, bg);
@@ -634,7 +658,7 @@ public class ProgressScreen extends Screen {
         for (int b : badges.values()) {
             nowBadge += b;
         }
-        rowRail(g, 8, -1, null, Component.translatable("screen.kuronami_quest_tree.now"), w, mouseX, mouseY, nowBadge, null);
+        rowRail(g, 8, -1, null, Component.translatable("screen.kuronami_quest_tree.now"), w, mouseX, mouseY, nowBadge, null, null);
         g.disableScissor();
         // the chapter list scrolls smoothly under the Now row
         float max = railMaxScroll();
@@ -662,10 +686,10 @@ public class ProgressScreen extends Screen {
                 if (searching()) {
                     // while searching, the rail shows where the matches are instead
                     int hits = matchCount.getOrDefault(c.id, 0);
-                    rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, 0, String.valueOf(hits));
+                    rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, 0, String.valueOf(hits), c.id);
                 } else {
                     rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
-                            !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
+                            !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right, c.id);
                 }
             }
             ry += hgt;
@@ -693,9 +717,10 @@ public class ProgressScreen extends Screen {
 
     /**
      * One rail row. {@code badge} > 0 shows a yellow count (claimable quests, points to spend); otherwise {@code right}
-     * is a grey count, and an empty string means the chapter is complete (a green tick).
+     * is a grey count, and an empty string means the chapter is complete (a green tick). {@code pinId} adds the pin
+     * slot at the row's right end: a gold pin while pinned, a grey one while the row is hovered (clicking toggles it).
      */
-    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, int mouseX, int mouseY, int badge, String right) {
+    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, int mouseX, int mouseY, int badge, String right, String pinId) {
         boolean on = index == chapterIndex;
         boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + RAIL_ROW;
         // the row is inset inside the panel and rounded, so the selection reads as a row and not as a slice of the panel
@@ -719,17 +744,26 @@ public class ProgressScreen extends Screen {
         }
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
+            // the pin slot is reserved whether or not a pin is drawn, so a hovering pin never moves the count or label
+            int slot = pinId == null ? 0 : RAIL_PIN_W;
+            int edge = w - Ui.S1 - slot;
             int rightW = 0;
             if (badge > 0) {
-                rightW = Ui.badge(g, font, String.valueOf(badge), w - Ui.S1, y + (RAIL_ROW - Ui.BADGE_H) / 2);
+                rightW = Ui.badge(g, font, String.valueOf(badge), edge, y + (RAIL_ROW - Ui.BADGE_H) / 2);
             } else if (right != null && right.isEmpty()) {
                 rightW = 10;
-                Tiles.icon(g, "tick", w - Ui.S1 - 10, y + 8, 8, Tiles.GREEN_TEXT);
+                Tiles.icon(g, "tick", edge - 10, y + 8, 8, Tiles.GREEN_TEXT);
             } else if (right != null) {
                 rightW = font.width(right) + 4;
-                Ui.textRight(g, font, right, w - Ui.S1, y + 8, (Ui.DIM & 0xFFFFFF) | alpha);
+                Ui.textRight(g, font, right, edge, y + 8, (Ui.DIM & 0xFFFFFF) | alpha);
             }
-            Ui.text(g, font, trim(label.getString(), w - 40 - rightW), 32, y + 8, ((on ? Ui.BRIGHT : Ui.MUTED) & 0xFFFFFF) | alpha);
+            Ui.text(g, font, trim(label.getString(), w - 40 - rightW - slot), 32, y + 8, ((on ? Ui.BRIGHT : Ui.MUTED) & 0xFFFFFF) | alpha);
+            if (pinId != null) {
+                boolean pinned = ClientConfig.railPinned(pinId);
+                if (pinned || hover) {
+                    Tiles.icon(g, "pin", pinSlotLeft(w) + 2, y + 8, 9, ((pinned ? Tiles.GOLD : Ui.MUTED) & 0xFFFFFF) | alpha);
+                }
+            }
         }
         g.pose().popPose();
     }
@@ -755,8 +789,21 @@ public class ProgressScreen extends Screen {
         return (width >= DOCK_MIN_WIDTH ? railOpenW : RAIL) + 20;
     }
 
+    /**
+     * Where the 最新 log column starts, which is exactly the room the details sheet opens into. Now used to shrink to
+     * the open sheet, so opening a quest moved every cell in the grid and could push the one just clicked off the edge
+     * (the player, 2026-10-19). The sheet covers the log instead, and the grid stays where it was.
+     */
+    private int nowLogLeft() {
+        return width - sheetWidth();
+    }
+
+    private int nowLogRight() {
+        return width - 12;
+    }
+
     private int nowRight() {
-        return (sheetT > 0 ? sheetLeft() : width) - 12;
+        return nowLogLeft() - LOG_GAP;
     }
 
     /**
@@ -797,14 +844,22 @@ public class ProgressScreen extends Screen {
             });
         }
         int top = 44;
-        int recentH = recentHeight();
-        int bottom = Math.min(height - 12 - recentH, height - 34);
+        // the log column has room of its own now, so the grid runs to the bottom edge (2026-10-19)
+        int bottom = height - 34;
         int cols = nowCols();
         int cellW = nowCellWidth();
         int rows = (nowEntries.size() + cols - 1) / cols;
         int rowH = NOW_TILE + NOW_GAP;
         nowScroll = Mth.clamp(nowScroll, 0, Math.max(0, rows * rowH - (bottom - top)));
         g.enableScissor(left - 4, top - 4, nowRight() + 4, bottom);
+        // a hairline under every row but the last: the grid's rows read as rows, as in FTB Quests' reward list
+        // (the player compared the two lists, 2026-10-19). Drawn before the cells so a hover card covers it.
+        for (int r = 0; r < rows - 1; r++) {
+            int ly = top + r * rowH + NOW_TILE + NOW_GAP / 2 - nowScroll;
+            if (ly >= top && ly < bottom) {
+                g.fill(left, ly, nowRight(), ly + 1, Ui.HAIRLINE);
+            }
+        }
         long now = Util.getMillis();
         for (int i = 0; i < nowEntries.size(); i++) {
             NowEntry e = nowEntries.get(i);
@@ -818,7 +873,8 @@ public class ProgressScreen extends Screen {
                 // the whole cell is the target; selected = a lighter card behind it, hover = a fainter one
                 Ui.surface(g, x - 3, y - 3, cellW + 6, NOW_TILE + 6, Ui.R3, e.key.equals(selected) ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
             }
-            renderNowText(g, e, x + NOW_TILE + 8, y, cellW - NOW_TILE - 8);
+            renderNowRewards(g, e, x + cellW, y);
+            renderNowText(g, e, x + NOW_TILE + 8, y, cellW - NOW_TILE - 8 - nowRewardsWidth(e));
             if (e.pointsChapter != null) {
                 Tiles.tile(g, "rsquare", x, y, NOW_TILE, Tiles.Look.AFFORDABLE, 1, e.pointsChapter.displayIcon(), false);
                 g.pose().pushPose();
@@ -838,13 +894,44 @@ public class ProgressScreen extends Screen {
             flash(g, e.key, x, y, NOW_TILE, now);
         }
         g.disableScissor();
-        if (rows * rowH > bottom - top) {
-            int trackH = bottom - top;
-            int barH = Math.max(10, trackH * trackH / (rows * rowH));
-            int barY = top + (trackH - barH) * nowScroll / Math.max(1, rows * rowH - trackH);
-            Ui.surface(g, nowRight() + 6, barY, 3, barH, 2, Ui.SCROLLBAR);
+        int gridH = bottom - top;
+        if (rows * rowH > gridH) {
+            // a track under the thumb as well: a bare 3px thumb on the screen's edge was not read as a scrollbar, and
+            // nothing said the grid went on below (the player, 2026-10-19)
+            Ui.surface(g, nowRight() + 4, top, 5, gridH, 3, Ui.OVERLAY_1);
+            int barH = Math.max(12, gridH * gridH / (rows * rowH));
+            int barY = top + (gridH - barH) * nowScroll / Math.max(1, rows * rowH - gridH);
+            Ui.surface(g, nowRight() + 4, barY, 5, barH, 3, Ui.SCROLLBAR);
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z);
+            g.fillGradient(left - 4, bottom - 24, nowRight() + 6, bottom, 0x00000000, Ui.GROUND);
+            g.pose().popPose();
         }
-        renderRecent(g, m, left, height - 8 - recentH, mouseX, mouseY);
+        renderLog(g, m, mouseX, mouseY);
+    }
+
+    /**
+     * What a quest gives, at the right edge of its cell. FTB Quests' reward list shows the reward's own item beside the
+     * title (the player compared the two lists, 2026-10-19); our cells only said what the quest is, never what it gives.
+     * Two at most: a third would eat the title. A choice reward is one chest in the model, and its options are in the
+     * detail sheet where they can be picked.
+     */
+    private void renderNowRewards(GuiGraphics g, NowEntry e, int right, int y) {
+        List<ItemStack> rs = e.node == null ? List.of() : e.node.rewards;
+        int n = Math.min(NOW_REWARDS, rs.size());
+        for (int i = 0; i < n; i++) {
+            ItemStack s = rs.get(i);
+            int ix = right - (n - i) * 18;
+            int iy = y + (NOW_TILE - 16) / 2;
+            g.renderItem(s, ix, iy);
+            g.renderItemDecorations(font, s, ix, iy);
+        }
+    }
+
+    private int nowRewardsWidth(NowEntry e) {
+        List<ItemStack> rs = e.node == null ? List.of() : e.node.rewards;
+        int n = Math.min(NOW_REWARDS, rs.size());
+        return n == 0 ? 0 : n * 18 + 4;
     }
 
     /** Title (white) and chapter (grey) beside a Now tile; a skill chapter shows its points to spend in gold. */
@@ -862,8 +949,17 @@ public class ProgressScreen extends Screen {
             ClientModel.Chapter c = model().chapterOf.get(e.key);
             sub = c == null ? Component.empty() : c.title;
         }
-        Ui.text(g, font, trim(title.getString(), w), x, y + 5, Ui.TEXT);
-        Ui.text(g, font, trimChapter(sub.getString(), w), x, y + 18, subColor);
+        Ui.text(g, font, trim(plain(title), w), x, y + 5, Ui.TEXT);
+        Ui.text(g, font, trimChapter(plain(sub), w), x, y + 18, subColor);
+    }
+
+    /**
+     * A title or chapter as plain text: imported titles carry FTB Quests colour codes, and a grid of them read as
+     * scattered colours rather than as a list (the player, comparing our list with FTB Quests', 2026-10-19). The colour
+     * still shows on the map's chapter title, where one title at a time is read.
+     */
+    private static String plain(Component c) {
+        return net.minecraft.ChatFormatting.stripFormatting(c.getString());
     }
 
     /** "%s points", but "%s point" in the singular: "1 points" read wrong (review 2026-10-16). */
@@ -880,55 +976,95 @@ public class ProgressScreen extends Screen {
         return trim(colon >= 0 ? s.substring(colon + 2) : s, w);
     }
 
-    /** Recent entries shown under Now: fewer on short screens, so the Now cells keep the room. */
-    private int recentRows() {
-        return height < 320 ? 3 : 5;
+    /** Rows the 最新 log holds: its own column, not the strip it used to share with the grid. */
+    private int logRows() {
+        return Math.max(3, (height - 60) / 16);
     }
 
-    private int recentHeight() {
-        int n = Math.min(recentRows(), ClientProgress.progress().recent.size());
-        return n == 0 ? 0 : 16 + n * 18;
-    }
-
-    private void renderRecent(GuiGraphics g, ClientModel m, int x, int y, int mouseX, int mouseY) {
+    /**
+     * The 最新 log in the column at the right of Now: one line per event, tight rows, the time in its own dim column at
+     * the left and the event in its own colour after it. On the strip under the grid the time and the event were drawn
+     * in the same grey and read alike (the player, 2026-10-19). A completion the claim follows straight away collapses
+     * into the claim line: with automatic claiming, one quest filled two rows with the same name.
+     */
+    private void renderLog(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
         PlayerProgress p = ClientProgress.progress();
-        if (p.recent.isEmpty()) {
-            return;
-        }
-        Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.recent"), x, y, Ui.DIM);
-        y += 14;
+        List<String> recent = new ArrayList<>(p.recent);
+        int x = nowLogLeft();
+        int right = nowLogRight();
+        int top = 44;
+        Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.recent"), x, top - 14, Ui.DIM);
+        g.fill(x - 6, top - 16, x - 5, height - 10, Ui.HAIRLINE);
+        int ry = top + 6;
         int shown = 0;
         long now = System.currentTimeMillis();
-        for (String r : p.recent) {
-            if (shown++ >= recentRows()) {
-                break;
-            }
-            String[] parts = r.split("\\|");
+        for (int i = 0; i < recent.size() && shown < logRows(); i++) {
+            String[] parts = recent.get(i).split("\\|");
             if (parts.length < 3) {
                 continue;
             }
-            ClientModel.Node n = m.nodesByKey.get(parts[1]);
-            ClientModel.Chapter c = n != null ? m.chapterOf.get(parts[1]) : chapterById(m, parts[1].endsWith("/") ? parts[1].substring(0, parts[1].length() - 1) : "");
-            ItemStack icon = n != null ? n.icon : c != null ? c.displayIcon() : ItemStack.EMPTY;
-            Component name = n != null ? n.title : c != null ? c.title : Component.literal(parts[1]);
-            String nameS = trim(name.getString(), 200);
-            String kind = Component.translatable("event.kuronami_quest_tree." + parts[0]).getString();
-            String ago = ago(now - parseLong(parts[2]));
-            int kindX = x + 26 + font.width(nameS);
-            int agoX = kindX + font.width(kind) + 6;
-            boolean hover = mouseX >= x && mouseX < agoX + font.width(ago) && mouseY >= y - 1 && mouseY < y + 17;
-            if (hover) {
-                Ui.surface(g, x - Ui.S1, y - 1, agoX + font.width(ago) - x + 2 * Ui.S1, 18, Ui.R2, Ui.OVERLAY_1);
+            if (parts[0].equals("complete") && i > 0 && isClaimOf(recent.get(i - 1), parts[1])) {
+                continue;
             }
-            g.renderItem(icon, x, y);
+            // the same event over and over (a skill levelling in bursts) filled the whole column with one line: collapse
+            // a run of identical rows into one with a count, the way a log repeats itself (2026-10-19)
+            int same = 1;
+            while (i + same < recent.size() && sameRow(recent.get(i + same), parts)) {
+                same++;
+            }
+            ClientModel.Node n = m.nodesByKey.get(parts[1]);
+            ClientModel.Chapter c = n != null ? m.chapterOf.get(parts[1])
+                    : chapterById(m, parts[1].endsWith("/") ? parts[1].substring(0, parts[1].length() - 1) : "");
+            Component name = n != null ? n.title : c != null ? c.title : Component.literal(parts[1]);
+            Component verb = Component.translatable("event.kuronami_quest_tree." + parts[0]);
+            int vw = font.width(verb);
+            String count = same > 1 ? "\u00d7" + same : "";
+            int cw = count.isEmpty() ? 0 : font.width(count) + 5;
+            String nameS = trim(name.getString(), right - x - 44 - vw - cw);
+            boolean hover = mouseX >= x - 4 && mouseX < right && mouseY >= ry - 2 && mouseY < ry + 14;
+            if (hover) {
+                Ui.surface(g, x - 4, ry - 2, right - x + 4, 16, Ui.R2, Ui.OVERLAY_1);
+            }
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z);
-            Ui.text(g, font, nameS, x + 20, y + 4, Ui.TEXT);
-            Ui.text(g, font, kind, kindX, y + 4, Ui.MUTED);
-            Ui.text(g, font, ago, agoX, y + 4, Ui.DIM);
+            Ui.textRight(g, font, ago(now - parseLong(parts[2])), x + 26, ry + 4, Ui.DIM);
+            Ui.text(g, font, verb, x + 34, ry + 4, verbColour(parts[0]));
+            Ui.text(g, font, nameS, x + 40 + vw, ry + 4, Ui.TEXT);
+            if (!count.isEmpty()) {
+                Ui.text(g, font, count, x + 40 + vw + font.width(nameS) + 5, ry + 4, Ui.DIM);
+            }
             g.pose().popPose();
-            y += 18;
+            ry += 16;
+            shown++;
+            i += same - 1;
         }
+        if (sheetT > 0) {
+            // the details sheet opens over this column: hide the log under it, or two sets of rows read through each
+            // other on the translucent sheet (the detail shot, 2026-10-19)
+            g.fill(sheetLeft(), 0, width, height, Ui.GROUND);
+        }
+    }
+
+    /** True when a later row is the same event for the same quest. */
+    private static boolean sameRow(String row, String[] first) {
+        String[] parts = row.split("\\|");
+        return parts.length >= 3 && parts[0].equals(first[0]) && parts[1].equals(first[1]);
+    }
+
+    /** True when {@code newer} is the claim of the same quest as {@code key}. */
+    private static boolean isClaimOf(String newer, String key) {
+        String[] parts = newer.split("\\|");
+        return parts.length >= 3 && parts[0].equals("claim") && parts[1].equals(key);
+    }
+
+    /** The colour of an event's own word in 最新: what happened, told apart at a glance from the grey time beside it. */
+    private static int verbColour(String kind) {
+        return switch (kind) {
+            case "claim" -> Tiles.GOLD;
+            case "complete" -> Tiles.GREEN_TEXT;
+            case "submit" -> Tiles.BLUE;
+            default -> Ui.MUTED;
+        };
     }
 
     private static ClientModel.Chapter chapterById(ClientModel m, String id) {
@@ -1016,8 +1152,13 @@ public class ProgressScreen extends Screen {
     static int LINE_CLOSED = 0xFF797E89;
     /** The closed line on a node under the mouse: brighter than {@link #LINE_OPEN}, which is brighter than closed. */
     static int LINE_CLOSED_ON = 0xFFA9AFB9;
-    private static final float LINE_W = 2;
-    private static final float LINE_W_ON = 3;
+    /**
+     * One width for every state (proposal C), one step up from the 2 units of the 2026-10-16 rebuild: FTB Quests' line
+     * on ATM10 measured 6-8 px against our 4-5 px at the same zoom (the two screenshots the player compared, 2026-10-19).
+     * The map is drawn in map units, so the width grows with the zoom along with the tiles.
+     */
+    private static final float LINE_W = 3;
+    private static final float LINE_W_ON = 4.5f;
     /** Arrowhead size (map units) and how long one slide along a highlighted line takes. */
     private static final float ARROW = 7;
     private static final float ARROW_ON = 8;
@@ -1323,7 +1464,20 @@ public class ProgressScreen extends Screen {
 
     /** Right edge of the rail as currently drawn (it opens to railOpenW on hover). */
     private int railRight() {
-        return (int) Mth.lerp(ease(railT), RAIL, railOpenW) + 4;
+        return railWidth() + 4;
+    }
+
+    /**
+     * The rail's drawn width, following the hover slide. Drawing and hit tests share this, so the pin slot at a row's
+     * right end is where it looks, also mid-slide.
+     */
+    private int railWidth() {
+        return (int) Mth.lerp(ease(railT), RAIL, railOpenW);
+    }
+
+    /** Left edge of a row's pin slot (0 when {@code null} is passed, i.e. on rows without a chapter). */
+    private int pinSlotLeft(int w) {
+        return w - Ui.S1 - RAIL_PIN_W;
     }
 
     private int sheetWidth() {
@@ -1779,7 +1933,11 @@ public class ProgressScreen extends Screen {
         if (r == null || !minimapShown()) {
             return;
         }
-        Ui.floating(g, r[0], r[1], r[2], r[3], Ui.PANEL_TRANSLUCENT);
+        if (ClientConfig.liquidGlass()) {
+            GlassPanel.render(g, r[0], r[1], r[2], r[3]);
+        } else {
+            Ui.floating(g, r[0], r[1], r[2], r[3], Ui.PANEL_TRANSLUCENT);
+        }
         double[] b = bounds(ch);
         double s = Math.min((r[2] - 8) / Math.max(1, b[2] - b[0]), (r[3] - 8) / Math.max(1, b[3] - b[1]));
         for (ClientModel.Node n : ch.nodes.values()) {
@@ -1835,7 +1993,7 @@ public class ProgressScreen extends Screen {
                 return true;
             }
         }
-        int railW = railT > 0.5f ? railOpenW : RAIL;
+        int railW = railWidth();
         if (mx < railW + 4) {
             if (my < RAIL_LIST_TOP) {
                 if (my >= 8) {
@@ -1848,7 +2006,13 @@ public class ProgressScreen extends Screen {
                     if (my >= rowY && my < rowY + hgt) {
                         // a header is a label, not a target
                         if (!row.isHeader()) {
-                            select(m.chapters.indexOf(row.chapter()));
+                            // the pin slot toggles the pin; anywhere else on the row opens the chapter
+                            if (railT > 0.6f && mx >= pinSlotLeft(railW)) {
+                                ClientConfig.toggleRailPin(row.chapter().id);
+                                ProgressFeedback.click();
+                            } else {
+                                select(m.chapters.indexOf(row.chapter()));
+                            }
                         }
                         break;
                     }
@@ -1885,7 +2049,7 @@ public class ProgressScreen extends Screen {
     private boolean clickNow(ClientModel m, double mx, double my) {
         int left = nowLeft();
         int top = 40;
-        int bottom = Math.min(height - 12 - recentHeight(), height - 34);
+        int bottom = height - 34;
         if (mx < left || my < top || my >= bottom) {
             selected = null;
             return true;
@@ -1956,6 +2120,22 @@ public class ProgressScreen extends Screen {
     void tourSearch(String text) {
         if (searchBox != null) {
             searchBox.setValue(text);
+        }
+    }
+
+    /** Dev tour only: pin a couple of chapters, so the pinned block at the top of the list is in a photo. */
+    void tourPin(int count) {
+        ClientModel m = model();
+        if (m == null) {
+            return;
+        }
+        int n = 0;
+        for (int i = 1; i < m.chapters.size() && n < count; i += 2) {
+            ClientModel.Chapter c = m.chapters.get(i);
+            if (!ClientProgress.chapterHidden(c.id)) {
+                ClientConfig.setRailPin(c.id, true);
+                n++;
+            }
         }
     }
 
@@ -2269,7 +2449,6 @@ public class ProgressScreen extends Screen {
     @Override
     public void removed() {
         lastChapter = chapterIndex;
-        Seen.flush();
         // release the toasts queued while this screen was up; the flush bypasses the suppression (the screen is
         // still the current one when removed() runs)
         PendingToasts.beginFlush();
@@ -2367,12 +2546,16 @@ public class ProgressScreen extends Screen {
      * an arrowhead at the line's end, just outside that node's edge, like any arrow (2026-10-18, the player: the open
      * chevron only read as a twig while it sat mid-line). Nodes that share a parent share its first leg, so a fan reads
      * as one trunk. Skill trees keep straight lines with the same end arrowhead: their layouts are free-form, often radial.
+     * A quest link that is a diagonal (its two offsets of similar size) is a straight line too: there the elbow only
+     * walked around a corner (the player, 2026-10-19).
      */
     static final boolean ELBOW_LINES = !Boolean.getBoolean("quest_tree.straightLines");
     /** The largest corner radius, in map units: one grid unit, as in a book laid out on a grid. */
     private static final float ELBOW_R = UNIT;
     /** Neighbours closer than this (map units) keep a straight line: an elbow between touching tiles is only a curl. */
     private static final float ELBOW_MIN = 1.5f * UNIT;
+    /** Below this ratio between the two offsets a link is a diagonal, not a step along one axis, and is drawn straight. */
+    private static final float DIAGONAL_RATIO = 0.5f;
     /**
      * Where the chevron's tip and its inner corner sit, as fractions of the icon from its centre (icon/chevron is 64px:
      * tip at 57, inner corner at 37). The tip lands on the line's end and the line stops inside the inner corner, so no
@@ -2438,6 +2621,14 @@ public class ProgressScreen extends Screen {
      */
     private static float[] elbowPath(float x1, float y1, float dx, float dy, float straightIn) {
         if (Math.abs(dx) < 1 || Math.abs(dy) < 1 || dx * dx + dy * dy < ELBOW_MIN * ELBOW_MIN) {
+            return new float[]{x1, y1, x1 + dx, y1 + dy};
+        }
+        float ax = Math.abs(dx);
+        float ay = Math.abs(dy);
+        // A link that leaves on both axes by a similar amount reads better as a straight diagonal: the elbow is then a
+        // detour around a corner nobody needed (the player, 2026-10-19), while a link that is mostly along one axis
+        // keeps its elbow, where the small turn keeps a fan of siblings reading as one trunk.
+        if (Math.min(ax, ay) >= ELBOW_MIN && Math.min(ax, ay) >= DIAGONAL_RATIO * Math.max(ax, ay)) {
             return new float[]{x1, y1, x1 + dx, y1 + dy};
         }
         boolean enterSideways = Math.abs(dx) >= Math.abs(dy);

@@ -182,12 +182,31 @@ final class DevTour {
             }
         });
         shot(pt + 60, "17_quest_to_recipes");
+        // the pinned block at the top of the chapter list: Now keeps the list docked open
+        at(pt + 62, () -> open(-1));
+        at(pt + 64, () -> screen.tourPin(2));
+        shot(pt + 68, "18_rail_pins");
         at(pt + 70, () -> {
+            // the glass minimap, over a dense part of the map. The same view is shot without and with the glass so the
+            // two can be put side by side, then it is turned off again so the config is not left changed
+            if (big != null) {
+                open(m.chapters.indexOf(big));
+                screen.tourZoom();
+                screen.tourZoom();
+            }
+        });
+        shot(pt + 78, "19_glass_off");
+        at(pt + 80, () -> ClientConfig.liquidGlass = true);
+        shot(pt + 82, "20_glass_on");
+        at(pt + 84, () -> {
+            ClientConfig.liquidGlass = false;
+            ClientConfig.write();
+        });
+        at(pt + 86, () -> {
             ProgressScreen.tourResting(false);
             Constants.LOG.info("Dev tour finished");
         });
     }
-
     private static ClientModel.Node openItemQuest() {
         for (ClientModel.Node n : ClientProgress.model().nodesByKey.values()) {
             State s = ClientProgress.state(n.key);

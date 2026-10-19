@@ -1,6 +1,8 @@
 package com.kuronami.questtree.client;
 
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
@@ -10,6 +12,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Client settings ({@code config/kuronami_quest_tree-client.json}). Defaults are the product; the file is the way out
@@ -19,6 +23,14 @@ public final class ClientConfig {
 
     /** The "needed for" line on item tooltips. */
     public static boolean itemTooltips = true;
+
+    /** The minimap is drawn as a liquid-glass panel instead of a flat fill. */
+    public static boolean liquidGlass = false;
+
+    /** Chapters kept at the top of the chapter list, in pin order. Not per world: it follows the player. */
+    public static final List<String> railPinned = new ArrayList<>();
+
+    private static int railPinVersion;
 
     private static boolean loaded;
 
@@ -40,13 +52,67 @@ public final class ClientConfig {
                 if (o.has("item_tooltips")) {
                     itemTooltips = o.get("item_tooltips").getAsBoolean();
                 }
+                if (o.has("liquid_glass")) {
+                    liquidGlass = o.get("liquid_glass").getAsBoolean();
+                }
+                if (o.has("rail_pinned") && o.get("rail_pinned").isJsonArray()) {
+                    for (JsonElement e : o.getAsJsonArray("rail_pinned")) {
+                        railPinned.add(e.getAsString());
+                    }
+                }
             }
-            JsonObject o = new JsonObject();
-            o.addProperty("item_tooltips", itemTooltips);
-            Files.createDirectories(file().getParent());
-            Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(o), StandardCharsets.UTF_8);
+            write();
         } catch (IOException | RuntimeException ex) {
             Constants.LOG.warn("Could not read client settings: {}", ex.toString());
+        }
+    }
+
+    public static boolean liquidGlass() {
+        ensureLoaded();
+        return liquidGlass;
+    }
+
+    public static boolean railPinned(String id) {
+        ensureLoaded();
+        return railPinned.contains(id);
+    }
+
+    /** Pins or unpins a chapter; returns true when it ends up pinned. */
+    public static boolean setRailPin(String id, boolean pinned) {
+        ensureLoaded();
+        if (pinned) {
+            if (!railPinned.contains(id)) {
+                railPinned.add(id);
+            }
+        } else {
+            railPinned.remove(id);
+        }
+        railPinVersion++;
+        write();
+        return pinned;
+    }
+
+    /** Changes whenever the pins change, so the screen knows to rebuild its rows. */
+    public static int railPinVersion() {
+        return railPinVersion;
+    }
+
+    public static void toggleRailPin(String id) {
+        setRailPin(id, !railPinned(id));
+    }
+
+    static void write() {
+        try {
+            JsonObject o = new JsonObject();
+            o.addProperty("item_tooltips", itemTooltips);
+            o.addProperty("liquid_glass", liquidGlass);
+            JsonArray a = new JsonArray();
+            railPinned.forEach(a::add);
+            o.add("rail_pinned", a);
+            Files.createDirectories(file().getParent());
+            Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(o), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            Constants.LOG.warn("Could not write client settings: {}", ex.toString());
         }
     }
 }
