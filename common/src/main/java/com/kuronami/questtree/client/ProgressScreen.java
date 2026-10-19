@@ -698,8 +698,6 @@ public class ProgressScreen extends Screen {
     private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, int mouseX, int mouseY, int badge, String right) {
         boolean on = index == chapterIndex;
         boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + RAIL_ROW;
-        ClientModel cm = model();
-        boolean fresh = index >= 0 && cm != null && index < cm.chapters.size() && unread.contains(cm.chapters.get(index).id);
         // the row is inset inside the panel and rounded, so the selection reads as a row and not as a slice of the panel
         if (on || hover) {
             Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, RAIL_ROW, Ui.R2, on ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
@@ -707,9 +705,6 @@ public class ProgressScreen extends Screen {
         if (on) {
             // Discord's mark for the open server: a short pill on the panel's left edge
             Ui.surface(g, 4, y + 4, 3, RAIL_ROW - 8, 2, Ui.ACCENT);
-        } else if (fresh) {
-            // and for a channel with unread messages: a small white one
-            Ui.surface(g, 4, y + RAIL_ROW / 2 - 3, 3, 6, 2, Ui.BRIGHT);
         }
         if (icon == null) {
             Tiles.icon(g, "now", 12, y + 6, 12, on ? Ui.TEXT : Ui.MUTED);
@@ -721,8 +716,6 @@ public class ProgressScreen extends Screen {
         if (railT <= 0.6f && badge > 0) {
             // closed rail: a dot on the icon's corner
             Tiles.icon(g, "dot", 24, y + 5, 7, Tiles.GOLD);
-        } else if (railT <= 0.6f && fresh) {
-            Tiles.icon(g, "dot", 25, y + 6, 5, Ui.BRIGHT);
         }
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
@@ -736,7 +729,7 @@ public class ProgressScreen extends Screen {
                 rightW = font.width(right) + 4;
                 Ui.textRight(g, font, right, w - Ui.S1, y + 8, (Ui.DIM & 0xFFFFFF) | alpha);
             }
-            Ui.text(g, font, trim(label.getString(), w - 40 - rightW), 32, y + 8, ((on || fresh ? Ui.BRIGHT : Ui.MUTED) & 0xFFFFFF) | alpha);
+            Ui.text(g, font, trim(label.getString(), w - 40 - rightW), 32, y + 8, ((on ? Ui.BRIGHT : Ui.MUTED) & 0xFFFFFF) | alpha);
         }
         g.pose().popPose();
     }
@@ -1141,14 +1134,6 @@ public class ProgressScreen extends Screen {
                     ClientProgress.iconFor(n), false);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
-            if (!far && Seen.isNew(n.key)) {
-                // unread: a white dot on the tile's top-left corner, ringed in the ground so it reads on any tile
-                g.pose().pushPose();
-                g.pose().translate(0, 0, OVERLAY_Z + 10);
-                Tiles.icon(g, "dot", x - 4, y - 4, 9, Ui.GROUND);
-                Tiles.icon(g, "dot", x - 3, y - 3, 7, Ui.BRIGHT);
-                g.pose().popPose();
-            }
             if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
                 // the unfinished requirements on the way to the selected node
                 g.pose().pushPose();
