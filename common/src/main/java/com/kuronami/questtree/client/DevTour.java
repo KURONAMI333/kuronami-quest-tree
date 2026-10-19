@@ -184,11 +184,14 @@ final class DevTour {
         shot(pt + 60, "17_quest_to_recipes");
         // the pinned block at the top of the chapter list: Now keeps the list docked open
         at(pt + 62, () -> open(-1));
+        // the developer's own pins and glass setting are put back at the end, so the tour leaves the config as it found it
+        List<String> pinsBefore = new ArrayList<>(ClientConfig.railPinned());
+        boolean glassBefore = ClientConfig.liquidGlass();
         at(pt + 64, () -> screen.tourPin(2));
         shot(pt + 68, "18_rail_pins");
         at(pt + 70, () -> {
             // the glass minimap, over a dense part of the map. The same view is shot without and with the glass so the
-            // two can be put side by side, then it is turned off again so the config is not left changed
+            // two can be put side by side
             if (big != null) {
                 open(m.chapters.indexOf(big));
                 screen.tourZoom();
@@ -199,7 +202,11 @@ final class DevTour {
         at(pt + 80, () -> ClientConfig.liquidGlass = true);
         shot(pt + 82, "20_glass_on");
         at(pt + 84, () -> {
-            ClientConfig.liquidGlass = false;
+            ClientConfig.liquidGlass = glassBefore;
+            for (String id : new ArrayList<>(ClientConfig.railPinned())) {
+                ClientConfig.setRailPin(id, pinsBefore.contains(id));
+            }
+            pinsBefore.forEach(id -> ClientConfig.setRailPin(id, true));
             ClientConfig.write();
         });
         at(pt + 86, () -> {

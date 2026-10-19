@@ -116,6 +116,8 @@ public class ProgressScreen extends Screen {
     protected void init() {
         Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
         imageCache.clear();
+        // a resource pack change can add, drop or resize background pictures
+        TEXTURE_SIZES.clear();
         searchBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 120 - 2 * Ui.S2, EDIT_H, Component.translatable("screen.kuronami_quest_tree.search"));
         // drawn as one of the screen's flat controls (renderSearch), not vanilla's black box with a grey border
         searchBox.setBordered(false);
@@ -429,7 +431,7 @@ public class ProgressScreen extends Screen {
         }
         // pinned chapters form their own block at the top, in pin order: quick access to the few a player works in
         List<ClientModel.Chapter> pinnedRail = new ArrayList<>();
-        for (String id : ClientConfig.railPinned) {
+        for (String id : ClientConfig.railPinned()) {
             for (ClientModel.Chapter c : railChapters) {
                 if (c.id.equals(id)) {
                     pinnedRail.add(c);
@@ -1187,7 +1189,7 @@ public class ProgressScreen extends Screen {
         return LINE_CLOSED;
     }
 
-    /** Pixel size of each background picture, read once from its file (null = missing or unreadable). */
+    /** Pixel size of each background picture, read once per screen from its file ({0, 0} = missing or unreadable). */
     private static final Map<ResourceLocation, int[]> TEXTURE_SIZES = new HashMap<>();
 
     private static int[] textureSize(ResourceLocation id) {
@@ -1195,13 +1197,13 @@ public class ProgressScreen extends Screen {
             var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(k);
             if (res.isEmpty()) {
                 com.kuronami.questtree.Constants.LOG.warn("Chapter background {} does not exist", k);
-                return null;
+                return new int[]{0, 0};
             }
             try (var in = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(in)) {
                 return new int[]{img.getWidth(), img.getHeight()};
             } catch (java.io.IOException ex) {
                 com.kuronami.questtree.Constants.LOG.warn("Could not read chapter background {}: {}", k, ex.toString());
-                return null;
+                return new int[]{0, 0};
             }
         });
     }
@@ -1221,7 +1223,8 @@ public class ProgressScreen extends Screen {
                 continue;
             }
             g.setColor(1, 1, 1, l.alpha());
-            float zoom = 1 + (v[2] - 1) * l.speed();
+            // a zoom at or below 0 would make the tiling loop below never end
+            float zoom = Math.max(0.05f, 1 + (v[2] - 1) * l.speed());
             if (!l.tile()) {
                 float cover = Math.max(width / (float) size[0], height / (float) size[1]) * zoom;
                 float w = size[0] * cover;
@@ -1230,8 +1233,8 @@ public class ProgressScreen extends Screen {
                 float y = (height - h) / 2f + (v[1] - height / 2f) * l.speed() * 0.1f;
                 blitScaled(g, l.texture(), x, y, w, h, size);
             } else {
-                float tw = (l.size() > 0 ? l.size() : size[0]) * zoom;
-                float th = tw * size[1] / size[0];
+                float tw = Math.max(8, (l.size() > 0 ? l.size() : size[0]) * zoom);
+                float th = Math.max(8, tw * size[1] / size[0]);
                 float startX = floorMod(v[0] * l.speed(), tw) - tw;
                 float startY = floorMod(v[1] * l.speed(), th) - th;
                 for (float x = startX; x < width; x += tw) {
@@ -2449,6 +2452,7 @@ public class ProgressScreen extends Screen {
     @Override
     public void removed() {
         lastChapter = chapterIndex;
+        GlassPanel.release();
         // release the toasts queued while this screen was up; the flush bypasses the suppression (the screen is
         // still the current one when removed() runs)
         PendingToasts.beginFlush();

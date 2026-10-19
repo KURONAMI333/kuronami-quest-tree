@@ -34,6 +34,9 @@ public final class ClientConfig {
 
     private static boolean loaded;
 
+    /** The file was there but could not be read: never overwrite it. */
+    private static boolean readFailed;
+
     private ClientConfig() {
     }
 
@@ -49,22 +52,34 @@ public final class ClientConfig {
         try {
             if (Files.exists(file())) {
                 JsonObject o = JsonParser.parseString(Files.readString(file(), StandardCharsets.UTF_8)).getAsJsonObject();
-                if (o.has("item_tooltips")) {
-                    itemTooltips = o.get("item_tooltips").getAsBoolean();
-                }
-                if (o.has("liquid_glass")) {
-                    liquidGlass = o.get("liquid_glass").getAsBoolean();
-                }
+                itemTooltips = bool(o, "item_tooltips", itemTooltips);
+                liquidGlass = bool(o, "liquid_glass", liquidGlass);
                 if (o.has("rail_pinned") && o.get("rail_pinned").isJsonArray()) {
                     for (JsonElement e : o.getAsJsonArray("rail_pinned")) {
-                        railPinned.add(e.getAsString());
+                        if (e.isJsonPrimitive() && !railPinned.contains(e.getAsString())) {
+                            railPinned.add(e.getAsString());
+                        }
                     }
                 }
             }
             write();
         } catch (IOException | RuntimeException ex) {
-            Constants.LOG.warn("Could not read client settings: {}", ex.toString());
+            // keep the player's file as it is: writing now would replace what could not be read with the defaults
+            readFailed = true;
+            Constants.LOG.warn("Could not read client settings, they will not be saved this session: {}", ex.toString());
         }
+        railPinVersion++;
+    }
+
+    private static boolean bool(JsonObject o, String key, boolean fallback) {
+        JsonElement e = o.get(key);
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean() ? e.getAsBoolean() : fallback;
+    }
+
+    /** The pinned chapters in pin order (loads the file first). */
+    public static List<String> railPinned() {
+        ensureLoaded();
+        return railPinned;
     }
 
     public static boolean liquidGlass() {
@@ -102,6 +117,9 @@ public final class ClientConfig {
     }
 
     static void write() {
+        if (readFailed) {
+            return;
+        }
         try {
             JsonObject o = new JsonObject();
             o.addProperty("item_tooltips", itemTooltips);

@@ -422,14 +422,14 @@ public final class ClientModel {
      * drawn bottom first, so one picture gives a still backdrop and two or more give depth as the map moves.
      * <ul>
      *     <li>{@code texture}: the picture, a full texture path ({@code ns:textures/gui/backgrounds/x.png}).</li>
-     *     <li>{@code speed}: how far it moves with the map, 1 = with the map, 0 = not at all (default 0.5).
+     *     <li>{@code speed}: how far it moves with the map, 1 = with the map, 0 = not at all (default 0.5, kept in -1..1).
      *     Zooming follows the same share.</li>
      *     <li>{@code tile}: repeat the picture to fill the view (default true); false stretches one copy over it.</li>
      *     <li>{@code size}: the picture's width on screen in GUI pixels at zoom 1 (default: its pixel width).</li>
      *     <li>{@code alpha}: 0..1 (default 1).</li>
      * </ul>
      * {@code "background": "ns:textures/..."} is short for one layer that stays still; {@code {"layers": [...]}} lists
-     * them. Pictures come from resources, so a resource pack can replace any of them.
+     * them; a single {@code {"texture": ..., "fit": ...}} is one still layer. Pictures come from resources, so a resource pack can replace any of them.
      */
     public record BackgroundLayer(ResourceLocation texture, float speed, boolean tile, float size, float alpha) {
 
@@ -447,12 +447,22 @@ public final class ClientModel {
             if (!e.isJsonObject()) {
                 return;
             }
-            JsonElement layers = e.getAsJsonObject().get("layers");
+            JsonObject single = e.getAsJsonObject();
+            JsonElement layers = single.get("layers");
+            if ((layers == null || !layers.isJsonArray()) && single.has("texture") && single.get("texture").isJsonPrimitive()) {
+                // one still picture, as the Pufferfish's Skills import writes it ("fit": "tile" or a stretch)
+                ResourceLocation id = ResourceLocation.tryParse(single.get("texture").getAsString());
+                if (id != null) {
+                    boolean tile = !single.has("fit") || !single.get("fit").isJsonPrimitive() || single.get("fit").getAsString().equals("tile");
+                    into.add(new BackgroundLayer(id, 0, tile, 0, 1));
+                }
+                return;
+            }
             if (layers == null || !layers.isJsonArray()) {
                 return;
             }
             for (JsonElement l : layers.getAsJsonArray()) {
-                if (!l.isJsonObject() || !l.getAsJsonObject().has("texture")) {
+                if (!l.isJsonObject() || !l.getAsJsonObject().has("texture") || !l.getAsJsonObject().get("texture").isJsonPrimitive()) {
                     continue;
                 }
                 JsonObject o = l.getAsJsonObject();
@@ -460,7 +470,7 @@ public final class ClientModel {
                 if (id == null) {
                     continue;
                 }
-                into.add(new BackgroundLayer(id, num(o, "speed", 0.5f), !o.has("tile") || o.get("tile").getAsBoolean(),
+                into.add(new BackgroundLayer(id, Math.max(-1, Math.min(1, num(o, "speed", 0.5f))), !o.has("tile") || o.get("tile").getAsBoolean(),
                         num(o, "size", 0), Math.max(0, Math.min(1, num(o, "alpha", 1)))));
             }
         }
