@@ -148,21 +148,32 @@ public final class ProgressHud {
             rows.addAll(CLOSEST);
         }
         int total = 0;
+        int bw = 0;
         for (ClientModel.Node n : rows) {
-            total += 22 + 12 * materials(n).size();
+            List<long[]> mats = materials(n);
+            String title = font.plainSubstrByWidth(n.title.getString(), 110);
+            int w = Math.max(26 + font.width(title), 26 + font.width(progressLine(n)));
+            for (long[] mat : mats) {
+                w = Math.max(w, 38 + font.width(Math.min(mat[1], mat[2]) + "/" + mat[2]));
+            }
+            bw = Math.max(bw, w);
+            total += 22 + 12 * mats.size();
         }
         int y = g.guiHeight() / 2 - total / 2;
-        for (ClientModel.Node n : rows) {
+        if (total > 0) {
+            // one card behind every entry: a band per entry, advanced by 22 less its 2px overhang, overlapped its
+            // neighbour by 4px and doubled the edge there, which read as stacked boxes (the player, 2026-10-19)
+            Ui.surface(g, 2, y - 3, bw + 4, total + 6, Ui.R3, Ui.HUD_BACK);
+        }
+        for (int row = 0; row < rows.size(); row++) {
+            ClientModel.Node n = rows.get(row);
             State s = ClientProgress.state(n.key);
             List<long[]> mats = materials(n);
             String title = font.plainSubstrByWidth(n.title.getString(), 110);
             String line = progressLine(n);
-            // a band behind the entry: the tracker sits over terrain (snow, sky) where plain text is unreadable
-            int bw = Math.max(26 + font.width(title), 26 + font.width(line));
-            for (long[] mat : mats) {
-                bw = Math.max(bw, 38 + font.width(Math.min(mat[1], mat[2]) + "/" + mat[2]));
+            if (row > 0) {
+                g.fill(4, y - 3, bw + 2, y - 3 + 1, Ui.HAIRLINE);
             }
-            g.fill(2, y - 2, bw + 2, y + 22 + 12 * mats.size() + 2, Tiles.withAlpha(Ui.HUD_BACK, 1));
             Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
