@@ -12,7 +12,7 @@ import net.minecraft.world.item.Items;
  */
 final class DevShapes extends Screen {
 
-    private static final String[] SHAPES = {"square", "octagon", "circle", "diamond", "pentagon"};
+    private static final String[] SHAPES = {"square", "rsquare", "circle", "diamond", "octagon", "pentagon", "gear", "heart"};
     private static final Tiles.Look[] LOOKS = {Tiles.Look.DONE_REWARD, Tiles.Look.DONE, Tiles.Look.OPEN, Tiles.Look.PROGRESS,
             Tiles.Look.LOCKED_NEAR};
 
@@ -37,6 +37,26 @@ final class DevShapes extends Screen {
                 x += 12;
             }
             y += 42;
+        }
+        // the fill at several levels, where it actually appears: map size and Now size
+        g.drawString(font, "fill", 8, y + 10, 0xFFA8A8A8, true);
+        int fx = 64;
+        for (double f : new double[]{0.15, 0.35, 0.55, 0.75, 0.9}) {
+            for (int size : new int[]{20, 32}) {
+                Tiles.tile(g, "square", fx, y + (32 - size) / 2, size, Tiles.Look.PROGRESS, f, new ItemStack(Items.WHEAT), false);
+                fx += size + 8;
+            }
+            fx += 10;
+        }
+        y += 42;
+        g.drawString(font, "fill shapes", 8, y + 10, 0xFFA8A8A8, true);
+        fx = 64;
+        for (String shape : new String[]{"circle", "octagon", "diamond", "heart", "gear"}) {
+            for (int size : new int[]{20, 32}) {
+                Tiles.tile(g, shape, fx, y + (32 - size) / 2, size, Tiles.Look.PROGRESS, 0.45, new ItemStack(Items.WHEAT), false);
+                fx += size + 8;
+            }
+            fx += 10;
         }
     }
 

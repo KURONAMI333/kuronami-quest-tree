@@ -100,8 +100,8 @@ final class Tiles {
      * What a tile shows (2026-10-15 colour rebuild, DESIGN_NOTES). The state is a solid surface (the treatment the player
      * rated best); never a coloured rim around a pale tint of the same colour (negative_list section 7). Dark = not yet,
      * light grey (Minecraft's GUI grey) = can start / can unlock, blue rising from the bottom = in progress, green = done.
-     * A done quest with rewards waiting keeps the green with a gold rim around the shape; once claimed it is a
-     * plain settled green. One colour for "done", so claiming is never read as a second achievement. Gold is kept for
+     * A done quest with rewards waiting keeps the green, bright with a thick bottom edge like a button before it is
+     * pressed; once claimed it is a plain settled green. One colour for "done", so claiming is never read as a second achievement. Gold is kept for
      * rewards and currency elsewhere (claim button, points).
      */
     enum Look { LOCKED_FAR, LOCKED_NEAR, EXCLUDED, OPEN, AFFORDABLE, PROGRESS, DONE, DONE_REWARD }
@@ -113,6 +113,8 @@ final class Tiles {
     static int GREY_DARK = 0xFF8B8B8B;
     static int BLUE = 0xFF4F9FDB;
     static int BLUE_DARK = 0xFF2F6E9F;
+    /** The waterline: {@link #BLUE} lifted and pulled towards white, the way a surface catches the light. */
+    static int SURFACE = shade(BLUE, 1.22f, 0.90f);
     static int GOLD = 0xFFF2C230;
     static int RED = 0xFFD05656;
 
@@ -128,20 +130,97 @@ final class Tiles {
         };
     }
 
-    /** A solid surface with its darker bottom edge. */
-    private static void surface(GuiGraphics g, String shape, int x, int y, int s, int top, int edgeColor) {
-        int edge = Math.max(1, s / 16);
-        shape(g, shape, x, y, s, s, edgeColor);
-        shape(g, shape, x, y, s, s - edge, top);
+    /**
+     * A solid surface whose edge follows the shape: a darker rim, a lighter top-left, a darker bottom-right, all made
+     * from the one state colour (the player, 2026-10-19: the edge colour should come from the main colour). Four
+     * stretched copies of the same mask, so round, diamond, gear and heart work too; an earlier attempt failed only
+     * because it drew straight lines along the four sides of a rectangle.
+     */
+    private static void rim(GuiGraphics g, String shape, int x, int y, int s, int face) {
+        int e = Math.max(1, s / 16);
+        shape(g, shape, x, y, s, s, shade(face, 0.58f, 1f));
+        g.enableScissor(x + e, y + e, x + s - e, y + s - e);
+        shape(g, shape, x + e, y + e, s - 2 * e, s - 2 * e, shade(face, 1.30f, 0.92f));
+        shape(g, shape, x + 2 * e, y + 2 * e, s - 2 * e, s - 2 * e, shade(face, 0.74f, 1f));
+        shape(g, shape, x + 2 * e, y + 2 * e, s - 4 * e, s - 4 * e, face);
+        g.disableScissor();
+    }
+
+    /** A tone of {@code argb}: value scaled by {@code v}, saturation by {@code s} (both clamped). */
+    private static int shade(int argb, float v, float s) {
+        float r = ((argb >> 16) & 255) / 255f;
+        float gr = ((argb >> 8) & 255) / 255f;
+        float b = (argb & 255) / 255f;
+        float max = Math.max(r, Math.max(gr, b));
+        float min = Math.min(r, Math.min(gr, b));
+        float d = max - min;
+        float hue = 0;
+        if (d > 0) {
+            if (max == r) {
+                hue = ((gr - b) / d + 6) % 6;
+            } else if (max == gr) {
+                hue = (b - r) / d + 2;
+            } else {
+                hue = (r - gr) / d + 4;
+            }
+            hue /= 6;
+        }
+        float sat = Math.min(1, max <= 0 ? 0 : d / max * s);
+        float val = Math.min(1, max * v);
+        int i = (int) (hue * 6) % 6;
+        float f = hue * 6 - (int) (hue * 6);
+        float p = val * (1 - sat);
+        float q = val * (1 - sat * f);
+        float t = val * (1 - sat * (1 - f));
+        float nr;
+        float ng;
+        float nb;
+        switch (i) {
+            case 0 -> { nr = val; ng = t; nb = p; }
+            case 1 -> { nr = q; ng = val; nb = p; }
+            case 2 -> { nr = p; ng = val; nb = t; }
+            case 3 -> { nr = p; ng = q; nb = val; }
+            case 4 -> { nr = t; ng = p; nb = val; }
+            default -> { nr = val; ng = p; nb = q; }
+        }
+        return (argb & 0xFF000000) | (Math.round(nr * 255) << 16) | (Math.round(ng * 255) << 8) | Math.round(nb * 255);
     }
 
 
+    /**
+     * The blue that fills with the tasks done. Water seen from above is lighter at the surface and darker with depth, so
+     * the light tone sits on the waterline and the dark one at the bottom. Until 2026-10-20 the dark tone sat on the
+     * waterline, which read as a shadow lying on top of the water instead of a surface. With a low alpha the same shape
+     * is drawn over the icon again, so an item standing in water is tinted below the surface.
+     */
+    private static void water(GuiGraphics g, String shape, int x, int y, int s, double fraction, float alpha) {
+        int e = Math.max(1, s / 16);
+        int x0 = x + e;
+        int y0 = y + e;
+        int is = s - 2 * e;
+        double f = Math.max(0, Math.min(1, fraction));
+        if (f <= 0) {
+            return;
+        }
+        int deep = Math.max(1, s / 16);
+        shapeBottom(g, shape, x0, y0, is, is, f, withAlpha(BLUE, alpha));
+        if (f * is > 5) {
+            // the depth only shows when there is water for it: in a 4px sliver three tones turn into stripes
+            shapeBottom(g, shape, x0, y0, is, is, Math.min(f, deep / (double) is), withAlpha(BLUE_DARK, alpha));
+        }
+        if (alpha >= 1f && f * is > 3) {
+            // 1px of the lighter tone on the waterline, so the top of the water reads as a surface and not a cut. Only
+            // on the first pass: drawn again over the icon it would look like a scratch across the item
+            shapeBand(g, shape, x0, y0, is, is, 1 - f, 1 - f + 1.0 / is, withAlpha(SURFACE, alpha));
+        }
+    }
+
     private static void rewardFrame(GuiGraphics g, String shape, int x, int y, int s) {
-        shape(g, shape, x, y, s, s, GREEN);
-        // rewards waiting: a gold rim (gold = rewards everywhere else too), half outside the shape so it reads on 20px
-        // map tiles. Not a lighter green: a rim in the fill's own hue is on the negative list
-        int o = Math.max(1, s / 20);
-        ring(g, shape, x - o, y - o, s + 2 * o, s + 2 * o, GOLD);
+        // rewards waiting: a button before it is pressed. Bright green with a thick dark bottom edge, so it stands
+        // off the flat settled green of a claimed quest. Not a lighter green rim inside the shape (negative list
+        // section 7) and not the gold rim that was here until 2026-10-19, which the player called lame.
+        rim(g, shape, x, y, s, GREEN_BRIGHT);
+        shapeBottom(g, shape, x, y, s, s, Math.max(2, s / 8) / (double) s, GREEN_DARK);
     }
 
     static void tile(GuiGraphics g, String shape, int x, int y, int s, State state, double fraction, ItemStack icon, boolean far) {
@@ -165,16 +244,15 @@ final class Tiles {
         switch (look) {
             // done: green. Rewards still waiting = a gold rim; claimed = flat and settled
             case DONE_REWARD -> rewardFrame(g, shape, x, y, s);
-            case DONE -> shape(g, shape, x, y, s, s, GREEN_SETTLED);
-            case AFFORDABLE -> surface(g, shape, x, y, s, WHITE, GREY_DARK);
-            case OPEN -> surface(g, shape, x, y, s, GREY, GREY_DARK);
+            case DONE -> rim(g, shape, x, y, s, GREEN_SETTLED);
+            case AFFORDABLE -> rim(g, shape, x, y, s, WHITE);
+            case OPEN -> rim(g, shape, x, y, s, GREY);
             case PROGRESS -> {
-                surface(g, shape, x, y, s, GREY, GREY_DARK);
-                // the blue rises with the tasks done
-                shapeBottom(g, shape, x, y, s, s, fraction, BLUE_DARK);
-                shapeBottom(g, shape, x, y, s, s - Math.max(1, s / 16), Math.max(0, fraction - 1.0 / 16), BLUE);
+                rim(g, shape, x, y, s, GREY);
+                // the blue rises with the tasks done, inside the rim
+                water(g, shape, x, y, s, fraction, 1f);
             }
-            case LOCKED_FAR, LOCKED_NEAR, EXCLUDED -> shape(g, shape, x, y, s, s, TILE_LOCKED);
+            case LOCKED_FAR, LOCKED_NEAR, EXCLUDED -> rim(g, shape, x, y, s, TILE_LOCKED);
         }
         if (far) {
             // zoomed out the surface colour is the information; nothing on top
@@ -193,6 +271,11 @@ final class Tiles {
             g.pose().scale(k, k, 1);
             g.renderItem(icon, 0, 0);
             g.pose().popPose();
+        }
+        if (look == Look.PROGRESS) {
+            // the item stands in the water: the fill goes over the part below the surface, so the tile reads as depth
+            // and not as a bar clipped into the shape
+            water(g, shape, x, y, s, fraction, 0.30f);
         }
         if (look == Look.LOCKED_FAR || look == Look.LOCKED_NEAR || look == Look.EXCLUDED) {
             g.pose().pushPose();
