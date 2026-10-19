@@ -470,7 +470,7 @@ public final class ClientModel {
                 if (id == null) {
                     continue;
                 }
-                into.add(new BackgroundLayer(id, Math.max(-1, Math.min(1, num(o, "speed", 0.5f))), !o.has("tile") || o.get("tile").getAsBoolean(),
+                into.add(new BackgroundLayer(id, Math.max(-1, Math.min(1, num(o, "speed", 0.5f))), !o.has("tile") || !o.get("tile").isJsonPrimitive() || !o.get("tile").getAsJsonPrimitive().isBoolean() || o.get("tile").getAsBoolean(),
                         num(o, "size", 0), Math.max(0, Math.min(1, num(o, "alpha", 1)))));
             }
         }

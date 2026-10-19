@@ -1233,8 +1233,9 @@ public class ProgressScreen extends Screen {
                 float y = (height - h) / 2f + (v[1] - height / 2f) * l.speed() * 0.1f;
                 blitScaled(g, l.texture(), x, y, w, h, size);
             } else {
-                float tw = Math.max(8, (l.size() > 0 ? l.size() : size[0]) * zoom);
-                float th = Math.max(8, tw * size[1] / size[0]);
+                // at least 16 GUI px a picture, so a tiny size cannot turn into thousands of draws a frame
+                float tw = Math.max(16, (l.size() > 0 ? l.size() : size[0]) * zoom);
+                float th = Math.max(16, tw * size[1] / size[0]);
                 float startX = floorMod(v[0] * l.speed(), tw) - tw;
                 float startY = floorMod(v[1] * l.speed(), th) - th;
                 for (float x = startX; x < width; x += tw) {

@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,7 +35,7 @@ public final class ClientConfig {
 
     private static boolean loaded;
 
-    /** The file was there but could not be read: never overwrite it. */
+    /** The file could not be read nor moved aside: never overwrite it. */
     private static boolean readFailed;
 
     private ClientConfig() {
@@ -64,9 +65,16 @@ public final class ClientConfig {
             }
             write();
         } catch (IOException | RuntimeException ex) {
-            // keep the player's file as it is: writing now would replace what could not be read with the defaults
-            readFailed = true;
-            Constants.LOG.warn("Could not read client settings, they will not be saved this session: {}", ex.toString());
+            // keep what could not be read next to it, then start again from the defaults: an empty or cut-off file
+            // (a crash while writing) would otherwise stop the settings from ever being saved again
+            try {
+                Files.move(file(), file().resolveSibling(file().getFileName() + ".broken"), StandardCopyOption.REPLACE_EXISTING);
+                Constants.LOG.warn("Could not read client settings, moved them to {}.broken: {}", file().getFileName(), ex.toString());
+                write();
+            } catch (IOException moveEx) {
+                readFailed = true;
+                Constants.LOG.warn("Could not read client settings, they will not be saved this session: {}", ex.toString());
+            }
         }
         railPinVersion++;
     }
@@ -128,7 +136,14 @@ public final class ClientConfig {
             railPinned.forEach(a::add);
             o.add("rail_pinned", a);
             Files.createDirectories(file().getParent());
-            Files.writeString(file(), new GsonBuilder().setPrettyPrinting().create().toJson(o), StandardCharsets.UTF_8);
+            // written next to it and moved over, so a crash mid-write never leaves a cut-off file
+            Path tmp = file().resolveSibling(file().getFileName() + ".tmp");
+            Files.writeString(tmp, new GsonBuilder().setPrettyPrinting().create().toJson(o), StandardCharsets.UTF_8);
+            try {
+                Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
+                Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException ex) {
             Constants.LOG.warn("Could not write client settings: {}", ex.toString());
         }
