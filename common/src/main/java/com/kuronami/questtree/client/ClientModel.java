@@ -145,6 +145,8 @@ public final class ClientModel {
         public final boolean hideDetailsByDefault;
         /** Tiles that stand for a quest of another chapter (FTB Quests quest links). */
         public final List<Link> links = new ArrayList<>();
+        /** Pictures behind the map, bottom first (chapter {@code background}); empty = the plain ground. */
+        public final List<BackgroundLayer> background = new ArrayList<>();
 
         Chapter(ClientModel m, String id, JsonObject o, Map<String, Integer> groupOrder) {
             this.id = id;
@@ -165,6 +167,7 @@ public final class ClientModel {
             this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString()) : Component.literal(path);
             this.title = m.component("progression." + namespace + "." + path + ".title", fallbackTitle);
+            BackgroundLayer.read(o.get("background"), background);
             for (Map.Entry<String, JsonElement> n : obj(o, "nodes").entrySet()) {
                 if (!n.getValue().isJsonObject()) {
                     continue;
@@ -411,6 +414,59 @@ public final class ClientModel {
                     name = shown.name();
                 }
             }
+        }
+    }
+
+    /**
+     * One picture behind a chapter's map (2026-10-18, after Thaumaturge's research book). A chapter has any number,
+     * drawn bottom first, so one picture gives a still backdrop and two or more give depth as the map moves.
+     * <ul>
+     *     <li>{@code texture}: the picture, a full texture path ({@code ns:textures/gui/backgrounds/x.png}).</li>
+     *     <li>{@code speed}: how far it moves with the map, 1 = with the map, 0 = not at all (default 0.5).
+     *     Zooming follows the same share.</li>
+     *     <li>{@code tile}: repeat the picture to fill the view (default true); false stretches one copy over it.</li>
+     *     <li>{@code size}: the picture's width on screen in GUI pixels at zoom 1 (default: its pixel width).</li>
+     *     <li>{@code alpha}: 0..1 (default 1).</li>
+     * </ul>
+     * {@code "background": "ns:textures/..."} is short for one layer that stays still; {@code {"layers": [...]}} lists
+     * them. Pictures come from resources, so a resource pack can replace any of them.
+     */
+    public record BackgroundLayer(ResourceLocation texture, float speed, boolean tile, float size, float alpha) {
+
+        static void read(JsonElement e, List<BackgroundLayer> into) {
+            if (e == null) {
+                return;
+            }
+            if (e.isJsonPrimitive()) {
+                ResourceLocation id = ResourceLocation.tryParse(e.getAsString());
+                if (id != null) {
+                    into.add(new BackgroundLayer(id, 0, true, 0, 1));
+                }
+                return;
+            }
+            if (!e.isJsonObject()) {
+                return;
+            }
+            JsonElement layers = e.getAsJsonObject().get("layers");
+            if (layers == null || !layers.isJsonArray()) {
+                return;
+            }
+            for (JsonElement l : layers.getAsJsonArray()) {
+                if (!l.isJsonObject() || !l.getAsJsonObject().has("texture")) {
+                    continue;
+                }
+                JsonObject o = l.getAsJsonObject();
+                ResourceLocation id = ResourceLocation.tryParse(o.get("texture").getAsString());
+                if (id == null) {
+                    continue;
+                }
+                into.add(new BackgroundLayer(id, num(o, "speed", 0.5f), !o.has("tile") || o.get("tile").getAsBoolean(),
+                        num(o, "size", 0), Math.max(0, Math.min(1, num(o, "alpha", 1)))));
+            }
+        }
+
+        private static float num(JsonObject o, String key, float fallback) {
+            return o.has(key) && o.get(key).isJsonPrimitive() && o.get(key).getAsJsonPrimitive().isNumber() ? o.get(key).getAsFloat() : fallback;
         }
     }
 

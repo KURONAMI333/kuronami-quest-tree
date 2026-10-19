@@ -1046,9 +1046,80 @@ public class ProgressScreen extends Screen {
         return LINE_CLOSED;
     }
 
+    /** Pixel size of each background picture, read once from its file (null = missing or unreadable). */
+    private static final Map<ResourceLocation, int[]> TEXTURE_SIZES = new HashMap<>();
+
+    private static int[] textureSize(ResourceLocation id) {
+        return TEXTURE_SIZES.computeIfAbsent(id, k -> {
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(k);
+            if (res.isEmpty()) {
+                com.kuronami.questtree.Constants.LOG.warn("Chapter background {} does not exist", k);
+                return null;
+            }
+            try (var in = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(in)) {
+                return new int[]{img.getWidth(), img.getHeight()};
+            } catch (java.io.IOException ex) {
+                com.kuronami.questtree.Constants.LOG.warn("Could not read chapter background {}: {}", k, ex.toString());
+                return null;
+            }
+        });
+    }
+
+    /**
+     * The chapter's background pictures, bottom first, under everything on the map. Each moves and zooms with the map
+     * by its own share ({@link ClientModel.BackgroundLayer#speed()}), so layers at different speeds read as depth.
+     */
+    private void renderBackground(GuiGraphics g, ClientModel.Chapter ch, float[] v) {
+        if (ch.background.isEmpty()) {
+            return;
+        }
+        RenderSystem.enableBlend();
+        for (ClientModel.BackgroundLayer l : ch.background) {
+            int[] size = textureSize(l.texture());
+            if (size == null || size[0] <= 0 || size[1] <= 0) {
+                continue;
+            }
+            g.setColor(1, 1, 1, l.alpha());
+            float zoom = 1 + (v[2] - 1) * l.speed();
+            if (!l.tile()) {
+                float cover = Math.max(width / (float) size[0], height / (float) size[1]) * zoom;
+                float w = size[0] * cover;
+                float h = size[1] * cover;
+                float x = (width - w) / 2f + (v[0] - width / 2f) * l.speed() * 0.1f;
+                float y = (height - h) / 2f + (v[1] - height / 2f) * l.speed() * 0.1f;
+                blitScaled(g, l.texture(), x, y, w, h, size);
+            } else {
+                float tw = (l.size() > 0 ? l.size() : size[0]) * zoom;
+                float th = tw * size[1] / size[0];
+                float startX = floorMod(v[0] * l.speed(), tw) - tw;
+                float startY = floorMod(v[1] * l.speed(), th) - th;
+                for (float x = startX; x < width; x += tw) {
+                    for (float y = startY; y < height; y += th) {
+                        blitScaled(g, l.texture(), x, y, tw, th, size);
+                    }
+                }
+            }
+        }
+        g.setColor(1, 1, 1, 1);
+    }
+
+    private static float floorMod(float a, float m) {
+        float r = a % m;
+        return r < 0 ? r + m : r;
+    }
+
+    private static void blitScaled(GuiGraphics g, ResourceLocation tex, float x, float y, float w, float h, int[] size) {
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(w / size[0], h / size[1], 1);
+        g.blit(tex, 0, 0, 0, 0, size[0], size[1], size[0], size[1]);
+        g.pose().popPose();
+    }
+
     private void renderChapter(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
         float[] v = view(ch);
         stepPan(v);
+        renderBackground(g, ch, v);
         boolean far = v[2] < FAR;
         long now = Util.getMillis();
         g.pose().pushPose();
