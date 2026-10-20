@@ -186,8 +186,10 @@ class ImporterTest {
         Files.writeString(chapters.resolve("legacy.snbt"), """
                 {
                   filename: "legacy"
+                  title: "Legacy"
+                  default_quest_shape: "default"
                   quests: [
-                    {id: "1", tasks: [{id: "11", type: "item",
+                    {id: "1", shape: "default", title: "Old", description: ["first", "second"], tasks: [{id: "11", type: "item",
                       item: {id: "minecraft:diamond_sword", Count: 3, tag: {
                         Damage: 5,
                         display: {Name: "{\\"text\\":\\"Old Blade\\"}", Lore: ["{\\"text\\":\\"line\\"}"]},
@@ -201,7 +203,13 @@ class ImporterTest {
                 """);
         ImportOutput out = new ImportOutput("test");
         FtbQuestsImporter.convert(tmp, out);
-        JsonObject nodes = out.chapters.get("legacy").getAsJsonObject("nodes");
+        JsonObject chapter = out.chapters.get("legacy");
+        assertEquals("square", chapter.getAsJsonObject("defaults").get("shape").getAsString(),
+                "a legacy \"default\" chapter shape must fall back to square");
+        assertEquals("Legacy", out.lang.get("en_us").get("progression.test.legacy.title").getAsString());
+        assertEquals("first\nsecond", out.lang.get("en_us").get("progression.test.legacy.1.desc").getAsString());
+        JsonObject nodes = chapter.getAsJsonObject("nodes");
+        assertFalse(nodes.getAsJsonObject("1").has("shape"), "a legacy \"default\" quest shape must use the chapter default");
         JsonArray first = nodes.getAsJsonObject("1").getAsJsonArray("tasks");
         JsonObject item = first.get(0).getAsJsonObject();
         assertEquals(3, item.getAsJsonObject("item").get("count").getAsInt(), "Count must become count");

@@ -151,7 +151,12 @@ public final class FtbQuestsImporter {
                 case "autofocus_id" -> o.addProperty("autofocus", v.getAsString().toLowerCase(Locale.ROOT));
                 case "title" -> out.text("en_us", "progression." + ns + "." + cid + ".title", v);
                 case "subtitle" -> out.text("en_us", "progression." + ns + "." + cid + ".subtitle", v);
-                case "default_quest_shape" -> put(o, "defaults.shape", v);
+                // 1.19 and earlier wrote "default" for "no chapter shape"; that is not a shape a node can use
+                case "default_quest_shape" -> {
+                    if (!v.isJsonPrimitive() || !v.getAsString().equals("default")) {
+                        put(o, "defaults.shape", v);
+                    }
+                }
                 case "default_quest_size" -> put(o, "defaults.size", v);
                 case "default_hide_dependency_lines" -> put(o, "defaults.hide_lines", v);
                 case "default_min_width" -> put(o, "defaults.detail_width", v);
@@ -302,6 +307,10 @@ public final class FtbQuestsImporter {
             mapValue(n, target, k, kv.getValue(), prefix, out);
         }
         // values whose meaning changes, not just the name
+        if (n.has("shape") && n.get("shape").isJsonPrimitive() && n.get("shape").getAsString().equals("default")) {
+            // 1.19 and earlier: "default" means the chapter's shape, not a shape of its own
+            n.remove("shape");
+        }
         if (n.has("visibility") && n.getAsJsonObject("visibility").has("hidden_until")) {
             n.getAsJsonObject("visibility").remove("hidden_until");
             JsonObject vis = n.getAsJsonObject("visibility");
