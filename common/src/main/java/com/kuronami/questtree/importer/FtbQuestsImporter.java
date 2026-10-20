@@ -732,13 +732,26 @@ public final class FtbQuestsImporter {
         return o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsBoolean();
     }
 
-    static Iterable<JsonElement> arr(JsonObject o, String k) {
+    public static Iterable<JsonElement> arr(JsonObject o, String k) {
         return o.has(k) && o.get(k).isJsonArray() ? o.getAsJsonArray(k) : new JsonArray();
     }
 
-    private static String typeOf(JsonObject o) {
+    static String typeOf(JsonObject o) {
         String t = o.has("type") ? o.get("type").getAsString() : "?";
         return t.substring(t.indexOf(':') + 1);
+    }
+
+    /**
+     * Whether a task of this type is converted (unknown types are skipped, which shifts every later task index of the
+     * quest). Progress migration uses this to count task indexes the way the import did (2026-10-20).
+     */
+    public static boolean convertsTask(JsonObject task) {
+        return TASK.containsKey(typeOf(task));
+    }
+
+    /** As {@link #convertsTask}, for rewards. */
+    public static boolean convertsReward(JsonObject reward) {
+        return REWARD.containsKey(typeOf(reward));
     }
 
     private static String id(JsonObject o) {
@@ -790,7 +803,7 @@ public final class FtbQuestsImporter {
         return raw.getAsJsonPrimitive().isNumber() ? node(index, Long.toString(raw.getAsLong())) : node(index, raw.getAsString());
     }
 
-    static String slug(String s) {
+    public static String slug(String s) {
         String r = s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_]+", "_").replaceAll("^_+|_+$", "");
         return r.isEmpty() ? "x" : r;
     }
