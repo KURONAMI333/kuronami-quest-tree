@@ -5,7 +5,9 @@ import com.google.gson.JsonObject;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.points.Expression;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -345,6 +347,218 @@ public final class ProgressRules {
     /** The client has the chapter id and {@code points.pool} but not the whole chapter. */
     public static String key(String chapterId, String pool) {
         return pool == null || pool.isBlank() ? chapterId : "@pool:" + pool;
+    }
+
+    /** Whether several chapters share this chapter's experience, level, points and exchange counter. */
+    public static boolean isPooled(ProgressModel.Chapter c) {
+        return !key(c).equals(c.id);
+    }
+
+    /**
+     * Saved progress written before a chapter joined a pool is keyed by the chapter id. On load, fold those values
+     * into the pool key so adding {@code points.pool} to an existing chapter does not strand its level, experience,
+     * spent points, extra points or exchange count (2026-10-20). The fold is idempotent and also picks up chapters
+     * added to a pool later. Two chapters that already had their own values are summed: each was earned separately.
+     */
+    public static void migratePools(PlayerProgress p, ProgressModel model) {
+        Map<String, List<ProgressModel.Chapter>> pools = new LinkedHashMap<>();
+        for (ProgressModel.Chapter c : model.chapters.values()) {
+            if (isPooled(c)) {
+                pools.computeIfAbsent(key(c), k -> new ArrayList<>()).add(c);
+            }
+        }
+        for (Map.Entry<String, List<ProgressModel.Chapter>> e : pools.entrySet()) {
+            String pool = e.getKey();
+            boolean xp = false;
+            double xpSum = p.xp.getOrDefault(pool, 0.0);
+            int levelSum = p.level.getOrDefault(pool, 0);
+            int spentSum = p.spent.getOrDefault(pool, 0);
+            int bonusSum = p.bonus.getOrDefault(pool, 0);
+            int exchangeSum = p.exchange.getOrDefault(pool, 0);
+            boolean level = p.level.containsKey(pool);
+            boolean spent = p.spent.containsKey(pool);
+            boolean bonus = p.bonus.containsKey(pool);
+            boolean exchange = p.exchange.containsKey(pool);
+            for (ProgressModel.Chapter c : e.getValue()) {
+                Double x = p.xp.remove(c.id);
+                if (x != null) {
+                    xpSum += x;
+                    xp = true;
+                }
+                Integer l = p.level.remove(c.id);
+                if (l != null) {
+                    levelSum += l;
+                    level = true;
+                }
+                Integer s = p.spent.remove(c.id);
+                if (s != null) {
+                    spentSum += s;
+                    spent = true;
+                }
+                Integer b = p.bonus.remove(c.id);
+                if (b != null) {
+                    bonusSum += b;
+                    bonus = true;
+                }
+                Integer ex = p.exchange.remove(c.id);
+                if (ex != null) {
+                    exchangeSum += ex;
+                    exchange = true;
+                }
+            }
+            if (xp) {
+                p.xp.put(pool, xpSum);
+            }
+            if (level) {
+                p.level.put(pool, levelSum);
+            }
+            if (spent) {
+                p.spent.put(pool, spentSum);
+            }
+            if (bonus) {
+                p.bonus.put(pool, bonusSum);
+            }
+            if (exchange) {
+                p.exchange.put(pool, exchangeSum);
+            }
+        }
+    }
+
+    /**
+     * Respec and a one-chapter reset give back only this chapter's nodes, also when they share a pool with other
+     * chapters: the pool's spent counter is the sum of every member's taken nodes, so subtracting this chapter's
+     * share leaves the others' points spent (2026-10-20 review).
+     */
+    public static int refundChapterSpent(PlayerProgress p, ProgressModel.Chapter c) {
+        int refund = 0;
+        for (ProgressModel.Node n : c.nodes.values()) {
+            int taken = p.taken.getOrDefault(n.key, 0);
+            if (taken > 0) {
+                refund += Math.max(0, n.cost) * taken;
+            }
+        }
+        if (refund > 0) {
+            int refunded = refund;
+            p.spent.computeIfPresent(key(c), (k, v) -> Math.max(0, v - refunded));
+        }
+        return refund;
+    }
+
+    /**
+     * A one-chapter reset's stored values: a chapter without a pool also loses its experience, level, spent counter
+     * and extra points; a pooled chapter keeps them because they belong to every chapter in the pool. The exchange
+     * count always goes (2026-10-20 review).
+     */
+    public static void resetChapterData(PlayerProgress p, ProgressModel.Chapter c) {
+        String key = key(c);
+        if (!isPooled(c)) {
+            p.xp.remove(key);
+            p.level.remove(key);
+            p.spent.remove(key);
+            p.bonus.remove(key);
+        }
+        p.exchange.remove(key);
+    }
+
+    /**
+     * Forgets every stored skill value and per-player chapter override, for a full reset. Taken nodes are reset by
+     * the caller first (they also give their attributes back), so they are not touched here (2026-10-20 review).
+     */
+    public static void clearAll(PlayerProgress p) {
+        p.xp.clear();
+        p.level.clear();
+        p.spent.clear();
+        p.bonus.clear();
+        p.exchange.clear();
+        p.chapterOpen.clear();
+        p.recent.clear();
+    }
+
+    /** Forgets a pool's experience, level, points and exchange count (Pufferfish's Skills' erase for a shared pool). */
+    public static void erasePoolData(PlayerProgress p, String pool) {
+        p.xp.remove(pool);
+        p.level.remove(pool);
+        p.spent.remove(pool);
+        p.bonus.remove(pool);
+        p.exchange.remove(pool);
+    }
+
+    /**
+     * Pufferfish's Skills' {@code erase_on_death} for one chapter. A chapter without a pool erases its own values and
+     * its per-player lock override, as {@code removeCategoryData} does. A pooled chapter has no values of its own:
+     * its whole pool is erased (experience, level, points, bonus and exchange) and every chapter in it loses its
+     * lock override (2026-10-20 decision; Pufferfish's Skills has no pool equivalent).
+     */
+    public static void eraseChapterData(PlayerProgress p, ProgressModel model, ProgressModel.Chapter c) {
+        String pool = key(c);
+        if (!isPooled(c)) {
+            p.xp.remove(c.id);
+            p.level.remove(c.id);
+            p.spent.remove(c.id);
+            p.bonus.remove(c.id);
+            p.exchange.remove(c.id);
+            p.chapterOpen.remove(c.id);
+            return;
+        }
+        for (ProgressModel.Chapter other : model.chapters.values()) {
+            if (pool.equals(key(other))) {
+                p.chapterOpen.remove(other.id);
+            }
+        }
+        erasePoolData(p, pool);
+    }
+
+    /**
+     * Pufferfish's Skills' scoreboard reward context: how many skills of this node's definition are unlocked. Skills
+     * sharing a {@code definition} share its reward, so the score is the count of taken nodes of that definition.
+     * Data without a definition counts the node itself as one.
+     */
+    public static int definitionCount(PlayerProgress p, ProgressModel.Node n) {
+        if (n.definition == null || n.definition.isEmpty()) {
+            return p.taken.getOrDefault(n.key, 0) > 0 ? 1 : 0;
+        }
+        int count = 0;
+        for (ProgressModel.Node other : n.chapter.nodes.values()) {
+            if (n.definition.equals(other.definition) && p.taken.getOrDefault(other.key, 0) > 0) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** A skill chapter's exchange settings ({@code points.exchange}). */
+    public record Exchange(int cost, int limit) {
+    }
+
+    public static Exchange exchangeOf(ProgressModel.Chapter c) {
+        if (c == null || c.points == null || !c.points.has("exchange") || !c.points.get("exchange").isJsonObject()) {
+            return new Exchange(0, Integer.MAX_VALUE);
+        }
+        JsonObject exchange = c.points.getAsJsonObject("exchange");
+        int cost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
+                ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
+        int limit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
+                ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
+        return new Exchange(cost, limit);
+    }
+
+    /** Whether one exchange purchase is allowed now: open chapter, levels to pay, and the limit counted per pool. */
+    public static boolean canExchange(PlayerProgress p, ProgressModel.Chapter c, int playerLevel) {
+        if (c == null || !c.isSkills() || !chapterUnlocked(p, c)) {
+            return false;
+        }
+        Exchange e = exchangeOf(c);
+        if (e.cost() <= 0 || playerLevel < e.cost()) {
+            return false;
+        }
+        return p.exchange.getOrDefault(key(c), 0) < e.limit();
+    }
+
+    /** Records one exchange purchase: the counter and the extra point both live on the pool key. */
+    public static void applyExchange(PlayerProgress p, ProgressModel.Chapter c) {
+        String key = key(c);
+        p.exchange.merge(key, 1, Integer::sum);
+        p.bonus.merge(key, 1, Integer::sum);
     }
 
     /** Points that can be spent now in a skill chapter. */

@@ -65,6 +65,8 @@ public final class ProgressService {
     private static final Map<UUID, Boolean> DIRTY = new HashMap<>();
     /** Observation tasks being watched right now: player → {@code <node key>#<task index>} → consecutive ticks. */
     private static final Map<UUID, Map<String, Integer>> OBSERVED = new HashMap<>();
+    /** Player progress already migrated for one loaded data model, so a save is not folded into its pool twice. */
+    private static final Map<PlayerProgress, ProgressModel> MIGRATED = new java.util.WeakHashMap<>();
 
     private ProgressService() {
     }
@@ -79,7 +81,14 @@ public final class ProgressService {
     }
 
     public static PlayerProgress progress(ServerPlayer player) {
-        return ProgressStore.get(player.server).of(player.getUUID());
+        PlayerProgress p = ProgressStore.get(player.server).of(player.getUUID());
+        ProgressModel model = ProgressData.model();
+        if (MIGRATED.get(p) != model) {
+            // chapters that gained points.pool after their values were saved (2026-10-20 review)
+            ProgressRules.migratePools(p, model);
+            MIGRATED.put(p, model);
+        }
+        return p;
     }
 
     // ------------------------------------------------------------------ entry points
@@ -122,7 +131,7 @@ public final class ProgressService {
                 }
                 // "erase_on_death" (Pufferfish's Skills): the whole chapter starts over, skills and points included
                 if (ProgressModel.boolOf(c.points, "erase_on_death")) {
-                    PlayerCommands.resetChapter(player, p, c);
+                    PlayerCommands.eraseOnDeath(player, p, c);
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
                     continue;
@@ -265,11 +274,21 @@ public final class ProgressService {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
                         && manual(n.tasks.get(a.index()))) {
                     JsonObject task = n.tasks.get(a.index());
+                    long max = ProgressRules.target(task);
+                    long current = p.task(n.key, a.index());
+                    long next = com.kuronami.questtree.progress.CustomTaskResult.buttonProgress(current, max);
                     if (type(task).equals("custom")) {
-                        // no addon check to run: the button itself is the progress, as a checkmark
-                        QuestEvents.fire(player, n, task, true, a.index());
+                        // FTB Quests' custom task is Java code registered by an addon: a listener may set the progress
+                        // or complete it. Only with no listener for the task does the button itself make progress, as
+                        // before; a listener that leaves it alone is still in charge (2026-10-20 review).
+                        boolean listened = QuestEvents.hasListener(QuestEvents.taskKey(n, task, a.index()))
+                                || QuestEvents.hasAnyListener();
+                        var result = QuestEvents.fire(player, n, task, true, a.index(), current, max);
+                        next = listened ? (result.handled() ? result.progress() : current) : next;
                     }
-                    bump(player, p, n, a.index(), 1);
+                    if (next != current) {
+                        bump(player, p, n, a.index(), next);
+                    }
                 }
             }
             case "exchange" -> {
@@ -291,21 +310,13 @@ public final class ProgressService {
      * model keeps a fixed cost, which is what packs write.
      */
     private static void exchange(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
-        if (!c.isSkills() || !c.points.has("exchange") || !c.points.get("exchange").isJsonObject()) {
+        // the limit is counted per pool key, and a locked chapter cannot be bought into: the action names a chapter,
+        // so the node-level lock check at the top of onAction never saw it (2026-10-20 review)
+        if (!ProgressRules.canExchange(p, c, player.experienceLevel)) {
             return;
         }
-        JsonObject exchange = c.points.getAsJsonObject("exchange");
-        int cost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
-                ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
-        int limit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
-                ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
-        int bought = p.exchange.getOrDefault(c.id, 0);
-        if (cost <= 0 || bought >= limit || player.experienceLevel < cost) {
-            return;
-        }
-        player.giveExperienceLevels(-cost);
-        p.exchange.put(c.id, bought + 1);
-        p.bonus.merge(ProgressRules.key(c), 1, Integer::sum);
+        player.giveExperienceLevels(-ProgressRules.exchangeOf(c).cost());
+        ProgressRules.applyExchange(p, c);
         ProgressStore.get(player.server).setDirty();
         markDirty(player);
     }
@@ -734,6 +745,15 @@ public final class ProgressService {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
+    }
+
+    /** Server stopping: the anti-farming windows are runtime state and must not outlive the server (2026-10-20). */
+    public static void onServerStopping() {
+        SkillExperience.clearState();
+        PENDING.clear();
+        DIRTY.clear();
+        OBSERVED.clear();
+        MIGRATED.clear();
     }
 
     // ------------------------------------------------------------------ matching helpers

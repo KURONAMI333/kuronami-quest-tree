@@ -1,10 +1,12 @@
 package com.kuronami.questtree.server;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.points.Expression;
+import com.kuronami.questtree.progress.AntiFarming;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -24,8 +26,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -45,6 +45,8 @@ public final class SkillExperience {
 
     private static final Set<String> WARNED = new HashSet<>();
     private static final Map<String, Expression> PARSED = new HashMap<>();
+    /** Anti-farming windows of every source; runtime state, cleared when the server stops (2026-10-20). */
+    private static final AntiFarming ANTI_FARMING = new AntiFarming();
 
     private SkillExperience() {
     }
@@ -150,6 +152,7 @@ public final class SkillExperience {
         if (!usedSources(rules.model()).contains(source)) {
             return;
         }
+        ANTI_FARMING.removeOutdated(System.currentTimeMillis());
         PlayerProgress p = null;
         for (ProgressModel.Chapter c : rules.model().chapters.values()) {
             if (!c.isSkills() || !c.points.has("sources") || !c.points.get("sources").isJsonArray()) {
@@ -162,7 +165,9 @@ public final class SkillExperience {
                 continue;
             }
             double total = 0;
-            for (JsonElement e : c.points.getAsJsonArray("sources")) {
+            JsonArray sources = c.points.getAsJsonArray("sources");
+            for (int index = 0; index < sources.size(); index++) {
+                JsonElement e = sources.get(index);
                 if (!e.isJsonObject()) {
                     continue;
                 }
@@ -172,7 +177,8 @@ public final class SkillExperience {
                     continue;
                 }
                 JsonObject data = s.has("data") && s.get("data").isJsonObject() ? s.getAsJsonObject("data") : s;
-                total += sourceAmount(c.id, source, data, ctx);
+                // each entry counts on its own, as Pufferfish's Skills keeps one anti-farming state per source
+                total += sourceAmount(c.id, index, source, data, ctx);
             }
             if (total > 0) {
                 if (p == null) {
@@ -216,7 +222,7 @@ public final class SkillExperience {
      * {@code anti_farming_per_entity} caps the damage counted against one mob in the same window. Books made before
      * the split wrote the same guard as {@code anti_farming} (per chunk for kills, per entity for damage).
      */
-    private static double sourceAmount(String where, String source, JsonObject data, Map<String, Object> ctx) {
+    private static double sourceAmount(String where, int index, String source, JsonObject data, Map<String, Object> ctx) {
         if (!source.equals("kill_entity") && !source.equals("deal_damage")) {
             return amount(where, data, ctx);
         }
@@ -238,7 +244,8 @@ public final class SkillExperience {
         if (chunk != null) {
             int limit = intOf(chunk, "limit_per_chunk", -1);
             int reset = intOf(chunk, "reset_after_seconds", -1);
-            if (limit >= 0 && reset >= 0 && !allowInChunk(limit, reset, target.level().dimension().location() + "@" + target.chunkPosition().toLong())) {
+            if (limit >= 0 && reset >= 0 && !ANTI_FARMING.allowInChunk(where + "#" + index, limit, reset,
+                    target.level().dimension().location() + "@" + target.chunkPosition().toLong(), System.currentTimeMillis())) {
                 return 0;
             }
         }
@@ -248,7 +255,8 @@ public final class SkillExperience {
             int reset = intOf(entity, "reset_after_seconds", -1);
             if (limit >= 0 && reset >= 0) {
                 float damage = ctx.get("dealt_damage") instanceof Number n ? n.floatValue() : 0f;
-                float allowed = limitDamage(limit, reset, target.getUUID().toString(), damage);
+                float allowed = ANTI_FARMING.limitDamage(where + "#" + index, limit, reset,
+                        target.getUUID().toString(), damage, System.currentTimeMillis());
                 if (allowed <= 1.0E-6f) {
                     return 0;
                 }
@@ -259,46 +267,13 @@ public final class SkillExperience {
         return amount(where, data, event);
     }
 
-    private static boolean allowInChunk(int limit, int resetSeconds, String chunk) {
-        long now = System.currentTimeMillis();
-        String key = limit + "/" + resetSeconds + "@" + chunk;
-        Deque<Long> times = CHUNK_TIMES.computeIfAbsent(key, k -> new ArrayDeque<>());
-        while (!times.isEmpty() && times.peekFirst() < now) {
-            times.removeFirst();
-        }
-        if (times.size() >= limit) {
-            return false;
-        }
-        times.addLast(now + resetSeconds * 1000L);
-        return true;
+    /** Server stopping: anti-farming windows do not carry over into the next server run. */
+    public static void clearState() {
+        ANTI_FARMING.clear();
+        // parsed expressions and one-time warnings are caches of the loaded data, not player state
+        PARSED.clear();
+        WARNED.clear();
     }
-
-    private static float limitDamage(float limit, int resetSeconds, String entity, float damage) {
-        long now = System.currentTimeMillis();
-        String key = limit + "/" + resetSeconds + "@" + entity;
-        Deque<DamageAt> hits = ENTITY_DAMAGE.computeIfAbsent(key, k -> new ArrayDeque<>());
-        while (!hits.isEmpty() && hits.peekFirst().time() < now) {
-            hits.removeFirst();
-        }
-        float total = 0;
-        for (DamageAt hit : hits) {
-            total += hit.damage();
-        }
-        if (total >= limit) {
-            return 0;
-        }
-        float allowed = Math.min(damage, limit - total);
-        if (allowed > 0) {
-            hits.addLast(new DamageAt(now + resetSeconds * 1000L, allowed));
-        }
-        return allowed;
-    }
-
-    private record DamageAt(long time, float damage) {
-    }
-
-    private static final Map<String, Deque<Long>> CHUNK_TIMES = new HashMap<>();
-    private static final Map<String, Deque<DamageAt>> ENTITY_DAMAGE = new HashMap<>();
 
     private static JsonObject object(JsonObject data, String key) {
         return data.has(key) && data.get(key).isJsonObject() ? data.getAsJsonObject(key) : null;

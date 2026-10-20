@@ -44,7 +44,7 @@ public final class Rewards {
                 case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
                 case "toast" -> ProgressService.event(player, p, "toast", n.key);
-                case "scoreboard" -> scoreboard(player, rw);
+                case "scoreboard" -> scoreboard(player, p, n, rw);
                 // FTB Quests' custom reward: its effect is addon Java code; hand the claim to QuestEvents and do nothing else
                 case "custom" -> QuestEvents.fire(player, n, rw, false, -1);
                 // Kuronami's Trophies (mod-108): it gives each trophy once per player and engraves it; no dependency, only its command
@@ -100,7 +100,8 @@ public final class Rewards {
         var model = ProgressService.rules().model();
         for (var e : p.taken.entrySet()) {
             ProgressModel.Node n = model.nodes.get(e.getKey());
-            if (n != null) {
+            // a locked chapter's rewards were taken back by the lock; only open chapters put them back (PS showCategory)
+            if (n != null && ProgressRules.chapterUnlocked(p, n.chapter)) {
                 for (int rank = 0; rank < e.getValue(); rank++) {
                     List<JsonObject> list = rewardsOfRank(n, rank);
                     for (int i = 0; i < list.size(); i++) {
@@ -109,6 +110,7 @@ public final class Rewards {
                         }
                     }
                 }
+                updateScoreboard(player, p, n, e.getValue());
             }
         }
         // claimed quests, and repeatable quests claimed before (a repeat clears "claimed" and the per-reward marks).
@@ -121,7 +123,7 @@ public final class Rewards {
         });
         for (String key : claimedOnce) {
             ProgressModel.Node n = model.nodes.get(key);
-            if (n != null) {
+            if (n != null && ProgressRules.chapterUnlocked(p, n.chapter)) {
                 for (JsonObject rw : n.rewards) {
                     if (ProgressService.type(rw).equals("attribute")) {
                         attribute(player, n.key, slotOf(n, rw), rw);
@@ -159,7 +161,7 @@ public final class Rewards {
      * Takes a skill back ({@code taken} ranks of it): attribute bonuses go, each command reward runs its
      * {@code lock_command}, and tag rewards are removed, as Pufferfish's Skills does on a respec.
      */
-    static void revokeSkill(ServerPlayer player, ProgressModel.Node n, int taken) {
+    static void revokeSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
         removeAttributes(player, n);
         for (int rank = 0; rank < Math.max(1, Math.min(taken, Math.max(1, n.ranks))); rank++) {
             for (JsonObject rw : rewardsOfRank(n, rank)) {
@@ -171,6 +173,30 @@ public final class Rewards {
                     }
                 } catch (RuntimeException ex) {
                     Constants.LOG.error("Taking back a reward of {} failed: {}", n.key, ex.toString());
+                }
+            }
+        }
+        // the score is the number of still-unlocked instances of the reward's definition (PS RewardUpdateContext)
+        updateScoreboard(player, p, n, taken);
+    }
+
+    /**
+     * Pufferfish's Skills' {@code lockCategory}: the skills stay unlocked, but their rewards are taken back and every
+     * scoreboard reward goes to zero on the hidden category. {@code unlockCategory} later re-applies them through
+     * {@link #reapplyAttributes}.
+     */
+    static void revokeChapter(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
+        for (ProgressModel.Node n : c.nodes.values()) {
+            int taken = p.taken.getOrDefault(n.key, 0);
+            if (taken > 0) {
+                revokeSkill(player, p, n, taken);
+            } else if (p.claimed.contains(n.key)) {
+                removeAttributes(player, n);
+            }
+            // a locked chapter shows no score, whatever its skills still are
+            for (JsonObject rw : n.rewards) {
+                if (ProgressService.type(rw).equals("scoreboard")) {
+                    setScoreboard(player, rw, 0);
                 }
             }
         }
@@ -293,17 +319,14 @@ public final class Rewards {
                 }
             }
             default -> {
-                int rolls = intOf(table, "rolls", 1);
-                double empty = table.has("empty_weight") ? table.get("empty_weight").getAsDouble() : 0;
-                double total = empty + weights.stream().mapToDouble(Double::doubleValue).sum();
-                for (int r = 0; r < rolls && total > 0; r++) {
-                    double x = player.getRandom().nextDouble() * total - empty;
-                    for (int i = 0; i < entries.size() && x >= 0; i++) {
-                        x -= weights.get(i);
-                        if (x < 0) {
-                            give(player, p, n, entries.get(i), -1);
-                        }
-                    }
+                // FTB Quests: a random reward never rolls "empty" (only a loot crate's table uses empty_weight), and
+                // entries with weight 0 are always granted outside the rolls (2026-10-20 review)
+                boolean loot = mode.equals("loot");
+                double empty = loot && table.has("empty_weight") ? table.get("empty_weight").getAsDouble() : 0;
+                List<Integer> picks = com.kuronami.questtree.progress.RewardRoll.roll(weights, empty, loot,
+                        intOf(table, "rolls", 1), () -> player.getRandom().nextDouble());
+                for (int index : picks) {
+                    give(player, p, n, entries.get(index), -1);
                 }
             }
         }
@@ -364,7 +387,16 @@ public final class Rewards {
      * Pufferfish's Skills' scoreboard reward: set the player's score (not add to it), so claiming twice gives the same
      * number. {@code objective} is the current key; {@code scoreboard} is the name books written before it used.
      */
-    private static void scoreboard(ServerPlayer player, JsonObject rw) {
+    private static void scoreboard(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw) {
+        if (n.chapter.isSkills()) {
+            // Pufferfish's Skills' ScoreboardReward sets the count of unlocked instances of the definition
+            setScoreboard(player, rw, ProgressRules.definitionCount(p, n));
+        } else {
+            setScoreboard(player, rw, intOf(rw, "value", intOf(rw, "amount", 0)));
+        }
+    }
+
+    private static void setScoreboard(ServerPlayer player, JsonObject rw, int value) {
         String name = ProgressService.str(rw, "objective");
         if (name.isEmpty()) {
             name = ProgressService.str(rw, "scoreboard");
@@ -374,7 +406,23 @@ public final class Rewards {
         }
         var objective = player.getScoreboard().getObjective(name);
         if (objective != null) {
-            player.getScoreboard().getOrCreatePlayerScore(player, objective).set(intOf(rw, "value", intOf(rw, "amount", 0)));
+            player.getScoreboard().getOrCreatePlayerScore(player, objective).set(value);
+        }
+    }
+
+    /** Puts the scoreboard rewards of the ranks this player took back to their definition count. */
+    private static void updateScoreboard(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
+        if (!n.chapter.isSkills() || taken <= 0) {
+            return;
+        }
+        int count = ProgressRules.definitionCount(p, n);
+        int ranks = Math.max(1, Math.min(taken, Math.max(1, n.ranks)));
+        for (int rank = 0; rank < ranks; rank++) {
+            for (JsonObject rw : rewardsOfRank(n, rank)) {
+                if (ProgressService.type(rw).equals("scoreboard")) {
+                    setScoreboard(player, rw, count);
+                }
+            }
         }
     }
 

@@ -112,12 +112,15 @@ public final class ItemRequirement {
             return false;
         }
         // FTB Filter System owns the matching of its filter item; its components are the expression, not a requirement
-        if (spec.startsWith("~") || match == Match.NONE || components == null || components.isEmpty()) {
+        if (spec.startsWith("~") || match == Match.NONE) {
             return true;
         }
+        // A task with no components still means "the vanilla item", defaults included: strict and fuzzy both compare
+        // the expected stack's components, so skipping that check let a damaged or renamed item through (2026-10-20).
         ItemStack expected = expectedStack(registries);
         if (expected.isEmpty()) {
-            return false;
+            // a tag or an unreadable item has no stack to build; treat it as "no components"
+            return stack.getComponents().isEmpty();
         }
         if (match == Match.STRICT) {
             return ItemStack.isSameItemSameComponents(expected, stack);

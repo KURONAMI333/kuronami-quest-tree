@@ -68,11 +68,11 @@ final class PlayerCommands {
                 .then(Commands.literal("lock")
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
-                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, pr, false))))))
+                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, p, pr, false))))))
                 .then(Commands.literal("unlock")
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
-                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, pr, true))))))
+                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, p, pr, true))))))
                 .then(Commands.literal("points")
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
@@ -128,15 +128,27 @@ final class PlayerCommands {
 
     private static void resetAll(ServerPlayer p, PlayerProgress pr) {
         for (ProgressModel.Chapter ch : ProgressService.rules().model().chapters.values()) {
-            resetChapter(p, pr, ch);
+            for (ProgressModel.Node n : ch.nodes.values()) {
+                resetNode(p, pr, n);
+            }
         }
-        pr.recent.clear();
+        // a full reset forgets everything stored about skills, including the per-player chapter lock overrides
+        ProgressRules.clearAll(pr);
     }
 
-    /** Pufferfish's Skills' category lock/unlock: a per-player override of {@code points.unlocked_by_default}. */
-    private static void chapterOpen(CommandContext<CommandSourceStack> c, PlayerProgress pr, boolean open) {
+    /**
+     * Pufferfish's Skills' category lock/unlock: a per-player override of {@code points.unlocked_by_default}.
+     * Locking hides the chapter and takes back its rewards (attributes, scoreboard, command/tag unlocks) while keeping
+     * the skills unlocked; unlocking puts back the rewards of every open chapter (2026-10-20 review).
+     */
+    private static void chapterOpen(CommandContext<CommandSourceStack> c, ServerPlayer p, PlayerProgress pr, boolean open) {
         ProgressModel.Chapter ch = chapter(c);
         pr.chapterOpen.put(ch.id, open);
+        if (open) {
+            Rewards.reapplyAttributes(p, pr);
+        } else {
+            Rewards.revokeChapter(p, pr, ch);
+        }
     }
 
     private static void reset(ServerPlayer p, PlayerProgress pr, String id) {
@@ -154,19 +166,36 @@ final class PlayerCommands {
         for (ProgressModel.Node n : ch.nodes.values()) {
             resetNode(p, pr, n);
         }
-        String key = ProgressRules.key(ch);
-        pr.xp.remove(key);
-        pr.level.remove(key);
-        pr.spent.remove(key);
-        pr.bonus.remove(key);
-        pr.exchange.remove(ch.id);
+        // resetNode already subtracted this chapter's share of a shared spent counter; the pool's experience, level
+        // and extra points stay because they belong to every chapter in the pool (2026-10-20 review)
+        ProgressRules.resetChapterData(pr, ch);
+    }
+
+    /**
+     * Pufferfish's Skills' {@code erase_on_death}: a chapter without a pool starts over completely; a pooled chapter
+     * erases its whole pool and revokes the skills of every chapter in it, and each erased chapter also forgets its
+     * per-player lock override (2026-10-20 decision; Pufferfish's Skills has no pool equivalent).
+     */
+    static void eraseOnDeath(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch) {
+        if (!ProgressRules.isPooled(ch)) {
+            resetChapter(p, pr, ch);
+            ProgressRules.eraseChapterData(pr, ProgressService.rules().model(), ch);
+            return;
+        }
+        String pool = ProgressRules.key(ch);
+        for (ProgressModel.Chapter other : ProgressService.rules().model().chapters.values()) {
+            if (pool.equals(ProgressRules.key(other))) {
+                resetChapter(p, pr, other);
+            }
+        }
+        ProgressRules.eraseChapterData(pr, ProgressService.rules().model(), ch);
     }
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {
-        // removing an id that is not there is harmless, and repeats may have cleared "claimed"
-        Integer taken = pr.taken.get(n.key);
+        // take the node out before revoking: the scoreboard reward reads how many of its definition are still taken
+        Integer taken = pr.taken.remove(n.key);
         if (taken != null && taken > 0) {
-            Rewards.revokeSkill(p, n, taken);
+            Rewards.revokeSkill(p, pr, n, taken);
         } else {
             Rewards.removeAttributes(p, n);
         }
@@ -177,7 +206,6 @@ final class PlayerCommands {
         pr.clearNode(n.key);
         pr.repeats.remove(n.key);
         pr.cooldown.remove(n.key);
-        pr.taken.remove(n.key);
     }
 
     private static void complete(ServerPlayer p, PlayerProgress pr, String id) {
@@ -202,12 +230,13 @@ final class PlayerCommands {
         if (ch == null || !ch.isSkills()) {
             throw new IllegalArgumentException("Unknown skill chapter " + id);
         }
+        // refund before the nodes are removed: the amount is the chapter's taken nodes (2026-10-20 review)
+        ProgressRules.refundChapterSpent(pr, ch);
         for (ProgressModel.Node n : ch.nodes.values()) {
             Integer taken = pr.taken.remove(n.key);
             if (taken != null) {
-                Rewards.revokeSkill(p, n, taken);
+                Rewards.revokeSkill(p, pr, n, taken);
             }
         }
-        pr.spent.remove(ProgressRules.key(ch));
     }
 }

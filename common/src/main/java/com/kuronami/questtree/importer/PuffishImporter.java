@@ -92,6 +92,11 @@ public final class PuffishImporter {
             if (s.has("root") && s.get("root").getAsBoolean()) {
                 n.addProperty("root", true);
             }
+            // Keep the definition id: skills that share one definition share its rewards, and the scoreboard reward
+            // scores the number of unlocked skills of that definition (Pufferfish's Skills, 2026-10-20).
+            if (s.has("definition") && s.get("definition").isJsonPrimitive()) {
+                n.addProperty("definition", s.get("definition").getAsString());
+            }
             for (String k : s.keySet()) {
                 if (!Set.of("x", "y", "definition", "root").contains(k)) {
                     out.unknown("skill", k);

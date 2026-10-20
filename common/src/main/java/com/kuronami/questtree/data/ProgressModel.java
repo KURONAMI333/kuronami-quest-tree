@@ -122,6 +122,12 @@ public final class ProgressModel {
         public final String exclusiveGroup;
         public final int exclusiveMax;
         public final int ranks;
+        /**
+         * Pufferfish's Skills' {@code definition} id, kept so rewards shared by several skills can count how many of
+         * them are unlocked (its scoreboard reward uses that count, 2026-10-20). Empty for native quests and for data
+         * written before the importer carried it.
+         */
+        public final String definition;
         final List<String> requiresRaw = new ArrayList<>();
         final List<String> exclusiveWithRaw = new ArrayList<>();
         public final List<String> requires = new ArrayList<>();
@@ -165,6 +171,8 @@ public final class ProgressModel {
             this.exclusiveGroup = ex.has("group") ? ex.get("group").getAsString() : null;
             this.exclusiveMax = intOf(ex, "max", 1);
             this.ranks = o.has("ranks") && o.get("ranks").isJsonArray() ? o.getAsJsonArray("ranks").size() : 0;
+            this.definition = o.has("definition") && o.get("definition").isJsonPrimitive()
+                    ? o.get("definition").getAsString() : "";
         }
     }
 

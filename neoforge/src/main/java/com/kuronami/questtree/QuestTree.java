@@ -87,6 +87,7 @@ public class QuestTree {
                 CommonClass.onLogout(sp);
             }
         });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppingEvent e) -> CommonClass.onServerStopping());
     }
 
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {

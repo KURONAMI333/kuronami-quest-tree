@@ -82,6 +82,11 @@ public final class CommonClass {
         ProgressService.onLogout(player);
     }
 
+    /** The server is stopping: runtime-only state (anti-farming windows) is dropped. */
+    public static void onServerStopping() {
+        ProgressService.onServerStopping();
+    }
+
     public static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         ProgressCommands.register(dispatcher);
     }
