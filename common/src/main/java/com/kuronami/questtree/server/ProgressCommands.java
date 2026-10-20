@@ -1,6 +1,7 @@
 package com.kuronami.questtree.server;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.importer.FtbQuestsImporter;
@@ -60,7 +61,14 @@ public final class ProgressCommands {
                     c.getSource().sendSuccess(() -> Component.literal(ProgressData.chapterCount() + " chapters loaded"), false);
                     return ProgressData.chapterCount();
                 }))
-                .then(Commands.literal("validate").executes(ProgressCommands::validate)));
+                .then(Commands.literal("validate").executes(ProgressCommands::validate))
+                .then(Commands.literal("edit")
+                        .executes(c -> edit(c, null))
+                        .then(Commands.literal("on").executes(c -> edit(c, true)))
+                        .then(Commands.literal("off").executes(c -> edit(c, false))))
+                .then(Commands.literal("export")
+                        .then(Commands.argument("namespace", StringArgumentType.word())
+                                .executes(c -> export(c, StringArgumentType.getString(c, "namespace"))))));
         PlayerCommands.register(dispatcher);
     }
 
@@ -91,6 +99,82 @@ public final class ProgressCommands {
             src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.more", problems.size() - shown), false);
         }
         return Math.max(0, errors);
+    }
+
+    /** Turns editing mode on/off for this player; without an argument it toggles. */
+    private static int edit(CommandContext<CommandSourceStack> c, Boolean on) {
+        CommandSourceStack src = c.getSource();
+        net.minecraft.server.level.ServerPlayer player = src.getPlayer();
+        if (player == null) {
+            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.edit.player_only",
+                    "Only a player can turn editing mode on or off"));
+            return 0;
+        }
+        boolean state = on == null ? !EditorService.isEditing(player) : on;
+        EditorService.setEditing(player, state);
+        src.sendSuccess(() -> Component.translatableWithFallback(
+                state ? "commands.kuronami_quest_tree.edit.on" : "commands.kuronami_quest_tree.edit.off",
+                state ? "Quest editing is on" : "Quest editing is off"), false);
+        return state ? 1 : 0;
+    }
+
+    /**
+     * Writes the validated book as a data pack for one namespace, without enabling it or reloading. This is the way
+     * out of the world overlay: what the editor accepted becomes ordinary files an author can keep in a mod or pack.
+     */
+    private static int export(CommandContext<CommandSourceStack> c, String requested) {
+        CommandSourceStack src = c.getSource();
+        String ns = validNamespace(requested);
+        ImportOutput out = new ImportOutput(ns);
+        JsonObject bundle = ProgressData.mergedBundle();
+        JsonObject chapters = bundle.has("chapters") && bundle.get("chapters").isJsonObject()
+                ? bundle.getAsJsonObject("chapters") : new JsonObject();
+        String prefix = ns + ":";
+        int nodes = 0;
+        for (Map.Entry<String, JsonElement> e : chapters.entrySet()) {
+            if (!e.getKey().startsWith(prefix) || !e.getValue().isJsonObject()) {
+                continue;
+            }
+            JsonObject chapter = e.getValue().getAsJsonObject().deepCopy();
+            String path = e.getKey().substring(prefix.length());
+            out.chapters.put(path, chapter);
+            JsonElement chapterNodes = chapter.get("nodes");
+            if (chapterNodes != null && chapterNodes.isJsonObject()) {
+                nodes += chapterNodes.getAsJsonObject().size();
+            }
+        }
+        JsonObject tables = bundle.has("reward_tables") && bundle.get("reward_tables").isJsonObject()
+                ? bundle.getAsJsonObject("reward_tables") : new JsonObject();
+        for (Map.Entry<String, JsonElement> e : tables.entrySet()) {
+            if (e.getKey().startsWith(prefix) && e.getValue().isJsonObject()) {
+                out.tables.put(e.getKey().substring(prefix.length()), e.getValue().getAsJsonObject().deepCopy());
+            }
+        }
+        JsonElement groups = bundle.get("groups");
+        if (groups != null && groups.isJsonArray()) {
+            for (JsonElement el : groups.getAsJsonArray()) {
+                if (el.isJsonObject() && el.getAsJsonObject().has("namespace")
+                        && ns.equals(el.getAsJsonObject().get("namespace").getAsString())) {
+                    out.groups.add(el.deepCopy());
+                }
+            }
+        }
+        int nodeCount = nodes;
+        out.count("chapters", out.chapters.size());
+        out.count("nodes", nodeCount);
+        Path root = src.getServer().getWorldPath(LevelResource.DATAPACK_DIR).resolve("quest_tree_export_" + ns);
+        try {
+            out.writeTo(root);
+        } catch (IOException ex) {
+            Constants.LOG.error("Exporting progression data failed", ex);
+            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.export.failed",
+                    "Export failed: %s", ex.getMessage()));
+            return 0;
+        }
+        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.export.done",
+                "Exported %s chapters with %s nodes to %s (not enabled; review it before turning it on)",
+                out.chapters.size(), nodeCount, root.getFileName()), true);
+        return Math.max(1, nodeCount);
     }
 
     private static int importFtb(CommandContext<CommandSourceStack> c, String ns) {

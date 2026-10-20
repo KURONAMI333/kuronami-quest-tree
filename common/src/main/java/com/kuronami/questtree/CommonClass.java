@@ -1,15 +1,18 @@
 package com.kuronami.questtree;
 
+import com.kuronami.questtree.server.EditorService;
 import com.kuronami.questtree.server.ProgressCommands;
 import com.kuronami.questtree.server.ProgressData;
 import com.kuronami.questtree.server.ProgressService;
 import com.kuronami.questtree.server.SkillExperience;
 import com.kuronami.questtree.network.ActionPayload;
+import com.kuronami.questtree.network.EditorOpPayload;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 
@@ -41,9 +44,29 @@ public final class CommonClass {
         }
     }
 
+    /** The server started: the editor overlay lives inside the world that was opened. */
+    public static void onServerStarted(MinecraftServer server) {
+        EditorService.onServerStarted(server);
+    }
+
+    /** The server stopped: forget the world and every editing session. */
+    public static void onServerStopped() {
+        EditorService.onServerStopped();
+    }
+
+    /** End of a server tick: publish at most one editor rebuild for the edits made during the tick. */
+    public static void onServerTick(MinecraftServer server) {
+        EditorService.onServerTick(server);
+    }
+
     /** Server-side player tick (end of tick). */
     public static void onPlayerTick(ServerPlayer player) {
         ProgressService.onPlayerTick(player);
+    }
+
+    /** An edit request from a client in editing mode. */
+    public static void onEditorOp(ServerPlayer player, EditorOpPayload op) {
+        EditorService.onAction(player, op);
     }
 
     /** A player killed an entity. */
@@ -80,6 +103,7 @@ public final class CommonClass {
 
     public static void onLogout(ServerPlayer player) {
         ProgressService.onLogout(player);
+        EditorService.onLogout(player);
     }
 
     public static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
