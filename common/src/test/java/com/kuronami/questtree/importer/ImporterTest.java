@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ImporterTest {
@@ -147,8 +148,34 @@ class ImporterTest {
         assertTrue(out.unmapped.isEmpty(), "unmapped: " + out.unmapped);
     }
 
-    /** FTB Quests points at reward tables by a decimal long; the table files carry the same id as 16 hex digits. */
-    @org.junit.jupiter.api.Test
+    /**
+     * A chapter's {@code require_sequential_tasks} becomes the chapter default; a quest that sets its own false keeps
+     * it, and a quest without a value inherits (FTB Quests' Tristate, 2026-10-20).
+     */
+    @Test
+    void chapterSequentialDefaultIsImported(@TempDir Path tmp) throws Exception {
+        Path chapters = tmp.resolve("chapters");
+        Files.createDirectories(chapters);
+        Files.writeString(chapters.resolve("seq.snbt"), """
+                {
+                  filename: "seq"
+                  require_sequential_tasks: true
+                  quests: [
+                    {id: "1", tasks: [{id: "11", type: "checkmark"}, {id: "12", type: "checkmark"}]}
+                    {id: "2", require_sequential_tasks: false, tasks: [{id: "21", type: "checkmark"}, {id: "22", type: "checkmark"}]}
+                  ]
+                }
+                """);
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(tmp, out);
+        JsonObject ch = out.chapters.get("seq");
+        assertTrue(ch.getAsJsonObject("defaults").get("sequential_tasks").getAsBoolean());
+        JsonObject nodes = ch.getAsJsonObject("nodes");
+        assertFalse(nodes.getAsJsonObject("1").has("sequential_tasks"), "no own value: inherits the chapter");
+        assertFalse(nodes.getAsJsonObject("2").get("sequential_tasks").getAsBoolean(), "explicit false overrides");
+    }
+
+    /** FTB Quests points at reward tables by a decimal long; the table files carry the same id as 16 hex digits. */    @org.junit.jupiter.api.Test
     void tableIdMatchesTheTableFileName() {
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("6996929552069196378"));
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("6996929552069196378L"));

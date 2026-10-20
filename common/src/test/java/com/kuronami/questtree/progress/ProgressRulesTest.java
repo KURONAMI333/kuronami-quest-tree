@@ -123,6 +123,27 @@ class ProgressRulesTest {
         assertTrue(r.taskOpen(p, q, 2));
     }
 
+    /**
+     * A chapter's {@code require_sequential_tasks} applies to its quests, and a quest's own false wins over it
+     * (FTB Quests' Tristate, 2026-10-20).
+     */
+    @Test
+    void chapterSequentialDefaultIsInherited() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"s:c": {"defaults": {"sequential_tasks": true}, "nodes": {
+                  "inherit": {"tasks": [{"type": "checkmark"}, {"type": "checkmark"}]},
+                  "off": {"sequential_tasks": false, "tasks": [{"type": "checkmark"}, {"type": "checkmark"}]}
+                }}}}""").getAsJsonObject();
+        ProgressRules r = new ProgressRules(ProgressModel.of(bundle));
+        ProgressModel.Node inherit = r.model().nodes.get("s:c/inherit");
+        ProgressModel.Node off = r.model().nodes.get("s:c/off");
+        PlayerProgress p = new PlayerProgress();
+        assertTrue(inherit.sequentialTasks);
+        assertFalse(r.taskOpen(p, inherit, 1), "the chapter's rule reaches a quest without its own value");
+        assertFalse(off.sequentialTasks);
+        assertTrue(r.taskOpen(p, off, 1), "an explicit false overrides the chapter");
+    }
+
     /** Hidden quests: secret until done, until requirements are done, or until requirements are visible (recursively). */
     @Test
     void visibility() {

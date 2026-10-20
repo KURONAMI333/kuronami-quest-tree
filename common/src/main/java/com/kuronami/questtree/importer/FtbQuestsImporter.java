@@ -168,6 +168,7 @@ public final class FtbQuestsImporter {
                 case "disable_toast" -> put(o, "defaults.toast", new JsonPrimitive(!v.getAsBoolean()));
                 case "consume_items" -> put(o, "defaults.consume_items", v);
                 case "default_repeatable_quest" -> put(o, "defaults.repeatable", v);
+                case "require_sequential_tasks" -> put(o, "defaults.sequential_tasks", v);
                 default -> out.unknown("chapter", k);
             }
         }

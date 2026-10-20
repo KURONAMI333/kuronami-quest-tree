@@ -159,7 +159,8 @@ public final class ProgressModel {
             this.requireMode = req.has("mode") ? req.get("mode").getAsString() : "all";
             this.requireMin = intOf(req, "min", 0);
             this.tasksRequired = intOf(o, "tasks_required", 0);
-            this.sequentialTasks = boolOf(o, "sequential_tasks");
+            // a quest without its own value inherits the chapter's; an explicit false overrides it (FTB Quests)
+            this.sequentialTasks = boolOr(o, "sequential_tasks", boolOf(chapter.defaults, "sequential_tasks"));
             JsonObject ex = obj(o, "exclusive");
             this.exclusiveGroup = ex.has("group") ? ex.get("group").getAsString() : null;
             this.exclusiveMax = intOf(ex, "max", 1);
@@ -205,5 +206,11 @@ public final class ProgressModel {
 
     public static boolean boolOf(JsonObject o, String k) {
         return o != null && o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isBoolean() && o.get(k).getAsBoolean();
+    }
+
+    /** A boolean with a fallback: an explicit {@code false} is a value, not "unset" (FTB Quests' Tristate). */
+    public static boolean boolOr(JsonObject o, String k, boolean def) {
+        return o != null && o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isBoolean()
+                ? o.get(k).getAsBoolean() : def;
     }
 }

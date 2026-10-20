@@ -153,6 +153,8 @@ public final class ClientModel {
         /** Chapter-wide "hide dependency lines" (FTB Quests chapter default). */
         public final boolean hideLines;
         public final boolean hideDetailsByDefault;
+        /** Chapter-wide {@code require_sequential_tasks}, inherited by nodes that set no value of their own. */
+        final boolean defaultSequentialTasks;
         /** Tiles that stand for a quest of another chapter (FTB Quests quest links). */
         public final List<Link> links = new ArrayList<>();
         /** Pictures behind the map, bottom first (chapter {@code background}); empty = the plain ground. */
@@ -179,6 +181,7 @@ public final class ClientModel {
             this.hideDetailsByDefault = defaults.has("hide_details_until_startable") && defaults.get("hide_details_until_startable").isJsonPrimitive()
                     && defaults.get("hide_details_until_startable").getAsBoolean();
             this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
+            this.defaultSequentialTasks = ProgressModel.boolOf(defaults, "sequential_tasks");
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString()) : Component.literal(path);
             this.title = m.component("progression." + namespace + "." + path + ".title", fallbackTitle);
             BackgroundLayer.read(o.get("background"), background);
@@ -272,7 +275,7 @@ public final class ClientModel {
             this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             this.cost = o.has("cost") ? o.get("cost").getAsInt() : 0;
-            this.sequentialTasks = ProgressModel.boolOf(o, "sequential_tasks");
+            this.sequentialTasks = ProgressModel.boolOr(o, "sequential_tasks", ch.defaultSequentialTasks);
             this.repeatable = ProgressRules.repeatable(o);
             JsonObject req = obj(o, "requires");
             for (JsonElement r : arr(req, "nodes")) {
