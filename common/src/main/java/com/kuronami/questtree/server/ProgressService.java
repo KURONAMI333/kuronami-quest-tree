@@ -135,19 +135,23 @@ public final class ProgressService {
     public static void onKill(ServerPlayer player, Entity killed) {
         PlayerProgress p = progress(player);
         ProgressRules r = rules();
+        // which tasks may move is read before anything is bumped: one kill must not finish two sequential steps
+        List<TaskRef> hits = new ArrayList<>();
         for (ProgressModel.Node n : r.model().nodes.values()) {
             if (!working(r, p, n)) {
                 continue;
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (!r.taskOpen(p, n, i)) {
-                    continue;
-                }
-                if (type(t).equals("kill") && entityMatches(str(t, "entity"), killed.getType())) {
-                    bump(player, p, n, i, p.task(n.key, i) + 1);
+                if (r.taskOpen(p, n, i) && type(t).equals("kill") && entityMatches(str(t, "entity"), killed.getType())) {
+                    hits.add(new TaskRef(n, i));
                 }
             }
+        }
+        for (TaskRef hit : hits) {
+            ProgressModel.Node n = hit.node();
+            int i = hit.index();
+            bump(player, p, n, i, p.task(n.key, i) + 1);
         }
         SkillExperience.onKill(player, p, killed);
         recheck(player, p);
@@ -161,14 +165,19 @@ public final class ProgressService {
             return;
         }
         PlayerProgress p = progress(player);
+        List<TaskRef> hits = new ArrayList<>();
         for (TaskRef ref : refs) {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
-            if (!working(r, p, n) || !r.taskOpen(p, n, i) || !blockMatches(blockSpec(t), state)) {
-                continue;
+            if (working(r, p, n) && r.taskOpen(p, n, i) && blockMatches(blockSpec(t), state)) {
+                hits.add(ref);
             }
-            long target = ProgressRules.target(t);
+        }
+        for (TaskRef ref : hits) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            long target = ProgressRules.target(n.tasks.get(i));
             long had = p.task(n.key, i);
             if (had < target) {
                 bump(player, p, n, i, Math.min(had + 1, target));

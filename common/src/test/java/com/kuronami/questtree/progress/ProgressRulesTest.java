@@ -13,7 +13,9 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -142,6 +144,35 @@ class ProgressRulesTest {
         assertFalse(r.taskOpen(p, inherit, 1), "the chapter's rule reaches a quest without its own value");
         assertFalse(off.sequentialTasks);
         assertTrue(r.taskOpen(p, off, 1), "an explicit false overrides the chapter");
+    }
+
+    /**
+     * One event (a kill or a broken block) reads the open tasks once, before bumping any: finishing the first step
+     * must not also finish the second step in the same event (2026-10-20 review). The server applies increments in a
+     * second pass for the same reason.
+     */
+    @Test
+    void oneEventAdvancesOnlyTasksOpenWhenItStarted() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"s:c": {"defaults": {"sequential_tasks": true}, "nodes": {
+                  "q": {"tasks": [{"type": "checkmark"}, {"type": "checkmark"}]}
+                }}}}""").getAsJsonObject();
+        ProgressRules r = new ProgressRules(ProgressModel.of(bundle));
+        ProgressModel.Node q = r.model().nodes.get("s:c/q");
+        PlayerProgress p = new PlayerProgress();
+        List<Integer> open = new ArrayList<>();
+        for (int i = 0; i < q.tasks.size(); i++) {
+            if (r.taskOpen(p, q, i)) {
+                open.add(i);
+            }
+        }
+        // the event matches every checkmark task, so only the ones open at its start move
+        for (int i : open) {
+            p.setTask(q.key, i, p.task(q.key, i) + 1);
+        }
+        assertEquals(1, p.task(q.key, 0));
+        assertEquals(0, p.task(q.key, 1), "the second step was not open when the event started");
+        assertTrue(r.taskOpen(p, q, 1), "only the next event may move it");
     }
 
     /** Hidden quests: secret until done, until requirements are done, or until requirements are visible (recursively). */
