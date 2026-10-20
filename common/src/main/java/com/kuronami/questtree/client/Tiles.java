@@ -7,6 +7,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -85,11 +89,40 @@ final class Tiles {
         if (y1 <= y0 || w <= 0) {
             return;
         }
+        prepare(tex);
         RenderSystem.enableBlend();
         g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
         // the texture is addressed as if it were w x h, so a band's UVs are exact at any size
         g.blit(tex, x, y + y0, w, y1 - y0, 0, y0, w, y1 - y0, w, h);
         g.setColor(1, 1, 1, 1);
+    }
+
+    private static final Set<ResourceLocation> PREPARED = new java.util.HashSet<>();
+
+    /**
+     * Masks are drawn smooth and clamped at their edges. Without the clamp a scaled mask samples across its border into
+     * the opposite edge: a pentagon's flat, fully opaque bottom rows came back as thin lines along its top whenever the
+     * tile grew under the pointer (ATM10's star, 2026-10-20). Done in code once per texture, so a resource pack's mask
+     * without our .mcmeta behaves the same.
+     */
+    private static void prepare(ResourceLocation tex) {
+        if (!PREPARED.add(tex)) {
+            return;
+        }
+        var t = net.minecraft.client.Minecraft.getInstance().getTextureManager().getTexture(tex);
+        t.setFilter(true, false);
+        t.bind();
+        com.mojang.blaze3d.platform.GlStateManager._texParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_S,
+                org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
+        com.mojang.blaze3d.platform.GlStateManager._texParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T,
+                org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
+    }
+
+    /** Forgets everything worked out from the masks, so the next draw reads a resource pack's shapes again. */
+    static void reload() {
+        PREPARED.clear();
+        Metrics.ALL.values().forEach(Metrics::release);
+        Metrics.ALL.clear();
     }
 
     /**
@@ -130,19 +163,18 @@ final class Tiles {
     }
 
     /**
-     * A solid surface whose edge follows the shape: a darker rim, a lighter top-left, a darker bottom-right, all made
-     * from the one state colour (the player, 2026-10-19: the edge colour should come from the main colour). Four
-     * stretched copies of the same mask, so round, diamond, gear and heart work too; an earlier attempt failed only
-     * because it drew straight lines along the four sides of a rectangle.
+     * A solid surface whose edge follows the shape: a darker rim of even width, then the face with a soft light along its
+     * upper-left edge and a soft shade along its lower-right one, all from the one state colour (the player, 2026-10-19:
+     * the edge colour should come from the main colour). The rim and bevel are masks worked out from the shape's own mask
+     * ({@link Metrics}): until 2026-10-20 they were the same mask shrunk four times, and a shrunk gear, pentagon or heart
+     * is not an inset one, so the bands ran thick on one side and vanished on another (the player: "the gloss is a mess").
      */
     private static void rim(GuiGraphics g, String shape, int x, int y, int s, int face) {
-        int e = Math.max(1, s / 16);
-        // every layer is sized to end inside the rim instead of being cut with a scissor: a scissor takes screen
-        // coordinates and ignores the pose, so on the map (translated and scaled) it cut away everything but the rim
-        shape(g, shape, x, y, s, s, shade(face, 0.58f, 1f));
-        shape(g, shape, x + e, y + e, s - 2 * e, s - 2 * e, shade(face, 1.30f, 0.92f));
-        shape(g, shape, x + 2 * e, y + 2 * e, s - 3 * e, s - 3 * e, shade(face, 0.74f, 1f));
-        shape(g, shape, x + 2 * e, y + 2 * e, s - 4 * e, s - 4 * e, face);
+        Metrics m = Metrics.of(shape);
+        shape(g, shape, x, y, s, s, shade(face, 0.62f, 1f));
+        tinted(g, m.face, x, y, s, s, 0, 1, face);
+        tinted(g, m.light, x, y, s, s, 0, 1, withAlpha(shade(face, 1.22f, 0.9f), 0.85f));
+        tinted(g, m.shade, x, y, s, s, 0, 1, withAlpha(shade(face, 0.8f, 1f), 0.85f));
     }
 
     static int surfaceOf(int progress) {
@@ -191,39 +223,23 @@ final class Tiles {
 
 
     /**
-     * The blue that fills with the tasks done. Water seen from above is lighter at the surface and darker with depth, so
-     * the light tone sits on the waterline and the dark one at the bottom. Until 2026-10-20 the dark tone sat on the
-     * waterline, which read as a shadow lying on top of the water instead of a surface. With a low alpha the same shape
-     * is drawn over the icon again, so an item standing in water is tinted below the surface.
+     * The blue that fills with the tasks done, inside the rim and behind the icon: the face's own mask cut at the water
+     * level, with one lighter line on the waterline so its top reads as a surface. Until 2026-10-20 a dark band sat at
+     * the bottom of the water and the same water was drawn over the icon again at low alpha; the band read as a leftover
+     * thick bottom edge and the second pass tinted the item blue (the player: put the water behind the item).
      */
-    private static void water(GuiGraphics g, String shape, int x, int y, int s, double fraction, float alpha) {
-        int e = Math.max(1, s / 16);
-        int x0 = x + e;
-        int y0 = y + e;
-        int is = s - 2 * e;
+    private static void water(GuiGraphics g, String shape, int x, int y, int s, double fraction) {
         double f = Math.max(0, Math.min(1, fraction));
         if (f <= 0) {
             return;
         }
-        int deep = Math.max(1, s / 16);
-        shapeBottom(g, shape, x0, y0, is, is, f, withAlpha(BLUE, alpha));
-        if (f * is > 5) {
-            // the depth only shows when there is water for it: in a 4px sliver three tones turn into stripes
-            shapeBottom(g, shape, x0, y0, is, is, Math.min(f, deep / (double) is), withAlpha(BLUE_DARK, alpha));
+        Metrics m = Metrics.of(shape);
+        // the face spans the inset part of the box, so the fill is measured over that span, not the whole tile
+        double top = m.faceTop + (m.faceBottom - m.faceTop) * (1 - f);
+        tinted(g, m.face, x, y, s, s, top, 1, BLUE);
+        if (f < 1 && f * s * (m.faceBottom - m.faceTop) > 3) {
+            tinted(g, m.face, x, y, s, s, top, top + 1.0 / s, SURFACE);
         }
-        if (alpha >= 1f && f * is > 3) {
-            // 1px of the lighter tone on the waterline, so the top of the water reads as a surface and not a cut. Only
-            // on the first pass: drawn again over the icon it would look like a scratch across the item
-            shapeBand(g, shape, x0, y0, is, is, 1 - f, 1 - f + 1.0 / is, withAlpha(SURFACE, alpha));
-        }
-    }
-
-    private static void rewardFrame(GuiGraphics g, String shape, int x, int y, int s) {
-        // rewards waiting: a button before it is pressed. Bright green with a thick dark bottom edge, so it stands
-        // off the flat settled green of a claimed quest. Not a lighter green rim inside the shape (negative list
-        // section 7) and not the gold rim that was here until 2026-10-19, which the player called lame.
-        rim(g, shape, x, y, s, GREEN_BRIGHT);
-        shapeBottom(g, shape, x, y, s, s, Math.max(2, s / 8) / (double) s, GREEN_DARK);
     }
 
     static void tile(GuiGraphics g, String shape, int x, int y, int s, State state, double fraction, ItemStack icon, boolean far) {
@@ -245,15 +261,15 @@ final class Tiles {
         y -= (big - s) / 2;
         s = big;
         switch (look) {
-            // done: green. Rewards still waiting = a gold rim; claimed = flat and settled
-            case DONE_REWARD -> rewardFrame(g, shape, x, y, s);
+            // done: green. Rewards still waiting = the brighter green and the yellow notification dot; claimed = settled
+            case DONE_REWARD -> rim(g, shape, x, y, s, GREEN_BRIGHT);
             case DONE -> rim(g, shape, x, y, s, GREEN_SETTLED);
             case AFFORDABLE -> rim(g, shape, x, y, s, WHITE);
             case OPEN -> rim(g, shape, x, y, s, GREY);
             case PROGRESS -> {
                 rim(g, shape, x, y, s, GREY);
-                // the blue rises with the tasks done, inside the rim
-                water(g, shape, x, y, s, fraction, 1f);
+                // the blue rises with the tasks done, inside the rim and behind the icon
+                water(g, shape, x, y, s, fraction);
             }
             case LOCKED_FAR, LOCKED_NEAR, EXCLUDED -> rim(g, shape, x, y, s, TILE_LOCKED);
         }
@@ -262,26 +278,25 @@ final class Tiles {
             return;
         }
         if (!icon.isEmpty()) {
-            // a diamond's and a pentagon's insides are small: a full-size icon spills over their slopes. The pentagon's
-            // widest part is below its middle, so its icon sits a little lower
-            boolean penta = shape.equals("pentagon");
-            float k = s / 20f * (shape.equals("diamond") ? 0.62f : penta ? 0.8f : 1f);
-            float drop = penta ? s * 0.06f : 0;
+            // the icon fills the largest square that fits inside the shape's face, wherever that sits: a circle's or a
+            // gear's is smaller than a square's, a heart's sits low. Worked out from the mask (Metrics), so every shape
+            // and a resource pack's own shapes get an icon that stays inside them. Items leave a margin of their own,
+            // so the icon may reach a little past the square.
+            Metrics m = Metrics.of(shape);
+            float size = Math.min(s * 0.8f, s * m.inner * 1.25f);
+            float k = size / 16f;
             g.pose().pushPose();
-            float lift = look == Look.DONE_REWARD ? 0
-                    : look == Look.OPEN || look == Look.AFFORDABLE || look == Look.PROGRESS ? Math.max(1, s / 16) / 2f : 0;
-            g.pose().translate(x + s / 2f - 8 * k, y + s / 2f - 8 * k - lift + drop, 0);
+            g.pose().translate(x + s / 2f - size / 2f, y + s * m.innerCentre - size / 2f, 0);
             g.pose().scale(k, k, 1);
             g.renderItem(icon, 0, 0);
             g.pose().popPose();
         }
-        if (look == Look.PROGRESS) {
-            // the item stands in the water: the fill goes over the part below the surface, so the tile reads as depth
-            // and not as a bar clipped into the shape
-            // above the item's depth (renderItem writes depth at z+150), or the depth test drops the tint on the icon
+        if (look == Look.DONE_REWARD) {
+            // rewards waiting: the same yellow dot the chapter list and the claim badge use, on the tile's corner
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z);
-            water(g, shape, x, y, s, fraction, 0.30f);
+            float d = Math.max(5, s * 0.3f);
+            icon(g, "dot", x + s - d * 0.8f, y - d * 0.2f, d, GOLD);
             g.pose().popPose();
         }
         if (look == Look.LOCKED_FAR || look == Look.LOCKED_NEAR || look == Look.EXCLUDED) {
@@ -298,6 +313,259 @@ final class Tiles {
                 icon(g, "cross", x + (s - c) / 2f, y + (s - c) / 2f, c, RED);
             }
             g.pose().popPose();
+        }
+    }
+
+    /**
+     * How far the shape's edge is from its centre in the direction ({@code dx}, {@code dy}), as a share of the tile's
+     * size (0.5 = the box's side). Lines end their arrowheads here, so they meet a circle or a diamond where its edge is
+     * and not where its bounding box would be.
+     */
+    static float edge(String shape, double dx, double dy) {
+        Metrics m = Metrics.of(shapeOf(shape));
+        double a = Math.atan2(dy, dx);
+        int i = (int) Math.floorMod(Math.round(a / (2 * Math.PI) * Metrics.RAYS), Metrics.RAYS);
+        return m.edge[i];
+    }
+
+    /**
+     * What a mask tells about its shape, worked out once from the picture (so a resource pack's shapes get the same
+     * treatment as ours): the face inset by an even rim and its bevel bands as masks of their own, the largest square
+     * inside the face for the icon, and the edge's distance from the centre in every direction for the lines.
+     */
+    static final class Metrics {
+        static final Map<String, Metrics> ALL = new HashMap<>();
+        static final int RAYS = 72;
+        /** Rim width and bevel width, in pixels of the 128px mask (the rim is s/16 at any size). */
+        private static final float RIM = 8f;
+        private static final float BEVEL = 7f;
+
+        ResourceLocation face;
+        ResourceLocation light;
+        ResourceLocation shade;
+        /** Side of the largest square inside the face, and the height of its centre, as shares of the tile. */
+        float inner = 0.7f;
+        float innerCentre = 0.5f;
+        /** First and last rows of the face, as shares of the tile (the water fills between them). */
+        double faceTop;
+        double faceBottom = 1;
+        final float[] edge = new float[RAYS];
+        private final List<ResourceLocation> owned = new ArrayList<>();
+
+        static Metrics of(String shape) {
+            return ALL.computeIfAbsent(shape, Metrics::new);
+        }
+
+        private Metrics(String shape) {
+            java.util.Arrays.fill(edge, 0.5f);
+            ResourceLocation src = texture("shape/" + shape);
+            face = src;
+            light = src;
+            shade = src;
+            float[] a = read(src);
+            if (a == null) {
+                return;
+            }
+            int n = (int) Math.round(Math.sqrt(a.length));
+            boolean[] in = new boolean[a.length];
+            for (int i = 0; i < a.length; i++) {
+                in[i] = a[i] >= 0.5f;
+            }
+            float[] d = distance(in, n);
+            float[] fa = new float[a.length];
+            float[] la = new float[a.length];
+            float[] sa = new float[a.length];
+            float rim = RIM * n / 128f;
+            float bevel = BEVEL * n / 128f;
+            int top = n;
+            int bottom = -1;
+            for (int y = 0; y < n; y++) {
+                for (int x = 0; x < n; x++) {
+                    int i = y * n + x;
+                    // the face: the mask eroded by the rim, edges kept soft
+                    float f = Math.min(a[i], clamp01(d[i] - rim + 0.5f));
+                    fa[i] = f;
+                    if (f > 0.5f) {
+                        top = Math.min(top, y);
+                        bottom = Math.max(bottom, y);
+                    }
+                    if (f <= 0) {
+                        continue;
+                    }
+                    // the bevel: near the face's edge, lit where that edge faces up-left and shaded where it faces
+                    // down-right. The distance field rises away from the edge, so its slope points inward
+                    float gx = d[Math.min(n - 1, x + 1) + y * n] - d[Math.max(0, x - 1) + y * n];
+                    float gy = d[x + Math.min(n - 1, y + 1) * n] - d[x + Math.max(0, y - 1) * n];
+                    float len = (float) Math.hypot(gx, gy);
+                    if (len < 1e-4f) {
+                        continue;
+                    }
+                    float facing = (gx + gy) / len * 0.7071f;
+                    float band = f * clamp01(1 - (d[i] - rim) / bevel);
+                    la[i] = band * Math.max(0, facing);
+                    sa[i] = band * Math.max(0, -facing);
+                }
+            }
+            face = register(shape + "_face", fa, n);
+            light = register(shape + "_light", la, n);
+            shade = register(shape + "_shade", sa, n);
+            if (bottom >= top) {
+                faceTop = top / (double) n;
+                faceBottom = (bottom + 1) / (double) n;
+            }
+            innerSquare(d, n, rim);
+            for (int r = 0; r < RAYS; r++) {
+                double ang = r * 2 * Math.PI / RAYS;
+                double cx = n / 2.0;
+                double cy = n / 2.0;
+                float hit = 0.5f;
+                for (double t = 0; t < n; t += 0.5) {
+                    int px = (int) Math.floor(cx + Math.cos(ang) * t);
+                    int py = (int) Math.floor(cy + Math.sin(ang) * t);
+                    if (px < 0 || py < 0 || px >= n || py >= n || !in[py * n + px]) {
+                        hit = (float) (t / n);
+                        break;
+                    }
+                }
+                edge[r] = hit;
+            }
+        }
+
+        /** The largest square inside the face (all of it at least a rim away from the edge), centred across the tile. */
+        private void innerSquare(float[] d, int n, float rim) {
+            int[] sum = new int[(n + 1) * (n + 1)];
+            for (int y = 0; y < n; y++) {
+                for (int x = 0; x < n; x++) {
+                    int ok = d[y * n + x] >= rim + 1 ? 1 : 0;
+                    sum[(y + 1) * (n + 1) + x + 1] = ok + sum[y * (n + 1) + x + 1] + sum[(y + 1) * (n + 1) + x] - sum[y * (n + 1) + x];
+                }
+            }
+            for (int side = n; side > 4; side--) {
+                int x0 = (n - side) / 2;
+                int best = -1;
+                for (int y0 = 0; y0 + side <= n; y0++) {
+                    int c = sum[(y0 + side) * (n + 1) + x0 + side] - sum[y0 * (n + 1) + x0 + side] - sum[(y0 + side) * (n + 1) + x0] + sum[y0 * (n + 1) + x0];
+                    if (c == side * side && (best < 0 || Math.abs(y0 + side / 2.0 - n / 2.0) < Math.abs(best + side / 2.0 - n / 2.0))) {
+                        best = y0;
+                    }
+                }
+                if (best >= 0) {
+                    inner = side / (float) n;
+                    innerCentre = (float) ((best + side / 2.0) / n);
+                    return;
+                }
+            }
+        }
+
+        private ResourceLocation register(String name, float[] alpha, int n) {
+            com.mojang.blaze3d.platform.NativeImage img = new com.mojang.blaze3d.platform.NativeImage(n, n, true);
+            for (int y = 0; y < n; y++) {
+                for (int x = 0; x < n; x++) {
+                    int al = Math.round(clamp01(alpha[y * n + x]) * 255);
+                    img.setPixelRGBA(x, y, (al << 24) | 0xFFFFFF);
+                }
+            }
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "derived/" + name);
+            net.minecraft.client.Minecraft.getInstance().getTextureManager().register(id, new net.minecraft.client.renderer.texture.DynamicTexture(img));
+            owned.add(id);
+            return id;
+        }
+
+        void release() {
+            for (ResourceLocation id : owned) {
+                net.minecraft.client.Minecraft.getInstance().getTextureManager().release(id);
+            }
+            owned.clear();
+        }
+
+        /** The mask's alpha, 0..1, row by row; null when it is missing or not square. */
+        private static float[] read(ResourceLocation id) {
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(id);
+            if (res.isEmpty()) {
+                return null;
+            }
+            try (var is = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(is)) {
+                int n = img.getWidth();
+                if (img.getHeight() != n || n < 16) {
+                    return null;
+                }
+                float[] a = new float[n * n];
+                for (int y = 0; y < n; y++) {
+                    for (int x = 0; x < n; x++) {
+                        a[y * n + x] = ((img.getPixelRGBA(x, y) >>> 24) & 255) / 255f;
+                    }
+                }
+                return a;
+            } catch (java.io.IOException ex) {
+                Constants.LOG.warn("Could not read shape {}: {}", id, ex.toString());
+                return null;
+            }
+        }
+
+        /**
+         * Euclidean distance from every inside pixel to the nearest outside one (0 outside), Felzenszwalb's two passes.
+         * The picture's border counts as outside, so a square that fills its picture still gets a rim.
+         */
+        private static float[] distance(boolean[] in, int n) {
+            int m = n + 2;
+            float[] f = new float[m * m];
+            for (int y = 0; y < n; y++) {
+                for (int x = 0; x < n; x++) {
+                    f[(y + 1) * m + x + 1] = in[y * n + x] ? 1e9f : 0;
+                }
+            }
+            float[] col = new float[m];
+            float[] out = new float[m];
+            for (int x = 0; x < m; x++) {
+                for (int y = 0; y < m; y++) {
+                    col[y] = f[y * m + x];
+                }
+                edt1(col, out, m);
+                for (int y = 0; y < m; y++) {
+                    f[y * m + x] = out[y];
+                }
+            }
+            float[] d = new float[n * n];
+            for (int y = 0; y < m; y++) {
+                System.arraycopy(f, y * m, col, 0, m);
+                edt1(col, out, m);
+                if (y >= 1 && y <= n) {
+                    for (int x = 1; x <= n; x++) {
+                        d[(y - 1) * n + x - 1] = (float) Math.sqrt(out[x]);
+                    }
+                }
+            }
+            return d;
+        }
+
+        private static void edt1(float[] f, float[] d, int n) {
+            int[] v = new int[n];
+            float[] z = new float[n + 1];
+            int k = 0;
+            z[0] = -Float.MAX_VALUE;
+            z[1] = Float.MAX_VALUE;
+            for (int q = 1; q < n; q++) {
+                float s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2f * q - 2f * v[k]);
+                while (s <= z[k]) {
+                    k--;
+                    s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2f * q - 2f * v[k]);
+                }
+                k++;
+                v[k] = q;
+                z[k] = s;
+                z[k + 1] = Float.MAX_VALUE;
+            }
+            k = 0;
+            for (int q = 0; q < n; q++) {
+                while (z[k + 1] < q) {
+                    k++;
+                }
+                d[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
+            }
+        }
+
+        private static float clamp01(float v) {
+            return Math.max(0, Math.min(1, v));
         }
     }
 
