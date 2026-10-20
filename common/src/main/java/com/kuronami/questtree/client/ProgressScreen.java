@@ -1376,7 +1376,13 @@ public class ProgressScreen extends Screen {
         if (w <= 0) {
             return;
         }
-        Ui.surface(g, x, y, w, h, h / 2, Ui.OVERLAY_1);
+        // on the map there is nothing under it but tiles: the same glass as the other controls, so the map does not
+        // show through the text (the faint overlay used inside the rail let tile icons read through, 2026-10-20)
+        if (GlassPanel.on()) {
+            GlassPanel.render(g, GlassPanel.SEARCH, GlassPanel.Kind.REGULAR, x, y, w, h, h / 2, mouseX, mouseY);
+        } else {
+            Ui.surface(g, x, y, w, h, h / 2, Ui.PANEL_TRANSLUCENT);
+        }
         if (searchBox.isFocused()) {
             Ui.outline(g, x, y, w, h, h / 2, Ui.FOCUS);
         }
