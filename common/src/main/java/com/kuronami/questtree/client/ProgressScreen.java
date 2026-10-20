@@ -1746,10 +1746,11 @@ public class ProgressScreen extends Screen {
     private static final int MINIMAP_H = 64;
 
     /**
-     * A plan of the chapter: every quest as one small dot in its state's colour, joined by thin lines, and the part on
+     * A plan of the chapter: every quest in its own shape and state's colour, joined by thin lines, and the part on
      * screen as a frame (2026-10-20 rebuild, the player: zoomed in it read badly, squares overlapping oddly; make the
-     * shapes all the same and add the lines). It sits on the regular glass: through the clear glass the bent map behind
-     * showed between the dots and read as more squares.
+     * shapes all the same and add the lines). The shapes came back on 2026-10-20 too (the player: one round dot for
+     * every quest hid the shape that tells them apart on the map). It sits on the regular glass: through the clear
+     * glass the bent map behind showed between the tiles and read as more squares.
      */
     private void renderMinimap(GuiGraphics g, ClientModel.Chapter ch, float[] v, int mouseX, int mouseY) {
         int[] r = minimapRect(ch, v);
@@ -1789,13 +1790,19 @@ public class ProgressScreen extends Screen {
                 g.pose().popPose();
             }
         }
-        float dot = 3.5f;
         for (ClientModel.Node n : ch.nodes.values()) {
             if (!ClientProgress.visible(n.key)) {
                 continue;
             }
-            float d = dot * (float) Math.max(1, Math.min(1.6, n.size));
-            Tiles.icon(g, "dot", (float) (n.x * UNIT) * k - d / 2, (float) (n.y * UNIT) * k - d / 2, d, minimapColor(ClientProgress.state(n.key)));
+            String shape = Tiles.shapeOf(n.shape);
+            float d = Math.max(3.5f, Tiles.drawnSize(shape, (int) Math.round(NODE * n.size)) * k);
+            float cx = (float) (n.x * UNIT) * k;
+            float cy = (float) (n.y * UNIT) * k;
+            g.pose().pushPose();
+            g.pose().translate(cx - d / 2, cy - d / 2, 0);
+            g.pose().scale(d / 16f, d / 16f, 1);
+            Tiles.shape(g, shape, 0, 0, 16, 16, minimapColor(ClientProgress.state(n.key)));
+            g.pose().popPose();
         }
         g.pose().popPose();
         // the part of the chapter that is on screen
