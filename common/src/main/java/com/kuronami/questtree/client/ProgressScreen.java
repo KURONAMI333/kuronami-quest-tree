@@ -52,6 +52,11 @@ public class ProgressScreen extends Screen {
     private int railWidest;
     /** Height of a flat control (the search field, the zoom buttons). */
     private static final int BTN = 28;
+    /** Side of the title row's icon buttons (pin, search) and glyphs inside them. */
+    private static final int TITLE_BTN = BTN - 8;
+    private static final int TITLE_GLYPH = 10;
+    /** Width of the quest search field that takes the title's place in the title row. */
+    private static final int SEARCH_FIELD_W = 160;
     /** Height of the search field's EditBox; its box is drawn taller around it. */
     private static final int EDIT_H = 9;
     /**
@@ -562,7 +567,7 @@ public class ProgressScreen extends Screen {
         hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
         hoverGrow.values().removeIf(t -> t <= 0);
 
-        renderChapter(g, ch, mouseX, mouseY);
+        renderChapter(g, ch, mouseX, mouseY, partialTick);
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 50);
         if (sheetT > 0) {
@@ -1002,7 +1007,7 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
     }
 
-    private void renderChapter(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
+    private void renderChapter(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY, float partialTick) {
         float[] v = view(ch);
         stepPan(v);
         renderBackground(g, ch, v);
@@ -1165,7 +1170,7 @@ public class ProgressScreen extends Screen {
         // everything below sits above the map's item icons
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        renderHeader(g, ch, mouseX, mouseY);
+        renderHeader(g, ch, mouseX, mouseY, partialTick);
         renderMinimap(g, ch, v, mouseX, mouseY);
         renderZoomButtons(g, ch, v, mouseX, mouseY);
         g.pose().popPose();
@@ -1215,12 +1220,13 @@ public class ProgressScreen extends Screen {
      * colours and is shown in full, centred over the map's area — from the closed chapter list's edge to the screen's,
      * not the drawn rail or sheet — so opening either never moves it. A soft scrim under it keeps it readable over the
      * pack's pictures and bright tiles; it and the title sit under the rail, which is drawn later at a higher z. The pin
-     * marks the chapter for the top of the list. "Claim all" stays in the top right corner while anything without a
-     * choice waits.
+     * marks the chapter for the top of the list, and a magnifier beside it turns the row into the quest search (2026-10-20,
+     * the player: the search belongs to the title, not to the chapter list, which now has its own filter). "Claim all"
+     * stays in the top right corner while anything without a choice waits.
      */
-    private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
+    private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY, float partialTick) {
         claimRect[2] = 0;
-        int pin = BTN - 8;
+        int pin = TITLE_BTN;
         int icon = 12;
         int ty = Ui.S2 + 6;
         int left = RAIL + 4;
@@ -1231,24 +1237,40 @@ public class ProgressScreen extends Screen {
         int bw = waiting > 0 ? font.width(claimLabel) + Ui.S1 + font.width(String.valueOf(waiting)) + 2 * Ui.S2 + 4 : 0;
         int limitRight = width - Ui.S2 - (waiting > 0 ? bw + Ui.S1 : 0);
         int skillW = ch.skills ? Ui.S2 + skillHeaderWidth(ch) : 0;
-        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - pin - skillW - Ui.S2);
+        // the quest search takes the title's place while it is focused or has text (2026-10-20, the player: the search
+        // had moved into the chapter list, which now filters itself, so it comes back up to the title row)
+        boolean field = searchBox != null && (searchBox.isFocused() || !query.isBlank());
+        int searchBtn = field ? 0 : TITLE_BTN;
+        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - pin - searchBtn - skillW - Ui.S2);
         Component title = ch.title;
         int titleW = font.width(title);
-        if (titleW > maxTitleW) {
-            // last resort: a title wider than the map's room is cut, as the box used to cut it, but only then
-            title = Component.literal(trim(ch.title.getString(), maxTitleW));
-            titleW = font.width(title);
+        int contentW;
+        if (field) {
+            // about 160 GUI px, or all the room the row has on a narrow screen
+            contentW = Math.min(SEARCH_FIELD_W, maxTitleW);
+        } else {
+            if (titleW > maxTitleW) {
+                // last resort: a title wider than the map's room is cut, as the box used to cut it, but only then
+                title = Component.literal(trim(ch.title.getString(), maxTitleW));
+                titleW = font.width(title);
+            }
+            contentW = titleW;
         }
-        int gw = icon + Ui.S1 + titleW + Ui.S1 + pin + skillW;
+        int gw = icon + Ui.S1 + contentW + Ui.S1 + pin + searchBtn + skillW;
         int x = left + (avail - gw) / 2;
         if (x + gw > limitRight) {
             x = limitRight - gw;
         }
         x = Math.max(left + Ui.S2, x);
         int tx = x + icon + Ui.S1;
-        int px = tx + titleW + Ui.S1;
+        int px = tx + contentW + Ui.S1;
+        // the magnifier sits directly right of the pin; the field already holds one at its left
+        int sx = px + pin;
+        int skillX = (field ? px : sx) + pin + Ui.S2;
         int py = Ui.S2;
-        titleRect = new int[]{x, py, px + pin - x, pin};
+        titleRect = new int[]{x, py, (field ? px + pin : sx + pin) - x, pin};
+        // the details sheet slides over the row: whatever it covers neither lights up nor takes clicks
+        int open = sheetT > 0 ? sheetLeft() : width;
         // Depth, from the caller's OVERLAY_Z (the map's tiles and overlays reach up to it): scrim +10, title and its
         // controls +20, the chapter icon ends about +35, so all of it stays under the details sheet (+50) and rail (+100)
         g.pose().pushPose();
@@ -1264,21 +1286,36 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
         g.pose().pushPose();
         g.pose().translate(0, 0, 20);
-        // the component itself, shadowed: FTB Quests titles carry their own colours
-        g.drawString(font, title, tx, ty, Ui.BRIGHT, true);
+        if (field) {
+            renderQuestSearch(g, tx, py, contentW, pin, mouseX, mouseY, partialTick);
+            searchRect = new int[]{tx, py, contentW, pin};
+        } else {
+            // the component itself, shadowed: FTB Quests titles carry their own colours
+            g.drawString(font, title, tx, ty, Ui.BRIGHT, true);
+            boolean sover = mouseX >= sx && mouseX < sx + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
+            if (sover) {
+                Ui.surface(g, sx, py, pin, pin, pin / 2, Ui.OVERLAY_1);
+                pendingTip = Component.translatable("screen.kuronami_quest_tree.search");
+            }
+            Tiles.icon(g, "search", sx + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH,
+                    sover ? Ui.TEXT : Ui.DIM);
+            if (sx + pin <= open) {
+                buttons.add(new Button(sx, py, pin, pin, this::focusSearch));
+            }
+            searchRect = new int[]{sx, py, pin, pin};
+        }
         if (ch.skills) {
-            renderSkillHeader(g, ch, px + pin + Ui.S2, ty);
+            renderSkillHeader(g, ch, skillX, ty);
         }
         // the pin: gold while the chapter is pinned to the top of the list
         boolean pinned = ClientConfig.railPinned(ch.id);
-        // the details sheet slides over the row: whatever it covers neither lights up nor takes clicks
-        int open = sheetT > 0 ? sheetLeft() : width;
         boolean over = mouseX >= px && mouseX < px + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
         if (over) {
             Ui.surface(g, px, py, pin, pin, pin / 2, Ui.OVERLAY_1);
             pendingTip = Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
         }
-        Tiles.icon(g, "pin", px + (pin - 10) / 2f, py + (pin - 10) / 2f, 10, pinned ? Tiles.GOLD : over ? Ui.TEXT : Ui.DIM);
+        Tiles.icon(g, "pin", px + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH,
+                pinned ? Tiles.GOLD : over ? Ui.TEXT : Ui.DIM);
         if (px + pin <= open) {
             buttons.add(new Button(px, py, pin, pin, () -> {
                 ClientConfig.toggleRailPin(ch.id);
@@ -1313,6 +1350,47 @@ public class ProgressScreen extends Screen {
             claimRect = new int[]{bx, by, bw, bh};
         }
         g.pose().popPose();
+    }
+
+    /** Give the quest search the keyboard, and put the chapter list's field away. */
+    private void focusSearch() {
+        if (searchBox != null) {
+            setFocused(searchBox);
+            searchBox.setFocused(true);
+            if (railBox != null) {
+                railBox.setFocused(false);
+            }
+        }
+    }
+
+    /**
+     * The quest search in the title row: a rounded field with a magnifier at its left, the EditBox inside it and its
+     * match count right-aligned ("n", or "cursor/n" after Enter has walked the matches). The title is hidden while it
+     * shows; it takes the title's place and depth, so nothing about the map or the panels moves.
+     */
+    private void renderQuestSearch(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY, float partialTick) {
+        if (w <= 0) {
+            return;
+        }
+        Ui.surface(g, x, y, w, h, h / 2, Ui.OVERLAY_1);
+        if (searchBox.isFocused()) {
+            Ui.outline(g, x, y, w, h, h / 2, Ui.FOCUS);
+        }
+        int ix = x + Ui.S1;
+        Tiles.icon(g, "search", ix, y + (h - TITLE_GLYPH) / 2f, TITLE_GLYPH,
+                searchBox.isFocused() ? Ui.TEXT : Ui.MUTED);
+        String n = searching()
+                ? (matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size()) : null;
+        int countW = n == null ? 0 : font.width(n) + Ui.S1;
+        int ex = ix + TITLE_GLYPH + Ui.S1;
+        searchBox.setX(ex);
+        searchBox.setY(y + (h - EDIT_H) / 2);
+        searchBox.setWidth(Math.max(10, x + w - Ui.S2 - countW - ex));
+        searchBox.render(g, mouseX, mouseY, partialTick);
+        if (n != null) {
+            Ui.textRight(g, font, n, x + w - Ui.S2, y + (h - 8) / 2 + 1,
+                    matches.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
+        }
     }
 
     private int skillHeaderWidth(ClientModel.Chapter ch) {
@@ -2029,6 +2107,9 @@ public class ProgressScreen extends Screen {
     void tourSearch(String text) {
         if (searchBox != null) {
             searchBox.setValue(text);
+            // setValue does not run the responder, so set the search's own state the way typing would
+            query = text;
+            matchCursor = -1;
         }
     }
 
@@ -2358,6 +2439,11 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_F && Screen.hasControlDown()) {
+            // from anywhere, including the chapter list's filter: the quest search gets the title row
+            focusSearch();
+            return true;
+        }
         if (railBox != null && railBox.isFocused()) {
             if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) {
                 openFirstRailMatch();
@@ -2384,9 +2470,12 @@ public class ProgressScreen extends Screen {
             // typing goes to the box (the open key must not close the screen mid-word)
             return searchBox.keyPressed(key, scan, modifiers) || true;
         }
-        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_F && Screen.hasControlDown()) {
-            setFocused(searchBox);
-            searchBox.setFocused(true);
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE && searching()) {
+            // a second Escape (the first blurred the field) puts the title back: clearing the text does the same
+            searchBox.setValue("");
+            // setValue does not run the responder, so clear the search's own state too
+            query = "";
+            matchCursor = -1;
             return true;
         }
         if ((key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) && searching()) {
