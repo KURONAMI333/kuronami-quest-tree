@@ -1,6 +1,7 @@
 package com.kuronami.questtree.platform;
 
 import com.kuronami.questtree.platform.services.IPlatformHelper;
+import net.fabricmc.api.EnvType;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -34,6 +35,20 @@ public class FabricPlatformHelper implements IPlatformHelper {
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
         if (ServerPlayNetworking.canSend(player, payload.type())) {
             ServerPlayNetworking.send(player, payload);
+        }
+    }
+
+    @Override
+    public void openProgressionScreen() {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            ClientOnly.open();
+        }
+    }
+
+    /** Kept in its own class so a dedicated server never loads a client screen. */
+    private static final class ClientOnly {
+        static void open() {
+            net.minecraft.client.Minecraft.getInstance().setScreen(new com.kuronami.questtree.client.ProgressScreen());
         }
     }
 }

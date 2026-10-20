@@ -19,6 +19,9 @@ public interface IPlatformHelper {
     /** Sends a payload that was registered on both loaders as server-to-client. */
     void sendToPlayer(ServerPlayer player, CustomPacketPayload payload);
 
+    /** Opens the progression screen. Called from the quest book on the client only. */
+    void openProgressionScreen();
+
     default String getEnvironmentName() {
         return isDevelopmentEnvironment() ? "development" : "production";
     }

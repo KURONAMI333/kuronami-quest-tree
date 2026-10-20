@@ -1,11 +1,15 @@
 package com.kuronami.questtree;
 
 import com.kuronami.questtree.client.ClientProgress;
+import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.Item;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.neoforged.bus.api.IEventBus;
@@ -19,12 +23,29 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.registries.DeferredItem;
+import net.neoforged.neoforge.registries.DeferredRegister;
 
 @Mod(Constants.MOD_ID)
 public class QuestTree {
 
+    private static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(Constants.MOD_ID);
+
+    /** The quest book. The supplier also fills the common holder, so common code needs no loader reference. */
+    public static final DeferredItem<QuestBookItem> QUEST_BOOK = ITEMS.register("quest_book", () -> {
+        QuestBookItem item = new QuestBookItem(new Item.Properties().stacksTo(1));
+        ModItems.setQuestBook(item);
+        return item;
+    });
+
     public QuestTree(IEventBus modBus) {
         CommonClass.init();
+        ITEMS.register(modBus);
+        modBus.addListener((net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent e) -> {
+            if (e.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
+                e.accept(QUEST_BOOK);
+            }
+        });
         modBus.addListener(QuestTree::registerPayloads);
         NeoForge.EVENT_BUS.addListener(QuestTree::addReloadListener);
         NeoForge.EVENT_BUS.addListener((OnDatapackSyncEvent e) -> e.getRelevantPlayers().forEach(CommonClass::onSyncToPlayer));
