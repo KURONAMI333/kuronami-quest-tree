@@ -66,7 +66,8 @@ public final class GlassPanel {
     static final Slot SEARCH = new Slot();
     static final Slot ZOOM = new Slot();
     static final Slot MINIMAP = new Slot();
-    private static final Slot[] SLOTS = {RAIL, SHEET, SEARCH, ZOOM, MINIMAP};
+    static final Slot HEADER = new Slot();
+    private static final Slot[] SLOTS = {RAIL, SHEET, SEARCH, ZOOM, MINIMAP, HEADER};
 
     /** GUI pixels of the screen copied around the panel, so the lens can sample outside it. */
     private static final int PAD = 14;

@@ -94,10 +94,11 @@ final class DevTour {
         });
         t += 60;
         at(t - 4, DevTour::parkMouse);
+        // no chapter asked for: the screen opens on the first one in the list, fitted
         at(t, () -> open(-1));
-        shot(t + 20, "01_now");
+        shot(t + 20, "01_first_open");
         at(t + 30, () -> selectFirst(State.PROGRESS));
-        shot(t + 50, "02_now_detail");
+        shot(t + 50, "02_detail");
         if (quests != null) {
             at(t + 60, () -> open(m.chapters.indexOf(quests)));
             shot(t + 80, "03_chapter");
@@ -111,6 +112,10 @@ final class DevTour {
         if (big != null && big != quests) {
             at(t + 120, () -> open(m.chapters.indexOf(big)));
             shot(t + 140, "05_big_chapter");
+            // a node under the pointer in the big chapter: its lines in cyan and yellow, the rest stepped back
+            at(t + 142, () -> screen.tourHoverBusiest());
+            shot(t + 146, "22_big_hover");
+            at(t + 148, () -> ProgressScreen.tourHover(null));
         }
         if (skills != null) {
             at(t + 150, () -> open(m.chapters.indexOf(skills)));
@@ -182,13 +187,17 @@ final class DevTour {
             }
         });
         shot(pt + 60, "17_quest_to_recipes");
-        // the pinned block at the top of the chapter list: Now keeps the list docked open
+        // the pinned block at the top of the chapter list, held open for the photo
         at(pt + 62, () -> open(-1));
         // the developer's own pins and glass setting are put back at the end, so the tour leaves the config as it found it
         List<String> pinsBefore = new ArrayList<>(ClientConfig.railPinned());
         boolean glassBefore = ClientConfig.glass();
-        at(pt + 64, () -> screen.tourPin(2));
+        at(pt + 64, () -> {
+            screen.tourPin(2);
+            ProgressScreen.tourRailOpen(true);
+        });
         shot(pt + 68, "18_rail_pins");
+        at(pt + 69, () -> ProgressScreen.tourRailOpen(false));
         at(pt + 70, () -> {
             // the glass minimap, over a dense part of the map. The same view is shot without and with the glass so the
             // two can be put side by side
@@ -214,7 +223,28 @@ final class DevTour {
             pinsBefore.forEach(id -> ClientConfig.setRailPin(id, true));
             ClientConfig.write();
         });
-        at(pt + 94, () -> {
+        // ATM10's own chapters, to put next to the player's screenshots: Chapter 1 and the ATM Star, then the star's
+        // pentagon under the pointer (it drew lines along its top until 2026-10-20)
+        for (String[] c : new String[][]{{"mainquestline_part_1", "23_atm_chapter1"}, {"chapter_2_the_star", "24_atm_star"}}) {
+            ClientModel.Chapter atm = m.chapters.stream().filter(x -> x.id.endsWith(":" + c[0])).findFirst().orElse(null);
+            if (atm != null) {
+                int base = c[1].startsWith("23") ? pt + 96 : pt + 104;
+                at(base, () -> open(m.chapters.indexOf(atm)));
+                shot(base + 4, c[1]);
+            }
+        }
+        at(pt + 110, () -> {
+            ClientModel.Chapter ch = screen == null ? null : m.chapters.stream().filter(x -> x.id.endsWith(":chapter_2_the_star")).findFirst().orElse(null);
+            if (ch != null) {
+                ch.nodes.values().stream().filter(n -> "pentagon".equals(n.shape)).findFirst().ifPresent(n -> {
+                    ProgressScreen.tourHover(n.key);
+                    screen.tourZoomTo(n, 2.5f);
+                });
+            }
+        });
+        shot(pt + 116, "25_star_pentagon_hover");
+        at(pt + 118, () -> ProgressScreen.tourHover(null));
+        at(pt + 120, () -> {
             ProgressScreen.tourResting(false);
             Constants.LOG.info("Dev tour finished");
         });

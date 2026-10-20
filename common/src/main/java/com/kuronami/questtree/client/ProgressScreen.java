@@ -24,8 +24,7 @@ import java.util.Map;
 /**
  * The progression screen (layout of the accepted v12-v14 mocks, see _research/progression_ui/).
  * <ul>
- *   <li>"Now" first: what can be claimed or unlocked now, then what is moving, then recent events. The chapter list is
- *       docked open on this screen.</li>
+ *   <li>It opens on a chapter: the "Now" overview was dropped on 2026-10-20 (the player: all of it was wrong).</li>
  *   <li>A chapter gives the tree the whole screen. The chapter list becomes a rail that opens on hover; node details
  *       slide in from the right only while a node is selected; zoom buttons and the minimap sit bottom-right.</li>
  * </ul>
@@ -40,14 +39,13 @@ public class ProgressScreen extends Screen {
      * the zoomed-out map almost black). Since 2026-10-18 it is Discord's main surface (see {@link Ui}).
      */
     private static int SCRIM = Ui.GROUND;
-    /** The band behind the chapter title, in the ground's own tone so it covers the map without a seam. */
-    private static int FADE = 0xCC000000 | (Ui.GROUND & 0xFFFFFF);
     /** What a node the search does not match wears, so it sinks into the ground instead of going dark. */
     private static int SINK = 0xC0000000 | (Ui.GROUND & 0xFFFFFF);
 
     private static final int UNIT = 24;      // GUI px per grid unit (FTB Quests positions)
     private static final int NODE = 20;      // GUI px of a size-1 node
-    private static final int RAIL = 34;
+    /** Closed width of the chapter list: one column of icons. */
+    private static final int RAIL = 24;
     private static final int RAIL_OPEN_MIN = 150;
     /** Open width of the chapter list: as wide as its longest name needs (ATM10's names were cut to "Chapter 2:..."). */
     private int railOpenW = RAIL_OPEN_MIN;
@@ -56,27 +54,19 @@ public class ProgressScreen extends Screen {
     private static final int BTN = 28;
     /** Height of the search field's EditBox; its box is drawn taller around it. */
     private static final int EDIT_H = 9;
-    /** Height of a chapter row and its pitch; 20/22 read cramped next to the panel's own padding. */
-    private static final int RAIL_ROW = 24;
-    private static final int RAIL_PITCH = 26;
-    /** Pin slot at the right end of a chapter row: reserved in the open list, so hovering never shifts a row. */
-    private static final int RAIL_PIN_W = 16;
-    /** FTB Quests' default zoom (16): 28 GUI px per grid step, against our UNIT of 24. */
-    private static final float FTB_SCALE = 28f / 24f;
-    /** Extra room left of a fitted map, beyond the closed chapter list. */
-    private static final int FIT_LEFT = 40;
-    private static final int NOW_TILE = 32;
-    private static final int NOW_GAP = 6;
-    /** How many of a quest's rewards a Now cell shows at its right edge; the rest are in the detail sheet. */
-    private static final int NOW_REWARDS = 2;
-    /** Narrowest Now cell: the tile and room for about 20 characters of title beside it (15 read cramped, review 2026-10-16). */
-    private static final int NOW_CELL_MIN = 180;
-    /** Gap between the Now grid and the 最新 log column that holds the right edge. */
-    private static final int LOG_GAP = 12;
-    /** In-progress quests Now lists: it answers "what can I do now", and forty of them buried the claimable ones
-     *  (the player, 2026-10-19). A chapter still shows every quest. */
-    private static final int NOW_MOVING_MAX = 6;
-    private static final int DOCK_MIN_WIDTH = 560;
+    /**
+     * Height of a chapter row (rows touch, so it is also the pitch). 26 until 2026-10-20 fitted 8 rows on a 1080p screen
+     * at GUI scale 4, where FTB Quests' list fits 18 and cut no names (the player): 14 fits 16 and the names get the
+     * room the pin slot and the big icons took.
+     */
+    private static final int RAIL_ROW = 14;
+    /** Icon size in a row: 0.75 of an item, whole screen pixels per item pixel at GUI scale 4. */
+    private static final int RAIL_ICON = 12;
+    /** Left edge of a row's icon and of its label. */
+    private static final int RAIL_ICON_X = 10;
+    private static final int RAIL_TEXT_X = RAIL_ICON_X + RAIL_ICON + 6;
+    /** The smallest zoom a chapter opens at: a size-1 tile is 9 GUI px, still a readable icon. */
+    private static final float FIT_MIN = 0.45f;
     private static final float FAR = 0.6f;   // below this zoom, arrowheads and optional outlines are left out (icons stay)
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
 
@@ -115,6 +105,8 @@ public class ProgressScreen extends Screen {
     @Override
     protected void init() {
         Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
+        // a resource reload calls init on the open screen: shapes a pack replaced are measured again
+        Tiles.reload();
         imageCache.clear();
         // a resource pack change can add, drop or resize background pictures
         TEXTURE_SIZES.clear();
@@ -247,17 +239,9 @@ public class ProgressScreen extends Screen {
         }
     }
 
-    /** A tile on the Now screen: a node, or a skill chapter with points to spend. {@code allSkills} marks the one cell
-     *  that stands for every skill chapter at once (its value is the total, it opens the first). */
-    private record NowEntry(String key, ClientModel.Node node, ClientModel.Chapter pointsChapter, int points, boolean allSkills) {
-        NowEntry(String key, ClientModel.Node node, ClientModel.Chapter pointsChapter) {
-            this(key, node, pointsChapter, 0, false);
-        }
-    }
-
     /**
      * A rail entry: a group's header (title while open, a divider while closed; never clickable) or a chapter row.
-     * {@code chapter} is null on a header. Mixed heights (chapter rows use railPitch(), headers HEADER_H) keep groups
+     * {@code chapter} is null on a header. Mixed heights (chapter rows RAIL_ROW, headers HEADER_H) keep groups
      * readable the way FTB Quests' chapter list does.
      */
     private record RailRow(ClientModel.Chapter chapter, Component header) {
@@ -273,7 +257,6 @@ public class ProgressScreen extends Screen {
     /** Chapter list scroll in GUI px: shown value easing to the target the wheel sets. */
     private float railScroll;
     private float railScrollTarget;
-    private int nowScroll;
     private float railT;
     private float sheetT;
     /** Details sheet scroll: the shown value easing to the wheel's target, and the max of the last drawn frame. */
@@ -311,7 +294,6 @@ public class ProgressScreen extends Screen {
     private int lastMouseY;
     /** A quest to show once the screen is laid out (opened from an item, see {@link #openAt}). */
     private String pendingGoTo;
-    private final List<NowEntry> nowEntries = new ArrayList<>();
     private final Map<String, Integer> badges = new LinkedHashMap<>();
     /** done, visible, hidden node counts per chapter. */
     private final Map<String, int[]> chapterCounts = new LinkedHashMap<>();
@@ -355,18 +337,11 @@ public class ProgressScreen extends Screen {
         cachedFor = p;
         cachedModel = m;
         railPins = ClientConfig.railPinVersion();
-        nowEntries.clear();
         badges.clear();
         chapterCounts.clear();
         claimableNoChoice = 0;
         doneTotal = 0;
         questTotal = 0;
-        List<NowEntry> pinned = new ArrayList<>();
-        List<NowEntry> claim = new ArrayList<>();
-        List<NowEntry> points = new ArrayList<>();
-        List<NowEntry> moving = new ArrayList<>();
-        // chapters the player has started or finished something in: their startable quests come first in Now
-        java.util.Set<String> started = new java.util.HashSet<>();
         railChapters.clear();
         railRows.clear();
         railWidest = 0;
@@ -390,9 +365,6 @@ public class ProgressScreen extends Screen {
                     // completed, rewards waiting or not
                     done++;
                 }
-                if (s == State.DONE || s == State.CLAIM || s == State.PROGRESS) {
-                    started.add(c.id);
-                }
                 if (c.skills) {
                     continue;
                 }
@@ -401,15 +373,6 @@ public class ProgressScreen extends Screen {
                     if (s == State.DONE || s == State.CLAIM) {
                         doneTotal++;
                     }
-                }
-                NowEntry e = new NowEntry(n.key, n, null);
-                if (Pins.has(n.key) && s != State.DONE) {
-                    pinned.add(e);
-                } else if (s == State.CLAIM || flashes.containsKey(n.key)) {
-                    // a just-claimed tile stays where it was until its animation ends, then the list closes up
-                    claim.add(e);
-                } else if (s == State.PROGRESS) {
-                    moving.add(e);
                 }
                 if (s == State.CLAIM) {
                     badge++;
@@ -420,9 +383,7 @@ public class ProgressScreen extends Screen {
             }
             if (c.skills) {
                 badge = ClientProgress.points(c.id);
-                if (badge > 0 && hasTakeable(c)) {
-                    points.add(new NowEntry(c.id, null, c, badge, false));
-                } else {
+                if (badge <= 0 || !hasTakeable(c)) {
                     badge = 0;
                 }
             }
@@ -461,53 +422,6 @@ public class ProgressScreen extends Screen {
             lastGroup = c.group;
             railRows.add(new RailRow(c, null));
         }
-        // many skill chapters (ATM-style, Artisan Life's 11 jobs) would fill the grid with "N points" tiles: one cell
-        // stands for all of them, its value their total, and it opens the first (review 2026-10-16)
-        if (points.size() >= 2) {
-            int total = 0;
-            for (NowEntry e : points) {
-                total += e.points;
-            }
-            ClientModel.Chapter first = points.get(0).pointsChapter;
-            points.clear();
-            points.add(new NowEntry(first.id, null, first, total, true));
-        }
-        // the required path first, optional quests after it, each closest-to-done first
-        moving.sort(Comparator.comparing((NowEntry e) -> e.node.optional).thenComparingDouble(e -> -ClientProgress.fraction(e.key)));
-        // what can be started next: chapters the player is already in first, then chapter order and map position. A
-        // new world's Now was almost empty without these; six is enough to point the way without a second list.
-        List<NowEntry> open = new ArrayList<>();
-        java.util.Set<String> listed = new java.util.HashSet<>();
-        for (NowEntry e : pinned) {
-            listed.add(e.key);
-        }
-        for (NowEntry e : claim) {
-            listed.add(e.key);
-        }
-        for (NowEntry e : moving) {
-            listed.add(e.key);
-        }
-        for (ClientModel.Chapter c : m.chapters) {
-            if (c.skills || ClientProgress.chapterHidden(c.id)) {
-                continue;
-            }
-            for (ClientModel.Node n : c.nodes.values()) {
-                if (n.optional || listed.contains(n.key) || !ClientProgress.visible(n.key) || ClientProgress.state(n.key) != State.OPEN
-                        || !ClientProgress.unlocked(n.key)) {
-                    continue;
-                }
-                open.add(new NowEntry(n.key, n, null));
-            }
-        }
-        open.sort(Comparator.comparingInt((NowEntry e) -> started.contains(m.chapterOf.get(e.key).id) ? 0 : 1)
-                .thenComparingInt(e -> m.chapters.indexOf(m.chapterOf.get(e.key)))
-                .thenComparingDouble(e -> e.node.x)
-                .thenComparingDouble(e -> e.node.y));
-        nowEntries.addAll(pinned);
-        nowEntries.addAll(claim);
-        nowEntries.addAll(moving.subList(0, Math.min(moving.size(), NOW_MOVING_MAX)));
-        nowEntries.addAll(open.subList(0, Math.min(open.size(), 6)));
-        nowEntries.addAll(points);
     }
 
     private static boolean hasTakeable(ClientModel.Chapter c) {
@@ -547,25 +461,27 @@ public class ProgressScreen extends Screen {
         }
         refresh(m);
         refreshMatches(m);
-        // icon, gaps, a count like "12/127" and the pin slot beside the longest name, within a third of the screen
-        railOpenW = Mth.clamp(railWidest + 38 + 34 + RAIL_PIN_W, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width / 3));
+        // icon, gaps and a count like "12/127" beside the longest name, within two fifths of the screen
+        railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width * 2 / 5));
+        if (chapter() == null || ClientProgress.chapterHidden(chapter().id)) {
+            // no overview screen any more: open on the last chapter, or the first one listed
+            if (railChapters.isEmpty()) {
+                Ui.textCenter(g, font, Component.translatable("screen.kuronami_quest_tree.empty"), width / 2, height / 2 - 4, Ui.DIM);
+                return;
+            }
+            select(m.chapters.indexOf(railChapters.get(0)));
+        }
         ClientModel.Chapter ch = chapter();
-        // the chapter list stays open on Now, except on small screens (GUI scale 4 on 1080p is 480 wide) where the tiles need the room
-        boolean docked = ch == null && width >= DOCK_MIN_WIDTH;
         boolean overRail = mouseX < (railT > 0.5f ? railOpenW : RAIL) + 8;
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
         lastFrame = nowMs;
-        railT = docked || tourRailOpen ? 1 : Mth.clamp(railT + (overRail ? dt : -dt) / RAIL_MS, 0, 1);
+        railT = tourRailOpen ? 1 : Mth.clamp(railT + (overRail ? dt : -dt) / RAIL_MS, 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? dt : -dt) / SHEET_MS, 0, 1);
         hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
         hoverGrow.values().removeIf(t -> t <= 0);
 
-        if (ch == null) {
-            renderNow(g, m, mouseX, mouseY);
-        } else {
-            renderChapter(g, ch, mouseX, mouseY);
-        }
+        renderChapter(g, ch, mouseX, mouseY);
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 50);
         if (sheetT > 0) {
@@ -574,7 +490,7 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 100);
-        renderRail(g, m, mouseX, mouseY, docked, dt);
+        renderRail(g, m, mouseX, mouseY, dt);
         renderSearch(g, mouseX, mouseY, partialTick);
         g.pose().popPose();
         if (pendingTip != null) {
@@ -595,7 +511,7 @@ public class ProgressScreen extends Screen {
         int w = searchBox.getWidth() + 2 * Ui.S2;
         int y = height - Ui.S2 - BTN;
         // on maps it moves aside with the chapter list, so it never sits on the list's rows
-        int x = map ? railRight() + Ui.S2 : nowRight() - w;
+        int x = railRight() + Ui.S2;
         boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + BTN;
         if (GlassPanel.on()) {
             GlassPanel.render(g, GlassPanel.SEARCH, GlassPanel.Kind.REGULAR, x, y, w, BTN, Ui.R3, mouseX, mouseY);
@@ -625,44 +541,40 @@ public class ProgressScreen extends Screen {
         this.renderBlurredBackground(partialTick);
     }
 
-    private static final int RAIL_LIST_TOP = 36;
-    /** Height of a group header row in the rail; chapter rows use {@link #railPitch()} instead. */
+    private static final int RAIL_LIST_TOP = 8;
+    /** Height of a group header row in the rail; chapter rows are {@link #RAIL_ROW}. */
     private static final int HEADER_H = 14;
 
     private int railListBottom() {
         return height - 8;
     }
 
-    /**
-     * Row pitch of the chapter list. When it overflows, the pitch is stretched a little so the last visible row is cut
-     * in half: a half row says "there is more" (NN/g's illusion of completeness: lists that end on a whole row look
-     * finished). When everything fits, rows keep their normal {@link #RAIL_PITCH}.
-     */
-    private float railPitch() {
-        float h = railListBottom() - RAIL_LIST_TOP;
-        float content = 0;
-        for (RailRow row : railRows) {
-            content += row.isHeader() ? HEADER_H : RAIL_PITCH;
-        }
-        if (content <= h) {
-            return RAIL_PITCH;
-        }
-        int k = Math.max(1, (int) Math.floor(h / (float) RAIL_PITCH - 0.5f));
-        return h / (k + 0.5f);
-    }
-
     private float railMaxScroll() {
-        float content = 0;
-        for (RailRow row : railRows) {
-            content += row.isHeader() ? HEADER_H : railPitch();
-        }
-        return Math.max(0, content - (railListBottom() - RAIL_LIST_TOP) + 4);
+        return Math.max(0, railContentHeight() - (railListBottom() - RAIL_LIST_TOP) + 4);
     }
 
-    private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, boolean docked, float dt) {
+    private int railContentHeight() {
+        int content = 0;
+        for (RailRow row : railRows) {
+            content += row.isHeader() ? HEADER_H : RAIL_ROW;
+        }
+        return content;
+    }
+
+    /**
+     * The scroll as drawn: rounded to whole screen pixels. Every row sits at a whole GUI pixel inside the list and the
+     * list moves as one, so rows never round on their own. Until 2026-10-20 each row rounded its own fractional
+     * position (the pitch was stretched to cut the last row in half), so the gaps changed by a pixel while scrolling and
+     * the names shook (the player).
+     */
+    private float railScrollShown() {
+        double gs = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
+        return (float) (Math.round(railScroll * gs) / gs);
+    }
+
+    private void renderRail(GuiGraphics g, ClientModel m, int mouseX, int mouseY, float dt) {
         int w = railWidth();
-        int bg = docked ? Ui.PANEL_TRANSLUCENT
-                : railT > 0.01f ? lerpColor(Ui.RAIL_CLOSED, Ui.PANEL_TRANSLUCENT, railT) : Ui.RAIL_CLOSED;
+        int bg = railT > 0.01f ? lerpColor(Ui.RAIL_CLOSED, Ui.PANEL_TRANSLUCENT, railT) : Ui.RAIL_CLOSED;
         if (GlassPanel.on()) {
             // the glass's lit rim is its edge; a hairline on top would draw it twice
             GlassPanel.render(g, GlassPanel.RAIL, GlassPanel.Kind.REGULAR, 4, 4, w, height - 8, Ui.R4, mouseX, mouseY);
@@ -670,117 +582,105 @@ public class ProgressScreen extends Screen {
             Ui.surface(g, 4, 4, w, height - 8, Ui.R4, bg);
             Ui.outline(g, 4, 4, w, height - 8, Ui.R4, Ui.HAIRLINE);
         }
-        g.enableScissor(4, 4, 4 + w, height - 4);
-        int nowBadge = 0;
-        for (int b : badges.values()) {
-            nowBadge += b;
-        }
-        rowRail(g, 8, -1, null, Component.translatable("screen.kuronami_quest_tree.now"), w, mouseX, mouseY, nowBadge, null, null);
-        g.disableScissor();
-        // the chapter list scrolls smoothly under the Now row
         float max = railMaxScroll();
         railScrollTarget = Mth.clamp(railScrollTarget, 0, max);
         railScroll = Mth.clamp(railScroll + (railScrollTarget - railScroll) * Math.min(1, dt / 70f), 0, max);
-        float pitch = railPitch();
+        float shown = railScrollShown();
         int top = RAIL_LIST_TOP;
         int bottom = railListBottom();
         g.enableScissor(4, top, 4 + w, bottom);
-        // rows have mixed heights (chapter pitch, header HEADER_H), so walk a running y instead of indexing by pitch
-        float ry = top - railScroll;
+        g.pose().pushPose();
+        g.pose().translate(0, top - shown, 0);
+        int my = mouseY >= top && mouseY < bottom ? (int) Math.floor(mouseY - top + shown) : Integer.MIN_VALUE;
+        int ry = 0;
         for (RailRow row : railRows) {
-            float hgt = row.isHeader() ? HEADER_H : pitch;
-            if (ry >= bottom) {
+            int hgt = row.isHeader() ? HEADER_H : RAIL_ROW;
+            if (ry - shown >= bottom - top) {
                 break;
             }
-            if (row.isHeader()) {
-                drawRailHeader(g, ry, row.header(), w);
-            } else if (ry + hgt > top) {
-                ClientModel.Chapter c = row.chapter();
-                int y = Math.round(ry);
-                int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
-                String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
-                        ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
-                if (searching()) {
-                    // while searching, the rail shows where the matches are instead
-                    int hits = matchCount.getOrDefault(c.id, 0);
-                    rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, 0, String.valueOf(hits), c.id);
+            if (ry + hgt - shown > 0) {
+                if (row.isHeader()) {
+                    drawRailHeader(g, ry, row.header(), w);
                 } else {
-                    rowRail(g, y, m.chapters.indexOf(c), c.displayIcon(), c.title, w, mouseX, mouseY, badges.getOrDefault(c.id, 0),
-                            !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right, c.id);
+                    ClientModel.Chapter c = row.chapter();
+                    int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
+                    String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
+                            ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
+                    boolean hover = mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + RAIL_ROW;
+                    if (searching()) {
+                        // while searching, the rail shows where the matches are instead
+                        int hits = matchCount.getOrDefault(c.id, 0);
+                        rowRail(g, ry, m.chapters.indexOf(c), c.displayIcon(), c.title, w, hover, 0, String.valueOf(hits));
+                    } else {
+                        rowRail(g, ry, m.chapters.indexOf(c), c.displayIcon(), c.title, w, hover, badges.getOrDefault(c.id, 0),
+                                !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
+                    }
                 }
             }
             ry += hgt;
         }
+        g.pose().popPose();
         if (max > 0) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 1);
             // soft edges where rows run under, and a scrollbar that is always there while the list overflows
             if (railScroll > 1) {
-                g.fillGradient(4, top, 4 + w, top + 10, 0xCC000000 | (Ui.PANEL & 0xFFFFFF), Ui.PANEL & 0xFFFFFF);
+                g.fillGradient(4, top, 4 + w, top + 8, 0xCC000000 | (Ui.PANEL & 0xFFFFFF), Ui.PANEL & 0xFFFFFF);
             }
             if (railScroll < max - 1) {
-                g.fillGradient(4, bottom - 14, 4 + w, bottom, Ui.PANEL & 0xFFFFFF, 0xCC000000 | (Ui.PANEL & 0xFFFFFF));
+                g.fillGradient(4, bottom - 10, 4 + w, bottom, Ui.PANEL & 0xFFFFFF, 0xCC000000 | (Ui.PANEL & 0xFFFFFF));
             }
-            float h = bottom - top;
-            float content = h + max;
-            int thumb = Math.max(12, Math.round(h * h / content));
-            int ty = top + Math.round((h - thumb) * (railScroll / max));
-            boolean over = mouseX < 4 + w && mouseX >= 4 && mouseY >= top && mouseY < bottom;
-            Ui.surface(g, 4 + w - 7, ty, 3, thumb, 2, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
+            if (railT > 0.6f) {
+                float h = bottom - top;
+                float content = h + max;
+                int thumb = Math.max(12, Math.round(h * h / content));
+                int ty = top + Math.round((h - thumb) * (railScroll / max));
+                boolean over = mouseX < 4 + w && mouseX >= 4 && mouseY >= top && mouseY < bottom;
+                Ui.surface(g, 4 + w - 5, ty, 2, thumb, 1, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
+            }
             g.pose().popPose();
         }
         g.disableScissor();
     }
 
     /**
-     * One rail row. {@code badge} > 0 shows a yellow count (claimable quests, points to spend); otherwise {@code right}
-     * is a grey count, and an empty string means the chapter is complete (a green tick). {@code pinId} adds the pin
-     * slot at the row's right end: a gold pin while pinned, a grey one while the row is hovered (clicking toggles it).
+     * One rail row at list position {@code y}. {@code badge} > 0 shows a yellow count (claimable quests, points to
+     * spend); otherwise {@code right} is a grey count, and an empty string means the chapter is complete (a tick). The
+     * open chapter is one solid accent pill with bright text, the one mark of selection (2026-10-20, the player: the pale
+     * grey box together with a blue bar on the left read cheap and said the same thing twice); hover is a faint pill.
      */
-    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, int mouseX, int mouseY, int badge, String right, String pinId) {
+    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, boolean hover, int badge, String right) {
         boolean on = index == chapterIndex;
-        boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + RAIL_ROW;
-        // the row is inset inside the panel and rounded, so the selection reads as a row and not as a slice of the panel
         if (on || hover) {
-            Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, RAIL_ROW, Ui.R2, on ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
+            Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, RAIL_ROW, RAIL_ROW / 2, on ? Ui.ACCENT : Ui.OVERLAY_1);
         }
-        if (on) {
-            // Discord's mark for the open server: a short pill on the panel's left edge
-            Ui.surface(g, 4, y + 4, 3, RAIL_ROW - 8, 2, Ui.ACCENT);
-        }
-        if (icon == null) {
-            Tiles.icon(g, "now", 12, y + 6, 12, on ? Ui.TEXT : Ui.MUTED);
-        } else {
-            g.renderItem(icon, 12, y + 4);
-        }
+        g.pose().pushPose();
+        g.pose().translate(RAIL_ICON_X, y + (RAIL_ROW - RAIL_ICON) / 2f, 0);
+        g.pose().scale(RAIL_ICON / 16f, RAIL_ICON / 16f, 1);
+        g.renderItem(icon, 0, 0);
+        g.pose().popPose();
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
         if (railT <= 0.6f && badge > 0) {
             // closed rail: a dot on the icon's corner
-            Tiles.icon(g, "dot", 24, y + 5, 7, Tiles.GOLD);
+            Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, y, 6, Tiles.GOLD);
         }
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
-            // the pin slot is reserved whether or not a pin is drawn, so a hovering pin never moves the count or label
-            int slot = pinId == null ? 0 : RAIL_PIN_W;
-            int edge = w - Ui.S1 - slot;
+            int edge = w - Ui.S2;
             int rightW = 0;
+            int ty = y + (RAIL_ROW - 8) / 2;
             if (badge > 0) {
-                rightW = Ui.badge(g, font, String.valueOf(badge), edge, y + (RAIL_ROW - Ui.BADGE_H) / 2);
+                rightW = Ui.badge(g, font, String.valueOf(badge), edge + 2, y + (RAIL_ROW - Ui.BADGE_H) / 2) + 4;
             } else if (right != null && right.isEmpty()) {
-                rightW = 10;
-                Tiles.icon(g, "tick", edge - 10, y + 8, 8, Tiles.GREEN_TEXT);
+                rightW = 12;
+                Tiles.icon(g, "tick", edge - 8, y + (RAIL_ROW - 8) / 2f, 8, ((on ? Ui.BRIGHT : Tiles.GREEN_TEXT) & 0xFFFFFF) | alpha);
             } else if (right != null) {
-                rightW = font.width(right) + 4;
-                Ui.textRight(g, font, right, edge, y + 8, (Ui.DIM & 0xFFFFFF) | alpha);
+                rightW = font.width(right) + 6;
+                Ui.textRight(g, font, right, edge, ty, ((on ? Ui.BRIGHT : Ui.DIM) & 0xFFFFFF) | alpha);
             }
-            Ui.text(g, font, trim(label.getString(), w - 40 - rightW - slot), 32, y + 8, ((on ? Ui.BRIGHT : Ui.MUTED) & 0xFFFFFF) | alpha);
-            if (pinId != null) {
-                boolean pinned = ClientConfig.railPinned(pinId);
-                if (pinned || hover) {
-                    Tiles.icon(g, "pin", pinSlotLeft(w) + 2, y + 8, 9, ((pinned ? Tiles.GOLD : Ui.MUTED) & 0xFFFFFF) | alpha);
-                }
-            }
+            Ui.text(g, font, trim(label.getString(), w - RAIL_TEXT_X - Ui.S1 - rightW), RAIL_TEXT_X, ty,
+                    ((on ? Ui.BRIGHT : Ui.MUTED) & 0xFFFFFF) | alpha);
         }
         g.pose().popPose();
     }
@@ -789,370 +689,75 @@ public class ProgressScreen extends Screen {
      * A group header. Open rail: the title in grey, at the same fade the chapter labels use. Closed rail: a thin
      * divider so the groups still read as separate blocks while only icons are shown.
      */
-    private void drawRailHeader(GuiGraphics g, float y, Component title, int w) {
+    private void drawRailHeader(GuiGraphics g, int y, Component title, int w) {
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
-            String s = trim(title.getString(), w - 24);
-            Ui.text(g, font, s, 16, Math.round(y + (HEADER_H - 8) / 2f), (Ui.DIM & 0xFFFFFF) | alpha);
+            String s = trim(title.getString(), w - 2 * Ui.S2);
+            Ui.text(g, font, s, RAIL_ICON_X, y + (HEADER_H - 8) / 2 + 1, (Ui.DIM & 0xFFFFFF) | alpha);
         } else {
-            int my = Math.round(y + HEADER_H / 2f);
+            int my = y + HEADER_H / 2;
             g.fill(8, my, 4 + w - 4, my + 1, Ui.HAIRLINE);
         }
     }
 
-    // ------------------------------------------------------------------ Now
-
-    private int nowLeft() {
-        return (width >= DOCK_MIN_WIDTH ? railOpenW : RAIL) + 20;
-    }
-
-    /**
-     * Where the 最新 log column starts, which is exactly the room the details sheet opens into. Now used to shrink to
-     * the open sheet, so opening a quest moved every cell in the grid and could push the one just clicked off the edge
-     * (the player, 2026-10-19). The sheet covers the log instead, and the grid stays where it was.
-     */
-    private int nowLogLeft() {
-        return width - sheetWidth();
-    }
-
-    private int nowLogRight() {
-        return width - 12;
-    }
-
-    private int nowRight() {
-        return nowLogLeft() - LOG_GAP;
-    }
-
-    /**
-     * Now is a grid of cells: the tile, its title in white and its chapter in grey beside it, so what each tile is can
-     * be read without hovering (2026-10-15 review: a row of same-coloured tiles said nothing about which quest is which).
-     */
-    private int nowCols() {
-        return Math.max(1, (nowRight() - nowLeft() + NOW_GAP) / (NOW_CELL_MIN + NOW_GAP));
-    }
-
-    private int nowCellWidth() {
-        int cols = nowCols();
-        return (nowRight() - nowLeft() + NOW_GAP) / cols - NOW_GAP;
-    }
-
-    private void renderNow(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
-        int left = nowLeft();
-        // the title at the font's own size, like the chapter header (drawn twice as large it crowded the grid)
-        Component title = Component.translatable("screen.kuronami_quest_tree.now");
-        Ui.text(g, font, title, left, 11, Ui.TEXT);
-        int tx = left + font.width(title) + Ui.S2;
-        if (questTotal > 0) {
-            Ui.text(g, font, doneTotal + "/" + questTotal, tx, 22, Ui.MUTED);
-        }
-        if (claimableNoChoice > 0) {
-            Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
-            int bw = font.width(ca) + 2 * Ui.S2;
-            button(g, ca, nowRight() - bw, 8, bw, Tiles.GOLD, true, mouseX, mouseY, () -> {
-                ClientProgress.send("claim_all", "", -1);
-                long start = Util.getMillis();
-                int i = 0;
-                for (NowEntry e : nowEntries) {
-                    if (e.node != null && ClientProgress.state(e.key) == State.CLAIM && e.node.choice.isEmpty()) {
-                        // one tile after another, 140ms apart
-                        flashes.put(e.key, start + 140L * i++);
-                    }
-                }
-            });
-        }
-        int top = 44;
-        // the log column has room of its own now, so the grid runs to the bottom edge (2026-10-19)
-        int bottom = height - 34;
-        int cols = nowCols();
-        int cellW = nowCellWidth();
-        int rows = (nowEntries.size() + cols - 1) / cols;
-        int rowH = NOW_TILE + NOW_GAP;
-        nowScroll = Mth.clamp(nowScroll, 0, Math.max(0, rows * rowH - (bottom - top)));
-        g.enableScissor(left - 4, top - 4, nowRight() + 4, bottom);
-        // a hairline under every row but the last: the grid's rows read as rows, as in FTB Quests' reward list
-        // (the player compared the two lists, 2026-10-19). Drawn before the cells so a hover card covers it.
-        for (int r = 0; r < rows - 1; r++) {
-            int ly = top + r * rowH + NOW_TILE + NOW_GAP / 2 - nowScroll;
-            if (ly >= top && ly < bottom) {
-                g.fill(left, ly, nowRight(), ly + 1, Ui.HAIRLINE);
-            }
-        }
-        long now = Util.getMillis();
-        for (int i = 0; i < nowEntries.size(); i++) {
-            NowEntry e = nowEntries.get(i);
-            int x = left + (i % cols) * (cellW + NOW_GAP);
-            int y = top + (i / cols) * rowH - nowScroll;
-            if (y + NOW_TILE < top - 4 || y > bottom) {
-                continue;
-            }
-            boolean hover = mouseX >= x && mouseX < x + cellW && mouseY >= y && mouseY < y + NOW_TILE && mouseY < bottom;
-            if (e.key.equals(selected) || hover) {
-                // the whole cell is the target; selected = a lighter card behind it, hover = a fainter one
-                Ui.surface(g, x - 3, y - 3, cellW + 6, NOW_TILE + 6, Ui.R3, e.key.equals(selected) ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
-            }
-            renderNowRewards(g, e, x + cellW, y);
-            renderNowText(g, e, x + NOW_TILE + 8, y, cellW - NOW_TILE - 8 - nowRewardsWidth(e));
-            if (e.pointsChapter != null) {
-                Tiles.tile(g, "rsquare", x, y, NOW_TILE, Tiles.Look.AFFORDABLE, 1, e.pointsChapter.displayIcon(), false);
-                g.pose().pushPose();
-                g.pose().translate(0, 0, OVERLAY_Z);
-                String pts = String.valueOf(e.points);
-                Ui.textRight(g, font, pts, x + NOW_TILE - 3, y + NOW_TILE - 10, Tiles.GOLD);
-                g.pose().popPose();
-            } else {
-                Tiles.tile(g, e.node.shape, x, y, NOW_TILE, ClientProgress.look(e.key), Motion.fill(e.key, ClientProgress.fraction(e.key)), ClientProgress.iconFor(e.node), false);
-                if (Pins.has(e.key)) {
-                    g.pose().pushPose();
-                    g.pose().translate(0, 0, OVERLAY_Z);
-                    g.fill(x + 3, y + 3, x + 7, y + 7, Ui.MARK);
-                    g.pose().popPose();
-                }
-            }
-            flash(g, e.key, x, y, NOW_TILE, now);
-        }
-        g.disableScissor();
-        int gridH = bottom - top;
-        if (rows * rowH > gridH) {
-            // a track under the thumb as well: a bare 3px thumb on the screen's edge was not read as a scrollbar, and
-            // nothing said the grid went on below (the player, 2026-10-19)
-            Ui.surface(g, nowRight() + 4, top, 5, gridH, 3, Ui.OVERLAY_1);
-            int barH = Math.max(12, gridH * gridH / (rows * rowH));
-            int barY = top + (gridH - barH) * nowScroll / Math.max(1, rows * rowH - gridH);
-            Ui.surface(g, nowRight() + 4, barY, 5, barH, 3, Ui.SCROLLBAR);
-            g.pose().pushPose();
-            g.pose().translate(0, 0, OVERLAY_Z);
-            g.fillGradient(left - 4, bottom - 24, nowRight() + 6, bottom, 0x00000000, Ui.GROUND);
-            g.pose().popPose();
-        }
-        renderLog(g, m, mouseX, mouseY);
-    }
-
-    /**
-     * What a quest gives, at the right edge of its cell. FTB Quests' reward list shows the reward's own item beside the
-     * title (the player compared the two lists, 2026-10-19); our cells only said what the quest is, never what it gives.
-     * Two at most: a third would eat the title. A choice reward is one chest in the model, and its options are in the
-     * detail sheet where they can be picked.
-     */
-    private void renderNowRewards(GuiGraphics g, NowEntry e, int right, int y) {
-        List<ItemStack> rs = e.node == null ? List.of() : e.node.rewards;
-        int n = Math.min(NOW_REWARDS, rs.size());
-        for (int i = 0; i < n; i++) {
-            ItemStack s = rs.get(i);
-            int ix = right - (n - i) * 18;
-            int iy = y + (NOW_TILE - 16) / 2;
-            g.renderItem(s, ix, iy);
-            g.renderItemDecorations(font, s, ix, iy);
-        }
-    }
-
-    private int nowRewardsWidth(NowEntry e) {
-        List<ItemStack> rs = e.node == null ? List.of() : e.node.rewards;
-        int n = Math.min(NOW_REWARDS, rs.size());
-        return n == 0 ? 0 : n * 18 + 4;
-    }
-
-    /** Title (white) and chapter (grey) beside a Now tile; a skill chapter shows its points to spend in gold. */
-    private void renderNowText(GuiGraphics g, NowEntry e, int x, int y, int w) {
-        Component title;
-        Component sub;
-        int subColor = Ui.MUTED;
-        if (e.pointsChapter != null) {
-            // the one cell for every skill chapter cannot show a single chapter's title
-            title = e.allSkills ? Component.translatable("screen.kuronami_quest_tree.now.skill_points") : e.pointsChapter.title;
-            sub = pointsLabel(e.points);
-            subColor = Tiles.GOLD;
-        } else {
-            title = e.node.title;
-            ClientModel.Chapter c = model().chapterOf.get(e.key);
-            sub = c == null ? Component.empty() : c.title;
-        }
-        Ui.text(g, font, trim(plain(title), w), x, y + 5, Ui.TEXT);
-        Ui.text(g, font, trimChapter(plain(sub), w), x, y + 18, subColor);
-    }
-
-    /**
-     * A title or chapter as plain text: imported titles carry FTB Quests colour codes, and a grid of them read as
-     * scattered colours rather than as a list (the player, comparing our list with FTB Quests', 2026-10-19). The colour
-     * still shows on the map's chapter title, where one title at a time is read.
-     */
-    private static String plain(Component c) {
-        return net.minecraft.ChatFormatting.stripFormatting(c.getString());
-    }
-
-    /** "%s points", but "%s point" in the singular: "1 points" read wrong (review 2026-10-16). */
-    private static Component pointsLabel(int n) {
-        return Component.translatable(n == 1 ? "screen.kuronami_quest_tree.points_one" : "screen.kuronami_quest_tree.points", n);
-    }
-
-    /** A chapter name in a narrow cell: "Chapter 1: The Beginning" reads as "The Beginning" rather than "Chapter 1: T...". */
-    private String trimChapter(String s, int w) {
-        if (font.width(s) <= w) {
-            return s;
-        }
-        int colon = s.indexOf(": ");
-        return trim(colon >= 0 ? s.substring(colon + 2) : s, w);
-    }
-
-    /** Rows the 最新 log holds: its own column, not the strip it used to share with the grid. */
-    private int logRows() {
-        return Math.max(3, (height - 60) / 16);
-    }
-
-    /**
-     * The 最新 log in the column at the right of Now: one line per event, tight rows, the time in its own dim column at
-     * the left and the event in its own colour after it. On the strip under the grid the time and the event were drawn
-     * in the same grey and read alike (the player, 2026-10-19). A completion the claim follows straight away collapses
-     * into the claim line: with automatic claiming, one quest filled two rows with the same name.
-     */
-    private void renderLog(GuiGraphics g, ClientModel m, int mouseX, int mouseY) {
-        PlayerProgress p = ClientProgress.progress();
-        List<String> recent = new ArrayList<>(p.recent);
-        int x = nowLogLeft();
-        int right = nowLogRight();
-        int top = 44;
-        Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.recent"), x, top - 14, Ui.DIM);
-        g.fill(x - 6, top - 16, x - 5, height - 10, Ui.HAIRLINE);
-        int ry = top + 6;
-        int shown = 0;
-        long now = System.currentTimeMillis();
-        for (int i = 0; i < recent.size() && shown < logRows(); i++) {
-            String[] parts = recent.get(i).split("\\|");
-            if (parts.length < 3) {
-                continue;
-            }
-            if (parts[0].equals("complete") && i > 0 && isClaimOf(recent.get(i - 1), parts[1])) {
-                continue;
-            }
-            // the same event over and over (a skill levelling in bursts) filled the whole column with one line: collapse
-            // a run of identical rows into one with a count, the way a log repeats itself (2026-10-19)
-            int same = 1;
-            while (i + same < recent.size() && sameRow(recent.get(i + same), parts)) {
-                same++;
-            }
-            ClientModel.Node n = m.nodesByKey.get(parts[1]);
-            ClientModel.Chapter c = n != null ? m.chapterOf.get(parts[1])
-                    : chapterById(m, parts[1].endsWith("/") ? parts[1].substring(0, parts[1].length() - 1) : "");
-            Component name = n != null ? n.title : c != null ? c.title : Component.literal(parts[1]);
-            Component verb = Component.translatable("event.kuronami_quest_tree." + parts[0]);
-            int vw = font.width(verb);
-            String count = same > 1 ? "\u00d7" + same : "";
-            int cw = count.isEmpty() ? 0 : font.width(count) + 5;
-            String nameS = trim(name.getString(), right - x - 44 - vw - cw);
-            boolean hover = mouseX >= x - 4 && mouseX < right && mouseY >= ry - 2 && mouseY < ry + 14;
-            if (hover) {
-                Ui.surface(g, x - 4, ry - 2, right - x + 4, 16, Ui.R2, Ui.OVERLAY_1);
-            }
-            g.pose().pushPose();
-            g.pose().translate(0, 0, OVERLAY_Z);
-            Ui.textRight(g, font, ago(now - parseLong(parts[2])), x + 26, ry + 4, Ui.DIM);
-            Ui.text(g, font, verb, x + 34, ry + 4, verbColour(parts[0]));
-            Ui.text(g, font, nameS, x + 40 + vw, ry + 4, Ui.TEXT);
-            if (!count.isEmpty()) {
-                Ui.text(g, font, count, x + 40 + vw + font.width(nameS) + 5, ry + 4, Ui.DIM);
-            }
-            g.pose().popPose();
-            ry += 16;
-            shown++;
-            i += same - 1;
-        }
-        if (sheetT > 0) {
-            // the details sheet opens over this column: hide the log under it, or two sets of rows read through each
-            // other on the translucent sheet (the detail shot, 2026-10-19)
-            g.fill(sheetLeft(), 0, width, height, Ui.GROUND);
-        }
-    }
-
-    /** True when a later row is the same event for the same quest. */
-    private static boolean sameRow(String row, String[] first) {
-        String[] parts = row.split("\\|");
-        return parts.length >= 3 && parts[0].equals(first[0]) && parts[1].equals(first[1]);
-    }
-
-    /** True when {@code newer} is the claim of the same quest as {@code key}. */
-    private static boolean isClaimOf(String newer, String key) {
-        String[] parts = newer.split("\\|");
-        return parts.length >= 3 && parts[0].equals("claim") && parts[1].equals(key);
-    }
-
-    /** The colour of an event's own word in 最新: what happened, told apart at a glance from the grey time beside it. */
-    private static int verbColour(String kind) {
-        return switch (kind) {
-            case "claim" -> Tiles.GOLD;
-            case "complete" -> Tiles.GREEN_TEXT;
-            case "submit" -> Tiles.BLUE;
-            default -> Ui.MUTED;
-        };
-    }
-
-    private static ClientModel.Chapter chapterById(ClientModel m, String id) {
-        for (ClientModel.Chapter c : m.chapters) {
-            if (c.id.equals(id)) {
-                return c;
-            }
-        }
-        return null;
-    }
-
-    private static long parseLong(String s) {
-        try {
-            return Long.parseLong(s);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
-    private static String ago(long ms) {
-        long s = Math.max(0, ms / 1000);
-        if (s < 60) {
-            return Component.translatable("screen.kuronami_quest_tree.ago_s", s).getString();
-        }
-        if (s < 3600) {
-            return Component.translatable("screen.kuronami_quest_tree.ago_m", s / 60).getString();
-        }
-        if (s < 86400) {
-            return Component.translatable("screen.kuronami_quest_tree.ago_h", s / 3600).getString();
-        }
-        return Component.translatable("screen.kuronami_quest_tree.ago_d", s / 86400).getString();
-    }
-
-    // ------------------------------------------------------------------ chapter map
+    // ------------------------------------------------------------------ map
 
     private float[] view(ClientModel.Chapter ch) {
         return VIEWS.computeIfAbsent(ch.id, k -> fitView(ch));
     }
 
+    /**
+     * The view a chapter opens at: the whole tree, its pictures included, in the room between the closed chapter list,
+     * the header and the controls at the bottom, centred. Until 2026-10-20 it never went below FTB Quests' default
+     * zoom, so a big chapter (ATM10's star, 127 quests) opened on its middle at full size and a small one at a size
+     * that had nothing to do with it (the player: open at a scale that shows the tree, per chapter). Small trees still
+     * stop growing at 1.5, and huge ones at {@link #FIT_MIN}, where the tiles still read.
+     */
     private float[] fitView(ClientModel.Chapter ch) {
         double[] b = bounds(ch);
-        // a margin on the left: a pointer that overshoots a tile at the very edge would open the chapter list over it
-        float availW = width - RAIL - 24 - FIT_LEFT;
-        float availH = height - 40;
-        float fit = (float) Math.min(availW / (b[2] - b[0] + 2 * UNIT), availH / (b[3] - b[1] + 2 * UNIT));
-        // never smaller than FTB Quests' default (a big book opens at the size its author laid it out, centred, as in FTB
-        // Quests; shrinking ATM10's 127-quest chapter to fit made every tile tiny); small chapters still grow to fill
-        float z = Mth.clamp(fit, FTB_SCALE, 1.5f);
+        float left = RAIL + 4 + Ui.S3;
+        float top = Ui.S2 + BTN + Ui.S2;
+        float right = width - Ui.S3;
+        float bottom = height - BTN - Ui.S2 - Ui.S2;
+        float availW = Math.max(40, right - left);
+        float availH = Math.max(40, bottom - top);
+        float fit = (float) Math.min(availW / Math.max(1, b[2] - b[0]), availH / Math.max(1, b[3] - b[1]));
+        float z = Mth.clamp(fit, FIT_MIN, 1.5f);
         float cx = (float) (b[0] + b[2]) / 2f;
         float cy = (float) (b[1] + b[3]) / 2f;
-        return new float[]{RAIL + 12 + FIT_LEFT + availW / 2f - cx * z, 30 + availH / 2f - cy * z, z};
+        return new float[]{left + availW / 2f - cx * z, top + availH / 2f - cy * z, z};
     }
 
-    private static double[] bounds(ClientModel.Chapter ch) {
-        double minX = 0;
-        double minY = 0;
-        double maxX = 0;
-        double maxY = 0;
-        boolean first = true;
+    /**
+     * What a chapter covers in map units: every visible tile with its own size, and every picture the chapter shows,
+     * so a fitted view and the minimap take in the whole page as its author laid it out.
+     */
+    private double[] bounds(ClientModel.Chapter ch) {
+        double minX = Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE;
+        double maxY = -Double.MAX_VALUE;
         for (ClientModel.Node n : ch.nodes.values()) {
-            double x = n.x * UNIT;
-            double y = n.y * UNIT;
-            if (first) {
-                minX = maxX = x;
-                minY = maxY = y;
-                first = false;
+            if (!ClientProgress.visible(n.key)) {
+                continue;
             }
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
+            double half = NODE * n.size / 2.0;
+            minX = Math.min(minX, n.x * UNIT - half);
+            minY = Math.min(minY, n.y * UNIT - half);
+            maxX = Math.max(maxX, n.x * UNIT + half);
+            maxY = Math.max(maxY, n.y * UNIT + half);
+        }
+        for (ClientModel.Decoration d : ch.decorations) {
+            if (!decorationVisible(d)) {
+                continue;
+            }
+            minX = Math.min(minX, (d.x - d.w / 2) * UNIT);
+            minY = Math.min(minY, (d.y - d.h / 2) * UNIT);
+            maxX = Math.max(maxX, (d.x + d.w / 2) * UNIT);
+            maxY = Math.max(maxY, (d.y + d.h / 2) * UNIT);
+        }
+        if (minX > maxX) {
+            return new double[]{0, 0, 0, 0};
         }
         return new double[]{minX, minY, maxX, maxY};
     }
@@ -1169,28 +774,30 @@ public class ProgressScreen extends Screen {
     static int LINE_CLOSED = 0xFF797E89;
     /** The closed line on a node under the mouse: brighter than {@link #LINE_OPEN}, which is brighter than closed. */
     static int LINE_CLOSED_ON = 0xFFA9AFB9;
+    /** Into the focused node (what it needs) and out of it (what it opens): the 2026-10-16 pair, cyan and yellow. */
+    static int LINE_REQUIRES = 0xFF5BC8E8;
+    static int LINE_UNLOCKS = 0xFFF2C230;
+    /** The dark edge on both sides of every line and arrowhead, in the ground's colour. */
+    static int LINE_CASING_COLOR = 0xE6313338;
     /**
-     * One width for every state (proposal C), one step up from the 2 units of the 2026-10-16 rebuild: FTB Quests' line
-     * on ATM10 measured 6-8 px against our 4-5 px at the same zoom (the two screenshots the player compared, 2026-10-19).
-     * The map is drawn in map units, so the width grows with the zoom along with the tiles.
+     * Line, casing and arrowhead in map units (they grow with the zoom along with the tiles), and the least each may
+     * shrink to on screen in GUI pixels, so zooming out never leaves a hairline or drops the arrowhead.
      */
-    private static final float LINE_W = 3;
-    private static final float LINE_W_ON = 4.5f;
-    /** Arrowhead size (map units) and how long one slide along a highlighted line takes. */
-    private static final float ARROW = 7;
-    private static final float ARROW_ON = 8;
-    private static final float SLIDE_MS = 1400;
-    /** How far an arrowhead stays from the edge of a tile it stands between, in map units. */
-    private static final float ARROW_PAD = 1.5f;
-    /** Zoomed out no arrowhead is drawn, so no free stretch is measured either. */
-    private static final float[] NO_RUNS = new float[0];
+    private static final float LINE_W = 2.5f;
+    private static final float LINE_CASING = 1.25f;
+    private static final float ARROW = 8;
+    private static final float LINE_MIN_PX = 1.5f;
+    private static final float CASING_MIN_PX = 1f;
+    private static final float ARROW_MIN_PX = 6f;
+    /** How far an arrowhead's tip stays from the edge of the tile it points at, in map units. */
+    private static final float ARROW_PAD = 1f;
 
     /** Colours worked out from the palette, refreshed when it is read again. */
     static void paletteChanged() {
         SCRIM = Ui.GROUND;
-        FADE = 0xCC000000 | (Ui.GROUND & 0xFFFFFF);
         SINK = 0xC0000000 | (Ui.GROUND & 0xFFFFFF);
         LINE_WALKED = Tiles.GREEN;
+        LINE_CASING_COLOR = 0xE6000000 | (Ui.GROUND & 0xFFFFFF);
     }
 
     private static int lineColor(State parent, State child) {
@@ -1307,8 +914,7 @@ public class ProgressScreen extends Screen {
         ClientModel cm = model();
         String focus = hoveredNode != null ? hoveredNode : selected;
         Map<String, Integer> depth = depths(ch);
-        // the tiles hide whatever passes behind them, so the lines know where they are actually visible
-        float[] occ = far ? NO_RUNS : occluderBoxes(ch, cm);
+        List<LineDraw> lines = new ArrayList<>();
         for (ClientModel.Node n : ch.nodes.values()) {
             if (ch.hideLines || n.hideLinesToRequired || !ClientProgress.visible(n.key)) {
                 continue;
@@ -1329,13 +935,28 @@ public class ProgressScreen extends Screen {
                     }
                 }
                 int lc = lineColor(ClientProgress.state(p.key), cs);
-                boolean on = focus != null && (n.key.equals(focus) || p.key.equals(focus));
-                // the way just opened: colour runs in from the earlier node with the arrow at its head (300ms)
+                // around the node under the pointer (or the selected one): what it needs in one colour, what it opens in
+                // another, everything else stepped back, so crossing and converging lines can be told apart
+                int role = focus == null ? 0 : n.key.equals(focus) ? 1 : p.key.equals(focus) ? 2 : 3;
+                // the way just opened: colour runs in from the earlier node, the arrowhead at its front (300ms)
                 float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW);
-                if (ELBOW_LINES) {
-                    elbowLine(g, p, n, on ? brighter(lc) : lc, on, grow >= 0 ? grow : -1, far, ch.skills);
-                } else {
-                    arrowLine(g, p, n, on ? brighter(lc) : lc, on, grow >= 0 ? grow : -1, far, now, occ);
+                LineDraw l = lineGeometry(p, n, lc, role, grow >= 0 ? grow : -1, v[2]);
+                if (l != null) {
+                    lines.add(l);
+                }
+            }
+        }
+        // casings under every core, so a line crossing another keeps a dark gap on both sides; the lines around the
+        // focus go last, on top of the rest
+        for (int pass = 0; pass < 2; pass++) {
+            for (LineDraw l : lines) {
+                if ((l.role == 1 || l.role == 2) == (pass == 1)) {
+                    drawLine(g, l, true);
+                }
+            }
+            for (LineDraw l : lines) {
+                if ((l.role == 1 || l.role == 2) == (pass == 1)) {
+                    drawLine(g, l, false);
                 }
             }
         }
@@ -1358,8 +979,11 @@ public class ProgressScreen extends Screen {
                 Tiles.ring(g, shape, x - ro - 3, y - ro - 3, rs + 6, rs + 6, Ui.SELECTION);
             }
             if (n.optional && !far) {
-                // optional quests: a broken outline, so they read as "extra" next to the required path
-                dashedOutline(g, x - 2, y - 2, s + 4, s + 4, Ui.OPTIONAL_OUTLINE);
+                // optional quests: a faint outline that follows the tile's shape (a dashed square until 2026-10-20 sat
+                // around circles and diamonds as a box and looked like a stray frame)
+                int os = Tiles.drawnSize(shape, s + grow);
+                int oo = (os - s) / 2;
+                Tiles.ring(g, shape, x - oo - 2, y - oo - 2, os + 4, os + 4, Ui.OPTIONAL_OUTLINE);
             }
             Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)),
                     ClientProgress.iconFor(n), false);
@@ -1369,7 +993,9 @@ public class ProgressScreen extends Screen {
                 // the unfinished requirements on the way to the selected node
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z + 15);
-                dashedOutline(g, x - 3, y - 3, s + 6, s + 6, Ui.SELECTION);
+                int ps = Tiles.drawnSize(shape, s);
+                int po = (ps - s) / 2;
+                Tiles.ring(g, shape, x - po - 3, y - po - 3, ps + 6, ps + 6, Tiles.withAlpha(Ui.SELECTION, 0.55f));
                 g.pose().popPose();
             }
             if (searching() && !matchSet.contains(n.key)) {
@@ -1380,8 +1006,7 @@ public class ProgressScreen extends Screen {
             }
             double sx = v[0] + n.x * UNIT * v[2];
             double sy = v[1] + n.y * UNIT * v[2];
-            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight()
-                    && mouseX < (sheetT > 0 ? sheetLeft() : width)) {
+            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && overMap(mouseX, mouseY)) {
                 hovered = n.key;
             }
         }
@@ -1404,12 +1029,14 @@ public class ProgressScreen extends Screen {
             }
             double sx = v[0] + l.x * UNIT * v[2];
             double sy = v[1] + l.y * UNIT * v[2];
-            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && mouseX > railRight()
-                    && mouseX < (sheetT > 0 ? sheetLeft() : width)) {
+            if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && overMap(mouseX, mouseY)) {
                 hovered = target.key;
             }
         }
         g.pose().popPose();
+        if (tourHoverKey != null) {
+            hovered = tourHoverKey;
+        }
         hoveredNode = dragging ? null : hovered;
         if (hoveredNode != null) {
             hoverGrow.putIfAbsent(hoveredNode, 0f);
@@ -1419,25 +1046,7 @@ public class ProgressScreen extends Screen {
         // everything below sits above the map's item icons
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        // a band behind the header: the title never sits directly on map tiles (fades out by y=40)
-        g.fillGradient(railRight(), 0, sheetT > 0 ? sheetLeft() : width, 40, FADE, FADE & 0xFFFFFF);
-        // the header moves aside with the chapter list when it opens, instead of showing through it
-        int hx0 = railRight() + Ui.S2;
-        // the title at the font's own size: drawn twice as large it crowded big maps (the player, ATM10 2026-10-16)
-        Ui.text(g, font, ch.title, hx0, 11, Ui.TEXT);
-        if (ch.skills) {
-            renderSkillHeader(g, ch, hx0, 23);
-        } else {
-            int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size(), 0});
-            String count = cnt[0] + "/" + cnt[1];
-            Ui.text(g, font, count, hx0, 23, Ui.MUTED);
-            if (cnt[2] > 0) {
-                // more is hidden (Steam's "n hidden achievements remaining"): the count, never what it is. The lock
-                // icon is used for "not open yet" elsewhere, so a word is unambiguous.
-                int hx = hx0 + font.width(count) + Ui.S1;
-                Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.hidden", cnt[2]), hx, 23, Ui.DIM);
-            }
-        }
+        renderHeader(g, ch, mouseX, mouseY);
         renderMinimap(g, ch, v, mouseX, mouseY);
         renderZoomButtons(g, ch, v, mouseX, mouseY);
         g.pose().popPose();
@@ -1461,6 +1070,110 @@ public class ProgressScreen extends Screen {
         }
     }
 
+    /** Whether the pointer is over the map itself, not over the chapter list, the details sheet or the header. */
+    private boolean overMap(double mx, double my) {
+        return mx > railRight() && mx < (sheetT > 0 ? sheetLeft() : width)
+                && !(mx >= headerRect[0] && mx < headerRect[0] + headerRect[2] && my >= headerRect[1] && my < headerRect[1] + headerRect[3]);
+    }
+
+    /** The chapter header's box on screen (x, y, w, h), for clicks that must not reach the map under it. */
+    private int[] headerRect = new int[4];
+
+    /**
+     * The chapter's name, its count and its pin, in one glass box fixed to the top right (2026-10-20). Until then the
+     * title sat on the map at the top left: it was hard to read over the pack's own title pictures and bright tiles, and
+     * it slid sideways whenever the chapter list opened (the player). The pin that marks a chapter for the top of the
+     * list moved here from the list's rows, so the list's rows only open chapters. The details sheet slides over the
+     * box instead of pushing it. "Claim all" sits under it while anything without a choice waits.
+     */
+    private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
+        int h = BTN;
+        int pin = h - 8;
+        int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size(), 0});
+        String count = ch.skills ? "" : cnt[0] + "/" + cnt[1];
+        Component hidden = !ch.skills && cnt[2] > 0 ? Component.translatable("screen.kuronami_quest_tree.hidden", cnt[2]) : null;
+        int tail = ch.skills ? skillHeaderWidth(ch) : font.width(count) + (hidden != null ? Ui.S1 + font.width(hidden) : 0);
+        int fixed = Ui.S2 + 12 + Ui.S2 + Ui.S2 + tail + Ui.S2 + pin + 4;
+        int maxW = Math.max(160, width / 2);
+        int titleW = Math.min(font.width(ch.title), maxW - fixed);
+        int w = fixed + titleW;
+        int x = width - Ui.S2 - w;
+        int y = Ui.S2;
+        headerRect = new int[]{x, y, w, h};
+        if (GlassPanel.on()) {
+            GlassPanel.render(g, GlassPanel.HEADER, GlassPanel.Kind.REGULAR, x, y, w, h, h / 2, mouseX, mouseY);
+        } else {
+            Ui.surface(g, x, y, w, h, h / 2, Ui.PANEL_TRANSLUCENT);
+            Ui.outline(g, x, y, w, h, Ui.R4, Ui.HAIRLINE);
+        }
+        int cx = x + Ui.S2 + 2;
+        int ty = y + (h - 8) / 2;
+        g.pose().pushPose();
+        g.pose().translate(cx, y + (h - 12) / 2f, 0);
+        g.pose().scale(0.75f, 0.75f, 1);
+        g.renderItem(ch.displayIcon(), 0, 0);
+        g.pose().popPose();
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z);
+        cx += 12 + Ui.S2;
+        Ui.text(g, font, trim(ch.title.getString(), titleW), cx, ty, Ui.BRIGHT);
+        cx += titleW + Ui.S2;
+        if (ch.skills) {
+            renderSkillHeader(g, ch, cx, ty);
+        } else {
+            Ui.text(g, font, count, cx, ty, Ui.MUTED);
+            if (hidden != null) {
+                // more is hidden (Steam's "n hidden achievements remaining"): the count, never what it is
+                Ui.text(g, font, hidden, cx + font.width(count) + Ui.S1, ty, Ui.DIM);
+            }
+        }
+        // the pin: gold while the chapter is pinned to the top of the list
+        int px = x + w - 4 - pin;
+        int py = y + 4;
+        boolean pinned = ClientConfig.railPinned(ch.id);
+        boolean over = mouseX >= px && mouseX < px + pin && mouseY >= py && mouseY < py + pin;
+        if (over) {
+            Ui.surface(g, px, py, pin, pin, pin / 2, Ui.OVERLAY_1);
+            pendingTip = Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
+        }
+        Tiles.icon(g, "pin", px + (pin - 10) / 2f, py + (pin - 10) / 2f, 10, pinned ? Tiles.GOLD : over ? Ui.TEXT : Ui.DIM);
+        buttons.add(new Button(px, py, pin, pin, () -> {
+            ClientConfig.toggleRailPin(ch.id);
+            ProgressFeedback.click();
+        }));
+        if (claimableNoChoice > 0) {
+            Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
+            String n = String.valueOf(claimableNoChoice);
+            int bh = 20;
+            int bw = font.width(ca) + Ui.S1 + font.width(n) + 2 * Ui.S2 + 4;
+            int bx = width - Ui.S2 - bw;
+            int by = y + h + Ui.S1;
+            boolean bo = mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh;
+            Ui.surface(g, bx, by, bw, bh, bh / 2, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
+            Ui.text(g, font, ca, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
+            Ui.text(g, font, n, bx + bw - Ui.S2 - font.width(n), by + (bh - 8) / 2, Tiles.INK);
+            buttons.add(new Button(bx, by, bw, bh, () -> {
+                ClientProgress.send("claim_all", "", -1);
+                long start = Util.getMillis();
+                int i = 0;
+                for (ClientModel.Node node : ch.nodes.values()) {
+                    if (ClientProgress.state(node.key) == State.CLAIM && node.choice.isEmpty()) {
+                        // one tile after another, 140ms apart
+                        flashes.put(node.key, start + 140L * i++);
+                    }
+                }
+            }));
+            headerRect = new int[]{Math.min(x, bx), y, Math.max(w, bw), by + bh - y};
+        }
+        g.pose().popPose();
+    }
+
+    private int skillHeaderWidth(ClientModel.Chapter ch) {
+        String lv = Component.translatable("screen.kuronami_quest_tree.level_short", ClientProgress.progress().level.getOrDefault(ch.id, 0)).getString();
+        int pts = ClientProgress.points(ch.id);
+        return font.width(lv) + Ui.S1 + 60 + (pts > 0 ? 8 + font.width(pointsLabel(pts)) : 0);
+    }
+
     /** Level, experience bar and points to spend, under a skill chapter's title. */
     private void renderSkillHeader(GuiGraphics g, ClientModel.Chapter ch, int x, int y) {
         PlayerProgress p = ClientProgress.progress();
@@ -1481,6 +1194,10 @@ public class ProgressScreen extends Screen {
         }
     }
 
+    private static Component pointsLabel(int n) {
+        return Component.translatable(n == 1 ? "screen.kuronami_quest_tree.points_one" : "screen.kuronami_quest_tree.points", n);
+    }
+
     /** Right edge of the rail as currently drawn (it opens to railOpenW on hover). */
     private int railRight() {
         return railWidth() + 4;
@@ -1492,11 +1209,6 @@ public class ProgressScreen extends Screen {
      */
     private int railWidth() {
         return (int) Mth.lerp(ease(railT), RAIL, railOpenW);
-    }
-
-    /** Left edge of a row's pin slot (0 when {@code null} is passed, i.e. on rows without a chapter). */
-    private int pinSlotLeft(int w) {
-        return w - Ui.S1 - RAIL_PIN_W;
     }
 
     private int sheetWidth() {
@@ -1599,7 +1311,7 @@ public class ProgressScreen extends Screen {
                     y += 20;
                     continue;
                 }
-                Tiles.tile(g, p.shape, x, y, 16, ClientProgress.look(p.key), ClientProgress.fraction(p.key), p.icon, false);
+                Tiles.tile(g, p.shape, x, y, 16, ClientProgress.look(p.key), ClientProgress.fraction(p.key), ClientProgress.iconFor(p), false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 ClientModel.Chapter other = m.chapterOf.get(r);
@@ -1629,11 +1341,12 @@ public class ProgressScreen extends Screen {
                 long have = Math.min(p.task(n.key, i), t.count);
                 boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
                 Ui.divider(g, x, y - 2, w);
-                if (!t.item.isEmpty() && lastMouseX >= x && lastMouseX < x + 16 && lastMouseY >= y + 2 && lastMouseY < y + 18) {
-                    hoverStack = t.item;
+                ItemStack shownItem = t.shown();
+                if (!shownItem.isEmpty() && lastMouseX >= x && lastMouseX < x + 16 && lastMouseY >= y + 2 && lastMouseY < y + 18) {
+                    hoverStack = shownItem;
                     RecipeViewer viewer = RecipeViewer.Holder.get();
                     if (viewer != null) {
-                        ItemStack it = t.item;
+                        ItemStack it = shownItem;
                         buttons.add(new Button(x, y + 2, 16, 16, () -> viewer.showRecipes(it)));
                     }
                 }
@@ -1932,7 +1645,9 @@ public class ProgressScreen extends Screen {
             }
             boolean hover = mouseX >= cx && mouseX < cx + BTN && mouseY >= y && mouseY < y + BTN;
             if (hover) {
-                g.fill(cx, y + 3, cx + BTN, y + BTN - 3, Ui.OVERLAY_1);
+                // a round light inside the cell, clear of the dividers and the bar's rounded ends (until 2026-10-20 a
+                // square strip that cut across the bar's corners, the player)
+                Ui.surface(g, cx + 4, y + 4, BTN - 8, BTN - 8, (BTN - 8) / 2, Ui.OVERLAY_1);
             }
             Tiles.icon(g, glyphs[i], cx + (BTN - 12) / 2, y + (BTN - 12) / 2, 12, Ui.TEXT);
             int which = i;
@@ -1943,17 +1658,30 @@ public class ProgressScreen extends Screen {
     /** Minimap only when the chapter does not fit on screen at the current zoom. */
     private int[] minimapRect(ClientModel.Chapter ch, float[] v) {
         double[] b = bounds(ch);
-        double cw = (b[2] - b[0] + 2 * UNIT) * v[2];
-        double chh = (b[3] - b[1] + 2 * UNIT) * v[2];
+        double cw = (b[2] - b[0]) * v[2];
+        double chh = (b[3] - b[1]) * v[2];
         if (cw <= width - RAIL - 24 && chh <= height - 40) {
             return null;
         }
-        int mw = 84;
-        int mh = 54;
+        // the chapter's own proportions inside 100 x 64 at most
+        double bw = Math.max(1, b[2] - b[0]);
+        double bh = Math.max(1, b[3] - b[1]);
+        double k = Math.min((MINIMAP_W - 12) / bw, (MINIMAP_H - 12) / bh);
+        int mw = (int) Math.ceil(bw * k) + 12;
+        int mh = (int) Math.ceil(bh * k) + 12;
         int right = (sheetT > 0 ? sheetLeft() : width) - Ui.S2;
-        return new int[]{right - mw, height - BTN - 16 - mh, mw, mh};
+        return new int[]{right - mw, height - BTN - Ui.S2 - Ui.S1 - mh, mw, mh};
     }
 
+    private static final int MINIMAP_W = 100;
+    private static final int MINIMAP_H = 64;
+
+    /**
+     * A plan of the chapter: every quest as one small dot in its state's colour, joined by thin lines, and the part on
+     * screen as a frame (2026-10-20 rebuild, the player: zoomed in it read badly, squares overlapping oddly; make the
+     * shapes all the same and add the lines). It sits on the regular glass: through the clear glass the bent map behind
+     * showed between the dots and read as more squares.
+     */
     private void renderMinimap(GuiGraphics g, ClientModel.Chapter ch, float[] v, int mouseX, int mouseY) {
         int[] r = minimapRect(ch, v);
         // shown while the map moves (drag, zoom) and for a moment after, then gone: it covered large maps all the time
@@ -1961,31 +1689,56 @@ public class ProgressScreen extends Screen {
             return;
         }
         if (GlassPanel.on()) {
-            // the clear kind: a small control over a busy picture, so the map stays sharp and bends at the rim
-            GlassPanel.render(g, GlassPanel.MINIMAP, GlassPanel.Kind.CLEAR, r[0], r[1], r[2], r[3], Ui.R4, mouseX, mouseY);
+            GlassPanel.render(g, GlassPanel.MINIMAP, GlassPanel.Kind.REGULAR, r[0], r[1], r[2], r[3], Ui.R3, mouseX, mouseY);
         } else {
             Ui.floating(g, r[0], r[1], r[2], r[3], Ui.PANEL_TRANSLUCENT);
         }
         double[] b = bounds(ch);
-        double s = Math.min((r[2] - 8) / Math.max(1, b[2] - b[0]), (r[3] - 8) / Math.max(1, b[3] - b[1]));
+        float k = (float) Math.min((r[2] - 12) / Math.max(1, b[2] - b[0]), (r[3] - 12) / Math.max(1, b[3] - b[1]));
+        float ox = r[0] + 6 - (float) b[0] * k;
+        float oy = r[1] + 6 - (float) b[1] * k;
+        ClientModel cm = model();
+        g.pose().pushPose();
+        g.pose().translate(ox, oy, 0);
+        for (ClientModel.Node n : ch.nodes.values()) {
+            if (ch.hideLines || n.hideLinesToRequired || !ClientProgress.visible(n.key)) {
+                continue;
+            }
+            for (String req : n.requireKeys) {
+                ClientModel.Node p = cm.nodesByKey.get(req);
+                if (p == null || cm.chapterOf.get(req) != ch || p.hideLinesToDependents || !ClientProgress.visible(p.key)) {
+                    continue;
+                }
+                float x1 = (float) (p.x * UNIT) * k;
+                float y1 = (float) (p.y * UNIT) * k;
+                float dx = (float) (n.x * UNIT) * k - x1;
+                float dy = (float) (n.y * UNIT) * k - y1;
+                g.pose().pushPose();
+                g.pose().translate(x1, y1, 0);
+                g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
+                fillLine(g, 0, (float) Math.sqrt(dx * dx + dy * dy), 0.75f, Tiles.withAlpha(LINE_CLOSED, 0.8f));
+                g.pose().popPose();
+            }
+        }
+        float dot = 3.5f;
         for (ClientModel.Node n : ch.nodes.values()) {
             if (!ClientProgress.visible(n.key)) {
                 continue;
             }
-            int px = r[0] + 4 + (int) ((n.x * UNIT - b[0]) * s);
-            int py = r[1] + 4 + (int) ((n.y * UNIT - b[1]) * s);
-            g.fill(px - 1, py - 1, px + 1, py + 1, minimapColor(ClientProgress.state(n.key)));
+            float d = dot * (float) Math.max(1, Math.min(1.6, n.size));
+            Tiles.icon(g, "dot", (float) (n.x * UNIT) * k - d / 2, (float) (n.y * UNIT) * k - d / 2, d, minimapColor(ClientProgress.state(n.key)));
         }
+        g.pose().popPose();
         // the part of the chapter that is on screen
         double vx0 = (-v[0]) / v[2];
         double vy0 = (-v[1]) / v[2];
         double vx1 = vx0 + width / v[2];
         double vy1 = vy0 + height / v[2];
-        int x0 = Mth.clamp(r[0] + 4 + (int) ((vx0 - b[0]) * s), r[0], r[0] + r[2]);
-        int y0 = Mth.clamp(r[1] + 4 + (int) ((vy0 - b[1]) * s), r[1], r[1] + r[3]);
-        int x1 = Mth.clamp(r[0] + 4 + (int) ((vx1 - b[0]) * s), r[0], r[0] + r[2]);
-        int y1 = Mth.clamp(r[1] + 4 + (int) ((vy1 - b[1]) * s), r[1], r[1] + r[3]);
-        g.renderOutline(x0, y0, Math.max(2, x1 - x0), Math.max(2, y1 - y0), Ui.MINIMAP_VIEW);
+        int x0 = Mth.clamp((int) Math.floor(ox + vx0 * k), r[0] + 2, r[0] + r[2] - 2);
+        int y0 = Mth.clamp((int) Math.floor(oy + vy0 * k), r[1] + 2, r[1] + r[3] - 2);
+        int x1 = Mth.clamp((int) Math.ceil(ox + vx1 * k), r[0] + 2, r[0] + r[2] - 2);
+        int y1 = Mth.clamp((int) Math.ceil(oy + vy1 * k), r[1] + 2, r[1] + r[3] - 2);
+        Ui.outline(g, x0, y0, Math.max(3, x1 - x0), Math.max(3, y1 - y0), 2, Ui.MINIMAP_VIEW);
     }
 
     private static int minimapColor(State s) {
@@ -2023,24 +1776,15 @@ public class ProgressScreen extends Screen {
         }
         int railW = railWidth();
         if (mx < railW + 4) {
-            if (my < RAIL_LIST_TOP) {
-                if (my >= 8) {
-                    select(-1);
-                }
-            } else if (my < railListBottom()) {
-                float rowY = RAIL_LIST_TOP - railScroll;
+            if (my >= RAIL_LIST_TOP && my < railListBottom()) {
+                double at = my - RAIL_LIST_TOP + railScrollShown();
+                int rowY = 0;
                 for (RailRow row : railRows) {
-                    float hgt = row.isHeader() ? HEADER_H : railPitch();
-                    if (my >= rowY && my < rowY + hgt) {
+                    int hgt = row.isHeader() ? HEADER_H : RAIL_ROW;
+                    if (at >= rowY && at < rowY + hgt) {
                         // a header is a label, not a target
                         if (!row.isHeader()) {
-                            // the pin slot toggles the pin; anywhere else on the row opens the chapter
-                            if (railT > 0.6f && mx >= pinSlotLeft(railW)) {
-                                ClientConfig.toggleRailPin(row.chapter().id);
-                                ProgressFeedback.click();
-                            } else {
-                                select(m.chapters.indexOf(row.chapter()));
-                            }
+                            select(m.chapters.indexOf(row.chapter()));
                         }
                         break;
                     }
@@ -2052,17 +1796,20 @@ public class ProgressScreen extends Screen {
         if (sheetT > 0 && selected != null && mx >= sheetLeft()) {
             return true;
         }
+        if (mx >= headerRect[0] && mx < headerRect[0] + headerRect[2] && my >= headerRect[1] && my < headerRect[1] + headerRect[3]) {
+            return true;
+        }
         ClientModel.Chapter ch = chapter();
         if (ch == null) {
-            return clickNow(m, mx, my);
+            return true;
         }
         float[] v = view(ch);
         int[] r = minimapShown() ? minimapRect(ch, v) : null;
         if (r != null && mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3]) {
             double[] b = bounds(ch);
-            double s = Math.min((r[2] - 8) / Math.max(1, b[2] - b[0]), (r[3] - 8) / Math.max(1, b[3] - b[1]));
-            double wx = (mx - r[0] - 4) / s + b[0];
-            double wy = (my - r[1] - 4) / s + b[1];
+            double s = Math.min((r[2] - 12) / Math.max(1, b[2] - b[0]), (r[3] - 12) / Math.max(1, b[3] - b[1]));
+            double wx = (mx - r[0] - 6) / s + b[0];
+            double wy = (my - r[1] - 6) / s + b[1];
             v[0] = (float) (width / 2.0 - wx * v[2]);
             v[1] = (float) (height / 2.0 - wy * v[2]);
             return true;
@@ -2074,47 +1821,7 @@ public class ProgressScreen extends Screen {
         return true;
     }
 
-    private boolean clickNow(ClientModel m, double mx, double my) {
-        int left = nowLeft();
-        int top = 40;
-        int bottom = height - 34;
-        if (mx < left || my < top || my >= bottom) {
-            selected = null;
-            return true;
-        }
-        int cols = nowCols();
-        int cellW = nowCellWidth();
-        int col = (int) ((mx - left) / (cellW + NOW_GAP));
-        int row = (int) ((my - top + nowScroll) / (NOW_TILE + NOW_GAP));
-        double inX = (mx - left) - col * (cellW + NOW_GAP);
-        double inY = (my - top + nowScroll) - row * (NOW_TILE + NOW_GAP);
-        int index = row * cols + col;
-        if (col >= cols || inX >= cellW || inY >= NOW_TILE || index >= nowEntries.size()) {
-            selected = null;
-            return true;
-        }
-        NowEntry e = nowEntries.get(index);
-        if (e.pointsChapter != null) {
-            ProgressFeedback.click();
-            select(m.chapters.indexOf(e.pointsChapter));
-            return true;
-        }
-        if (ClientProgress.state(e.key) == State.CLAIM && e.node.choice.isEmpty()) {
-            ClientProgress.send("claim", e.key, -1);
-            flashes.put(e.key, Util.getMillis());
-            if (e.key.equals(selected)) {
-                selected = null;
-            }
-            return true;
-        }
-        if (!e.key.equals(selected)) {
-            choicePick = -1;
-        }
-        selected = e.key;
-        return true;
-    }
-
-    /** Dev tour only ({@link DevTour}): open on a chapter (-1 = Now). */
+    /** Dev tour only ({@link DevTour}): open on a chapter. */
     void tourChapter(int index) {
         select(index);
     }
@@ -2123,9 +1830,10 @@ public class ProgressScreen extends Screen {
     void tourSelectFirst(State state) {
         ClientModel m = model();
         ClientModel.Chapter ch = chapter();
-        Iterable<ClientModel.Node> nodes = ch != null ? ch.nodes.values()
-                : nowEntries.stream().filter(e -> e.node != null).map(e -> e.node).toList();
-        for (ClientModel.Node n : nodes) {
+        if (ch == null) {
+            return;
+        }
+        for (ClientModel.Node n : ch.nodes.values()) {
             if (ClientProgress.state(n.key) == state) {
                 selected = n.key;
                 if (ch != null) {
@@ -2178,6 +1886,44 @@ public class ProgressScreen extends Screen {
 
     /** Dev tour only: holds the chapter list open without the pointer over it. */
     private static boolean tourRailOpen;
+
+    /** Dev tour only: centre a node at a zoom. */
+    void tourZoomTo(ClientModel.Node n, float zoom) {
+        ClientModel.Chapter ch = chapter();
+        if (ch == null) {
+            return;
+        }
+        float[] v = view(ch);
+        v[2] = zoom;
+        v[0] = (float) (width / 2.0 - n.x * UNIT * zoom);
+        v[1] = (float) (height / 2.0 - n.y * UNIT * zoom);
+    }
+
+    /** Dev tour only: a node treated as under the pointer (null = the real pointer). */
+    static void tourHover(String key) {
+        tourHoverKey = key;
+    }
+
+    private static String tourHoverKey;
+
+    /** Dev tour only: hover the node with the most lines in the current chapter. */
+    void tourHoverBusiest() {
+        ClientModel.Chapter ch = chapter();
+        if (ch == null) {
+            return;
+        }
+        Map<String, Integer> degree = new HashMap<>();
+        for (ClientModel.Node n : ch.nodes.values()) {
+            for (String r : n.requireKeys) {
+                degree.merge(r, 1, Integer::sum);
+                degree.merge(n.key, 1, Integer::sum);
+            }
+        }
+        java.util.Set<String> here = new java.util.HashSet<>();
+        ch.nodes.values().forEach(n -> here.add(n.key));
+        degree.entrySet().stream().filter(e -> here.contains(e.getKey()) && ClientProgress.visible(e.getKey()))
+                .max(Map.Entry.comparingByValue()).ifPresent(e -> tourHoverKey = e.getKey());
+    }
 
     static void tourRailOpen(boolean open) {
         tourRailOpen = open;
@@ -2414,7 +2160,7 @@ public class ProgressScreen extends Screen {
             return super.mouseScrolled(mx, my, scrollX, scrollY);
         }
         if (mx < railRight()) {
-            railScrollTarget = Mth.clamp(railScrollTarget - (float) scrollY * railPitch() * 1.5f, 0, railMaxScroll());
+            railScrollTarget = Mth.clamp(railScrollTarget - (float) scrollY * RAIL_ROW * 3, 0, railMaxScroll());
             return true;
         }
         if (sheetT > 0 && selected != null && mx >= sheetLeft()) {
@@ -2423,7 +2169,6 @@ public class ProgressScreen extends Screen {
         }
         ClientModel.Chapter ch = chapter();
         if (ch == null) {
-            nowScroll = Math.max(0, nowScroll - (int) (scrollY * 20));
             return true;
         }
         float[] v = view(ch);
@@ -2531,355 +2276,79 @@ public class ProgressScreen extends Screen {
         });
     }
 
-    private static int brighter(int lc) {
-        return lc == LINE_WALKED ? Tiles.GREEN_TEXT : lc == LINE_OPEN ? Ui.LINE_OPEN_HOVER : LINE_CLOSED_ON;
+    /**
+     * One line from an earlier node to a later one, worked out once per frame: where it starts, where the tip of its
+     * arrowhead touches the later node's edge, and its colour. {@code role}: 0 = nothing in focus, 1 = into the focused
+     * node (what it needs), 2 = out of it (what it opens), 3 = unrelated while something is in focus.
+     */
+    private record LineDraw(float x1, float y1, float x2, float y2, float w, float casing, float head, int color, int role, float open) {
     }
 
     /**
-     * One line from {@code p} (earlier) to {@code n}. The lines and the arrowheads are drawn under the tiles, so an
-     * arrowhead that walked over a tile showed through its edge: it now stands only on a stretch of the line that no
-     * tile covers, and a line whose length is covered end to end gets none. While highlighted it slides along those
-     * free stretches, so the parts a tile hides are stepped over rather than travelled. Zoomed out it is left out, and
-     * nothing is measured for it.
+     * Straight lines with an arrowhead on the end, at every zoom (2026-10-20 rebuild, the player: zoomed out the
+     * arrowheads vanished and only bars were left, converging lines could not be told apart, some arrowheads sat off
+     * their tiles, and both the line and the head were hard to see). Straight because the books come from FTB Quests,
+     * whose authors laid out their trees for straight lines: the elbows of 2026-10-18 invented routes that ran through
+     * other tiles and merged siblings into one trunk. The tip stops at the later tile's real edge for its shape
+     * ({@link Tiles#edge}), not at its box, and the line, its casing and the head keep a minimum size on screen.
      */
-    private static void arrowLine(GuiGraphics g, ClientModel.Node p, ClientModel.Node n, int argb, boolean on, float open,
-                                  boolean far, long now, float[] occ) {
-        double x1 = p.x * UNIT;
-        double y1 = p.y * UNIT;
-        double dx = n.x * UNIT - x1;
-        double dy = n.y * UNIT - y1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy);
-        if (len < 1) {
-            return;
-        }
-        float w = on ? LINE_W_ON : LINE_W;
-        float a = on || open >= 0 ? ARROW_ON : ARROW;
-        float[] runs = far ? NO_RUNS : visibleRuns(x1, y1, dx, dy, len, occ);
-        g.pose().pushPose();
-        g.pose().translate(x1, y1, 0);
-        g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
-        float head;
-        if (open >= 0) {
-            float e = ease(open);
-            fillLine(g, 0, len, w, LINE_CLOSED);
-            fillLine(g, 0, len * e, w, argb);
-            head = !far && fitsRun(runs, len * e, a) ? len * e : -1;
-        } else {
-            fillLine(g, 0, len, w, argb);
-            head = far ? -1
-                    : on ? slideHead(runs, ((now % 100_000L) / SLIDE_MS) % 1f, a)
-                    : longestMiddle(runs, a);
-        }
-        if (head >= 0) {
-            Tiles.icon(g, "arrow", head - a / 2, -a / 2, a, argb);
-        }
-        g.pose().popPose();
-    }
-
-    /**
-     * Quest lines drawn as elbows (2026-10-18 trial, after Thaumaturge's research book): leave the earlier node along
-     * one axis, turn once on a rounded corner, and enter the later node along the axis it is mostly reached by, with
-     * an arrowhead at the line's end, just outside that node's edge, like any arrow (2026-10-18, the player: the open
-     * chevron only read as a twig while it sat mid-line). Nodes that share a parent share its first leg, so a fan reads
-     * as one trunk. Skill trees keep straight lines with the same end arrowhead: their layouts are free-form, often radial.
-     * A quest link that is a diagonal (its two offsets of similar size) is a straight line too: there the elbow only
-     * walked around a corner (the player, 2026-10-19).
-     */
-    static final boolean ELBOW_LINES = !Boolean.getBoolean("quest_tree.straightLines");
-    /** The largest corner radius, in map units: one grid unit, as in a book laid out on a grid. */
-    private static final float ELBOW_R = UNIT;
-    /** Neighbours closer than this (map units) keep a straight line: an elbow between touching tiles is only a curl. */
-    private static final float ELBOW_MIN = 1.5f * UNIT;
-    /** Below this ratio between the two offsets a link is a diagonal, not a step along one axis, and is drawn straight. */
-    private static final float DIAGONAL_RATIO = 0.5f;
-    /**
-     * Where the chevron's tip and its inner corner sit, as fractions of the icon from its centre (icon/chevron is 64px:
-     * tip at 57, inner corner at 37). The tip lands on the line's end and the line stops inside the inner corner, so no
-     * line shows past the point.
-     */
-    private static final float CHEVRON_TIP = 0.39f;
-    private static final float CHEVRON_NOTCH = 0.12f;
-    /**
-     * The straight run a line keeps after its corner, beyond the tile's edge and the arrowhead, so the arrowhead sits on
-     * a straight piece and points the way the line arrives instead of along the end of the curve.
-     */
-    private static final float ELBOW_RUN_IN = 4;
-    /** Segments per rounded corner; enough that the joins do not show at the widest zoom. */
-    private static final int ELBOW_ARC_STEPS = 8;
-
-    private static void elbowLine(GuiGraphics g, ClientModel.Node p, ClientModel.Node n, int argb, boolean on, float open,
-                                  boolean far, boolean straight) {
+    private LineDraw lineGeometry(ClientModel.Node p, ClientModel.Node n, int color, int role, float open, float zoom) {
         float x1 = (float) (p.x * UNIT);
         float y1 = (float) (p.y * UNIT);
         float x2 = (float) (n.x * UNIT);
         float y2 = (float) (n.y * UNIT);
         float dx = x2 - x1;
         float dy = y2 - y1;
-        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
-            return;
-        }
-        float a = on || open >= 0 ? ARROW_ON : ARROW;
-        float half = (float) (NODE * n.size) / 2f * (Tiles.shapeOf(n.shape).equals("diamond") ? 1.25f : 1f);
-        float stop = half + ARROW_PAD;
-        float[] pts = straight ? new float[]{x1, y1, x2, y2} : elbowPath(x1, y1, dx, dy, stop + a + ELBOW_RUN_IN);
-        int last = pts.length - 2;
-        float ex = pts[last] - pts[last - 2];
-        float ey = pts[last + 1] - pts[last - 1];
-        float el = (float) Math.sqrt(ex * ex + ey * ey);
-        float ux = ex / el;
-        float uy = ey / el;
-        float w = on ? LINE_W_ON : LINE_W;
-        float total = polylineLength(pts) - stop;
-        boolean head = !far && total > a;
-        if (head) {
-            total -= CHEVRON_TIP * a - CHEVRON_NOTCH * a;
-        }
-        if (open >= 0) {
-            float e = ease(open);
-            polyline(g, pts, total, w, LINE_CLOSED);
-            polyline(g, pts, total * e, w, argb);
-        } else {
-            polyline(g, pts, total, w, argb);
-        }
-        if (head) {
-            g.pose().pushPose();
-            g.pose().translate(x2 - ux * (stop + CHEVRON_TIP * a), y2 - uy * (stop + CHEVRON_TIP * a), 0);
-            g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(uy, ux)));
-            Tiles.icon(g, "chevron", -a / 2, -a / 2, a, argb);
-            g.pose().popPose();
-        }
-    }
-
-    /**
-     * The elbow's points: a straight pair when the nodes share a row or column, otherwise first leg, a quarter circle
-     * sampled into short chords, and the leg into the later node. The leg into the node runs along the larger offset, and
-     * the corner shrinks so that leg keeps at least {@code straightIn} straight.
-     */
-    private static float[] elbowPath(float x1, float y1, float dx, float dy, float straightIn) {
-        if (Math.abs(dx) < 1 || Math.abs(dy) < 1 || dx * dx + dy * dy < ELBOW_MIN * ELBOW_MIN) {
-            return new float[]{x1, y1, x1 + dx, y1 + dy};
-        }
-        float ax = Math.abs(dx);
-        float ay = Math.abs(dy);
-        // A link that leaves on both axes by a similar amount reads better as a straight diagonal: the elbow is then a
-        // detour around a corner nobody needed (the player, 2026-10-19), while a link that is mostly along one axis
-        // keeps its elbow, where the small turn keeps a fan of siblings reading as one trunk.
-        if (Math.min(ax, ay) >= ELBOW_MIN && Math.min(ax, ay) >= DIAGONAL_RATIO * Math.max(ax, ay)) {
-            return new float[]{x1, y1, x1 + dx, y1 + dy};
-        }
-        boolean enterSideways = Math.abs(dx) >= Math.abs(dy);
-        float sx = Math.signum(dx);
-        float sy = Math.signum(dy);
-        float cx = enterSideways ? x1 : x1 + dx;
-        float cy = enterSideways ? y1 + dy : y1;
-        float d1x = enterSideways ? 0 : sx;
-        float d1y = enterSideways ? sy : 0;
-        float d2x = enterSideways ? sx : 0;
-        float d2y = enterSideways ? 0 : sy;
-        float r = Math.min(ELBOW_R, Math.min(Math.abs(dx), Math.abs(dy)));
-        float secondLeg = enterSideways ? Math.abs(dx) : Math.abs(dy);
-        r = Math.max(0, Math.min(r, secondLeg - straightIn));
-        float[] pts = new float[(ELBOW_ARC_STEPS + 3) * 2];
-        int k = 0;
-        pts[k++] = x1;
-        pts[k++] = y1;
-        float ox = cx - d1x * r + d2x * r;
-        float oy = cy - d1y * r + d2y * r;
-        for (int i = 0; i <= ELBOW_ARC_STEPS; i++) {
-            double t = Math.PI / 2 * i / ELBOW_ARC_STEPS;
-            float c = (float) Math.cos(t);
-            float s = (float) Math.sin(t);
-            pts[k++] = ox - d2x * r * c + d1x * r * s;
-            pts[k++] = oy - d2y * r * c + d1y * r * s;
-        }
-        pts[k++] = x1 + dx;
-        pts[k] = y1 + dy;
-        return pts;
-    }
-
-    private static float polylineLength(float[] pts) {
-        float len = 0;
-        for (int i = 0; i + 3 < pts.length; i += 2) {
-            float ax = pts[i + 2] - pts[i];
-            float ay = pts[i + 3] - pts[i + 1];
-            len += (float) Math.sqrt(ax * ax + ay * ay);
-        }
-        return len;
-    }
-
-    /** Draws a polyline up to {@code upTo} map units of its length; each chord overlaps the next so joins stay closed. */
-    private static void polyline(GuiGraphics g, float[] pts, float upTo, float w, int argb) {
-        float done = 0;
-        for (int i = 0; i + 3 < pts.length && done < upTo; i += 2) {
-            float ax = pts[i + 2] - pts[i];
-            float ay = pts[i + 3] - pts[i + 1];
-            float l = (float) Math.sqrt(ax * ax + ay * ay);
-            if (l < 0.01f) {
-                continue;
-            }
-            float draw = Math.min(l, upTo - done);
-            g.pose().pushPose();
-            g.pose().translate(pts[i], pts[i + 1], 0);
-            g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(ay, ax)));
-            fillLine(g, done == 0 ? 0 : -w / 2, draw + (draw < l ? 0 : w / 2), w, argb);
-            g.pose().popPose();
-            done += l;
-        }
-    }
-
-    /** The footprints of a chapter's tiles in map units. A line knows these so it can keep its arrowhead off them. */
-    private static float[] occluderBoxes(ClientModel.Chapter ch, ClientModel cm) {
-        float[] boxes = new float[(ch.nodes.size() + ch.links.size()) * 3];
-        int k = 0;
-        for (ClientModel.Node n : ch.nodes.values()) {
-            if (ClientProgress.visible(n.key)) {
-                k = putBox(boxes, k, n.x, n.y, n.shape, n.size);
-            }
-        }
-        for (ClientModel.Link l : ch.links) {
-            ClientModel.Node target = cm.nodesByKey.get(l.node);
-            if (target != null && ClientProgress.visible(target.key)) {
-                k = putBox(boxes, k, l.x, l.y, l.shape.isEmpty() ? target.shape : l.shape, l.size);
-            }
-        }
-        return Arrays.copyOf(boxes, k);
-    }
-
-    /** Adds one tile footprint (centre and half extent, map units) to a flat box list and returns the next slot. */
-    private static int putBox(float[] boxes, int k, double x, double y, String shape, double size) {
-        // a diamond is drawn wider than its box, so its footprint is widened the same way the tile is
-        float half = (float) (NODE * size) / 2f * (Tiles.shapeOf(shape).equals("diamond") ? 1.25f : 1f);
-        boxes[k] = (float) x * UNIT;
-        boxes[k + 1] = (float) y * UNIT;
-        boxes[k + 2] = half;
-        return k + 3;
-    }
-
-    /**
-     * The stretches of one line that no tile covers, in map units from {@code p}'s centre. The stretch inside a tile is
-     * what the tile hides, so the line keeps its arrowhead in what is left.
-     */
-    private static float[] visibleRuns(double x1, double y1, double dx, double dy, float len, float[] occ) {
-        float[] cov = new float[occ.length / 3 * 2];
-        int c = 0;
-        for (int i = 0; i + 2 < occ.length; i += 3) {
-            double[] t = tileSpan(x1, y1, dx, dy, occ[i], occ[i + 1], occ[i + 2]);
-            if (t != null) {
-                cov[c++] = (float) t[0] * len;
-                cov[c++] = (float) t[1] * len;
-            }
-        }
-        for (int i = 2; i < c; i += 2) {   // order the covered stretches
-            float s0 = cov[i];
-            float s1 = cov[i + 1];
-            int j = i - 2;
-            while (j >= 0 && cov[j] > s0) {
-                cov[j + 2] = cov[j];
-                cov[j + 3] = cov[j + 1];
-                j -= 2;
-            }
-            cov[j + 2] = s0;
-            cov[j + 3] = s1;
-        }
-        float[] runs = new float[c + 2];
-        int r = 0;
-        float at = 0;
-        for (int i = 0; i < c; i += 2) {   // merge them, then keep what is left of the line
-            if (cov[i] > at) {
-                runs[r++] = at;
-                runs[r++] = cov[i];
-            }
-            at = Math.max(at, cov[i + 1]);
-        }
-        if (at < len) {
-            runs[r++] = at;
-            runs[r++] = len;
-        }
-        return Arrays.copyOf(runs, r);
-    }
-
-    /** Where a line crosses one tile box, as the 0..1 span along the line, or null when it misses the box. */
-    private static double[] tileSpan(double x1, double y1, double dx, double dy, float cx, float cy, float half) {
-        double[] xs = slab(x1, dx, cx - half, cx + half);
-        double[] ys = slab(y1, dy, cy - half, cy + half);
-        if (xs == null || ys == null) {
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 1) {
             return null;
         }
-        double from = Math.max(xs[0], ys[0]);
-        double to = Math.min(xs[1], ys[1]);
-        return to > from ? new double[] {from, to} : null;
+        float ux = dx / len;
+        float uy = dy / len;
+        String shape = Tiles.shapeOf(n.shape);
+        float size = Tiles.drawnSize(shape, (int) Math.round(NODE * n.size));
+        float stop = Tiles.edge(shape, -dx, -dy) * size + ARROW_PAD;
+        float from = Tiles.edge(Tiles.shapeOf(p.shape), dx, dy) * Tiles.drawnSize(Tiles.shapeOf(p.shape), (int) Math.round(NODE * p.size));
+        float visible = len - stop - from;
+        if (visible <= 0.5f) {
+            return null;
+        }
+        float w = Math.max(LINE_W, LINE_MIN_PX / zoom);
+        float casing = Math.max(LINE_CASING, CASING_MIN_PX / zoom);
+        float head = Math.min(Math.max(ARROW, ARROW_MIN_PX / zoom), visible * 0.8f);
+        return new LineDraw(x1 + ux * from, y1 + uy * from, x2 - ux * stop, y2 - uy * stop, w, casing, head, color, role, open);
     }
 
-    /** The 0..1 span where one axis of the line lies within {@code [lo, hi]}, or null when it never does. */
-    private static double[] slab(double o, double d, double lo, double hi) {
-        if (d == 0) {
-            return o < lo || o > hi ? null : new double[] {0, 1};
+    private static void drawLine(GuiGraphics g, LineDraw l, boolean casing) {
+        float dx = l.x2 - l.x1;
+        float dy = l.y2 - l.y1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        int color = switch (l.role) {
+            case 1 -> LINE_REQUIRES;
+            case 2 -> LINE_UNLOCKS;
+            default -> l.color;
+        };
+        float alpha = l.role == 3 ? 0.35f : 1f;
+        g.pose().pushPose();
+        g.pose().translate(l.x1, l.y1, 0);
+        g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
+        // the core stops inside the arrowhead, which covers its end
+        float body = len - l.head * 0.6f;
+        if (casing) {
+            int c = Tiles.withAlpha(LINE_CASING_COLOR, alpha * ((LINE_CASING_COLOR >>> 24) / 255f));
+            fillLine(g, 0, body, l.w + 2 * l.casing, c);
+            float hc = l.head + 2.4f * l.casing;
+            Tiles.icon(g, "head", len - hc + l.casing * 0.9f, -hc / 2, hc, c);
+        } else if (l.open >= 0) {
+            float e = ease(l.open);
+            fillLine(g, 0, body, l.w, Tiles.withAlpha(LINE_CLOSED, alpha));
+            fillLine(g, 0, body * e, l.w, Tiles.withAlpha(color, alpha));
+            Tiles.icon(g, "head", len - l.head, -l.head / 2, l.head, Tiles.withAlpha(e >= 1 ? color : LINE_CLOSED, alpha));
+        } else {
+            fillLine(g, 0, body, l.w, Tiles.withAlpha(color, alpha));
+            Tiles.icon(g, "head", len - l.head, -l.head / 2, l.head, Tiles.withAlpha(color, alpha));
         }
-        double a = (lo - o) / d;
-        double b = (hi - o) / d;
-        if (a > b) {
-            double s = a;
-            a = b;
-            b = s;
-        }
-        a = Math.max(a, 0);
-        b = Math.min(b, 1);
-        return b > a ? new double[] {a, b} : null;
-    }
-
-    /**
-     * Where the arrowhead rests on a line nobody is pointing at: the middle of its widest free stretch, when that
-     * stretch is wide enough to hold an arrowhead of length {@code a} and keep {@link #ARROW_PAD} from each tile.
-     */
-    private static float longestMiddle(float[] runs, float a) {
-        float best = a + 2 * ARROW_PAD;
-        float mid = -1;
-        for (int i = 0; i + 1 < runs.length; i += 2) {
-            if (runs[i + 1] - runs[i] >= best) {
-                best = runs[i + 1] - runs[i];
-                mid = (runs[i] + runs[i + 1]) / 2;
-            }
-        }
-        return mid;
-    }
-
-    /**
-     * Where the arrowhead is while it slides: {@code t} runs 0..1 over the free stretches together, so the parts a
-     * tile covers are stepped over instead of travelled, and never so far that the arrowhead or its padding reaches
-     * the tile hiding that part. -1 when no stretch is wide enough to hold it.
-     */
-    private static float slideHead(float[] runs, float t, float a) {
-        float pad = a / 2 + ARROW_PAD;
-        float total = 0;
-        for (int i = 0; i + 1 < runs.length; i += 2) {
-            total += Math.max(0, runs[i + 1] - runs[i] - 2 * pad);
-        }
-        if (total <= 0) {
-            return -1;
-        }
-        float at = t * total;
-        for (int i = 0; i + 1 < runs.length; i += 2) {
-            float span = runs[i + 1] - runs[i] - 2 * pad;
-            if (span <= 0) {
-                continue;
-            }
-            if (at <= span) {
-                return runs[i] + pad + at;
-            }
-            at -= span;
-        }
-        return -1;
-    }
-
-    /** Whether an arrowhead of length a centred at s lies inside one free stretch, padding included. */
-    private static boolean fitsRun(float[] runs, float s, float a) {
-        float pad = a / 2 + ARROW_PAD - 0.001f;
-        for (int i = 0; i + 1 < runs.length; i += 2) {
-            if (s - pad >= runs[i] && s + pad <= runs[i + 1]) {
-                return true;
-            }
-        }
-        return false;
+        g.pose().popPose();
     }
 
     /** A straight run along the x axis of the current pose, centred on it. */
