@@ -185,8 +185,12 @@ public final class ProgressService {
                 }
             }
             case "claim_all" -> {
+                // the node field may name a chapter: the header's button claims that chapter only (2026-10-20). Empty
+                // keeps the old meaning, every chapter
+                String only = a.node().isEmpty() || n != null ? null : a.node();
                 for (ProgressModel.Node m : r.model().nodes.values()) {
-                    if (r.state(p, m) == State.CLAIM && !m.chapter.isSkills() && !excludedFromClaimAll(m)) {
+                    if (r.state(p, m) == State.CLAIM && !m.chapter.isSkills() && !ProgressModel.excludedFromClaimAll(m)
+                            && (only == null || m.chapter.id.equals(only))) {
                         claim(player, p, m, -1);
                     }
                 }
@@ -431,7 +435,7 @@ public final class ProgressService {
             // main inventory and hotbar only: never take worn armour or the offhand item
             for (int s = 0; s < inv.items.size() && taken < missing; s++) {
                 ItemStack st = inv.items.get(s);
-                if (!st.isEmpty() && itemMatches(spec, st)) {
+                if (!st.isEmpty() && itemMatches(spec, st, player.registryAccess())) {
                     int n2 = (int) Math.min(st.getCount(), missing - taken);
                     st.shrink(n2);
                     taken += n2;
@@ -529,10 +533,6 @@ public final class ProgressService {
         event(player, p, "claim", n.key);
         rules().repeatAfterClaim(p, n, System.currentTimeMillis());
         ProgressStore.get(player.server).setDirty();
-    }
-
-    private static boolean excludedFromClaimAll(ProgressModel.Node n) {
-        return n.rewards.stream().anyMatch(rw -> ProgressModel.boolOf(rw, "exclude_from_claim_all"));
     }
 
     // ------------------------------------------------------------------ sending
@@ -645,11 +645,19 @@ public final class ProgressService {
     }
 
     static boolean itemMatches(String spec, ItemStack st) {
+        return itemMatches(spec, st, null);
+    }
+
+    /**
+     * {@code registries} lets a smart filter's component(...) terms read values that point into registries (stored
+     * enchantments, datapack entries); without them those terms never match.
+     */
+    static boolean itemMatches(String spec, ItemStack st, net.minecraft.core.HolderLookup.Provider registries) {
         if (spec.isEmpty()) {
             return false;
         }
         if (spec.startsWith("~")) {
-            return com.kuronami.questtree.progress.ItemFilter.parse(spec.substring(1)).test(st);
+            return com.kuronami.questtree.progress.ItemFilter.parse(spec.substring(1)).test(st, registries);
         }
         if (spec.startsWith("#")) {
             ResourceLocation id = ResourceLocation.tryParse(spec.substring(1));
@@ -668,7 +676,7 @@ public final class ProgressService {
         var inv = player.getInventory();
         for (int s = 0; s < inv.getContainerSize(); s++) {
             ItemStack st = inv.getItem(s);
-            if (!st.isEmpty() && itemMatches(spec, st)) {
+            if (!st.isEmpty() && itemMatches(spec, st, player.registryAccess())) {
                 c += st.getCount();
             }
         }

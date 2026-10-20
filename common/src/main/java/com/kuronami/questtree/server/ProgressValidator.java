@@ -490,6 +490,9 @@ public final class ProgressValidator {
                     var f = com.kuronami.questtree.progress.ItemFilter.parse(filter);
                     if (!f.isValid()) {
                         problem(out, Severity.ERROR, ref, path + ".item", "item filter cannot be read (" + f.error() + "), so it never counts");
+                    } else if (f.root().children().isEmpty()) {
+                        // as in FTB Filter System, an empty filter takes every item: the task counts whatever is held
+                        problem(out, Severity.WARNING, ref, path + ".item", "item filter is empty, so any item counts (and is taken, if the task takes items)");
                     } else if (!f.unsupportedFunctions().isEmpty()) {
                         problem(out, Severity.WARNING, ref, path + ".item", "item filter uses " + f.unsupportedFunctions()
                                 + ", which Quest Tree cannot check; those parts never match");

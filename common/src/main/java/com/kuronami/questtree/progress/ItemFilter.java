@@ -636,7 +636,7 @@ public final class ItemFilter {
             for (String key : want.getAllKeys()) {
                 ResourceLocation id = ResourceLocation.tryParse(key);
                 DataComponentType<?> type = id == null ? null : BuiltInRegistries.DATA_COMPONENT_TYPE.get(id);
-                if (type == null || !matches(type, want.get(key), s, ops)) {
+                if (type == null || !matches(type, want.get(key), s, ops, n.strict)) {
                     return false;
                 }
             }
@@ -651,11 +651,19 @@ public final class ItemFilter {
             return true;
         }
 
-        static <T> boolean matches(DataComponentType<T> type, Tag wanted, ItemStack s, DynamicOps<Tag> ops) {
+        static <T> boolean matches(DataComponentType<T> type, Tag wanted, ItemStack s, DynamicOps<Tag> ops, boolean strict) {
             T actual = s.get(type);
             Codec<T> codec = type.codec();
             if (actual == null || codec == null) {
                 return false;
+            }
+            if (!strict) {
+                // fuzzy: what the filter lists has to be in the stack's value; more is allowed (a book that also
+                // carries another enchantment still counts)
+                Optional<Tag> encoded = codec.encodeStart(ops, actual).result();
+                if (encoded.isPresent() && NbtUtils.compareNbt(wanted, encoded.get(), true)) {
+                    return true;
+                }
             }
             Optional<T> decoded = codec.parse(ops, wanted).result();
             if (decoded.isPresent()) {

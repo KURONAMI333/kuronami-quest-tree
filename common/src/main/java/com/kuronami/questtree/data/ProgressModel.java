@@ -192,6 +192,11 @@ public final class ProgressModel {
         return o != null && o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isNumber() ? o.get(k).getAsInt() : def;
     }
 
+    /** Whether "claim all" leaves this node alone (FTB Quests' exclude_from_claim_all on any of its rewards). */
+    public static boolean excludedFromClaimAll(Node n) {
+        return n.rewards.stream().anyMatch(rw -> boolOf(rw, "exclude_from_claim_all"));
+    }
+
     public static boolean boolOf(JsonObject o, String k) {
         return o != null && o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isBoolean() && o.get(k).getAsBoolean();
     }

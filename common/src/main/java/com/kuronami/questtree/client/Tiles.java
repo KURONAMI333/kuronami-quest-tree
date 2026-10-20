@@ -109,6 +109,11 @@ final class Tiles {
         if (!PREPARED.add(tex)) {
             return;
         }
+        // a missing picture draws the shared missing texture: leave that one's settings alone
+        if (!tex.getPath().startsWith("derived/")
+                && net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(tex).isEmpty()) {
+            return;
+        }
         var t = net.minecraft.client.Minecraft.getInstance().getTextureManager().getTexture(tex);
         t.setFilter(true, false);
         t.bind();
@@ -116,6 +121,18 @@ final class Tiles {
                 org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
         com.mojang.blaze3d.platform.GlStateManager._texParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T,
                 org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
+    }
+
+    private static String packs;
+
+    /** {@link #reload()} when the list of resource packs differs from the one the shapes were measured with. */
+    static void reloadIfPacksChanged() {
+        String now = net.minecraft.client.Minecraft.getInstance().getResourceManager().listPacks()
+                .map(net.minecraft.server.packs.PackResources::packId).collect(java.util.stream.Collectors.joining(","));
+        if (!now.equals(packs)) {
+            packs = now;
+            reload();
+        }
     }
 
     /** Forgets everything worked out from the masks, so the next draw reads a resource pack's shapes again. */
@@ -325,7 +342,8 @@ final class Tiles {
         Metrics m = Metrics.of(shapeOf(shape));
         double a = Math.atan2(dy, dx);
         int i = (int) Math.floorMod(Math.round(a / (2 * Math.PI) * Metrics.RAYS), Metrics.RAYS);
-        return m.edge[i];
+        // a pack's shape whose centre lies outside it has no edge on the ray: fall back to the box
+        return m.edge[i] > 0 ? m.edge[i] : 0.5f;
     }
 
     /**

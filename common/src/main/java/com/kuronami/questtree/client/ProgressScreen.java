@@ -105,8 +105,9 @@ public class ProgressScreen extends Screen {
     @Override
     protected void init() {
         Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
-        // a resource reload calls init on the open screen: shapes a pack replaced are measured again
-        Tiles.reload();
+        // a resource reload calls init on the open screen: shapes a pack replaced are measured again (only then, not on
+        // every resize or return from another screen)
+        Tiles.reloadIfPacksChanged();
         imageCache.clear();
         // a resource pack change can add, drop or resize background pictures
         TEXTURE_SIZES.clear();
@@ -301,7 +302,8 @@ public class ProgressScreen extends Screen {
     private final List<ClientModel.Chapter> railChapters = new ArrayList<>();
     /** The rail's rows: a header before the first chapter of each titled group, then the chapter rows. */
     private final List<RailRow> railRows = new ArrayList<>();
-    private int claimableNoChoice;
+    /** Per chapter, quests "claim all" would take: rewards waiting, no choice to make, not excluded by the pack. */
+    private final Map<String, Integer> claimable = new HashMap<>();
     private int doneTotal;
     private int questTotal;
 
@@ -339,7 +341,7 @@ public class ProgressScreen extends Screen {
         railPins = ClientConfig.railPinVersion();
         badges.clear();
         chapterCounts.clear();
-        claimableNoChoice = 0;
+        claimable.clear();
         doneTotal = 0;
         questTotal = 0;
         railChapters.clear();
@@ -376,8 +378,9 @@ public class ProgressScreen extends Screen {
                 }
                 if (s == State.CLAIM) {
                     badge++;
-                    if (n.choice.isEmpty()) {
-                        claimableNoChoice++;
+                    var pn = ClientProgress.rules() == null ? null : ClientProgress.rules().model().nodes.get(n.key);
+                    if (n.choice.isEmpty() && (pn == null || !com.kuronami.questtree.data.ProgressModel.excludedFromClaimAll(pn))) {
+                        claimable.merge(c.id, 1, Integer::sum);
                     }
                 }
             }
@@ -1131,29 +1134,35 @@ public class ProgressScreen extends Screen {
         int px = x + w - 4 - pin;
         int py = y + 4;
         boolean pinned = ClientConfig.railPinned(ch.id);
-        boolean over = mouseX >= px && mouseX < px + pin && mouseY >= py && mouseY < py + pin;
+        // the details sheet slides over the box: whatever it covers neither lights up nor takes clicks
+        int open = sheetT > 0 ? sheetLeft() : width;
+        boolean over = mouseX >= px && mouseX < px + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
         if (over) {
             Ui.surface(g, px, py, pin, pin, pin / 2, Ui.OVERLAY_1);
             pendingTip = Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
         }
         Tiles.icon(g, "pin", px + (pin - 10) / 2f, py + (pin - 10) / 2f, 10, pinned ? Tiles.GOLD : over ? Ui.TEXT : Ui.DIM);
-        buttons.add(new Button(px, py, pin, pin, () -> {
-            ClientConfig.toggleRailPin(ch.id);
-            ProgressFeedback.click();
-        }));
-        if (claimableNoChoice > 0) {
+        if (px + pin <= open) {
+            buttons.add(new Button(px, py, pin, pin, () -> {
+                ClientConfig.toggleRailPin(ch.id);
+                ProgressFeedback.click();
+            }));
+        }
+        int waiting = claimable.getOrDefault(ch.id, 0);
+        if (waiting > 0) {
+            // this chapter's rewards only: the count and the claim are the chapter's, as the box they sit under is
             Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
-            String n = String.valueOf(claimableNoChoice);
+            String n = String.valueOf(waiting);
             int bh = 20;
             int bw = font.width(ca) + Ui.S1 + font.width(n) + 2 * Ui.S2 + 4;
             int bx = width - Ui.S2 - bw;
             int by = y + h + Ui.S1;
-            boolean bo = mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh;
+            boolean bo = mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh && mouseX < open;
             Ui.surface(g, bx, by, bw, bh, bh / 2, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
             Ui.text(g, font, ca, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
             Ui.text(g, font, n, bx + bw - Ui.S2 - font.width(n), by + (bh - 8) / 2, Tiles.INK);
-            buttons.add(new Button(bx, by, bw, bh, () -> {
-                ClientProgress.send("claim_all", "", -1);
+            Runnable claim = () -> {
+                ClientProgress.send("claim_all", ch.id, -1);
                 long start = Util.getMillis();
                 int i = 0;
                 for (ClientModel.Node node : ch.nodes.values()) {
@@ -1162,7 +1171,10 @@ public class ProgressScreen extends Screen {
                         flashes.put(node.key, start + 140L * i++);
                     }
                 }
-            }));
+            };
+            if (bx + bw <= open) {
+                buttons.add(new Button(bx, by, bw, bh, claim));
+            }
             headerRect = new int[]{Math.min(x, bx), y, Math.max(w, bw), by + bh - y};
         }
         g.pose().popPose();

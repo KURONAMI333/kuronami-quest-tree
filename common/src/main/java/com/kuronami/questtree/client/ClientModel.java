@@ -431,7 +431,8 @@ public final class ClientModel {
             if (st.isEmpty()) {
                 return false;
             }
-            return filter != null ? filter.test(st) : !item.isEmpty() && st.is(item.getItem());
+            var level = Minecraft.getInstance().level;
+            return filter != null ? filter.test(st, level == null ? null : level.registryAccess()) : !item.isEmpty() && st.is(item.getItem());
         }
 
         public Component name() {

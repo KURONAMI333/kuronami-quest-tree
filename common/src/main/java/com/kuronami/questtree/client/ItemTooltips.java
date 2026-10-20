@@ -101,7 +101,8 @@ public final class ItemTooltips {
         for (Want w : BY_TAG) {
             if (w.spec.startsWith("~")) {
                 // an FTB Filter System smart filter: the item counts when the filter takes it
-                if (com.kuronami.questtree.progress.ItemFilter.parse(w.spec.substring(1)).test(stack)) {
+                var level = net.minecraft.client.Minecraft.getInstance().level;
+                if (com.kuronami.questtree.progress.ItemFilter.parse(w.spec.substring(1)).test(stack, level == null ? null : level.registryAccess())) {
                     return w.node;
                 }
                 continue;
