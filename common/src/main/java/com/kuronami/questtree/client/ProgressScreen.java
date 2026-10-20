@@ -575,8 +575,8 @@ public class ProgressScreen extends Screen {
         this.renderBlurredBackground(partialTick);
     }
 
-    /** Top of the rail's panel. */
-    private static final int RAIL_TOP = 4;
+    /** Top of the search row: inside the rail's panel (which starts at 4) by the same inset as the rows' sides. */
+    private static final int RAIL_TOP = 8;
     /** The rail's first row is the search; the chapter list starts under it. */
     private static final int SEARCH_H = 18;
     private static final int RAIL_LIST_TOP = RAIL_TOP + SEARCH_H + Ui.S1;
@@ -1174,7 +1174,8 @@ public class ProgressScreen extends Screen {
         int bh = 20;
         int bw = waiting > 0 ? font.width(claimLabel) + Ui.S1 + font.width(String.valueOf(waiting)) + 2 * Ui.S2 + 4 : 0;
         int limitRight = width - Ui.S2 - (waiting > 0 ? bw + Ui.S1 : 0);
-        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - pin - Ui.S2);
+        int skillW = ch.skills ? Ui.S2 + skillHeaderWidth(ch) : 0;
+        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - pin - skillW - Ui.S2);
         Component title = ch.title;
         int titleW = font.width(title);
         if (titleW > maxTitleW) {
@@ -1182,7 +1183,6 @@ public class ProgressScreen extends Screen {
             title = Component.literal(trim(ch.title.getString(), maxTitleW));
             titleW = font.width(title);
         }
-        int skillW = ch.skills ? Ui.S2 + skillHeaderWidth(ch) : 0;
         int gw = icon + Ui.S1 + titleW + Ui.S1 + pin + skillW;
         int x = left + (avail - gw) / 2;
         if (x + gw > limitRight) {
@@ -1196,12 +1196,14 @@ public class ProgressScreen extends Screen {
         // a soft landing for the title over whatever the chapter draws at the top of the map
         g.fillGradient(0, 0, width, TITLE_SCRIM_H, 0xB0000000 | (Ui.GROUND & 0xFFFFFF), Ui.GROUND & 0xFFFFFF);
         g.pose().pushPose();
-        g.pose().translate(x, ty - 2, 0);
+        // renderItem lifts the item by 150: take it back, so the icon stays at the header's depth (under the rail and the
+        // details sheet, like the title)
+        g.pose().translate(x, ty - 2, -150);
         g.pose().scale(0.75f, 0.75f, 1);
         g.renderItem(ch.displayIcon(), 0, 0);
         g.pose().popPose();
         g.pose().pushPose();
-        g.pose().translate(0, 0, OVERLAY_Z);
+        // already at OVERLAY_Z (the caller's): one more would lift the title over the rail and the details sheet
         // the component itself, shadowed: FTB Quests titles carry their own colours
         g.drawString(font, title, tx, ty, Ui.BRIGHT, true);
         if (ch.skills) {
@@ -1811,7 +1813,8 @@ public class ProgressScreen extends Screen {
                 continue;
             }
             String shape = Tiles.shapeOf(n.shape);
-            float d = Math.max(3.5f, Tiles.drawnSize(shape, (int) Math.round(NODE * n.size)) * k);
+            // a little smaller than true scale, so tiles that sit close on the map stay apart here instead of merging
+            float d = Math.max(2.5f, Tiles.drawnSize(shape, (int) Math.round(NODE * n.size)) * k * 0.75f);
             float cx = (float) (n.x * UNIT) * k;
             float cy = (float) (n.y * UNIT) * k;
             g.pose().pushPose();
@@ -2430,7 +2433,10 @@ public class ProgressScreen extends Screen {
             int c = Tiles.withAlpha(LINE_CASING_COLOR, alpha * ((LINE_CASING_COLOR >>> 24) / 255f));
             fillLine(g, 0, len, l.w + 2 * l.casing, c);
         } else {
-            float phase = (Util.getMillis() % 1_000_000L) / 1000f * BELT_SPEED * l.w;
+            // the pattern is pinned to the map, not to the line's start: lines that run along the same track (a
+            // column of quests all feeding one tile) show their chevrons on top of each other instead of a solid bar
+            float along = (l.x1 * dx + l.y1 * dy) / len;
+            float phase = (Util.getMillis() % 1_000_000L) / 1000f * BELT_SPEED * l.w - along;
             if (l.open >= 0) {
                 // the way just opened: colour runs in from the earlier tile over the closed belt
                 float e = ease(l.open);
