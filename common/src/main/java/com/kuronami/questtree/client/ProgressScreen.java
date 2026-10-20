@@ -79,6 +79,7 @@ public class ProgressScreen extends Screen {
         VIEWS.clear();
         lastChapter = -1;
         query = "";
+        railQuery = "";
     }
 
     // ------------------------------------------------------------------ search (EXTERNAL_REFERENCES 1-1)
@@ -93,8 +94,20 @@ public class ProgressScreen extends Screen {
     private final java.util.Set<String> matchSet = new java.util.HashSet<>();
     private final Map<String, Integer> matchCount = new HashMap<>();
     private int matchCursor = -1;
-    /** The search row's hit area (x, y, w, h), set every frame by {@link #renderSearch}. */
+    /** The quest search field's hit area (x, y, w, h), set every frame by {@link #renderHeader}. */
     private int[] searchRect = new int[4];
+    /**
+     * The chapter list's own filter (2026-10-20, the player: the field at the top of the list looked like it searched
+     * the list, so it now does). Kept apart from the quest search: it only narrows the rows shown there.
+     */
+    private static String railQuery = "";
+    private net.minecraft.client.gui.components.EditBox railBox;
+    /** The rail field's hit area (x, y, w, h), set every frame by {@link #renderRailField}. */
+    private int[] railRect = new int[4];
+    /** The chapters the rail lists after its filter (all of them when the field is empty). */
+    private final List<ClientModel.Chapter> railShown = new ArrayList<>();
+    /** The filter text the rows were last built for, part of the rebuild key. */
+    private String railBuiltFilter = "";
     /**
      * Chapter decorations (FTB Quests' chapter images) name a texture from the pack they came from, so a pack used
      * without that pack's resource pack draws the magenta "missing texture" across the map. Record what this client
@@ -114,7 +127,7 @@ public class ProgressScreen extends Screen {
         // a resource pack change can add, drop or resize background pictures
         TEXTURE_SIZES.clear();
         searchBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 120 - 2 * Ui.S2, EDIT_H, Component.translatable("screen.kuronami_quest_tree.search"));
-        // drawn as one of the screen's flat controls (renderSearch), not vanilla's black box with a grey border
+        // drawn as one of the screen's flat controls (renderHeader), not vanilla's black box with a grey border
         searchBox.setBordered(false);
         searchBox.setHint(Component.translatable("screen.kuronami_quest_tree.search").withStyle(net.minecraft.ChatFormatting.GRAY));
         searchBox.setMaxLength(64);
@@ -125,6 +138,17 @@ public class ProgressScreen extends Screen {
         });
         // input only: drawn by render() above the scrim
         addWidget(searchBox);
+        railBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 120 - 2 * Ui.S2, EDIT_H,
+                Component.translatable("screen.kuronami_quest_tree.find_chapter"));
+        railBox.setBordered(false);
+        railBox.setHint(Component.translatable("screen.kuronami_quest_tree.find_chapter").withStyle(net.minecraft.ChatFormatting.GRAY));
+        railBox.setMaxLength(64);
+        railBox.setValue(railQuery);
+        railBox.setResponder(v -> {
+            railQuery = v;
+            railScrollTarget = 0;
+        });
+        addWidget(railBox);
         if (pendingGoTo != null && model() != null) {
             goTo(pendingGoTo);
             pendingGoTo = null;
@@ -337,13 +361,15 @@ public class ProgressScreen extends Screen {
 
     private void refresh(ClientModel m) {
         PlayerProgress p = ClientProgress.progress();
-        if (p == cachedFor && m == cachedModel && railPins == ClientConfig.railPinVersion() && railBuiltSearching == searching()) {
+        if (p == cachedFor && m == cachedModel && railPins == ClientConfig.railPinVersion() && railBuiltSearching == searching()
+                && railBuiltFilter.equals(railQuery)) {
             return;
         }
         cachedFor = p;
         cachedModel = m;
         railPins = ClientConfig.railPinVersion();
         railBuiltSearching = searching();
+        railBuiltFilter = railQuery;
         badges.clear();
         chapterCounts.clear();
         claimable.clear();
@@ -398,10 +424,19 @@ public class ProgressScreen extends Screen {
             badges.put(c.id, badge);
             chapterCounts.put(c.id, new int[]{done, shown, hidden});
         }
+        // the rail's filter: a chapter stays when its own name or its group's name contains the text; a group with no
+        // chapter left simply never gets its header, and while filtering no group is folded shut (the player)
+        railShown.clear();
+        String filter = railQuery.toLowerCase(java.util.Locale.ROOT).trim();
+        for (ClientModel.Chapter c : railChapters) {
+            if (filter.isEmpty() || chapterMatchesFilter(m, c, filter)) {
+                railShown.add(c);
+            }
+        }
         // pinned chapters form their own block at the top, in pin order: quick access to the few a player works in
         List<ClientModel.Chapter> pinnedRail = new ArrayList<>();
         for (String id : ClientConfig.railPinned()) {
-            for (ClientModel.Chapter c : railChapters) {
+            for (ClientModel.Chapter c : railShown) {
                 if (c.id.equals(id)) {
                     pinnedRail.add(c);
                     break;
@@ -420,7 +455,7 @@ public class ProgressScreen extends Screen {
         // A group without a title (or chapters with no group) simply gets no header, keeping the old rail.
         String lastGroup = null;
         boolean shut = false;
-        for (ClientModel.Chapter c : railChapters) {
+        for (ClientModel.Chapter c : railShown) {
             if (ClientConfig.railPinned(c.id)) {
                 continue;
             }
@@ -443,9 +478,31 @@ public class ProgressScreen extends Screen {
     /** Fold key of the pinned block (group ids come from the pack and never start with '#'). */
     private static final String PINNED_FOLD = "#pinned";
 
-    /** A group stays open while searching, so every match can be seen. */
+    /** A group stays open while searching, so every match can be seen; a filter also shows its matching chapters. */
     private boolean folded(String fold) {
-        return !searching() && ClientConfig.railFolded(fold);
+        return !searching() && !railFiltering() && ClientConfig.railFolded(fold);
+    }
+
+    private boolean railFiltering() {
+        return !railQuery.isBlank();
+    }
+
+    /** Whether a chapter stays listed for a lower-cased filter: its own title or its group's title contains it. */
+    private boolean chapterMatchesFilter(ClientModel m, ClientModel.Chapter c, String filter) {
+        if (c.title.getString().toLowerCase(java.util.Locale.ROOT).contains(filter)) {
+            return true;
+        }
+        Component group = c.group == null ? null : m.groupTitle(c);
+        return group != null && group.getString().toLowerCase(java.util.Locale.ROOT).contains(filter);
+    }
+
+    /** Enter in the rail field: open the first chapter the filter leaves listed. */
+    private void openFirstRailMatch() {
+        ClientModel m = model();
+        if (!railFiltering() || m == null || railShown.isEmpty()) {
+            return;
+        }
+        select(m.chapters.indexOf(railShown.get(0)));
     }
 
     private static boolean hasTakeable(ClientModel.Chapter c) {
@@ -500,7 +557,7 @@ public class ProgressScreen extends Screen {
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
         lastFrame = nowMs;
-        railT = tourRailOpen ? 1 : Mth.clamp(railT + (overRail || (searchBox != null && searchBox.isFocused()) ? dt : -dt) / RAIL_MS, 0, 1);
+        railT = tourRailOpen ? 1 : Mth.clamp(railT + (overRail || (railBox != null && railBox.isFocused()) ? dt : -dt) / RAIL_MS, 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? dt : -dt) / SHEET_MS, 0, 1);
         hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
         hoverGrow.values().removeIf(t -> t <= 0);
@@ -515,7 +572,7 @@ public class ProgressScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 100);
         renderRail(g, m, mouseX, mouseY, dt);
-        renderSearch(g, mouseX, mouseY, partialTick);
+        renderRailField(g, mouseX, mouseY, partialTick);
         g.pose().popPose();
         if (pendingTip != null) {
             g.pose().pushPose();
@@ -526,47 +583,46 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * The search sits at the top of the chapter list, where it belongs (2026-10-20, the player: it moved sideways with
-     * the list and left a second box at the bottom left). Search finds where things are, and the list already shows
-     * each chapter's match count while searching, so the field is part of the list: closed, one magnifier in the icon
-     * column; open, a rounded field over the list's width. The EditBox is placed every frame so it fits the drawn rail.
+     * The field at the top of the chapter list now filters the list itself (2026-10-20, the player: it looked like a
+     * list search, so it is one). Closed, one magnifier in the icon column; open, a rounded field over the list's width,
+     * its count the number of chapters left. The EditBox is placed every frame so it fits the drawn rail.
      */
-    private void renderSearch(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+    private void renderRailField(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int w = railWidth();
         int y = RAIL_TOP;
         boolean open = railT > 0.6f;
         if (!open) {
             boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + SEARCH_H;
             Tiles.icon(g, "search", RAIL_ICON_X, y + (SEARCH_H - RAIL_ICON) / 2f, RAIL_ICON,
-                    searching() ? Ui.ACCENT : hover ? Ui.TEXT : Ui.DIM);
+                    railFiltering() ? Ui.ACCENT : hover ? Ui.TEXT : Ui.DIM);
             // the box is hidden with the open rail, but stays where a click can reach it without jumping
-            searchBox.setX(RAIL_ICON_X);
-            searchBox.setY(y + (SEARCH_H - EDIT_H) / 2);
-            searchBox.setWidth(RAIL_ICON);
-            searchRect = new int[]{4, y, w, SEARCH_H};
+            railBox.setX(RAIL_ICON_X);
+            railBox.setY(y + (SEARCH_H - EDIT_H) / 2);
+            railBox.setWidth(RAIL_ICON);
+            railRect = new int[]{4, y, w, SEARCH_H};
             return;
         }
         int fx = 4 + Ui.S1;
         int fw = w - 2 * Ui.S1;
         Ui.surface(g, fx, y, fw, SEARCH_H, SEARCH_H / 2, Ui.OVERLAY_1);
-        if (searchBox.isFocused()) {
+        if (railBox.isFocused()) {
             Ui.outline(g, fx, y, fw, SEARCH_H, SEARCH_H / 2, Ui.FOCUS);
         }
         int ix = fx + Ui.S1;
         Tiles.icon(g, "search", ix, y + (SEARCH_H - RAIL_ICON) / 2f, RAIL_ICON,
-                searchBox.isFocused() ? Ui.TEXT : Ui.MUTED);
-        String n = searching() ? (matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size()) : null;
+                railBox.isFocused() ? Ui.TEXT : Ui.MUTED);
+        String n = railFiltering() ? String.valueOf(railShown.size()) : null;
         int countW = n == null ? 0 : font.width(n) + Ui.S1;
         int ex = ix + RAIL_ICON + Ui.S1;
-        searchBox.setX(ex);
-        searchBox.setY(y + (SEARCH_H - EDIT_H) / 2);
-        searchBox.setWidth(Math.max(10, fx + fw - Ui.S2 - countW - ex));
-        searchBox.render(g, mouseX, mouseY, partialTick);
+        railBox.setX(ex);
+        railBox.setY(y + (SEARCH_H - EDIT_H) / 2);
+        railBox.setWidth(Math.max(10, fx + fw - Ui.S2 - countW - ex));
+        railBox.render(g, mouseX, mouseY, partialTick);
         if (n != null) {
             Ui.textRight(g, font, n, fx + fw - Ui.S2, y + (SEARCH_H - 8) / 2 + 1,
-                    matches.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
+                    railShown.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
         }
-        searchRect = new int[]{fx, y, fw, SEARCH_H};
+        railRect = new int[]{fx, y, fw, SEARCH_H};
     }
 
     @Override
@@ -1854,11 +1910,27 @@ public class ProgressScreen extends Screen {
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         ClientModel m = model();
+        if (railBox != null && inRect(railRect, mx, my)) {
+            setFocused(railBox);
+            railBox.setFocused(true);
+            if (searchBox != null) {
+                searchBox.setFocused(false);
+            }
+            railBox.mouseClicked(mx, my, button);
+            return true;
+        }
         if (searchBox != null && inRect(searchRect, mx, my)) {
             setFocused(searchBox);
             searchBox.setFocused(true);
+            if (railBox != null) {
+                railBox.setFocused(false);
+            }
             searchBox.mouseClicked(mx, my, button);
             return true;
+        }
+        if (railBox != null && railBox.isFocused()) {
+            railBox.setFocused(false);
+            setFocused(null);
         }
         if (searchBox != null && searchBox.isFocused()) {
             searchBox.setFocused(false);
@@ -2286,6 +2358,19 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (railBox != null && railBox.isFocused()) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) {
+                openFirstRailMatch();
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+                railBox.setFocused(false);
+                setFocused(null);
+                return true;
+            }
+            // typing goes to the box (the open key must not close the screen mid-word)
+            return railBox.keyPressed(key, scan, modifiers) || true;
+        }
         if (searchBox != null && searchBox.isFocused()) {
             if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) {
                 nextMatch();
