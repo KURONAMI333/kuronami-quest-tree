@@ -73,6 +73,14 @@ public final class SkillExperience {
         award(player, "craft_item", ctx);
     }
 
+    /** An enchanting table result, as Pufferfish's Skills' {@code enchant_item} source (levels spent included). */
+    public static void onEnchant(ServerPlayer player, ItemStack enchanted, int levels) {
+        Map<String, Object> ctx = base(player);
+        ctx.put("enchanted_item_stack", enchanted);
+        ctx.put("levels", (double) levels);
+        award(player, "enchant_item", ctx);
+    }
+
     public static void onSmelt(ServerPlayer player, ItemStack smelted) {
         Map<String, Object> ctx = base(player);
         ctx.put("smelted_item_stack", smelted);

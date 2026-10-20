@@ -10,7 +10,8 @@
         "LivingHealMixin",
         "PlayerEatMixin",
         "ResultSlotMixin",
-        "StatsCounterMixin"
+        "StatsCounterMixin",
+        "EnchantedItemCriterionMixin"
     ],
     "client": [
         "AbstractContainerScreenAccessor",
