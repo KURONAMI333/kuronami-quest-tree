@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
+import com.kuronami.questtree.progress.ProgressRules;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.core.Holder;
@@ -329,7 +330,11 @@ public final class Rewards {
 
     private static String pointsChapter(ProgressModel.Node n, JsonObject rw) {
         String c = ProgressService.str(rw, "chapter");
-        return c.isEmpty() ? n.chapter.id : c;
+        if (c.isEmpty()) {
+            return ProgressRules.key(n.chapter);
+        }
+        ProgressModel.Chapter target = ProgressService.rules().model().chapters.get(c);
+        return target == null ? c : ProgressRules.key(target);
     }
 
     private static int intOf(JsonObject o, String k, int def) {

@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
+import com.kuronami.questtree.progress.ProgressRules;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -67,7 +68,7 @@ final class PlayerCommands {
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
                                         .then(Commands.argument("amount", IntegerArgumentType.integer())
-                                                .executes(c -> each(c, (p, pr) -> pr.bonus.merge(chapter(c).id,
+                                                .executes(c -> each(c, (p, pr) -> pr.bonus.merge(ProgressRules.key(chapter(c)),
                                                         IntegerArgumentType.getInteger(c, "amount"), Integer::sum)))))))
                 .then(Commands.literal("experience")
                         .then(Commands.argument("players", EntityArgument.players())
@@ -138,10 +139,11 @@ final class PlayerCommands {
         for (ProgressModel.Node n : ch.nodes.values()) {
             resetNode(p, pr, n);
         }
-        pr.xp.remove(ch.id);
-        pr.level.remove(ch.id);
-        pr.spent.remove(ch.id);
-        pr.bonus.remove(ch.id);
+        String key = ProgressRules.key(ch);
+        pr.xp.remove(key);
+        pr.level.remove(key);
+        pr.spent.remove(key);
+        pr.bonus.remove(key);
     }
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {
@@ -154,7 +156,7 @@ final class PlayerCommands {
         }
         if (taken != null && n.chapter.isSkills()) {
             // give the points back, as a chapter reset or respec would
-            pr.spent.computeIfPresent(n.chapter.id, (k, v) -> Math.max(0, v - Math.max(0, n.cost) * taken));
+            pr.spent.computeIfPresent(ProgressRules.key(n.chapter), (k, v) -> Math.max(0, v - Math.max(0, n.cost) * taken));
         }
         pr.clearNode(n.key);
         pr.repeats.remove(n.key);
@@ -190,6 +192,6 @@ final class PlayerCommands {
                 Rewards.revokeSkill(p, n, taken);
             }
         }
-        pr.spent.remove(ch.id);
+        pr.spent.remove(ProgressRules.key(ch));
     }
 }

@@ -97,8 +97,9 @@ public final class ProgressService {
         if (died) {
             // "reset_on_death": the experience towards the next level is lost (levels and points stay)
             for (ProgressModel.Chapter c : rules().model().chapters.values()) {
-                if (c.isSkills() && ProgressModel.boolOf(c.points, "reset_on_death") && p.xp.getOrDefault(c.id, 0.0) > 0) {
-                    p.xp.put(c.id, 0.0);
+                String key = ProgressRules.key(c);
+                if (c.isSkills() && ProgressModel.boolOf(c.points, "reset_on_death") && p.xp.getOrDefault(key, 0.0) > 0) {
+                    p.xp.put(key, 0.0);
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
                 }

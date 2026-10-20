@@ -143,6 +143,8 @@ public final class ClientModel {
         /** The chapter's group id (as written by the pack, lower-cased), or null when it has none. */
         public final String group;
         public final boolean skills;
+        /** {@code points.pool}: chapters naming the same pool share experience and points. */
+        public final String pool;
         public final Component title;
         public final Map<String, Node> nodes = new LinkedHashMap<>();
         public final List<Decoration> decorations = new ArrayList<>();
@@ -174,6 +176,8 @@ public final class ClientModel {
             this.group = gid.isBlank() ? null : gid;
             this.groupOrder = group == null ? -1 : groupOrder.getOrDefault(group, 999);
             this.skills = o.has("points") && o.get("points").isJsonObject();
+            JsonObject pointsJson = obj(o, "points");
+            this.pool = pointsJson.has("pool") && pointsJson.get("pool").isJsonPrimitive() ? pointsJson.get("pool").getAsString() : null;
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
             this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive();
