@@ -162,7 +162,8 @@ public final class ProgressHud {
         int y = g.guiHeight() / 2 - total / 2;
         // side and scale from the client settings (2026-10-20); the tracker is centred either way
         float scale = ClientConfig.trackerScale();
-        float dx = ClientConfig.trackerRight() ? g.guiWidth() - bw - 8 : 0;
+        // the right margin shrinks with the scale, or 125%/150% would push the card off the screen
+        float dx = ClientConfig.trackerRight() ? g.guiWidth() - (bw + 8) * scale : 0;
         g.pose().pushPose();
         if (dx != 0) {
             g.pose().translate(dx, 0, 0);

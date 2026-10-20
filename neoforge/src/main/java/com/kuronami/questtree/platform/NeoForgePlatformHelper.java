@@ -36,7 +36,7 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
 
     @Override
     public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
-        // the registrar is optional, so vanilla/other clients can join; sending to them would throw and kick them
+        // the channel is required on both sides; the check only keeps a player already leaving from throwing
         if (player.connection.hasChannel(payload.type())) {
             PacketDistributor.sendToPlayer(player, payload);
         }

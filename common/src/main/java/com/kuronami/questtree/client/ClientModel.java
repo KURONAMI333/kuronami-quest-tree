@@ -258,6 +258,8 @@ public final class ClientModel {
         public final boolean exclusive;
         /** Any reward asks "claim all" to leave this quest alone. */
         public final boolean excludeFromClaimAll;
+        /** A reward is a choice table, so the server waits for a pick before it pays anything out. */
+        public final boolean choiceReward;
         public final int cost;
         /** FTB Quests' {@code require_sequential_tasks}: a task waits for the one before it (2026-10-20). */
         public final boolean sequentialTasks;
@@ -311,6 +313,7 @@ public final class ClientModel {
                 }
             }
             JsonArray rewardArray = arr(o, "rewards");
+            boolean hasChoiceReward = false;
             for (int ri = 0; ri < rewardArray.size(); ri++) {
                 JsonElement r = rewardArray.get(ri);
                 if (!r.isJsonObject()) {
@@ -318,6 +321,17 @@ public final class ClientModel {
                 }
                 JsonObject ro = r.getAsJsonObject();
                 String type = ro.has("type") ? ro.get("type").getAsString() : "";
+                // a choice table is a pick before claim, not a reward of its own: an icon on it is only for display and
+                // must not turn it into a plain item (2026-10-20 review)
+                if (type.equals("table") && (ro.has("mode") ? ro.get("mode").getAsString() : "random").equals("choice")) {
+                    hasChoiceReward = true;
+                    JsonObject table = ro.has("table") ? obj(m.tables, ro.get("table").getAsString()) : new JsonObject();
+                    for (JsonElement en : arr(table, "entries")) {
+                        JsonObject rw = en.isJsonObject() ? obj(en.getAsJsonObject(), "reward") : new JsonObject();
+                        choice.add(rw.has("item") ? stack(rw.get("item")) : new ItemStack(Items.EXPERIENCE_BOTTLE));
+                    }
+                    continue;
+                }
                 // any reward may name its own icon (FTB Quests reward icons; command rewards have nothing else to show)
                 ItemStack own = ro.has("icon") ? stack(ro.get("icon")) : ItemStack.EMPTY;
                 if (!own.isEmpty()) {
@@ -333,22 +347,12 @@ public final class ClientModel {
                     }
                     case "item" -> addReward(stack(ro.get("item")), ri);
                     case "xp", "xp_levels" -> addReward(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64, ro.has("amount") ? ro.get("amount").getAsInt() : 1))), ri);
-                    case "table" -> {
-                        String mode = ro.has("mode") ? ro.get("mode").getAsString() : "random";
-                        JsonObject table = ro.has("table") ? obj(m.tables, ro.get("table").getAsString()) : new JsonObject();
-                        if (mode.equals("choice")) {
-                            for (JsonElement en : arr(table, "entries")) {
-                                JsonObject rw = en.isJsonObject() ? obj(en.getAsJsonObject(), "reward") : new JsonObject();
-                                choice.add(rw.has("item") ? stack(rw.get("item")) : new ItemStack(Items.EXPERIENCE_BOTTLE));
-                            }
-                        } else {
-                            addReward(new ItemStack(Items.CHEST), ri);
-                        }
-                    }
+                    case "table" -> addReward(new ItemStack(Items.CHEST), ri);
                     case "attribute" -> rewardLines.add(attributeLine(ro));
                     default -> { }
                 }
             }
+            this.choiceReward = hasChoiceReward;
             ItemStack ic = stack(o.get("icon"));
             this.iconTask = ic.isEmpty() && !tasks.isEmpty() && tasks.get(0).filter != null ? tasks.get(0) : null;
             if (ic.isEmpty() && !tasks.isEmpty()) {
@@ -379,6 +383,15 @@ public final class ClientModel {
                 }
             }
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);
+        }
+
+        /**
+         * Whether the server asks for a pick before this node pays anything out (the same rule as choiceMissing).
+         *
+         * @return true when one of the node's rewards is a choice table
+         */
+        public boolean needsChoice() {
+            return choiceReward;
         }
 
         private void addReward(ItemStack stack, int index) {

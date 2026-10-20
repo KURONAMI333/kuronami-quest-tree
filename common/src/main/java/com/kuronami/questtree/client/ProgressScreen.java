@@ -475,7 +475,7 @@ public class ProgressScreen extends Screen {
                 if (s == State.CLAIM) {
                     badge++;
                     var pn = ClientProgress.rules() == null ? null : ClientProgress.rules().model().nodes.get(n.key);
-                    if (n.choice.isEmpty() && (pn == null || !com.kuronami.questtree.data.ProgressModel.excludedFromClaimAll(pn))) {
+                    if (!n.needsChoice() && (pn == null || !com.kuronami.questtree.data.ProgressModel.excludedFromClaimAll(pn))) {
                         claimable.merge(c.id, 1, Integer::sum);
                     }
                 }
@@ -1467,7 +1467,7 @@ public class ProgressScreen extends Screen {
                 int i = 0;
                 for (ClientModel.Node node : ch.nodes.values()) {
                     var pn = ClientProgress.rules() == null ? null : ClientProgress.rules().model().nodes.get(node.key);
-                    if (ClientProgress.state(node.key) == State.CLAIM && node.choice.isEmpty()
+                    if (ClientProgress.state(node.key) == State.CLAIM && !node.needsChoice()
                             && (pn == null || !com.kuronami.questtree.data.ProgressModel.excludedFromClaimAll(pn))) {
                         // one tile after another, 140ms apart
                         flashes.put(node.key, start + 140L * i++);
@@ -1816,11 +1816,11 @@ public class ProgressScreen extends Screen {
                 int index = i < n.rewardIndices.size() ? n.rewardIndices.get(i) : i;
                 boolean taken = ClientProgress.rewardClaimed(n.key, index);
                 boolean canTake = state == State.CLAIM && !taken
-                        && (n.choice.isEmpty() || choicePick >= 0);
+                        && (!n.needsChoice() || choicePick >= 0);
                 slot(g, r, rx, y, false, taken);
                 if (canTake && y + 22 > contentTop && y < contentBottom) {
                     buttons.add(new Button(rx, y, 22, 22, () -> {
-                        ClientProgress.send("claim_reward", n.key, index, n.choice.isEmpty() ? -1 : choicePick);
+                        ClientProgress.send("claim_reward", n.key, index, n.needsChoice() ? choicePick : -1);
                         flashes.put(n.key, Util.getMillis());
                     }));
                 }
@@ -1917,11 +1917,11 @@ public class ProgressScreen extends Screen {
             return;
         }
         if (state == State.CLAIM) {
-            boolean ready = n.choice.isEmpty() || choicePick >= 0;
+            boolean ready = !n.needsChoice() || choicePick >= 0;
             Component claim = Component.translatable("screen.kuronami_quest_tree.claim");
             int bw = font.width(claim) + 2 * Ui.S2;
             button(g, claim, bx, y, bw, Tiles.GOLD, ready, mouseX, mouseY, () -> {
-                ClientProgress.send("claim", n.key, n.choice.isEmpty() ? -1 : choicePick);
+                ClientProgress.send("claim", n.key, n.needsChoice() ? choicePick : -1);
                 flashes.put(n.key, Util.getMillis());
                 choicePick = -1;
             });

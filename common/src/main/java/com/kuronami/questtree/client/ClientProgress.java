@@ -251,7 +251,7 @@ public final class ClientProgress {
         int n = 0;
         for (ClientModel.Node node : m.nodesByKey.values()) {
             ClientModel.Chapter chapter = m.chapterOf.get(node.key);
-            if ((chapter != null && chapter.skills) || node.choice.size() > 0 || node.excludeFromClaimAll) {
+            if ((chapter != null && chapter.skills) || node.needsChoice() || node.excludeFromClaimAll) {
                 continue;
             }
             ProgressModel.Node serverNode = r.model().nodes.get(node.key);

@@ -107,6 +107,7 @@ public final class ProgressService {
             player.drop(book, false);
         }
         p.bookGiven = true;
+        ProgressStore.get(player.server).setDirty();
         markDirty(player);
     }
 
@@ -566,6 +567,7 @@ public final class ProgressService {
             if (ProgressModel.boolOf(rw, "auto") && !p.claimedRewards.contains(n.key + "#" + i)) {
                 Rewards.give(player, p, n, rw, -1);
                 p.claimedRewards.add(n.key + "#" + i);
+                ProgressStore.get(player.server).setDirty();
             }
         }
         finishClaim(player, p, n);
@@ -591,6 +593,7 @@ public final class ProgressService {
             Rewards.give(player, p, n, n.rewards.get(i), choice);
             p.claimedRewards.add(n.key + "#" + i);
         }
+        ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
     }
 
@@ -608,6 +611,7 @@ public final class ProgressService {
         }
         Rewards.give(player, p, n, rw, choice);
         p.claimedRewards.add(n.key + "#" + index);
+        ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
     }
 

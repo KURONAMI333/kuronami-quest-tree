@@ -11,4 +11,13 @@ public interface AbstractContainerScreenAccessor {
 
     @Accessor("hoveredSlot")
     Slot questTree$hoveredSlot();
+
+    @Accessor("leftPos")
+    int questTree$leftPos();
+
+    @Accessor("topPos")
+    int questTree$topPos();
+
+    @Accessor("imageWidth")
+    int questTree$imageWidth();
 }

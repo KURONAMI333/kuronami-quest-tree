@@ -90,8 +90,10 @@ public class QuestTree {
     }
 
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        // optional: a client without the mod can still join a server that has it
-        var r = event.registrar("1").optional();
+        // the quest_book item is synced as a registry entry, so the client mod is required (like FTB Quests). The
+        // version is bumped when a payload changes shape (2: ActionPayload gained its choice field), so an older
+        // client fails the handshake with a version mismatch instead of disconnecting on the first claim.
+        var r = event.registrar("2");
         r.playToClient(SyncPayload.TYPE, SyncPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onSync(payload));
         r.playToClient(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onProgress(payload));
         r.playToServer(ActionPayload.TYPE, ActionPayload.STREAM_CODEC, (payload, context) -> {

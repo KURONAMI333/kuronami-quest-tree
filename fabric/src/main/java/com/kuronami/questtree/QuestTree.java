@@ -37,6 +37,7 @@ public class QuestTree implements ModInitializer {
         CommonClass.init();
         ModItems.setQuestBook(QUEST_BOOK);
         ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(e -> e.accept(QUEST_BOOK));
+        // the quest_book item is synced, so the client mod is required (like FTB Quests)
         PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(ActionPayload.TYPE, ActionPayload.STREAM_CODEC);
