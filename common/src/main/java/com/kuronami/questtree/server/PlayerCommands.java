@@ -4,6 +4,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
+import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -19,6 +20,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.function.BiConsumer;
 
 /**
@@ -51,35 +55,37 @@ final class PlayerCommands {
     }
 
     static void register(CommandDispatcher<CommandSourceStack> d) {
-        d.register(Commands.literal(Constants.COMMAND).requires(s -> s.hasPermission(2))
-                .then(Commands.literal("reset")
+        // the root is shared with ProgressCommands (party commands are open to everyone), so each admin literal carries its own gate
+        d.register(Commands.literal(Constants.COMMAND)
+                .then(Commands.literal("reset").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
-                                .executes(c -> each(c, (p, pr) -> resetAll(p, pr)))
+                                .executes(c -> each(c, (p, pr) -> resetAll(p, pr), PlayerCommands::clearOwnClaims))
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(ANY)
-                                        .executes(c -> each(c, (p, pr) -> reset(p, pr, id(c)))))))
-                .then(Commands.literal("complete")
+                                        .executes(c -> each(c, (p, pr) -> reset(p, pr, id(c)),
+                                        (p, pr) -> clearOwnClaims(p, pr, id(c)))))))
+                .then(Commands.literal("complete").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(NODES)
                                         .executes(c -> each(c, (p, pr) -> complete(p, pr, id(c)))))))
-                .then(Commands.literal("respec")
+                .then(Commands.literal("respec").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
                                         .executes(c -> each(c, (p, pr) -> respec(p, pr, id(c)))))))
-                .then(Commands.literal("lock")
+                .then(Commands.literal("lock").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
                                         .executes(c -> each(c, (p, pr) -> chapterOpen(c, p, pr, false))))))
-                .then(Commands.literal("unlock")
+                .then(Commands.literal("unlock").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
                                         .executes(c -> each(c, (p, pr) -> chapterOpen(c, p, pr, true))))))
-                .then(Commands.literal("points")
+                .then(Commands.literal("points").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
                                         .then(Commands.argument("amount", IntegerArgumentType.integer())
                                                 .executes(c -> each(c, (p, pr) -> pr.bonus.merge(ProgressRules.key(chapter(c)),
                                                         IntegerArgumentType.getInteger(c, "amount"), Integer::sum)))))))
-                .then(Commands.literal("experience")
+                .then(Commands.literal("experience").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
                                         .then(Commands.argument("amount", DoubleArgumentType.doubleArg(0))
@@ -104,17 +110,36 @@ final class PlayerCommands {
         return ch;
     }
 
-    /** Runs the change for every target, then re-checks, saves and syncs. */
     private static int each(CommandContext<CommandSourceStack> c, BiConsumer<ServerPlayer, PlayerProgress> change) throws CommandSyntaxException {
+        return each(c, change, null);
+    }
+
+    /**
+     * Runs the change once per team, then re-checks, saves and syncs to every online member. Selecting several players
+     * of one team must not apply a shared change twice (a reset would revoke rewards twice, points would double).
+     * {@code perMember} runs for every target first, for the parts that stay with one player (claims), so resetting a
+     * whole party also clears each member's own claims.
+     */
+    private static int each(CommandContext<CommandSourceStack> c, BiConsumer<ServerPlayer, PlayerProgress> change,
+                            BiConsumer<ServerPlayer, PlayerProgress> perMember) throws CommandSyntaxException {
         Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
         try {
+            if (perMember != null) {
+                for (ServerPlayer p : players) {
+                    perMember.accept(p, ProgressService.progress(p));
+                }
+            }
+            Map<UUID, ServerPlayer> firstOfTeam = new LinkedHashMap<>();
             for (ServerPlayer p : players) {
+                firstOfTeam.putIfAbsent(TeamResolver.teamId(p.server, p.getUUID()), p);
+            }
+            for (ServerPlayer p : firstOfTeam.values()) {
                 PlayerProgress pr = ProgressService.progress(p);
                 change.accept(p, pr);
                 ProgressStore.get(p.server).setDirty();
                 ProgressService.recheck(p, pr);
                 ProgressService.markDirty(p);
-                ProgressService.flush(p);
+                ProgressService.flushTeam(p);
             }
         } catch (IllegalArgumentException ex) {
             c.getSource().sendFailure(Component.literal(ex.getMessage()));
@@ -124,6 +149,29 @@ final class PlayerCommands {
         c.getSource().sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.changed",
                 "Progress changed for %s players", n), true);
         return n;
+    }
+
+    /** A full reset forgets the player's own claims and recent list before the shared record is reset. */
+    private static void clearOwnClaims(ServerPlayer p, PlayerProgress pr) {
+        pr.claimed.clear();
+        pr.claimedRewards.clear();
+        pr.recent.clear();
+    }
+
+    /** One chapter or node reset clears only the claims that belong to it, for every selected member. */
+    private static void clearOwnClaims(ServerPlayer p, PlayerProgress pr, String id) {
+        ProgressModel model = ProgressService.rules().model();
+        if (model.chapters.containsKey(id)) {
+            ProgressModel.Chapter ch = model.chapters.get(id);
+            for (ProgressModel.Node n : ch.nodes.values()) {
+                pr.claimed.remove(n.key);
+                pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+            }
+        } else if (model.nodes.containsKey(id)) {
+            ProgressModel.Node n = model.nodes.get(id);
+            pr.claimed.remove(n.key);
+            pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+        }
     }
 
     private static void resetAll(ServerPlayer p, PlayerProgress pr) {

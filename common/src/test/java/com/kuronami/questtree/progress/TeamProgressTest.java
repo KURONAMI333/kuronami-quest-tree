@@ -1,0 +1,121 @@
+package com.kuronami.questtree.progress;
+
+import com.google.gson.JsonObject;
+import org.junit.jupiter.api.Test;
+
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** Team ownership, the join/leave rules and the FTBQ team_reward mark, checked without a running game. */
+class TeamProgressTest {
+
+    private static final UUID A = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+    private static final UUID B = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+    private static final UUID TEAM = UUID.fromString("00000000-0000-0000-0000-0000000000ff");
+
+    @Test
+    void legacyPlayerBecomesSoloTeamWithoutLosingAnything() {
+        PlayerProgress old = new PlayerProgress();
+        old.completed.add("t:q/one");
+        old.setTask("t:q/two", 0, 3);
+        old.xp.put("t:mining", 12.5);
+        old.claimed.add("t:q/one");
+        old.claimedRewards.add("t:q/one#0");
+        old.event("claim", "t:q/one", 1000);
+        old.setBookGiven(true);
+
+        TeamProgress solo = TeamProgress.fromLegacy(A, old);
+        PlayerProgress view = solo.view(A);
+
+        assertEquals(A, solo.id);
+        assertTrue(view.completed.contains("t:q/one"));
+        assertEquals(3, view.task("t:q/two", 0));
+        assertEquals(12.5, view.xp.get("t:mining"));
+        assertTrue(view.claimed.contains("t:q/one"));
+        assertTrue(view.claimedRewards.contains("t:q/one#0"));
+        assertTrue(view.bookGiven());
+        assertEquals(1, view.recent.size());
+    }
+
+    @Test
+    void teamRewardIsClaimedOnceForEveryoneButOtherClaimsStayPerPlayer() {
+        TeamProgress team = new TeamProgress(TEAM);
+        PlayerProgress a = team.view(A);
+        PlayerProgress b = team.view(B);
+
+        assertTrue(a.claimTeamReward("t:q/shared#0"));
+        assertFalse(b.claimTeamReward("t:q/shared#0"));
+        assertTrue(b.rewardClaimed("t:q/shared#0"));
+
+        a.claimedRewards.add("t:q/shared#1");
+        assertFalse(b.rewardClaimed("t:q/shared#1"));
+    }
+
+    @Test
+    void joiningFoldsProgressInWithMaxPerKey() {
+        TeamProgress solo = new TeamProgress(A);
+        solo.shared.completed.add("t:q/a");
+        solo.shared.setTask("t:q/x", 0, 5);
+        solo.shared.xp.put("t:mining", 10.0);
+        solo.part(A).claimedRewards.add("t:q/a#0");
+        solo.teamClaimedRewards.add("t:q/team#0");
+
+        TeamProgress team = new TeamProgress(TEAM);
+        team.shared.completed.add("t:q/b");
+        team.shared.setTask("t:q/x", 0, 7);
+        team.shared.xp.put("t:mining", 4.0);
+        team.mergeJoiner(A, solo);
+
+        assertEquals(2, team.shared.completed.size());
+        assertEquals(7, team.shared.task("t:q/x", 0));
+        assertEquals(10.0, team.shared.xp.get("t:mining"));
+        assertTrue(team.view(A).claimedRewards.contains("t:q/a#0"));
+        assertTrue(team.view(A).rewardClaimed("t:q/team#0"));
+    }
+
+    @Test
+    void leavingTakesACopyAndKeepsOwnClaims() {
+        TeamProgress team = new TeamProgress(TEAM);
+        team.shared.completed.add("t:q/a");
+        team.part(A).claimedRewards.add("t:q/a#0");
+
+        TeamProgress solo = team.leaveCopy(A);
+
+        assertEquals(A, solo.id);
+        assertTrue(solo.shared.completed.contains("t:q/a"));
+        assertTrue(solo.view(A).claimedRewards.contains("t:q/a#0"));
+    }
+
+    @Test
+    void syncedJsonShowsTeamRewardAsClaimed() {
+        TeamProgress team = new TeamProgress(TEAM);
+        team.view(A).claimTeamReward("t:q/a#0");
+
+        JsonObject json = ProgressJson.write(team.view(A));
+        PlayerProgress read = ProgressJson.read(json);
+
+        assertTrue(read.claimedRewards.contains("t:q/a#0"));
+    }
+
+    @Test
+    void storeMovesAPlayerBetweenSoloAndTeam() {
+        TeamStoreData store = new TeamStoreData();
+        PlayerProgress solo = store.team(A).view(A);
+        solo.completed.add("t:q/solo");
+        store.owners.put(A, A);
+
+        assertTrue(store.changedTeam(A, TEAM));
+        assertTrue(store.team(TEAM).shared.completed.contains("t:q/solo"));
+        assertFalse(store.teams.containsKey(A));
+
+        assertTrue(store.changedTeam(A, A));
+        TeamProgress back = store.team(A);
+        assertNotNull(back);
+        assertTrue(back.shared.completed.contains("t:q/solo"));
+        assertEquals(A, store.teamOf(A));
+    }
+}

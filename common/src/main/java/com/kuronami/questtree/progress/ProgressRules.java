@@ -68,7 +68,7 @@ public final class ProgressRules {
     /** Whether every reward of a node was claimed one by one (2026-10-20). */
     public static boolean allRewardsClaimed(PlayerProgress p, ProgressModel.Node n) {
         for (int i = 0; i < n.rewards.size(); i++) {
-            if (!p.claimedRewards.contains(n.key + "#" + i)) {
+            if (!p.rewardClaimed(n.key + "#" + i)) {
                 return false;
             }
         }

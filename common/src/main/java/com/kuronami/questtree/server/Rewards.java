@@ -131,7 +131,9 @@ public final class Rewards {
                 }
             }
         }
-        for (String mark : p.claimedRewards) {
+        java.util.Set<String> marks = new java.util.HashSet<>(p.claimedRewards);
+        marks.addAll(p.teamClaimedRewards);
+        for (String mark : marks) {
             int hash = mark.lastIndexOf('#');
             if (hash <= 0) {
                 continue;

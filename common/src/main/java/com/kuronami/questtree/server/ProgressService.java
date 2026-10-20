@@ -15,6 +15,8 @@ import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
+import com.kuronami.questtree.progress.TeamProgress;
+import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
@@ -44,8 +46,10 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -81,7 +85,8 @@ public final class ProgressService {
     }
 
     public static PlayerProgress progress(ServerPlayer player) {
-        PlayerProgress p = ProgressStore.get(player.server).of(player.getUUID());
+        // the store resolves the player's current team (solo = their UUID) and folds a join/leave in on the way
+        PlayerProgress p = ProgressStore.get(player.server).view(player.server, player.getUUID());
         ProgressModel model = ProgressData.model();
         if (MIGRATED.get(p) != model) {
             // chapters that gained points.pool after their values were saved (2026-10-20 review)
@@ -108,14 +113,14 @@ public final class ProgressService {
      * inventory drops it at the player rather than losing it; the flag is set either way so it is not given twice.
      */
     private static void giveBookOnce(ServerPlayer player, PlayerProgress p) {
-        if (p.bookGiven || !ServerConfig.giveBookOnFirstJoin() || ModItems.questBook() == null) {
+        if (p.bookGiven() || !ServerConfig.giveBookOnFirstJoin() || ModItems.questBook() == null) {
             return;
         }
         ItemStack book = new ItemStack(ModItems.questBook());
         if (!player.getInventory().add(book)) {
             player.drop(book, false);
         }
-        p.bookGiven = true;
+        p.setBookGiven(true);
         ProgressStore.get(player.server).setDirty();
         markDirty(player);
     }
@@ -345,6 +350,9 @@ public final class ProgressService {
     private static void scanItems(ServerPlayer player, PlayerProgress p) {
         ProgressRules r = rules();
         Map<String, Long> held = null;
+        // FTBQ counts what a member holds toward the team's value and only ever raises it (ItemTask.submitTask), so one
+        // member with an empty bag cannot undo another's count. A solo player keeps the "what you hold now" rule.
+        boolean team = TeamResolver.members(player.server, TeamResolver.teamId(player.server, player.getUUID())).size() > 1;
         for (ProgressModel.Node n : r.model().nodes.values()) {
             if (!working(r, p, n)) {
                 continue;
@@ -384,7 +392,7 @@ public final class ProgressService {
                 // inflate it that no one can foresee. Reaching the target once still finishes the task, like FTB Quests
                 long had = p.task(n.key, i);
                 long capped = Math.min(now, target);
-                if (had < target && capped != had) {
+                if (had < target && (team ? capped > had : capped != had)) {
                     bump(player, p, n, i, capped);
                 }
             }
@@ -635,9 +643,10 @@ public final class ProgressService {
         }
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
-            if (ProgressModel.boolOf(rw, "auto") && !p.claimedRewards.contains(n.key + "#" + i)) {
+            String key = n.key + "#" + i;
+            if (ProgressModel.boolOf(rw, "auto") && !p.rewardClaimed(key)) {
                 Rewards.give(player, p, n, rw, -1);
-                p.claimedRewards.add(n.key + "#" + i);
+                markReward(p, rw, key);
                 ProgressStore.get(player.server).setDirty();
             }
         }
@@ -658,11 +667,12 @@ public final class ProgressService {
             }
         }
         for (int i = 0; i < n.rewards.size(); i++) {
-            if (p.claimedRewards.contains(n.key + "#" + i)) {
+            String key = n.key + "#" + i;
+            if (p.rewardClaimed(key)) {
                 continue;
             }
             Rewards.give(player, p, n, n.rewards.get(i), choice);
-            p.claimedRewards.add(n.key + "#" + i);
+            markReward(p, n.rewards.get(i), key);
         }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
@@ -673,7 +683,8 @@ public final class ProgressService {
         if (!p.completed.contains(n.key) || p.claimed.contains(n.key) || index < 0 || index >= n.rewards.size()) {
             return;
         }
-        if (p.claimedRewards.contains(n.key + "#" + index)) {
+        String key = n.key + "#" + index;
+        if (p.rewardClaimed(key)) {
             return;
         }
         JsonObject rw = n.rewards.get(index);
@@ -681,9 +692,21 @@ public final class ProgressService {
             return;
         }
         Rewards.give(player, p, n, rw, choice);
-        p.claimedRewards.add(n.key + "#" + index);
+        markReward(p, rw, key);
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
+    }
+
+    /**
+     * Records a reward as taken. A reward with {@code "team": true} (FTBQ's team_reward) settles once for the whole
+     * team; every other reward belongs to the player who claimed it.
+     */
+    private static void markReward(PlayerProgress p, JsonObject rw, String key) {
+        if (ProgressModel.boolOf(rw, "team")) {
+            p.claimTeamReward(key);
+        } else {
+            p.claimedRewards.add(key);
+        }
     }
 
     /** A choice table needs the player to pick a valid option before anything on the node is claimed. */
@@ -705,19 +728,47 @@ public final class ProgressService {
 
     // ------------------------------------------------------------------ sending
 
+    /**
+     * One event for every online member of the team, so a completion or claim is seen by everyone who shares it.
+     * The event also goes into each member's recent list (stored by UUID, so an offline member keeps it).
+     */
     static void event(ServerPlayer player, PlayerProgress p, String kind, String node) {
-        p.event(kind, node, System.currentTimeMillis());
-        ProgressStore.get(player.server).setDirty();
-        PENDING.computeIfAbsent(player.getUUID(), k -> new ArrayList<>()).add(kind + "|" + node);
-        markDirty(player);
+        MinecraftServer server = player.server;
+        UUID teamId = TeamResolver.teamId(server, player.getUUID());
+        TeamProgress team = ProgressStore.get(server).team(teamId);
+        long now = System.currentTimeMillis();
+        Set<UUID> members = new LinkedHashSet<>(TeamResolver.members(server, teamId));
+        members.add(player.getUUID());
+        for (UUID id : members) {
+            team.part(id).event(kind, node, now);
+            ServerPlayer online = server.getPlayerList().getPlayer(id);
+            if (online != null) {
+                PENDING.computeIfAbsent(id, k -> new ArrayList<>()).add(kind + "|" + node);
+                DIRTY.put(id, true);
+            }
+        }
+        ProgressStore.get(server).setDirty();
     }
 
+    /** Marks every online member of the player's team, because the change was to shared progress. */
     static void markDirty(ServerPlayer player) {
-        DIRTY.put(player.getUUID(), true);
+        for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
+            DIRTY.put(member.getUUID(), true);
+        }
     }
 
+    /** Experience is shared too: every member is marked, but only for the 10-tick (non-urgent) send. */
     static void markExperienceDirty(ServerPlayer player) {
-        DIRTY.putIfAbsent(player.getUUID(), false);
+        for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
+            DIRTY.putIfAbsent(member.getUUID(), false);
+        }
+    }
+
+    /** Sends the current shared progress to every online member now (used after a command or a party change). */
+    static void flushTeam(ServerPlayer player) {
+        for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
+            flush(member);
+        }
     }
 
     /** Sends the player's progress if anything changed since the last send. */
