@@ -50,6 +50,7 @@ public final class ProgressCommands {
         dispatcher.register(Commands.literal(Constants.COMMAND)
                 // party commands are for every player; the book/admin commands below keep the old permission gate
                 .then(PartyCommands.node())
+                .then(MigrationCommands.node())
                 .then(Commands.literal("import").requires(ADMIN)
                         .then(Commands.literal("ftbquests")
                                 .executes(c -> importFtb(c, "ftbquests"))
@@ -166,9 +167,7 @@ public final class ProgressCommands {
     }
 
     private static int importFtb(CommandContext<CommandSourceStack> c, String ns) {
-        Path game = Services.PLATFORM.getGameDir();
-        Path quests = Stream.of("config/ftbquests/quests", "defaultconfigs/ftbquests/quests")
-                .map(game::resolve).filter(Files::isDirectory).findFirst().orElse(null);
+        Path quests = ftbQuestsDir();
         if (quests == null) {
             c.getSource().sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.import.ftbquests.missing", "No FTB Quests data found in config/ftbquests/quests"));
             return 0;
@@ -186,6 +185,13 @@ public final class ProgressCommands {
             return 0;
         }
         return finish(c, out);
+    }
+
+    /** The FTB Quests quest folder the import reads, also used to find the ids a progress migration needs. */
+    static Path ftbQuestsDir() {
+        Path game = Services.PLATFORM.getGameDir();
+        return Stream.of("config/ftbquests/quests", "defaultconfigs/ftbquests/quests")
+                .map(game::resolve).filter(Files::isDirectory).findFirst().orElse(null);
     }
 
     private static int importPuffish(CommandContext<CommandSourceStack> c, String ns) {

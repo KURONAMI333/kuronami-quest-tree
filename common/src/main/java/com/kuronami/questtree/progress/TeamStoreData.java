@@ -22,6 +22,12 @@ public final class TeamStoreData {
     public final Map<UUID, TeamProgress> teams = new LinkedHashMap<>();
     /** The team each player's progress was last keyed by; a change is what triggers a join merge or a leave copy. */
     public final Map<UUID, UUID> owners = new LinkedHashMap<>();
+    /**
+     * Progress migrations already applied, source key to {@code <hash of the input files>@<time>} (2026-10-20). A
+     * second apply of the same source after people have played could bring back repeatable state that was cleared and
+     * skills that were erased, so the command refuses it unless forced.
+     */
+    public final Map<String, String> migrations = new LinkedHashMap<>();
 
     public TeamProgress team(UUID id) {
         return teams.computeIfAbsent(id, TeamProgress::new);
@@ -102,6 +108,9 @@ public final class TeamStoreData {
         JsonObject ownerJson = new JsonObject();
         owners.forEach((player, team) -> ownerJson.addProperty(player.toString(), team.toString()));
         root.add("owners", ownerJson);
+        JsonObject migrationJson = new JsonObject();
+        migrations.forEach(migrationJson::addProperty);
+        root.add("migrations", migrationJson);
         return root;
     }
 
@@ -124,6 +133,11 @@ public final class TeamStoreData {
                 data.owners.put(UUID.fromString(e.getKey()), UUID.fromString(e.getValue().getAsString()));
             } catch (RuntimeException ignored) {
                 // an invalid owner entry falls back to "solo"
+            }
+        }
+        if (root.has("migrations") && root.get("migrations").isJsonObject()) {
+            for (Map.Entry<String, JsonElement> e : root.getAsJsonObject("migrations").entrySet()) {
+                data.migrations.put(e.getKey(), e.getValue().getAsString());
             }
         }
         return data;
