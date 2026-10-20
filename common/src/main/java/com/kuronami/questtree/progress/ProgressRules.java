@@ -401,6 +401,17 @@ public final class ProgressRules {
     }
 
     /**
+     * A repeatable quest with no rewards has no claim click that would start it over, so its completion does
+     * (2026-10-20). Quests with rewards keep the old order: the claim after the last reward resets them.
+     */
+    public boolean repeatAfterCompletion(PlayerProgress p, ProgressModel.Node n, long now) {
+        if (!n.rewards.isEmpty()) {
+            return false;
+        }
+        return repeatAfterClaim(p, n, now);
+    }
+
+    /**
      * Tasks a player must do again after a repeat: kills, checkmarks and hand-ins. Item tasks of repeatable quests are
      * hand-ins (see {@link #consumes}); position, advancement, stat and stage tasks would be met again immediately.
      */

@@ -175,6 +175,38 @@ class ProgressRulesTest {
         assertTrue(r.taskOpen(p, q, 1), "only the next event may move it");
     }
 
+    /**
+     * A repeatable quest with no rewards has no claim click: completing it starts it over (2026-10-20). A cooldown is
+     * kept, and a quest with rewards still waits for its claim.
+     */
+    @Test
+    void repeatableWithoutRewardsStartsOverAtCompletion() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"s:c": {"nodes": {
+                  "free": {"repeat": true, "tasks": [{"type": "kill", "entity": "minecraft:zombie"}]},
+                  "cool": {"repeat": {"cooldown": 30}, "tasks": [{"type": "kill", "entity": "minecraft:zombie"}]},
+                  "paid": {"repeat": true, "rewards": [{"type": "item", "item": "minecraft:stone"}],
+                           "tasks": [{"type": "kill", "entity": "minecraft:zombie"}]}
+                }}}}""").getAsJsonObject();
+        ProgressRules r = new ProgressRules(ProgressModel.of(bundle));
+        PlayerProgress p = new PlayerProgress();
+        ProgressModel.Node free = r.model().nodes.get("s:c/free");
+        p.completed.add(free.key);
+        p.setTask(free.key, 0, 1);
+        assertTrue(r.repeatAfterCompletion(p, free, 1000L));
+        assertFalse(p.completed.contains(free.key), "the finished run is cleared so the quest can be done again");
+        assertEquals(1, p.repeats.get(free.key).intValue());
+        assertEquals(0, p.task(free.key, 0));
+        ProgressModel.Node cool = r.model().nodes.get("s:c/cool");
+        p.completed.add(cool.key);
+        assertTrue(r.repeatAfterCompletion(p, cool, 1000L));
+        assertEquals(31_000L, p.cooldown.get(cool.key).longValue(), "a repeat cooldown still applies");
+        ProgressModel.Node paid = r.model().nodes.get("s:c/paid");
+        p.completed.add(paid.key);
+        assertFalse(r.repeatAfterCompletion(p, paid, 1000L), "a reward waits for the claim, which resets the quest");
+        assertTrue(p.completed.contains(paid.key));
+    }
+
     /** Hidden quests: secret until done, until requirements are done, or until requirements are visible (recursively). */
     @Test
     void visibility() {

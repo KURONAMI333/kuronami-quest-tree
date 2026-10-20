@@ -517,6 +517,8 @@ public final class ProgressService {
                     p.completed.add(n.key);
                     event(player, p, "complete", n.key);
                     autoRewards(player, p, n);
+                    // nothing to claim means no claim click: the completion itself starts the quest over
+                    r.repeatAfterCompletion(p, n, System.currentTimeMillis());
                     changed = true;
                 }
             }
