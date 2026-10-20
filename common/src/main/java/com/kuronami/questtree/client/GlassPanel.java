@@ -408,12 +408,13 @@ public final class GlassPanel {
                 uu[k] = (float) clamp((ox + vx + offX) / tw * su, 0.5 / texW, su - 0.5 / texW);
                 vv[k] = (float) clamp((1.0 - (oy + vy + offY) / th) * sv, 0.5 / texH, sv - 0.5 / texH);
 
-                // light on the rim: strongest where the rim faces the light, a weaker echo on the far side
+                // light on the rim: strongest where the rim faces the light, a weaker echo on the far side. Kept low: at
+                // +0.55 white (until 2026-10-20) the rim read as a white outline, not as a glint (the player: too white)
                 double rim = 1.0 - smooth(0.0, rimWidth, depth);
                 double facing = nxv * lightX + nyv * lightY;
-                double spec = rim * (0.10 + 0.45 * Math.max(facing, 0.0) + 0.16 * Math.max(-facing, 0.0));
+                double spec = rim * (0.03 + 0.20 * Math.max(facing, 0.0) + 0.07 * Math.max(-facing, 0.0));
                 // a soft sheen across the rim band, so the lens reads as a curved edge and not a cut
-                spec += (1.0 - t) * (clear ? 0.07 : 0.04) * (0.5 + 0.5 * Math.max(facing, 0.0));
+                spec += (1.0 - t) * (clear ? 0.03 : 0.015) * (0.5 + 0.5 * Math.max(facing, 0.0));
                 if (hover) {
                     double gd = Math.sqrt((vx - lx) * (vx - lx) + (vy - ly) * (vy - ly));
                     spec += 0.07 * (1.0 - smooth(0.0, glowR, gd));
