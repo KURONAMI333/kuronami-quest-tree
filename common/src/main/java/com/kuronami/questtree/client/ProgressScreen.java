@@ -699,7 +699,7 @@ public class ProgressScreen extends Screen {
             }
             if (ry + hgt - shown > 0) {
                 if (row.isHeader()) {
-                    boolean hover = !searching() && mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + HEADER_H;
+                    boolean hover = !searching() && !railFiltering() && mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + HEADER_H;
                     drawRailHeader(g, ry, row.header(), w, hover, folded(row.fold()));
                 } else {
                     ClientModel.Chapter c = row.chapter();
@@ -1167,7 +1167,11 @@ public class ProgressScreen extends Screen {
         }
         List<Component> decoTip = hovered == null && !dragging ? decorationAt(ch, v, mouseX, mouseY, true) : null;
 
-        // everything below sits above the map's item icons
+        // everything below sits above the map's item icons. The map's depth is dropped first: a block icon on a big
+        // tile is a 3D model as deep as the tile is wide, and it poked through the title row and the search field
+        // (2026-10-20, ATM10). The sheet and the rail come later at their own depths, still over these.
+        g.flush();
+        com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, net.minecraft.client.Minecraft.ON_OSX);
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
         renderHeader(g, ch, mouseX, mouseY, partialTick);
@@ -1997,7 +2001,8 @@ public class ProgressScreen extends Screen {
             railBox.mouseClicked(mx, my, button);
             return true;
         }
-        if (searchBox != null && inRect(searchRect, mx, my)) {
+        // the field may sit under the details sheet: what the sheet covers takes no clicks
+        if (searchBox != null && inRect(searchRect, mx, my) && mx < (sheetT > 0 ? sheetLeft() : width)) {
             setFocused(searchBox);
             searchBox.setFocused(true);
             if (railBox != null) {
@@ -2033,7 +2038,7 @@ public class ProgressScreen extends Screen {
                     if (at >= rowY && at < rowY + hgt) {
                         if (!row.isHeader()) {
                             select(m.chapters.indexOf(row.chapter()));
-                        } else if (!searching()) {
+                        } else if (!searching() && !railFiltering()) {
                             // FTB Quests folds a group shut on its name; while searching every group stays open
                             ClientConfig.toggleRailFold(row.fold());
                         }
