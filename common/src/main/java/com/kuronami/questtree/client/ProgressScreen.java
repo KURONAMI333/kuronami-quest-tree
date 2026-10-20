@@ -67,7 +67,7 @@ public class ProgressScreen extends Screen {
     private static final int RAIL_TEXT_X = RAIL_ICON_X + RAIL_ICON + 6;
     /** The smallest zoom a chapter opens at: a size-1 tile is 9 GUI px, still a readable icon. */
     private static final float FIT_MIN = 0.45f;
-    private static final float FAR = 0.6f;   // below this zoom, arrowheads and optional outlines are left out (icons stay)
+    private static final float FAR = 0.6f;   // below this zoom, optional outlines are left out (icons stay)
     private static final float OVERLAY_Z = Tiles.OVERLAY_Z;
 
     /** Per-chapter camera, kept for the session (players asked for the position to be remembered). */
@@ -811,12 +811,10 @@ public class ProgressScreen extends Screen {
         return new double[]{minX, minY, maxX, maxY};
     }
 
-    /** Lines, all opaque and a step above the scrim, so the tree's shape reads even where everything is closed. */
     /**
-     * Lines (2026-10-16 rebuild, the player picked proposal C of lines_v1.html): one width for every state, the state in
-     * the colour only, and one moving part: a solid triangular arrowhead (an open chevron read as a forked twig). Every line carries it at its middle, so direction is
-     * always readable; on the node under the mouse (or the selected one) its lines brighten and the arrowheads slide
-     * towards the later node; when a way opens, the colour runs in behind the arrowhead.
+     * Line colours: one width for every state, the state in the colour only. Around the node under the mouse (or the
+     * selected one) what it needs and what it opens take their own colours and the rest step back; when a way opens,
+     * the colour runs in from the earlier tile. The shape of a line is {@link #drawLine}.
      */
     private static int LINE_WALKED = Tiles.GREEN;
     static int LINE_OPEN = 0xFF9C9CA3;
@@ -829,17 +827,17 @@ public class ProgressScreen extends Screen {
     /** The dark edge on both sides of every line and arrowhead, in the ground's colour. */
     static int LINE_CASING_COLOR = 0xE6313338;
     /**
-     * Line, casing and arrowhead in map units (they grow with the zoom along with the tiles), and the least each may
-     * shrink to on screen in GUI pixels, so zooming out never leaves a hairline or drops the arrowhead.
+     * Belt and casing widths in map units (they grow with the zoom along with the tiles), and the least each may shrink
+     * to on screen in GUI pixels, so zoomed out the chevrons still read.
      */
-    private static final float LINE_W = 2.5f;
-    private static final float LINE_CASING = 1.25f;
-    private static final float ARROW = 8;
-    private static final float LINE_MIN_PX = 1.5f;
+    private static final float LINE_W = 5f;
+    private static final float LINE_CASING = 1f;
+    private static final float LINE_MIN_PX = 4f;
     private static final float CASING_MIN_PX = 1f;
-    private static final float ARROW_MIN_PX = 6f;
-    /** How far an arrowhead's tip stays from the edge of the tile it points at, in map units. */
+    /** How far a belt stops from the edge of the tile it runs into, in map units. */
     private static final float ARROW_PAD = 1f;
+    /** How fast the chevrons move, in belt widths per second. */
+    private static final float BELT_SPEED = 0.8f;
 
     /** Colours worked out from the palette, refreshed when it is read again. */
     static void paletteChanged() {
@@ -2343,16 +2341,16 @@ public class ProgressScreen extends Screen {
      * arrowhead touches the later node's edge, and its colour. {@code role}: 0 = nothing in focus, 1 = into the focused
      * node (what it needs), 2 = out of it (what it opens), 3 = unrelated while something is in focus.
      */
-    private record LineDraw(float x1, float y1, float x2, float y2, float w, float casing, float head, int color, int role, float open) {
+    private record LineDraw(float x1, float y1, float x2, float y2, float w, float casing, int color, int role, float open) {
     }
 
     /**
-     * Straight lines with an arrowhead on the end, at every zoom (2026-10-20 rebuild, the player: zoomed out the
-     * arrowheads vanished and only bars were left, converging lines could not be told apart, some arrowheads sat off
-     * their tiles, and both the line and the head were hard to see). Straight because the books come from FTB Quests,
-     * whose authors laid out their trees for straight lines: the elbows of 2026-10-18 invented routes that ran through
-     * other tiles and merged siblings into one trunk. The tip stops at the later tile's real edge for its shape
-     * ({@link Tiles#edge}), not at its box, and the line, its casing and the head keep a minimum size on screen.
+     * Straight conveyor belts from tile edge to tile edge, chevrons moving towards the later quest (2026-10-20, the
+     * player, after FTB Quests: a line with one arrowhead at its end only told its direction at that end, and once the
+     * other lines dimmed the head and the bar came apart). Straight because the books come from FTB Quests, whose
+     * authors laid out their trees for straight lines: the elbows of 2026-10-18 invented routes that ran through other
+     * tiles and merged siblings into one trunk. Both ends stop at the tiles' real edges for their shapes
+     * ({@link Tiles#edge}), and the belt and its casing keep a minimum size on screen.
      */
     private LineDraw lineGeometry(ClientModel.Node p, ClientModel.Node n, int color, int role, float open, float zoom) {
         float x1 = (float) (p.x * UNIT);
@@ -2377,8 +2375,7 @@ public class ProgressScreen extends Screen {
         }
         float w = Math.max(LINE_W, LINE_MIN_PX / zoom);
         float casing = Math.max(LINE_CASING, CASING_MIN_PX / zoom);
-        float head = Math.min(Math.max(ARROW, ARROW_MIN_PX / zoom), visible * 0.8f);
-        return new LineDraw(x1 + ux * from, y1 + uy * from, x2 - ux * stop, y2 - uy * stop, w, casing, head, color, role, open);
+        return new LineDraw(x1 + ux * from, y1 + uy * from, x2 - ux * stop, y2 - uy * stop, w, casing, color, role, open);
     }
 
     private static void drawLine(GuiGraphics g, LineDraw l, boolean casing) {
@@ -2394,21 +2391,20 @@ public class ProgressScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(l.x1, l.y1, 0);
         g.pose().mulPose(Axis.ZP.rotation((float) Math.atan2(dy, dx)));
-        // the core stops inside the arrowhead, which covers its end
-        float body = len - l.head * 0.6f;
+        // one piece per line (casing, then the belt), so a dimmed line fades as a whole and nothing overlaps itself
         if (casing) {
             int c = Tiles.withAlpha(LINE_CASING_COLOR, alpha * ((LINE_CASING_COLOR >>> 24) / 255f));
-            fillLine(g, 0, body, l.w + 2 * l.casing, c);
-            float hc = l.head + 2.4f * l.casing;
-            Tiles.icon(g, "head", len - hc + l.casing * 0.9f, -hc / 2, hc, c);
-        } else if (l.open >= 0) {
-            float e = ease(l.open);
-            fillLine(g, 0, body, l.w, Tiles.withAlpha(LINE_CLOSED, alpha));
-            fillLine(g, 0, body * e, l.w, Tiles.withAlpha(color, alpha));
-            Tiles.icon(g, "head", len - l.head, -l.head / 2, l.head, Tiles.withAlpha(e >= 1 ? color : LINE_CLOSED, alpha));
+            fillLine(g, 0, len, l.w + 2 * l.casing, c);
         } else {
-            fillLine(g, 0, body, l.w, Tiles.withAlpha(color, alpha));
-            Tiles.icon(g, "head", len - l.head, -l.head / 2, l.head, Tiles.withAlpha(color, alpha));
+            float phase = (Util.getMillis() % 1_000_000L) / 1000f * BELT_SPEED * l.w;
+            if (l.open >= 0) {
+                // the way just opened: colour runs in from the earlier tile over the closed belt
+                float e = ease(l.open);
+                Tiles.belt(g, len * e, len, l.w, phase - len * e, Tiles.withAlpha(LINE_CLOSED, alpha));
+                Tiles.belt(g, 0, len * e, l.w, phase, Tiles.withAlpha(color, alpha));
+            } else {
+                Tiles.belt(g, 0, len, l.w, phase, Tiles.withAlpha(color, alpha));
+            }
         }
         g.pose().popPose();
     }

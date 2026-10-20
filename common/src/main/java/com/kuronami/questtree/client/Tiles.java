@@ -83,6 +83,47 @@ final class Tiles {
         g.pose().popPose();
     }
 
+    /**
+     * A conveyor belt along the x axis of the current pose, from {@code from} to {@code to}, {@code w} wide and centred
+     * on the axis: {@code line/belt} repeated every {@code w} (its tile is square, one chevron pointing along +x over a
+     * faint band), slid forward by {@code phase}. Direction reads anywhere along the line, the way FTB Quests' moving
+     * lines do (2026-10-20, the player: with one arrowhead at the end you had to find the end to know the direction).
+     */
+    static void belt(GuiGraphics g, float from, float to, float w, float phase, int argb) {
+        if (to - from <= 0.01f || w <= 0) {
+            return;
+        }
+        ResourceLocation tex = texture("line/belt");
+        prepareRepeat(tex);
+        float len = to - from;
+        int uw = Math.max(1, Math.round(len / w * 32));
+        g.pose().pushPose();
+        g.pose().translate(from, -w / 2f, 0);
+        g.pose().scale(len / 64f, w / 32f, 1);
+        RenderSystem.enableBlend();
+        g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
+        g.blit(tex, 0, 0, 64, 32, -phase / w * 32, 0, uw, 32, 32, 32);
+        g.setColor(1, 1, 1, 1);
+        g.pose().popPose();
+    }
+
+    private static final Set<ResourceLocation> PREPARED_REPEAT = new java.util.HashSet<>();
+
+    /** Smooth, repeating along the belt and clamped across it. */
+    private static void prepareRepeat(ResourceLocation tex) {
+        if (!PREPARED_REPEAT.add(tex)
+                || net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(tex).isEmpty()) {
+            return;
+        }
+        var t = net.minecraft.client.Minecraft.getInstance().getTextureManager().getTexture(tex);
+        t.setFilter(true, false);
+        t.bind();
+        com.mojang.blaze3d.platform.GlStateManager._texParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_S,
+                org.lwjgl.opengl.GL11.GL_REPEAT);
+        com.mojang.blaze3d.platform.GlStateManager._texParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T,
+                org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
+    }
+
     private static void tinted(GuiGraphics g, ResourceLocation tex, int x, int y, int w, int h, double from, double to, int argb) {
         int y0 = (int) Math.round(h * Math.max(0, from));
         int y1 = (int) Math.round(h * Math.min(1, to));
@@ -138,6 +179,7 @@ final class Tiles {
     /** Forgets everything worked out from the masks, so the next draw reads a resource pack's shapes again. */
     static void reload() {
         PREPARED.clear();
+        PREPARED_REPEAT.clear();
         Metrics.ALL.values().forEach(Metrics::release);
         Metrics.ALL.clear();
     }
