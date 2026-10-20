@@ -25,8 +25,8 @@ public final class ClientConfig {
     /** The "needed for" line on item tooltips. */
     public static boolean itemTooltips = true;
 
-    /** The minimap is drawn as a liquid-glass panel instead of a flat fill. */
-    public static boolean liquidGlass = false;
+    /** Liquid Glass on the screen's controls and panels; off draws them as flat panels (less to look through). */
+    public static boolean glass = true;
 
     /** Chapters kept at the top of the chapter list, in pin order. Not per world: it follows the player. */
     public static final List<String> railPinned = new ArrayList<>();
@@ -54,7 +54,7 @@ public final class ClientConfig {
             if (Files.exists(file())) {
                 JsonObject o = JsonParser.parseString(Files.readString(file(), StandardCharsets.UTF_8)).getAsJsonObject();
                 itemTooltips = bool(o, "item_tooltips", itemTooltips);
-                liquidGlass = bool(o, "liquid_glass", liquidGlass);
+                glass = bool(o, "glass", glass);
                 if (o.has("rail_pinned") && o.get("rail_pinned").isJsonArray()) {
                     for (JsonElement e : o.getAsJsonArray("rail_pinned")) {
                         if (e.isJsonPrimitive() && !railPinned.contains(e.getAsString())) {
@@ -90,9 +90,9 @@ public final class ClientConfig {
         return railPinned;
     }
 
-    public static boolean liquidGlass() {
+    public static boolean glass() {
         ensureLoaded();
-        return liquidGlass;
+        return glass;
     }
 
     public static boolean railPinned(String id) {
@@ -131,7 +131,7 @@ public final class ClientConfig {
         try {
             JsonObject o = new JsonObject();
             o.addProperty("item_tooltips", itemTooltips);
-            o.addProperty("liquid_glass", liquidGlass);
+            o.addProperty("glass", glass);
             JsonArray a = new JsonArray();
             railPinned.forEach(a::add);
             o.add("rail_pinned", a);

@@ -186,7 +186,7 @@ final class DevTour {
         at(pt + 62, () -> open(-1));
         // the developer's own pins and glass setting are put back at the end, so the tour leaves the config as it found it
         List<String> pinsBefore = new ArrayList<>(ClientConfig.railPinned());
-        boolean glassBefore = ClientConfig.liquidGlass();
+        boolean glassBefore = ClientConfig.glass();
         at(pt + 64, () -> screen.tourPin(2));
         shot(pt + 68, "18_rail_pins");
         at(pt + 70, () -> {
@@ -198,11 +198,12 @@ final class DevTour {
                 screen.tourZoom();
             }
         });
+        at(pt + 76, () -> ClientConfig.glass = false);
         shot(pt + 78, "19_glass_off");
-        at(pt + 80, () -> ClientConfig.liquidGlass = true);
+        at(pt + 80, () -> ClientConfig.glass = true);
         shot(pt + 82, "20_glass_on");
         at(pt + 84, () -> {
-            ClientConfig.liquidGlass = glassBefore;
+            ClientConfig.glass = glassBefore;
             for (String id : new ArrayList<>(ClientConfig.railPinned())) {
                 ClientConfig.setRailPin(id, pinsBefore.contains(id));
             }

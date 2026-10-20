@@ -16,25 +16,62 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
+import org.joml.Vector3f;
 
 /**
- * The minimap drawn as a glass slab over whatever is behind it.
+ * Liquid Glass (Apple's material, 2025) for the screen's controls and navigation: the chapter list, the details
+ * sheet, the search field, the zoom buttons, tooltips and the minimap. Never on the map's tiles, which are the content
+ * the glass floats over (Apple HIG, Materials: "Don't use Liquid Glass in the content layer").
  * <p>
- * The screen is copied off-screen, dropped into smaller copies for the frost, and drawn back through a small grid
- * whose UVs are pushed around at the bezel, so the picture behind the edge bends like it is seen through a thick
- * rounded slab. Only the game's own {@code position_tex} and {@code position_tex_color} shaders are used: a shader
- * pack replaces the world shaders, and a core shader of our own is the first thing it takes with it.
+ * The screen behind the panel is copied off-screen and drawn back through a small grid whose UVs are pushed outward
+ * at the rounded edge, so the picture behind the rim bends like it is seen through a thick slab (lensing, not only a
+ * blur). Two variants, as Apple's:
+ * <ul>
+ *     <li>{@link Kind#REGULAR}: blurs what is behind and pulls it towards a dark tone, so text on it stays legible.
+ *     For the panels with text.</li>
+ *     <li>{@link Kind#CLEAR}: sharp and see-through with a strong lens and a light dimming layer, for a small control
+ *     over a busy picture (the minimap over the map).</li>
+ * </ul>
+ * The rim catches a light from the top left; it leans towards the pointer while the pointer is near, and the panel
+ * under the pointer glows softly where it is, the way Apple's interactive glass lights up under a finger. Only the
+ * game's own {@code position_tex}, {@code position_tex_color} and {@code position_color} shaders are used: a shader
+ * pack replaces the world shaders, and a core shader of our own is the first thing it takes with it (Iris docs).
+ * All colours come from the palette.
  */
 public final class GlassPanel {
 
-    /** GUI pixels of the screen copied around the panel, so the bezel can sample outside it. */
+    enum Kind { REGULAR, CLEAR }
+
+    /** Off-screen copies for one place on the screen, kept so their sizes do not change from one panel to the next. */
+    static final class Slot {
+        private TextureTarget copy;
+        private TextureTarget half;
+        private TextureTarget quarter;
+        private TextureTarget eighth;
+        private TextureTarget panel;
+
+        private void release() {
+            for (TextureTarget t : new TextureTarget[]{copy, half, quarter, eighth, panel}) {
+                if (t != null) {
+                    t.destroyBuffers();
+                }
+            }
+            copy = half = quarter = eighth = panel = null;
+        }
+    }
+
+    static final Slot RAIL = new Slot();
+    static final Slot SHEET = new Slot();
+    static final Slot SEARCH = new Slot();
+    static final Slot ZOOM = new Slot();
+    static final Slot MINIMAP = new Slot();
+    static final Slot TOOLTIP = new Slot();
+    private static final Slot[] SLOTS = {RAIL, SHEET, SEARCH, ZOOM, MINIMAP, TOOLTIP};
+
+    /** GUI pixels of the screen copied around the panel, so the lens can sample outside it. */
     private static final int PAD = 14;
-    /** Size of one bending cell, in GUI pixels. The bezel is a curve, so the cells have to be smaller than it. */
+    /** Size of one bending cell, in GUI pixels. The rim is a curve, so the cells have to be smaller than it. */
     private static final double CELL = 3.0;
-    /** Depth of the rounded edge, in GUI pixels. */
-    private static final double BEZEL = 9.0;
-    /** How far the bezel pushes the picture at the outer edge, in GUI pixels. */
-    private static final double REFRACT = 8.1;
     /**
      * What lies outside the rounded panel: opaque in the corners, clear inside, nine-sliced like {@code shape/rsquare}.
      * Stored inverted because the game's textured shader drops fully clear texels, which then multiply nothing.
@@ -43,34 +80,42 @@ public final class GlassPanel {
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/glass_mask.png");
     private static final int MASK_TEX = 128;
     private static final int MASK_CORNER = 23;
-
-    private static TextureTarget copy;
-    private static TextureTarget half;
-    private static TextureTarget quarter;
-    private static TextureTarget eighth;
-    private static TextureTarget panel;
+    /** How far from the panel the pointer still pulls the light, in GUI pixels. */
+    private static final double REACH = 48.0;
 
     private GlassPanel() {
     }
 
-    public static void render(GuiGraphics g, int x, int y, int w, int h) {
+    /** The glass is on unless the player turned it off; off draws the flat panels instead. */
+    static boolean on() {
+        return ClientConfig.glass();
+    }
+
+    /**
+     * Draws the glass at {@code x, y, w, h} (GUI coordinates under the current pose, which may only translate) with
+     * corner radius {@code radius}. Draw it after everything it floats over and before what sits on it.
+     */
+    static void render(GuiGraphics g, Slot slot, Kind kind, int x, int y, int w, int h, int radius, int mouseX, int mouseY) {
         Minecraft mc = Minecraft.getInstance();
         double scale = mc.getWindow().getGuiScale();
         if (scale <= 0 || w <= 2 || h <= 2) {
             return;
         }
+        // where the panel is on the screen: the caller may have moved the pose (tooltips are lifted, the map is not)
+        Vector3f at = g.pose().last().pose().transformPosition(new Vector3f(x, y, 0));
+        double sx = at.x;
+        double sy = at.y;
+
         var main = mc.getMainRenderTarget();
         int fbw = main.width;
         int fbh = main.height;
         int pad = Math.max(1, (int) Math.round(PAD * scale));
-
-        int px0 = (int) Math.round(x * scale);
-        int py0 = (int) Math.round(y * scale);
-        int px1 = (int) Math.round((x + w) * scale);
-        int py1 = (int) Math.round((y + h) * scale);
+        int px0 = (int) Math.round(sx * scale);
+        int py0 = (int) Math.round(sy * scale);
+        int px1 = (int) Math.round((sx + w) * scale);
+        int py1 = (int) Math.round((sy + h) * scale);
         int pw = px1 - px0;
         int ph = py1 - py0;
-
         int x0 = Math.max(0, px0 - pad);
         int x1 = Math.min(fbw, px1 + pad);
         int top = Math.max(0, py0 - pad);
@@ -86,14 +131,16 @@ public final class GlassPanel {
         // everything drawn behind the panel has to be on the screen before it can be copied, and before a target is
         // made or resized: both rebind the framebuffer and the viewport
         g.flush();
-        copy = target(copy, tw, th);
-        half = target(half, Math.max(1, tw / 2), Math.max(1, th / 2));
-        quarter = target(quarter, Math.max(1, tw / 4), Math.max(1, th / 4));
-        eighth = target(eighth, Math.max(1, tw / 8), Math.max(1, th / 8));
-        panel = target(panel, pw, ph);
+        slot.copy = target(slot.copy, tw, th);
+        if (kind == Kind.REGULAR) {
+            slot.half = target(slot.half, Math.max(1, tw / 2), Math.max(1, th / 2));
+            slot.quarter = target(slot.quarter, Math.max(1, tw / 4), Math.max(1, th / 4));
+            slot.eighth = target(slot.eighth, Math.max(1, tw / 8), Math.max(1, th / 8));
+        }
+        slot.panel = target(slot.panel, pw, ph);
 
         GlStateManager._glBindFramebuffer(36008, main.frameBufferId);
-        GlStateManager._glBindFramebuffer(36009, copy.frameBufferId);
+        GlStateManager._glBindFramebuffer(36009, slot.copy.frameBufferId);
         GlStateManager._glBlitFrameBuffer(x0, y0, x1, y1, 0, 0, tw, th, 0x4000, 0x2600);
         GlStateManager._glBindFramebuffer(36160, main.frameBufferId);
 
@@ -101,8 +148,7 @@ public final class GlassPanel {
         RenderSystem.disableBlend();
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         RenderSystem.backupProjectionMatrix();
-        Matrix4f projection = new Matrix4f().setOrtho(0f, 1f, 1f, 0f, -1f, 1f);
-        RenderSystem.setProjectionMatrix(projection, VertexSorting.ORTHOGRAPHIC_Z);
+        RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(0f, 1f, 1f, 0f, -1f, 1f), VertexSorting.ORTHOGRAPHIC_Z);
         // the passes draw in 0..1 with nothing else applied; the GUI's model-view pushes z back by a loader-dependent
         // amount, which a fixed far plane would not always cover
         Matrix4fStack modelView = RenderSystem.getModelViewStack();
@@ -111,23 +157,29 @@ public final class GlassPanel {
         RenderSystem.applyModelViewMatrix();
         try {
             // the copied frame may have any alpha in it; the passes below want the picture's alpha out of the way
-            opaque(copy);
-            blur(copy.getColorTextureId(), half);
-            blur(half.getColorTextureId(), quarter);
-            blur(quarter.getColorTextureId(), eighth);
+            opaque(slot.copy);
+            int source = slot.copy.getColorTextureId();
+            if (kind == Kind.REGULAR) {
+                blur(slot.copy.getColorTextureId(), slot.half);
+                blur(slot.half.getColorTextureId(), slot.quarter);
+                blur(slot.quarter.getColorTextureId(), slot.eighth);
+                source = slot.eighth.getColorTextureId();
+            }
 
-            panel.setClearColor(0f, 0f, 0f, 0f);
+            // the panel starts fully covered; the corner mask takes the coverage away outside the rounded shape
+            slot.panel.setClearColor(0f, 0f, 0f, 1f);
             GlStateManager._colorMask(true, true, true, true);
-            panel.clear(false);
-            panel.bindWrite(true);
-            RenderSystem.enableBlend();
-
-            bend(px0 - x0, py0 - top, pw, ph, tw, th, scale, quarter.getColorTextureId(), panel);
+            slot.panel.clear(false);
+            slot.panel.bindWrite(true);
+            double lx = (mouseX - sx) * scale;
+            double ly = (mouseY - sy) * scale;
+            lens(kind, px0 - x0, py0 - top, pw, ph, tw, th, scale, radius, lx, ly, source);
 
             // only the coverage is cut: the colour is multiplied by it once, when the panel is drawn onto the screen
+            RenderSystem.enableBlend();
             GlStateManager._colorMask(false, false, false, true);
             RenderSystem.blendFunc(GlStateManager.SourceFactor.ZERO, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
-            mask(pw, ph, scale);
+            mask(pw, ph, scale, radius);
         } finally {
             GlStateManager._colorMask(true, true, true, true);
             RenderSystem.defaultBlendFunc();
@@ -141,7 +193,7 @@ public final class GlassPanel {
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
-        RenderSystem.setShaderTexture(0, panel.getColorTextureId());
+        RenderSystem.setShaderTexture(0, slot.panel.getColorTextureId());
         Matrix4f pose = g.pose().last().pose();
         BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
         // the target holds the copy in GL order (v=0 is the bottom), so the top of the panel samples v=1
@@ -150,22 +202,15 @@ public final class GlassPanel {
         bb.addVertex(pose, x + w, y + h, 0f).setUv(1f, 0f);
         bb.addVertex(pose, x + w, y, 0f).setUv(1f, 1f);
         BufferUploader.drawWithShader(bb.buildOrThrow());
-
         RenderSystem.disableBlend();
         RenderSystem.enableDepthTest();
-        // a hairline instead of a solid white edge; the body's own rim already carries most of the highlight
-        Ui.outline(g, x, y, w, h, Ui.R4, (Ui.BRIGHT & 0xFFFFFF) | 0x50000000);
-        RenderSystem.disableBlend();
     }
 
-    /** Frees the off-screen copies; the next panel makes them again. */
+    /** Frees every off-screen copy; the next panel makes them again. */
     public static void release() {
-        for (TextureTarget t : new TextureTarget[]{copy, half, quarter, eighth, panel}) {
-            if (t != null) {
-                t.destroyBuffers();
-            }
+        for (Slot s : SLOTS) {
+            s.release();
         }
-        copy = half = quarter = eighth = panel = null;
     }
 
     private static TextureTarget target(TextureTarget target, int w, int h) {
@@ -204,12 +249,20 @@ public final class GlassPanel {
     }
 
     /**
-     * Draws the frosted picture through a bent grid. The offsets are worked out per vertex, so the quads share their
-     * corners and no seams show; the colour is added one channel at a time, and the coverage is written last so the
-     * background's own channels stay out of it.
+     * Draws the picture behind through the bent grid, then adds the glass's own light on top. Both passes work per
+     * vertex, so the quads share their corners and no seams show.
+     * <ul>
+     *     <li>Lens: inside the rim the picture is pushed outward, most at the outer edge (a ray through a rounded
+     *     slab, refractive index 1.5). The clear variant has a deeper rim and bends further.</li>
+     *     <li>Tone: the regular variant mixes the blurred picture with {@code glass_regular} (its alpha is how much);
+     *     the clear one keeps the picture sharp, dims it by {@code glass_clear} and tints it with {@code glass_tint}.</li>
+     *     <li>Light: a thin rim highlight from the top left, leaning towards the pointer when it is near, a fainter one
+     *     on the opposite rim, and a soft glow under the pointer while it is over the panel.</li>
+     * </ul>
      */
-    private static void bend(int ox, int oy, int pw, int ph, int tw, int th, double scale, int texture,
-                             TextureTarget to) {
+    private static void lens(Kind kind, int ox, int oy, int pw, int ph, int tw, int th, double scale, int radiusGui,
+                             double lx, double ly, int texture) {
+        boolean clear = kind == Kind.CLEAR;
         int nx = Math.max(2, (int) Math.ceil(pw / (CELL * scale)));
         int ny = Math.max(2, (int) Math.ceil(ph / (CELL * scale)));
         int vw = nx + 1;
@@ -219,18 +272,44 @@ public final class GlassPanel {
         float[] gy = new float[n];
         float[] uu = new float[n];
         float[] vv = new float[n];
-        float[] tint = new float[n];
-        float[] alpha = new float[n];
+        float[] mul = new float[n * 3];
+        float[] add = new float[n * 3];
 
-        double radius = Math.min(Ui.R4 * scale, Math.min(pw, ph) * 0.5);
-        double bezel = Math.max(BEZEL * scale, 1.0);
-        double refract = REFRACT * scale;
+        double radius = Math.min(radiusGui * scale, Math.min(pw, ph) * 0.5);
+        double rimDepth = Math.min((clear ? 12.0 : 7.0) * scale, Math.min(pw, ph) * 0.45);
+        double refract = (clear ? 11.0 : 5.0) * scale;
         double halfW = pw * 0.5;
         double halfH = ph * 0.5;
         double boxW = Math.max(halfW - radius, 0.0);
         double boxH = Math.max(halfH - radius, 0.0);
-        double cap = bezel * 1.3;
-        double rimWidth = Math.max(1.5, bezel * 0.10);
+        double cap = rimDepth * 1.2;
+        double rimWidth = Math.max(1.0, 1.2 * scale);
+
+        // the light: from the top left, pulled towards the pointer as it comes near
+        double lightX = -0.6;
+        double lightY = -0.8;
+        double cx = lx - halfW;
+        double cy = ly - halfH;
+        double outside = Math.max(Math.abs(cx) - halfW, 0) + Math.max(Math.abs(cy) - halfH, 0);
+        double pull = clamp(1.0 - outside / (REACH * scale), 0.0, 1.0);
+        double cl = Math.sqrt(cx * cx + cy * cy);
+        if (pull > 0 && cl > 1e-3) {
+            lightX = lightX * (1 - pull) + cx / cl * pull;
+            lightY = lightY * (1 - pull) + cy / cl * pull;
+            double ll = Math.sqrt(lightX * lightX + lightY * lightY);
+            if (ll > 1e-3) {
+                lightX /= ll;
+                lightY /= ll;
+            }
+        }
+        boolean hover = lx >= 0 && ly >= 0 && lx < pw && ly < ph;
+        double glowR = 28.0 * scale;
+
+        int toneArgb = clear ? Ui.GLASS_CLEAR : Ui.GLASS_REGULAR;
+        double toneA = ((toneArgb >>> 24) & 255) / 255.0;
+        double[] tone = {((toneArgb >> 16) & 255) / 255.0, ((toneArgb >> 8) & 255) / 255.0, (toneArgb & 255) / 255.0};
+        int tintArgb = clear ? Ui.GLASS_TINT : 0xFFFFFFFF;
+        double[] tint = {((tintArgb >> 16) & 255) / 255.0, ((tintArgb >> 8) & 255) / 255.0, (tintArgb & 255) / 255.0};
 
         for (int j = 0; j < vh; j++) {
             double vy = ph * (double) j / ny;
@@ -244,19 +323,19 @@ public final class GlassPanel {
                 double qy = vy - halfH;
                 double dx = Math.abs(qx) - boxW;
                 double dy = Math.abs(qy) - boxH;
-                double sx = Math.max(dx, 0.0);
-                double sy = Math.max(dy, 0.0);
-                double sd = Math.sqrt(sx * sx + sy * sy) + Math.min(Math.max(dx, dy), 0.0) - radius;
+                double ex = Math.max(dx, 0.0);
+                double ey = Math.max(dy, 0.0);
+                double sd = Math.sqrt(ex * ex + ey * ey) + Math.min(Math.max(dx, dy), 0.0) - radius;
                 double depth = Math.max(-sd, 0.0);
-                double t = Math.min(depth / bezel, 1.0);
+                double t = Math.min(depth / rimDepth, 1.0);
 
                 // the outward normal of the rounded box, in the panel's top-down pixels
                 double nxv;
                 double nyv;
-                double len = Math.sqrt(sx * sx + sy * sy);
+                double len = Math.sqrt(ex * ex + ey * ey);
                 if (len > 1.0e-5) {
-                    nxv = sx / len;
-                    nyv = sy / len;
+                    nxv = ex / len;
+                    nyv = ey / len;
                 } else if (dx > dy) {
                     nxv = 1.0;
                     nyv = 0.0;
@@ -267,11 +346,11 @@ public final class GlassPanel {
                 nxv *= qx < 0.0 ? -1.0 : 1.0;
                 nyv *= qy < 0.0 ? -1.0 : 1.0;
 
-                // rays through the rounded edge come out of the glass bent, most at the outer rim
+                // rays through the rounded rim come out bent, most at the outer edge
                 double xr = 1.0 - t;
-                double thetaI = Math.asin(xr * xr);
+                double thetaI = Math.asin(clear ? xr : xr * xr);
                 double thetaT = Math.asin(Math.min(Math.sin(thetaI) / 1.5, 1.0));
-                double bend = depth >= bezel ? 0.0 : -Math.tan(thetaT - thetaI);
+                double bend = depth >= rimDepth ? 0.0 : -Math.tan(thetaT - thetaI);
                 double offX = nxv * bend * refract;
                 double offY = nyv * bend * refract;
                 double offLen = Math.sqrt(offX * offX + offY * offY);
@@ -279,66 +358,72 @@ public final class GlassPanel {
                     offX *= cap / offLen;
                     offY *= cap / offLen;
                 }
+                uu[k] = (float) clamp((ox + vx + offX) / tw, 0.5 / tw, 1.0 - 0.5 / tw);
+                vv[k] = (float) clamp(1.0 - (oy + vy + offY) / th, 0.5 / th, 1.0 - 0.5 / th);
 
-                double sampleX = vx + offX;
-                double sampleY = vy + offY;
-                uu[k] = (float) clamp((ox + sampleX) / tw, 0.5 / tw, 1.0 - 0.5 / tw);
-                vv[k] = (float) clamp(1.0 - (oy + sampleY) / th, 0.5 / th, 1.0 - 0.5 / th);
-
-                double inside = clamp(0.5 - sd, 0.0, 1.0);
-                double wash = (1.0 - smooth(0.0, bezel, depth)) * inside;
-                double rim = 1.0 - smooth(0.0, rimWidth, Math.abs(sd));
-                tint[k] = (float) (1.0 + 0.22 * wash + 0.30 * rim);
-                alpha[k] = (float) clamp(0.34 + 0.34 * wash + 0.24 * rim, 0.0, 1.0);
+                // light on the rim: strongest where the rim faces the light, a weaker echo on the far side
+                double rim = 1.0 - smooth(0.0, rimWidth, depth);
+                double facing = nxv * lightX + nyv * lightY;
+                double spec = rim * (0.10 + 0.45 * Math.max(facing, 0.0) + 0.16 * Math.max(-facing, 0.0));
+                // a soft sheen across the rim band, so the lens reads as a curved edge and not a cut
+                spec += (1.0 - t) * (clear ? 0.07 : 0.04) * (0.5 + 0.5 * Math.max(facing, 0.0));
+                if (hover) {
+                    double gd = Math.sqrt((vx - lx) * (vx - lx) + (vy - ly) * (vy - ly));
+                    spec += 0.07 * (1.0 - smooth(0.0, glowR, gd));
+                }
+                for (int c = 0; c < 3; c++) {
+                    mul[k * 3 + c] = (float) ((1.0 - toneA) * tint[c]);
+                    add[k * 3 + c] = (float) (toneA * tone[c] + spec);
+                }
             }
         }
 
+        // the picture, scaled by the tone; written straight into the cleared panel
+        RenderSystem.disableBlend();
+        GlStateManager._colorMask(true, true, true, false);
         RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
         RenderSystem.setShaderTexture(0, texture);
+        BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        grid(bb, vw, vh, k -> {
+            bb.addVertex(gx[k], gy[k], 0f).setUv(uu[k], vv[k]);
+            bb.setColor(unit(mul[k * 3]), unit(mul[k * 3 + 1]), unit(mul[k * 3 + 2]), 255);
+        });
+        BufferUploader.drawWithShader(bb.buildOrThrow());
+
+        // the glass's own tone and light, added on top
+        RenderSystem.enableBlend();
         RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
-        int tintArgb = Ui.GLASS_TINT;
-        float[] base = {((tintArgb >> 16) & 255) / 255f, ((tintArgb >> 8) & 255) / 255f, (tintArgb & 255) / 255f};
-        for (int channel = 0; channel < 3; channel++) {
-            GlStateManager._colorMask(channel == 0, channel == 1, channel == 2, false);
-            grid(gx, gy, uu, vv, tint, alpha, vw, vh, channel, base[channel]);
-        }
-        GlStateManager._colorMask(false, false, false, true);
-        grid(gx, gy, uu, vv, tint, alpha, vw, vh, 3, 0f);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        BufferBuilder light = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        grid(light, vw, vh, k -> light.addVertex(gx[k], gy[k], 0f)
+                .setColor(unit(add[k * 3]), unit(add[k * 3 + 1]), unit(add[k * 3 + 2]), 255));
+        BufferUploader.drawWithShader(light.buildOrThrow());
+        GlStateManager._colorMask(true, true, true, true);
     }
 
-    private static void grid(float[] gx, float[] gy, float[] uu, float[] vv, float[] tint, float[] alpha,
-                             int vw, int vh, int channel, float base) {
-        BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+    private interface VertexWriter {
+        void write(int k);
+    }
+
+    private static void grid(BufferBuilder bb, int vw, int vh, VertexWriter v) {
         for (int j = 0; j < vh - 1; j++) {
             for (int i = 0; i < vw - 1; i++) {
                 int a = j * vw + i;
-                int b = a + 1;
-                int c = a + vw;
-                int d = c + 1;
-                vertex(bb, a, gx, gy, uu, vv, tint, alpha, channel, base);
-                vertex(bb, c, gx, gy, uu, vv, tint, alpha, channel, base);
-                vertex(bb, d, gx, gy, uu, vv, tint, alpha, channel, base);
-                vertex(bb, b, gx, gy, uu, vv, tint, alpha, channel, base);
+                v.write(a);
+                v.write(a + vw);
+                v.write(a + vw + 1);
+                v.write(a + 1);
             }
         }
-        BufferUploader.drawWithShader(bb.buildOrThrow());
     }
 
-    private static void vertex(BufferBuilder bb, int i, float[] gx, float[] gy, float[] uu, float[] vv,
-                               float[] tint, float[] alpha, int channel, float base) {
-        bb.addVertex(gx[i], gy[i], 0f).setUv(uu[i], vv[i]);
-        if (channel == 3) {
-            int a = Math.round(alpha[i] * 255f);
-            bb.setColor(255, 255, 255, a);
-        } else {
-            int value = Math.round(Math.min(tint[i] * base, 1f) * 255f);
-            bb.setColor(channel == 0 ? value : 0, channel == 1 ? value : 0, channel == 2 ? value : 0, 255);
-        }
+    private static int unit(float v) {
+        return Math.round(Math.max(0f, Math.min(1f, v)) * 255f);
     }
 
     /** Nine-slices the corner mask, which cuts the slab's coverage outside the rounded corners. */
-    private static void mask(int pw, int ph, double scale) {
-        double r = Math.min(Ui.R4 * scale, Math.min(pw, ph) * 0.5);
+    private static void mask(int pw, int ph, double scale, int radiusGui) {
+        double r = Math.min(radiusGui * scale, Math.min(pw, ph) * 0.5);
         double sx0 = r / pw;
         double sy0 = r / ph;
         double[] dx = {0.0, sx0, 1.0 - sx0, 1.0};

@@ -597,8 +597,18 @@ public class ProgressScreen extends Screen {
         // on maps it moves aside with the chapter list, so it never sits on the list's rows
         int x = map ? railRight() + Ui.S2 : nowRight() - w;
         boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + BTN;
-        Ui.surface(g, x, y, w, BTN, Ui.R3, hover ? Ui.OVERLAY_1 : Ui.PANEL_TRANSLUCENT);
-        Ui.outline(g, x, y, w, BTN, Ui.R3, searchBox.isFocused() ? Ui.FOCUS : Ui.HAIRLINE);
+        if (GlassPanel.on()) {
+            GlassPanel.render(g, GlassPanel.SEARCH, GlassPanel.Kind.REGULAR, x, y, w, BTN, Ui.R3, mouseX, mouseY);
+            if (hover) {
+                Ui.surface(g, x, y, w, BTN, Ui.R3, Ui.OVERLAY_1);
+            }
+            if (searchBox.isFocused()) {
+                Ui.outline(g, x, y, w, BTN, Ui.R3, Ui.FOCUS);
+            }
+        } else {
+            Ui.surface(g, x, y, w, BTN, Ui.R3, hover ? Ui.OVERLAY_1 : Ui.PANEL_TRANSLUCENT);
+            Ui.outline(g, x, y, w, BTN, Ui.R3, searchBox.isFocused() ? Ui.FOCUS : Ui.HAIRLINE);
+        }
         searchBox.setX(x + Ui.S2);
         searchBox.setY(y + (BTN - EDIT_H) / 2);
         searchBox.render(g, mouseX, mouseY, partialTick);
@@ -653,8 +663,13 @@ public class ProgressScreen extends Screen {
         int w = railWidth();
         int bg = docked ? Ui.PANEL_TRANSLUCENT
                 : railT > 0.01f ? lerpColor(Ui.RAIL_CLOSED, Ui.PANEL_TRANSLUCENT, railT) : Ui.RAIL_CLOSED;
-        Ui.surface(g, 4, 4, w, height - 8, Ui.R4, bg);
-        Ui.outline(g, 4, 4, w, height - 8, Ui.R4, Ui.HAIRLINE);
+        if (GlassPanel.on()) {
+            // the glass's lit rim is its edge; a hairline on top would draw it twice
+            GlassPanel.render(g, GlassPanel.RAIL, GlassPanel.Kind.REGULAR, 4, 4, w, height - 8, Ui.R4, mouseX, mouseY);
+        } else {
+            Ui.surface(g, 4, 4, w, height - 8, Ui.R4, bg);
+            Ui.outline(g, 4, 4, w, height - 8, Ui.R4, Ui.HAIRLINE);
+        }
         g.enableScissor(4, 4, 4 + w, height - 4);
         int nowBadge = 0;
         for (int b : badges.values()) {
@@ -1423,7 +1438,7 @@ public class ProgressScreen extends Screen {
                 Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.hidden", cnt[2]), hx, 23, Ui.DIM);
             }
         }
-        renderMinimap(g, ch, v);
+        renderMinimap(g, ch, v, mouseX, mouseY);
         renderZoomButtons(g, ch, v, mouseX, mouseY);
         g.pose().popPose();
         if (hovered != null && !dragging && selected == null) {
@@ -1505,7 +1520,11 @@ public class ProgressScreen extends Screen {
         if (pw <= 0) {
             return;
         }
-        Ui.floating(g, x0, Ui.S1, pw, height - 2 * Ui.S1, Ui.PANEL_TRANSLUCENT);
+        if (GlassPanel.on()) {
+            GlassPanel.render(g, GlassPanel.SHEET, GlassPanel.Kind.REGULAR, x0, Ui.S1, pw, height - 2 * Ui.S1, Ui.R4, mouseX, mouseY);
+        } else {
+            Ui.floating(g, x0, Ui.S1, pw, height - 2 * Ui.S1, Ui.PANEL_TRANSLUCENT);
+        }
         ClientModel.Node n = selected == null ? null : m.nodesByKey.get(selected);
         if (n == null) {
             return;
@@ -1900,8 +1919,12 @@ public class ProgressScreen extends Screen {
         int y = height - BTN - Ui.S2;
         int x = right - 3 * BTN;
         // one control with three cells, rather than three buttons that happen to sit next to each other
-        Ui.surface(g, x, y, 3 * BTN, BTN, Ui.R2, Ui.PANEL_TRANSLUCENT);
-        Ui.outline(g, x, y, 3 * BTN, BTN, Ui.R2, Ui.HAIRLINE);
+        if (GlassPanel.on()) {
+            GlassPanel.render(g, GlassPanel.ZOOM, GlassPanel.Kind.REGULAR, x, y, 3 * BTN, BTN, Ui.R2, mouseX, mouseY);
+        } else {
+            Ui.surface(g, x, y, 3 * BTN, BTN, Ui.R2, Ui.PANEL_TRANSLUCENT);
+            Ui.outline(g, x, y, 3 * BTN, BTN, Ui.R2, Ui.HAIRLINE);
+        }
         for (int i = 0; i < 3; i++) {
             int cx = x + i * BTN;
             if (i > 0) {
@@ -1931,14 +1954,15 @@ public class ProgressScreen extends Screen {
         return new int[]{right - mw, height - BTN - 16 - mh, mw, mh};
     }
 
-    private void renderMinimap(GuiGraphics g, ClientModel.Chapter ch, float[] v) {
+    private void renderMinimap(GuiGraphics g, ClientModel.Chapter ch, float[] v, int mouseX, int mouseY) {
         int[] r = minimapRect(ch, v);
         // shown while the map moves (drag, zoom) and for a moment after, then gone: it covered large maps all the time
         if (r == null || !minimapShown()) {
             return;
         }
-        if (ClientConfig.liquidGlass()) {
-            GlassPanel.render(g, r[0], r[1], r[2], r[3]);
+        if (GlassPanel.on()) {
+            // the clear kind: a small control over a busy picture, so the map stays sharp and bends at the rim
+            GlassPanel.render(g, GlassPanel.MINIMAP, GlassPanel.Kind.CLEAR, r[0], r[1], r[2], r[3], Ui.R4, mouseX, mouseY);
         } else {
             Ui.floating(g, r[0], r[1], r[2], r[3], Ui.PANEL_TRANSLUCENT);
         }
