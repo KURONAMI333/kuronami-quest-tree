@@ -739,7 +739,8 @@ public class ProgressScreen extends Screen {
             int color = ((hover ? Ui.TEXT : Ui.DIM) & 0xFFFFFF) | alpha;
             foldMark(g, RAIL_ICON_X + (RAIL_ICON - FOLD) / 2f, y + (HEADER_H - FOLD) / 2f, shut, color);
             String s = trim(title.getString(), w - RAIL_TEXT_X - Ui.S2);
-            Ui.text(g, font, s, RAIL_TEXT_X, y + (HEADER_H - 8) / 2 + 1, color);
+            // the same row centre as the fold mark and as a chapter row's label: both are at y + (row - 8) / 2
+            Ui.text(g, font, s, RAIL_TEXT_X, y + (HEADER_H - 8) / 2, color);
         } else {
             int my = y + HEADER_H / 2;
             if (shut) {
@@ -1192,17 +1193,21 @@ public class ProgressScreen extends Screen {
         int px = tx + titleW + Ui.S1;
         int py = Ui.S2;
         titleRect = new int[]{x, py, px + pin - x, pin};
+        // Depth, from the caller's OVERLAY_Z (the map's tiles and overlays reach up to it): scrim +10, title and its
+        // controls +20, the chapter icon ends about +35, so all of it stays under the details sheet (+50) and rail (+100)
+        g.pose().pushPose();
+        g.pose().translate(0, 0, 10);
         // a soft landing for the title over whatever the chapter draws at the top of the map
         g.fillGradient(0, 0, width, TITLE_SCRIM_H, 0xB0000000 | (Ui.GROUND & 0xFFFFFF), Ui.GROUND & 0xFFFFFF);
+        g.pose().popPose();
         g.pose().pushPose();
-        // renderItem lifts the item by 150: take it back, so the icon stays at the header's depth (under the rail and the
-        // details sheet, like the title)
-        g.pose().translate(x, ty - 2, -150);
+        // renderItem lifts the item by 150: 35 - 150 puts the icon's front at about +35 over the caller
+        g.pose().translate(x, ty - 2, -115);
         g.pose().scale(0.75f, 0.75f, 1);
         g.renderItem(ch.displayIcon(), 0, 0);
         g.pose().popPose();
         g.pose().pushPose();
-        // already at OVERLAY_Z (the caller's): one more would lift the title over the rail and the details sheet
+        g.pose().translate(0, 0, 20);
         // the component itself, shadowed: FTB Quests titles carry their own colours
         g.drawString(font, title, tx, ty, Ui.BRIGHT, true);
         if (ch.skills) {
