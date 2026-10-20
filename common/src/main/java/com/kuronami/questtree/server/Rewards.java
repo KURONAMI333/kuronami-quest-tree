@@ -242,6 +242,11 @@ public final class Rewards {
         ServerCommands.run(player, cmd, level, !rw.has("silent") || ProgressModel.boolOf(rw, "silent"));
     }
 
+    /**
+     * A reward table. One with {@code loot_crate} metadata is FTB Quests' crate: opening a crate rolls the same table
+     * once, so the roll result is granted here at claim time (2026-10-20). KQT has no crate item to carry and open
+     * later, so the contents arrive directly instead of the box.
+     */
     private static void table(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
         JsonObject table = ProgressService.rules().model().rewardTables.get(ProgressService.str(rw, "table"));
         if (table == null || !table.has("entries")) {

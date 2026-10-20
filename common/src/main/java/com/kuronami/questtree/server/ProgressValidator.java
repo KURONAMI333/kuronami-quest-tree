@@ -766,8 +766,8 @@ public final class ProgressValidator {
         }
         whole(out, ref, path, table, "rolls");
         numberShape(out, ref, path, table, "empty_weight");
-        if (table.has("loot_crate") && !table.get("loot_crate").isJsonNull()) {
-            problem(out, Severity.WARNING, ref, path + ".loot_crate", "loot crates are not implemented yet");
+        if (table.has("loot_crate") && !table.get("loot_crate").isJsonNull() && !table.get("loot_crate").isJsonObject()) {
+            problem(out, Severity.WARNING, ref, path + ".loot_crate", "loot crate settings must be an object; rolled as a normal table");
         }
     }
 
