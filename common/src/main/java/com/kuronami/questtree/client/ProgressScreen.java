@@ -1545,8 +1545,9 @@ public class ProgressScreen extends Screen {
                 if (p == null) {
                     continue;
                 }
-                if (!ClientProgress.visible(r)) {
-                    // a hidden requirement: counted, never named
+                ClientModel.Chapter reqChapter = m.chapterOf.get(r);
+                if (!ClientProgress.visible(r) || reqChapter != null && ClientProgress.chapterHidden(reqChapter.id)) {
+                    // a hidden requirement (or one in a hidden chapter): counted, never named
                     Tiles.tile(g, "square", x, y, 16, State.LOCKED, 0, ItemStack.EMPTY, false);
                     g.pose().pushPose();
                     g.pose().translate(0, 0, OVERLAY_Z);
@@ -1558,7 +1559,7 @@ public class ProgressScreen extends Screen {
                 Tiles.tile(g, p.shape, x, y, 16, ClientProgress.look(p.key), ClientProgress.fraction(p.key), ClientProgress.iconFor(p), false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
-                ClientModel.Chapter other = m.chapterOf.get(r);
+                ClientModel.Chapter other = reqChapter;
                 if (other != ch) {
                     // a requirement in another chapter: its chapter name above, and the row opens it
                     Ui.text(g, font, trim(p.title.getString(), w - 22), x + 22, y, Ui.TEXT);
@@ -1581,7 +1582,8 @@ public class ProgressScreen extends Screen {
             List<ClientModel.Node> leads = m.dependants.getOrDefault(n.key, List.of()).stream()
                     .filter(d -> {
                         ClientModel.Chapter dc = m.chapterOf.get(d.key);
-                        return dc != null && dc.namespace.equals(ch.namespace) && ClientProgress.visible(d.key);
+                        return dc != null && dc.namespace.equals(ch.namespace)
+                                && !ClientProgress.chapterHidden(dc.id) && ClientProgress.visible(d.key);
                     })
                     .toList();
             if (!leads.isEmpty()) {
@@ -2288,13 +2290,17 @@ public class ProgressScreen extends Screen {
 
     /** Opens a node's chapter and selects it, centring the map on it. */
     private void goTo(String key) {
+        ClientModel m = model();
+        ClientModel.Chapter c = m.chapterOf.get(key);
+        if (c != null && ClientProgress.chapterHidden(c.id)) {
+            // a chapter hidden as a whole is not opened through links, images or requirement rows either
+            return;
+        }
         if (!ClientProgress.visible(key)) {
             // hidden quests stay hidden, also through links, images and requirement rows
             ProgressFeedback.locked();
             return;
         }
-        ClientModel m = model();
-        ClientModel.Chapter c = m.chapterOf.get(key);
         ClientModel.Node n = m.nodesByKey.get(key);
         if (c == null || n == null) {
             return;
