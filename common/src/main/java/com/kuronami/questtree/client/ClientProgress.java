@@ -105,6 +105,15 @@ public final class ClientProgress {
     }
 
     /** State of a node for this player; nodes the rules do not know (should not happen) count as open. */
+    /**
+     * Whether one of a node's tasks may move now (FTB Quests' {@code require_sequential_tasks}, 2026-10-20). Unknown
+     * nodes and tasks count as open, so a data mismatch never hides a task for good.
+     */
+    public static boolean taskOpen(String key, int index) {
+        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        return n == null || index < 0 || index >= n.tasks.size() || rules.taskOpen(progress, n, index);
+    }
+
     /** Whether a node's requirements are met; a "flexible" node can be open without it. */
     public static boolean unlocked(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);

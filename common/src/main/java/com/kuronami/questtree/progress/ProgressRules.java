@@ -231,6 +231,21 @@ public final class ProgressRules {
         }
     }
 
+    /**
+     * Whether a task may move now (FTB Quests' {@code require_sequential_tasks}, 2026-10-20): tasks run in the order
+     * they are written, and each waits until the one before it reached its target. The last task still has to be done;
+     * the rule only stops a later task from being counted or submitted early.
+     */
+    public boolean taskOpen(PlayerProgress p, ProgressModel.Node n, int index) {
+        if (!n.sequentialTasks || index <= 0) {
+            return true;
+        }
+        if (index >= n.tasks.size()) {
+            return false;
+        }
+        return p.task(n.key, index - 1) >= target(n.tasks.get(index - 1));
+    }
+
     /** Share of the node's tasks done, 0..1 (counts weighted by their targets). */
     public double fraction(PlayerProgress p, ProgressModel.Node n) {
         if (n.tasks.isEmpty()) {

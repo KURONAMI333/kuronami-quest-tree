@@ -240,6 +240,8 @@ public final class ClientModel {
         public final List<ItemStack> rewards = new ArrayList<>();
         public final List<String> rewardLines = new ArrayList<>();
         public final int cost;
+        /** FTB Quests' {@code require_sequential_tasks}: a task waits for the one before it (2026-10-20). */
+        public final boolean sequentialTasks;
         public final Component title;
         /** FTB Quests' subtitle: one step under the title in the sheet and on the map's hover tooltip, or null. */
         public final Component subtitle;
@@ -258,6 +260,7 @@ public final class ClientModel {
             this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             this.cost = o.has("cost") ? o.get("cost").getAsInt() : 0;
+            this.sequentialTasks = ProgressModel.boolOf(o, "sequential_tasks");
             JsonObject req = obj(o, "requires");
             for (JsonElement r : arr(req, "nodes")) {
                 requires.add(r.getAsString());

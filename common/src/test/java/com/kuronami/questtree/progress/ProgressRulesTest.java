@@ -99,6 +99,30 @@ class ProgressRulesTest {
         assertFalse(rules.take(p, s1));
     }
 
+    /**
+     * Sequential tasks (2026-10-20): with require_sequential_tasks the second task waits until the first reaches its
+     * target, so a later step can neither be counted nor submitted early.
+     */
+    @Test
+    void sequentialTasksWaitForTheOneBefore() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"s:c": {"nodes": {
+                  "q": {"sequential_tasks": true, "tasks": [
+                    {"type": "checkmark"}, {"type": "checkmark", "count": 2}, {"type": "checkmark"}]}
+                }}}}""").getAsJsonObject();
+        ProgressRules r = new ProgressRules(ProgressModel.of(bundle));
+        ProgressModel.Node q = r.model().nodes.get("s:c/q");
+        PlayerProgress p = new PlayerProgress();
+        assertTrue(r.taskOpen(p, q, 0));
+        assertFalse(r.taskOpen(p, q, 1), "the second task waits while the first is incomplete");
+        assertFalse(r.taskOpen(p, q, 2));
+        p.setTask(q.key, 0, 1);
+        assertTrue(r.taskOpen(p, q, 1), "the first task done opens the second");
+        assertFalse(r.taskOpen(p, q, 2), "the third still waits for the second");
+        p.setTask(q.key, 1, 2);
+        assertTrue(r.taskOpen(p, q, 2));
+    }
+
     /** Hidden quests: secret until done, until requirements are done, or until requirements are visible (recursively). */
     @Test
     void visibility() {

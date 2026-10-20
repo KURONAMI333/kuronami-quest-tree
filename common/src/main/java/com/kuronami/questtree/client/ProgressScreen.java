@@ -1575,6 +1575,7 @@ public class ProgressScreen extends Screen {
                 ClientModel.Task t = n.tasks.get(i);
                 long have = Math.min(p.task(n.key, i), t.count);
                 boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
+                boolean open = met || ClientProgress.taskOpen(n.key, i);
                 Ui.divider(g, x, y - 2, w);
                 ItemStack shownItem = t.shown();
                 if (!shownItem.isEmpty() && lastMouseX >= x && lastMouseX < x + 16 && lastMouseY >= y + 2 && lastMouseY < y + 18) {
@@ -1594,11 +1595,18 @@ public class ProgressScreen extends Screen {
                     // optional tasks: the same broken outline as optional quests on the map
                     dashedOutline(g, x - 1, y + 1, 18, 18, Ui.OPTIONAL_OUTLINE);
                 }
+                if (!open) {
+                    // a task waiting for the one before it (require_sequential_tasks): the lock mark says why it is dim
+                    g.pose().pushPose();
+                    g.pose().translate(0, 0, OVERLAY_Z);
+                    Tiles.icon(g, "lock", x + 9, y + 9, 7, Ui.MUTED);
+                    g.pose().popPose();
+                }
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 String cnt = (met ? t.count : have) + "/" + t.count;
                 int right = x + w;
-                if (!met && working && (t.consume || t.type.equals("checkmark")) && y + 20 > contentTop && y < contentBottom) {
+                if (open && !met && working && (t.consume || t.type.equals("checkmark")) && y + 20 > contentTop && y < contentBottom) {
                     Component label = Component.translatable(t.type.equals("checkmark") ? "screen.kuronami_quest_tree.check" : "screen.kuronami_quest_tree.submit");
                     int bw = font.width(label) + 2 * Ui.S2;
                     int index = i;
@@ -1621,7 +1629,7 @@ public class ProgressScreen extends Screen {
                     Ui.textRight(g, font, cnt, right, y + 6, met ? Tiles.GREEN_TEXT : Ui.DIM);
                 }
                 Ui.text(g, font, trim(ProgressFeedback.taskLine(t).getString(), right - font.width(cnt) - x - 26), x + 20, y + 6,
-                        met || t.optional ? Ui.DIM : Ui.TEXT);
+                        met || t.optional || !open ? Ui.DIM : Ui.TEXT);
                 g.pose().popPose();
                 y += 20;
             }

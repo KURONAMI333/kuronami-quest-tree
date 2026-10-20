@@ -114,6 +114,11 @@ public final class ProgressModel {
         public final String requireMode;
         public final int requireMin;
         public final int tasksRequired;
+        /**
+         * FTB Quests' {@code require_sequential_tasks} (2026-10-20): only the first task that is not done yet may move,
+         * so a quest can ask for its steps in order. Read by {@link com.kuronami.questtree.progress.ProgressRules#taskOpen}.
+         */
+        public final boolean sequentialTasks;
         public final String exclusiveGroup;
         public final int exclusiveMax;
         public final int ranks;
@@ -154,6 +159,7 @@ public final class ProgressModel {
             this.requireMode = req.has("mode") ? req.get("mode").getAsString() : "all";
             this.requireMin = intOf(req, "min", 0);
             this.tasksRequired = intOf(o, "tasks_required", 0);
+            this.sequentialTasks = boolOf(o, "sequential_tasks");
             JsonObject ex = obj(o, "exclusive");
             this.exclusiveGroup = ex.has("group") ? ex.get("group").getAsString() : null;
             this.exclusiveMax = intOf(ex, "max", 1);

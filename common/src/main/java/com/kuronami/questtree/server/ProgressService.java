@@ -141,6 +141,9 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
+                if (!r.taskOpen(p, n, i)) {
+                    continue;
+                }
                 if (type(t).equals("kill") && entityMatches(str(t, "entity"), killed.getType())) {
                     bump(player, p, n, i, p.task(n.key, i) + 1);
                 }
@@ -162,7 +165,7 @@ public final class ProgressService {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
-            if (!working(r, p, n) || !blockMatches(blockSpec(t), state)) {
+            if (!working(r, p, n) || !r.taskOpen(p, n, i) || !blockMatches(blockSpec(t), state)) {
                 continue;
             }
             long target = ProgressRules.target(t);
@@ -202,12 +205,14 @@ public final class ProgressService {
                 }
             }
             case "submit" -> {
-                if (n != null && working(r, p, n) && validTask(n, a.index()) && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
+                if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
+                        && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
                     submit(player, p, n, a.index());
                 }
             }
             case "check" -> {
-                if (n != null && working(r, p, n) && validTask(n, a.index()) && type(n.tasks.get(a.index())).equals("checkmark")) {
+                if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
+                        && type(n.tasks.get(a.index())).equals("checkmark")) {
                     bump(player, p, n, a.index(), 1);
                 }
             }
@@ -240,7 +245,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (ProgressRules.consumes(n, t)) {
+                if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i)) {
                     continue;
                 }
                 String ty = type(t);
@@ -297,6 +302,9 @@ public final class ProgressService {
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
             if (!working(r, p, n)) {
+                continue;
+            }
+            if (!r.taskOpen(p, n, i)) {
                 continue;
             }
             long target = ProgressRules.target(t);
@@ -398,6 +406,9 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
+                if (!r.taskOpen(p, n, i)) {
+                    continue;
+                }
                 long value = switch (type(t)) {
                     case "dimension" -> level.dimension().location().toString().equals(str(t, "dimension")) ? 1 : 0;
                     case "biome" -> biomeMatches(level, pos, str(t, "biome")) ? 1 : 0;
