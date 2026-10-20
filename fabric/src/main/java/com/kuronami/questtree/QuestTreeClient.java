@@ -30,6 +30,10 @@ public class QuestTreeClient implements ClientModInitializer {
             }
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientProgress.onLogout());
+        // the quest book beside the inventory (2026-10-20)
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register((client, screen, w, h) ->
+                com.kuronami.questtree.client.InventoryQuestButton.add(screen,
+                        widget -> net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen).add(widget)));
         // the open key over an item in another screen opens the quest that wants it
         // Fabric makes a screen's key events anew on every init (resize, coming back from another screen), so the
         // listener is added on every init, not once per screen

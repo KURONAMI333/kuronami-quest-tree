@@ -22,11 +22,46 @@ import java.util.List;
  */
 public final class ClientConfig {
 
+    /** Where a quest or skill completion is announced (FTB Quests' completion style, 2026-10-20). */
+    public enum NotificationStyle {
+        TOAST("toast"), CHAT("chat"), ACTION_BAR("action_bar"), NONE("none");
+
+        final String id;
+
+        NotificationStyle(String id) {
+            this.id = id;
+        }
+
+        static NotificationStyle byId(String id) {
+            for (NotificationStyle s : values()) {
+                if (s.id.equals(id)) {
+                    return s;
+                }
+            }
+            return TOAST;
+        }
+
+        NotificationStyle next() {
+            return values()[(ordinal() + 1) % values().length];
+        }
+    }
+
     /** The "needed for" line on item tooltips. */
     public static boolean itemTooltips = true;
 
     /** Liquid Glass on the screen's controls and panels; off draws them as flat panels (less to look through). */
     public static boolean glass = true;
+
+    /** Completion notice: toast, chat, action bar, or nothing. */
+    public static NotificationStyle notificationStyle = NotificationStyle.TOAST;
+    /** The mod's completion, claim, unlock and level-up sounds. */
+    public static boolean completionSounds = true;
+    /** The pinned-quest tracker on the right edge instead of the left. */
+    public static boolean trackerRight = false;
+    /** Scale of the pinned-quest tracker (0.5 to 2.0). */
+    public static float trackerScale = 1f;
+    /** Keep the chapter list open instead of opening it on hover. */
+    public static boolean keepRailOpen = false;
 
     /** Chapters kept at the top of the chapter list, in pin order. Not per world: it follows the player. */
     public static final List<String> railPinned = new ArrayList<>();
@@ -58,6 +93,13 @@ public final class ClientConfig {
                 JsonObject o = JsonParser.parseString(Files.readString(file(), StandardCharsets.UTF_8)).getAsJsonObject();
                 itemTooltips = bool(o, "item_tooltips", itemTooltips);
                 glass = bool(o, "glass", glass);
+                if (o.has("notification_style") && o.get("notification_style").isJsonPrimitive()) {
+                    notificationStyle = NotificationStyle.byId(o.get("notification_style").getAsString());
+                }
+                completionSounds = bool(o, "completion_sounds", completionSounds);
+                trackerRight = bool(o, "tracker_right", trackerRight);
+                trackerScale = number(o, "tracker_scale", trackerScale);
+                keepRailOpen = bool(o, "keep_rail_open", keepRailOpen);
                 if (o.has("rail_pinned") && o.get("rail_pinned").isJsonArray()) {
                     for (JsonElement e : o.getAsJsonArray("rail_pinned")) {
                         if (e.isJsonPrimitive() && !railPinned.contains(e.getAsString())) {
@@ -94,6 +136,12 @@ public final class ClientConfig {
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean() ? e.getAsBoolean() : fallback;
     }
 
+    private static float number(JsonObject o, String key, float fallback) {
+        JsonElement e = o.get(key);
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
+                ? net.minecraft.util.Mth.clamp(e.getAsFloat(), 0.5f, 2f) : fallback;
+    }
+
     /** The pinned chapters in pin order (loads the file first). */
     public static List<String> railPinned() {
         ensureLoaded();
@@ -103,6 +151,37 @@ public final class ClientConfig {
     public static boolean glass() {
         ensureLoaded();
         return glass;
+    }
+
+    public static NotificationStyle notificationStyle() {
+        ensureLoaded();
+        return notificationStyle;
+    }
+
+    public static boolean completionSounds() {
+        ensureLoaded();
+        return completionSounds;
+    }
+
+    public static boolean trackerRight() {
+        ensureLoaded();
+        return trackerRight;
+    }
+
+    public static float trackerScale() {
+        ensureLoaded();
+        return net.minecraft.util.Mth.clamp(trackerScale, 0.5f, 2f);
+    }
+
+    public static boolean keepRailOpen() {
+        ensureLoaded();
+        return keepRailOpen;
+    }
+
+    /** Saves the settings after a screen changed them. */
+    public static void save() {
+        ensureLoaded();
+        write();
     }
 
     public static boolean railPinned(String id) {
@@ -166,6 +245,11 @@ public final class ClientConfig {
             JsonObject o = new JsonObject();
             o.addProperty("item_tooltips", itemTooltips);
             o.addProperty("glass", glass);
+            o.addProperty("notification_style", notificationStyle.id);
+            o.addProperty("completion_sounds", completionSounds);
+            o.addProperty("tracker_right", trackerRight);
+            o.addProperty("tracker_scale", trackerScale);
+            o.addProperty("keep_rail_open", keepRailOpen);
             JsonArray a = new JsonArray();
             railPinned.forEach(a::add);
             o.add("rail_pinned", a);

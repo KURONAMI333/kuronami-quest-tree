@@ -52,6 +52,12 @@ public final class QuestTreeClient {
             }
         }
 
+        /** The quest book beside the inventory (2026-10-20). */
+        @SubscribeEvent
+        public static void screenInit(net.neoforged.neoforge.client.event.ScreenEvent.Init.Post event) {
+            com.kuronami.questtree.client.InventoryQuestButton.add(event.getScreen(), event::addListener);
+        }
+
         /** The open key over an item in another screen opens the quest that wants it. */
         @SubscribeEvent
         public static void screenKey(net.neoforged.neoforge.client.event.ScreenEvent.KeyPressed.Pre event) {

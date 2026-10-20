@@ -71,24 +71,23 @@ final class ProgressFeedback {
                 case "complete" -> {
                     if (n != null && !m.chapterOf.get(key).skills) {
                         boolean claim = ClientProgress.state(key) == ProgressRules.State.CLAIM;
-                        QuestToast.show(n, claim ? ProgressRules.State.CLAIM : ProgressRules.State.DONE,
-                                Component.translatable("toast.kuronami_quest_tree.complete"));
+                        notifyCompletion(n, claim ? ProgressRules.State.CLAIM : ProgressRules.State.DONE);
                         chapterCompleted(m, key);
                     }
                 }
                 case "toast" -> {
                     if (n != null) {
-                        QuestToast.show(n, ProgressRules.State.DONE, n.title);
+                        notifyCompletion(n, ProgressRules.State.DONE);
                     }
                 }
                 case "claim" -> {
                     if (played.add(kind)) {
-                        play(QtSounds.CLAIM, 0.97f + (float) Math.random() * 0.06f, 0.8f);
+                        feedback(QtSounds.CLAIM, 0.97f + (float) Math.random() * 0.06f, 0.8f);
                     }
                 }
-                case "submit" -> play(QtSounds.SUBMIT, 1, 0.8f);
-                case "take" -> play(QtSounds.UNLOCK, 1, 0.8f);
-                case "level" -> play(QtSounds.LEVEL, 1, 0.8f);
+                case "submit" -> feedback(QtSounds.SUBMIT, 1, 0.8f);
+                case "take" -> feedback(QtSounds.UNLOCK, 1, 0.8f);
+                case "level" -> feedback(QtSounds.LEVEL, 1, 0.8f);
                 default -> { }
             }
         }
@@ -131,7 +130,7 @@ final class ProgressFeedback {
                 }
                 if (completed.contains(key)) {
                     // after the fill has run up (360ms)
-                    Motion.soundLater(QtSounds.FILL, 360, 1f);
+                    feedbackLater(QtSounds.FILL, 360, 1f);
                 }
             }
             if (kind.equals("complete")) {
@@ -146,7 +145,7 @@ final class ProgressFeedback {
                             && rules.state(now, child) != ProgressRules.State.LOCKED) {
                         long delay = Motion.LINE_GROW + Motion.CHILD_STEP * i;
                         Motion.OPENED.put(child.key, t + delay);
-                        Motion.soundLater(QtSounds.OPEN, delay, Math.min(1.5f, 1f + 0.06f * i));
+                        feedbackLater(QtSounds.OPEN, delay, Math.min(1.5f, 1f + 0.06f * i));
                         i++;
                     }
                 }
@@ -167,7 +166,7 @@ final class ProgressFeedback {
             }
         }
         if (stamped) {
-            play(QtSounds.EXCLUDE, 1, 0.7f);
+            feedback(QtSounds.EXCLUDE, 1, 0.7f);
         }
     }
 
@@ -180,7 +179,28 @@ final class ProgressFeedback {
                 return;
             }
         }
-        play(QtSounds.CHAPTER, 1, 0.8f);
+        feedback(QtSounds.CHAPTER, 1, 0.8f);
+    }
+
+    /**
+     * Announces a completion in the style the player picked (2026-10-20): a vanilla toast, a chat line, the action bar,
+     * or nothing. The toast frame keeps its own sound; chat and the action bar stay silent, as FTB Quests' do.
+     */
+    private static void notifyCompletion(ClientModel.Node n, ProgressRules.State state) {
+        Component top = Component.translatable("toast.kuronami_quest_tree.complete");
+        switch (ClientConfig.notificationStyle()) {
+            case TOAST -> QuestToast.show(n, state, top);
+            case CHAT -> chat(top, n.title, false);
+            case ACTION_BAR -> chat(top, n.title, true);
+            case NONE -> { }
+        }
+    }
+
+    private static void chat(Component top, Component title, boolean actionBar) {
+        var player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.displayClientMessage(top.copy().append(" ").append(title), actionBar);
+        }
     }
 
     static Component taskName(ClientModel.Task t) {
@@ -193,6 +213,23 @@ final class ProgressFeedback {
      */
     static Component taskLine(ClientModel.Task t) {
         return t.type.equals("checkmark") ? Component.translatable("task.kuronami_quest_tree.checkmark_action") : t.name();
+    }
+
+    /** A completion, claim, unlock or level sound, only while the player keeps them on (2026-10-20). */
+    static void feedback(SoundEvent sound, float pitch, float volume) {
+        if (ClientConfig.completionSounds()) {
+            play(sound, pitch, volume);
+        }
+    }
+
+    static void feedback(net.minecraft.core.Holder<SoundEvent> sound, float pitch, float volume) {
+        feedback(sound.value(), pitch, volume);
+    }
+
+    private static void feedbackLater(SoundEvent sound, long delay, float pitch) {
+        if (ClientConfig.completionSounds()) {
+            Motion.soundLater(sound, delay, pitch);
+        }
     }
 
     static void play(SoundEvent sound, float pitch, float volume) {

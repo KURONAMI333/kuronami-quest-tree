@@ -225,6 +225,43 @@ public final class ClientProgress {
         sender.accept(new ActionPayload(action, node == null ? "" : node, index));
     }
 
+    /** An action that also carries a choice option (one reward of a choice table). */
+    public static void send(String action, String node, int index, int choice) {
+        sender.accept(new ActionPayload(action, node == null ? "" : node, index, choice));
+    }
+
+    /** Whether one reward of a node was taken (per-reward claim, 2026-10-20). */
+    public static boolean rewardClaimed(String node, int index) {
+        return progress.claimedRewards.contains(node + "#" + index);
+    }
+
+    /**
+     * Quests "claim all" would take right now (2026-10-20): completed, not excluded from claim all, and with no
+     * choice left to make. Used by the chapter list's collect row and the buttons outside the screen.
+     */
+    public static int claimableCount() {
+        ProgressRules r = rules;
+        if (r == null) {
+            return 0;
+        }
+        ClientModel m = model;
+        if (m == null) {
+            return 0;
+        }
+        int n = 0;
+        for (ClientModel.Node node : m.nodesByKey.values()) {
+            ClientModel.Chapter chapter = m.chapterOf.get(node.key);
+            if ((chapter != null && chapter.skills) || node.choice.size() > 0 || node.excludeFromClaimAll) {
+                continue;
+            }
+            ProgressModel.Node serverNode = r.model().nodes.get(node.key);
+            if (serverNode != null && r.state(progress, serverNode) == ProgressRules.State.CLAIM) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     /** Leaving a server: forget its data so another server never shows it. */
     /**
      * A key pressed in any other screen. The open key over an item (in an inventory, or in the recipe viewer's lists)

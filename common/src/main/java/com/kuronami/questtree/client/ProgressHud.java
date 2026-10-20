@@ -160,6 +160,18 @@ public final class ProgressHud {
             total += 22 + 12 * mats.size();
         }
         int y = g.guiHeight() / 2 - total / 2;
+        // side and scale from the client settings (2026-10-20); the tracker is centred either way
+        float scale = ClientConfig.trackerScale();
+        float dx = ClientConfig.trackerRight() ? g.guiWidth() - bw - 8 : 0;
+        g.pose().pushPose();
+        if (dx != 0) {
+            g.pose().translate(dx, 0, 0);
+        }
+        if (scale != 1f) {
+            g.pose().translate(0, g.guiHeight() / 2f, 0);
+            g.pose().scale(scale, scale, 1);
+            g.pose().translate(0, -g.guiHeight() / 2f, 0);
+        }
         if (total > 0) {
             // one card behind every entry: a band per entry, advanced by 22 less its 2px overhang, overlapped its
             // neighbour by 4px and doubled the edge there, which read as stacked boxes (the player, 2026-10-19)
@@ -197,6 +209,7 @@ public final class ProgressHud {
                 y += 12;
             }
         }
+        g.pose().popPose();
     }
 
     /**

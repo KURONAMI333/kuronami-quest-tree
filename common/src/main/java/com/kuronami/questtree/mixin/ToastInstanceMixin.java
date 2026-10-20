@@ -1,5 +1,6 @@
 package com.kuronami.questtree.mixin;
 
+import com.kuronami.questtree.client.ClientConfig;
 import com.kuronami.questtree.client.OwnSoundToast;
 import com.kuronami.questtree.client.QtSounds;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -24,7 +25,9 @@ public abstract class ToastInstanceMixin {
             target = "Lnet/minecraft/client/gui/components/toasts/Toast$Visibility;playSound(Lnet/minecraft/client/sounds/SoundManager;)V"))
     private void questTree$toastSound(Toast.Visibility visibility, SoundManager sounds, Operation<Void> original) {
         if (toast instanceof OwnSoundToast) {
-            sounds.play(SimpleSoundInstance.forUI(visibility == Toast.Visibility.SHOW ? QtSounds.TOAST_IN : QtSounds.TOAST_OUT, 1, 0.8f));
+            if (ClientConfig.completionSounds()) {
+                sounds.play(SimpleSoundInstance.forUI(visibility == Toast.Visibility.SHOW ? QtSounds.TOAST_IN : QtSounds.TOAST_OUT, 1, 0.8f));
+            }
         } else {
             original.call(visibility, sounds);
         }

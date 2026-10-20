@@ -251,7 +251,13 @@ public final class ClientModel {
         public final boolean hideLinesToDependents;
         public final List<Task> tasks = new ArrayList<>();
         public final List<ItemStack> rewards = new ArrayList<>();
+        /** Raw reward index of each entry in {@link #rewards} (per-reward claim, 2026-10-20). */
+        public final List<Integer> rewardIndices = new ArrayList<>();
         public final List<String> rewardLines = new ArrayList<>();
+        /** One side of a pick-one choice: {@code exclusive} or {@code exclusive_with} (hover tooltip, 2026-10-20). */
+        public final boolean exclusive;
+        /** Any reward asks "claim all" to leave this quest alone. */
+        public final boolean excludeFromClaimAll;
         public final int cost;
         /** FTB Quests' {@code require_sequential_tasks}: a task waits for the one before it (2026-10-20). */
         public final boolean sequentialTasks;
@@ -277,6 +283,16 @@ public final class ClientModel {
             this.cost = o.has("cost") ? o.get("cost").getAsInt() : 0;
             this.sequentialTasks = ProgressModel.boolOr(o, "sequential_tasks", ch.defaultSequentialTasks);
             this.repeatable = ProgressRules.repeatable(o);
+            JsonObject ex = obj(o, "exclusive");
+            this.exclusive = ex.has("group") || !arr(o, "exclusive_with").isEmpty();
+            boolean excluded = false;
+            for (JsonElement e : arr(o, "rewards")) {
+                if (e.isJsonObject() && ProgressModel.boolOf(e.getAsJsonObject(), "exclude_from_claim_all")) {
+                    excluded = true;
+                    break;
+                }
+            }
+            this.excludeFromClaimAll = excluded;
             JsonObject req = obj(o, "requires");
             for (JsonElement r : arr(req, "nodes")) {
                 requires.add(r.getAsString());
@@ -294,7 +310,9 @@ public final class ClientModel {
                     tasks.add(new Task(m, t.getAsJsonObject(), o.has("repeat") && !(o.get("repeat").isJsonPrimitive() && !o.get("repeat").getAsBoolean())));
                 }
             }
-            for (JsonElement r : arr(o, "rewards")) {
+            JsonArray rewardArray = arr(o, "rewards");
+            for (int ri = 0; ri < rewardArray.size(); ri++) {
+                JsonElement r = rewardArray.get(ri);
                 if (!r.isJsonObject()) {
                     continue;
                 }
@@ -303,18 +321,18 @@ public final class ClientModel {
                 // any reward may name its own icon (FTB Quests reward icons; command rewards have nothing else to show)
                 ItemStack own = ro.has("icon") ? stack(ro.get("icon")) : ItemStack.EMPTY;
                 if (!own.isEmpty()) {
-                    rewards.add(own);
+                    addReward(own, ri);
                     continue;
                 }
                 switch (type) {
                     case "trophy" -> {
                         ItemStack t = trophyPreview(ro.has("trophy") ? ro.get("trophy").getAsString() : "");
                         if (!t.isEmpty()) {
-                            rewards.add(t);
+                            addReward(t, ri);
                         }
                     }
-                    case "item" -> rewards.add(stack(ro.get("item")));
-                    case "xp", "xp_levels" -> rewards.add(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64, ro.has("amount") ? ro.get("amount").getAsInt() : 1))));
+                    case "item" -> addReward(stack(ro.get("item")), ri);
+                    case "xp", "xp_levels" -> addReward(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64, ro.has("amount") ? ro.get("amount").getAsInt() : 1))), ri);
                     case "table" -> {
                         String mode = ro.has("mode") ? ro.get("mode").getAsString() : "random";
                         JsonObject table = ro.has("table") ? obj(m.tables, ro.get("table").getAsString()) : new JsonObject();
@@ -324,7 +342,7 @@ public final class ClientModel {
                                 choice.add(rw.has("item") ? stack(rw.get("item")) : new ItemStack(Items.EXPERIENCE_BOTTLE));
                             }
                         } else {
-                            rewards.add(new ItemStack(Items.CHEST));
+                            addReward(new ItemStack(Items.CHEST), ri);
                         }
                     }
                     case "attribute" -> rewardLines.add(attributeLine(ro));
@@ -361,6 +379,11 @@ public final class ClientModel {
                 }
             }
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);
+        }
+
+        private void addReward(ItemStack stack, int index) {
+            rewards.add(stack);
+            rewardIndices.add(index);
         }
 
         private static String attributeLine(JsonObject ro) {
