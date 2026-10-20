@@ -6,6 +6,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.points.Expression;
 import com.kuronami.questtree.progress.PlayerProgress;
+import com.kuronami.questtree.progress.ProgressRules;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -155,6 +156,9 @@ public final class SkillExperience {
                 continue;
             }
             if (c.points.has("experience_enabled") && !c.points.get("experience_enabled").getAsBoolean()) {
+                continue;
+            }
+            if (!ProgressRules.chapterUnlocked(ProgressService.progress(player), c)) {
                 continue;
             }
             double total = 0;

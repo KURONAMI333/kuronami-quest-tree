@@ -30,6 +30,7 @@ import java.util.function.BiConsumer;
  * /quest_tree respec &lt;players&gt; &lt;chapter&gt;          give back every point spent in a skill chapter
  * /quest_tree points &lt;players&gt; &lt;chapter&gt; &lt;n&gt;      add (or remove) spendable points
  * /quest_tree experience &lt;players&gt; &lt;chapter&gt; &lt;n&gt;  add experience to a skill chapter
+ * /quest_tree lock|unlock &lt;players&gt; &lt;chapter&gt;    hide/show one chapter for those players
  * </pre>
  * Ids are {@code <namespace>:<chapter>} and {@code <namespace>:<chapter>/<node>}.
  */
@@ -64,6 +65,14 @@ final class PlayerCommands {
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
                                         .executes(c -> each(c, (p, pr) -> respec(p, pr, id(c)))))))
+                .then(Commands.literal("lock")
+                        .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
+                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, pr, false))))))
+                .then(Commands.literal("unlock")
+                        .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
+                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, pr, true))))))
                 .then(Commands.literal("points")
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
@@ -122,6 +131,12 @@ final class PlayerCommands {
             resetChapter(p, pr, ch);
         }
         pr.recent.clear();
+    }
+
+    /** Pufferfish's Skills' category lock/unlock: a per-player override of {@code points.unlocked_by_default}. */
+    private static void chapterOpen(CommandContext<CommandSourceStack> c, PlayerProgress pr, boolean open) {
+        ProgressModel.Chapter ch = chapter(c);
+        pr.chapterOpen.put(ch.id, open);
     }
 
     private static void reset(ServerPlayer p, PlayerProgress pr, String id) {

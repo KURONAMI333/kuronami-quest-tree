@@ -75,6 +75,23 @@ class ProgressRulesTest {
     }
 
     @Test
+    void chapterLockHidesAndHoldsItsNodes() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": false},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel locked = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = locked.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(locked);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(ProgressRules.State.LOCKED, rules.state(p, a.nodes.get("n")));
+        p.chapterOpen.put(a.id, true);
+        assertEquals(ProgressRules.State.CLAIM, rules.state(p, a.nodes.get("n")));
+        p.chapterOpen.put(a.id, false);
+        assertEquals(ProgressRules.State.LOCKED, rules.state(p, a.nodes.get("n")));
+    }
+
+    @Test
     void pooledExperienceSurvivesSaveAndLoad() {
         JsonObject bundle = JsonParser.parseString("""
                 {"chapters": {"t:a": {"points": {"per_level": 1, "start": 1, "pool": "shared"}, "nodes": {"n": {"cost": 1}}}}}

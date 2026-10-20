@@ -191,6 +191,10 @@ public final class ProgressService {
         PlayerProgress p = progress(player);
         ProgressRules r = rules();
         ProgressModel.Node n = r.model().nodes.get(a.node());
+        if (n != null && !ProgressRules.chapterUnlocked(p, n.chapter)) {
+            flush(player);
+            return;
+        }
         switch (a.action()) {
             case "claim" -> {
                 if (n != null) {
@@ -268,7 +272,7 @@ public final class ProgressService {
 
     /** Whether the node's tasks may move now: visible, unlocked, not excluded, not done. */
     private static boolean working(ProgressRules r, PlayerProgress p, ProgressModel.Node n) {
-        if (n.tasks.isEmpty() || p.completed.contains(n.key)) {
+        if (!ProgressRules.chapterUnlocked(p, n.chapter) || n.tasks.isEmpty() || p.completed.contains(n.key)) {
             return false;
         }
         State s = r.state(p, n);

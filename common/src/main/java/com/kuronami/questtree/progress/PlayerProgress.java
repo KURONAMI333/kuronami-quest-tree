@@ -31,6 +31,11 @@ public final class PlayerProgress {
     /** Repeatable quests: how often each was claimed, and until when (epoch millis) it rests before it opens again. */
     public final Map<String, Integer> repeats = new HashMap<>();
     public final Map<String, Long> cooldown = new HashMap<>();
+    /**
+     * Chapters whose open/locked state a command changed (2026-10-20). No entry means the chapter's
+     * {@code points.unlocked_by_default}; storing only the override keeps the pack's default in charge.
+     */
+    public final Map<String, Boolean> chapterOpen = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public final Deque<String> recent = new ArrayDeque<>();
 

@@ -30,6 +30,9 @@ public final class ProgressRules {
     }
 
     public State state(PlayerProgress p, ProgressModel.Node n) {
+        if (!chapterUnlocked(p, n.chapter)) {
+            return State.LOCKED;
+        }
         if (excluded(p, n)) {
             return State.EXCLUDED;
         }
@@ -75,6 +78,22 @@ public final class ProgressRules {
             mode = n.chapter.defaults.get("progression_mode").getAsString();
         }
         return mode.equals("flexible");
+    }
+
+    /**
+     * Whether the chapter itself is open (Pufferfish's Skills category lock). A pack locks a chapter with
+     * {@code points.unlocked_by_default: false}; commands store an override per player, so unlocking one player does not
+     * open it for the whole server. Locked chapters are left out of the rail, and their XP sources do not count.
+     */
+    public static boolean chapterUnlocked(PlayerProgress p, ProgressModel.Chapter c) {
+        Boolean override = p.chapterOpen.get(c.id);
+        if (override != null) {
+            return override;
+        }
+        return c.points == null || !c.points.has("unlocked_by_default")
+                || !c.points.get("unlocked_by_default").isJsonPrimitive()
+                || c.points.get("unlocked_by_default").getAsJsonPrimitive().isBoolean()
+                && c.points.get("unlocked_by_default").getAsBoolean();
     }
 
     /** Whether the requirements are met (not considering exclusivity). */

@@ -27,6 +27,9 @@ public final class ProgressJson {
         o.add("spent", ints(p.spent));
         o.add("bonus", ints(p.bonus));
         o.add("exchange", ints(p.exchange));
+        JsonObject chapterOpen = new JsonObject();
+        p.chapterOpen.forEach(chapterOpen::addProperty);
+        o.add("chapter_open", chapterOpen);
         o.add("recent", strings(p.recent));
         o.add("repeats", ints(p.repeats));
         JsonObject cd = new JsonObject();
@@ -54,6 +57,9 @@ public final class ProgressJson {
         readInts(obj(o, "spent"), p.spent);
         readInts(obj(o, "bonus"), p.bonus);
         readInts(obj(o, "exchange"), p.exchange);
+        for (Map.Entry<String, JsonElement> e : obj(o, "chapter_open").entrySet()) {
+            p.chapterOpen.put(e.getKey(), e.getValue().getAsBoolean());
+        }
         readInts(obj(o, "repeats"), p.repeats);
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             p.cooldown.put(e.getKey(), e.getValue().getAsLong());
