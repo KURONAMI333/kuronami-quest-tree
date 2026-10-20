@@ -1,6 +1,7 @@
 package com.kuronami.questtree;
 
 import com.kuronami.questtree.client.ClientProgress;
+import com.kuronami.questtree.client.EditorSession;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -24,6 +25,12 @@ public final class QuestTreeClient {
                 var conn = net.minecraft.client.Minecraft.getInstance().getConnection();
                 if (conn != null && conn.hasChannel(a.type())) {
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(a);
+                }
+            };
+            ClientProgress.editorSender = p -> {
+                var conn = net.minecraft.client.Minecraft.getInstance().getConnection();
+                if (conn != null && conn.hasChannel(p.type())) {
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(p);
                 }
             };
         }

@@ -1,7 +1,9 @@
 package com.kuronami.questtree;
 
 import com.kuronami.questtree.client.ClientProgress;
+import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.network.EditorReplyPayload;
+import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import net.fabricmc.api.ClientModInitializer;
@@ -20,12 +22,18 @@ public class QuestTreeClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(mc -> ClientProgress.onClientTick());
         ClientPlayNetworking.registerGlobalReceiver(SyncPayload.TYPE, (payload, context) -> ClientProgress.onSync(payload));
         ClientPlayNetworking.registerGlobalReceiver(ProgressPayload.TYPE, (payload, context) -> ClientProgress.onProgress(payload));
-        // phase 1: the editor screen that consumes replies is not built yet; the server still answers every op
-        ClientPlayNetworking.registerGlobalReceiver(EditorReplyPayload.TYPE, (payload, context) -> {
-        });
+        ClientPlayNetworking.registerGlobalReceiver(EditorReplyPayload.TYPE,
+                (payload, context) -> EditorSession.onReply(payload));
+        ClientPlayNetworking.registerGlobalReceiver(EditorStatePayload.TYPE,
+                (payload, context) -> EditorSession.setAllowed(payload.canEdit()));
         ClientProgress.sender = a -> {
             if (ClientPlayNetworking.canSend(a.type())) {
                 ClientPlayNetworking.send(a);
+            }
+        };
+        ClientProgress.editorSender = p -> {
+            if (ClientPlayNetworking.canSend(p.type())) {
+                ClientPlayNetworking.send(p);
             }
         };
         net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, context, type, lines) -> {
