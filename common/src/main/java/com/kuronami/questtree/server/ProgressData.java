@@ -17,6 +17,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -45,27 +46,36 @@ public final class ProgressData {
     private static final Map<String, byte[]> COMPRESSED = new java.util.concurrent.ConcurrentHashMap<>();
     private static int generation;
     private static int chapterCount;
-    /** What the last reload found wrong (DATA_MODEL.md "検査"), for the log, {@code /quest_tree validate} and the join hint. */
+    /** What the last rebuild found wrong (DATA_MODEL.md "検査"), for the log, {@code /quest_tree validate} and the join hint. */
     private static List<ProgressValidator.Problem> problems = List.of();
     private static int errorCount;
     private static int warningCount;
-    /** Problems found while reading files; filled during {@link #reload} and drained into {@link #problems}. */
+    /** Problems found while reading files; filled during {@link #reload} and drained into {@link #packProblems}. */
     private static final List<ProgressValidator.Problem> readProblems = new ArrayList<>();
+
+    /**
+     * The pack side, kept between rebuilds: chapters after patches, reward tables, groups, raw text for validator
+     * lines, and the chapters whose file would not parse. The overlay is applied on top of a copy of this, so an edit
+     * costs one merge and one validation instead of a data pack reload (2026-10-20).
+     */
+    private static JsonObject packBundle = new JsonObject();
+    private static Map<String, ProgressValidator.Source> packSources = new LinkedHashMap<>();
+    private static Set<String> packUnreadable = new LinkedHashSet<>();
+    private static List<ProgressValidator.Problem> packProblems = List.of();
+    /** The open world's root; null before a server has told us which world it is. */
+    private static Path overlayRoot;
 
     private ProgressData() {
     }
 
     public static void reload(ResourceManager rm) {
-        JsonObject bundle = new JsonObject();
         JsonObject chapters = new JsonObject();
         JsonObject tables = new JsonObject();
         JsonObject patches = new JsonObject();
         JsonArray groups = new JsonArray();
-        JsonObject lang = new JsonObject();
 
         Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>();
         readProblems.clear();
-        List<ProgressValidator.Problem> problems = new ArrayList<>();
         // chapters whose file would not parse: a reference into one cannot be called missing (DATA_MODEL.md "検査")
         Set<String> unreadable = new LinkedHashSet<>();
 
@@ -95,26 +105,67 @@ public final class ProgressData {
             JsonObject target = byLocale.computeIfAbsent(locale, k -> new JsonObject());
             l.getAsJsonObject().entrySet().forEach(kv -> target.add(kv.getKey(), kv.getValue()));
         }
-        byLocale.forEach(lang::add);
 
         applyPatches(chapters, patches);
-        bundle.add("chapters", chapters);
-        bundle.add("reward_tables", tables);
-        bundle.add("groups", groups);
+        JsonObject pack = new JsonObject();
+        pack.add("chapters", chapters);
+        pack.add("reward_tables", tables);
+        pack.add("groups", groups);
+
+        packBundle = pack;
+        packSources = sources;
+        packUnreadable = unreadable;
+        packProblems = List.copyOf(readProblems);
+        langs = byLocale;
+        rebuild();
+    }
+
+    /**
+     * Rebuilds the bundle from the packs and the writable overlay, validates it, and publishes a new generation.
+     * <p>
+     * This is the only path an edit takes to the clients. It reads no resource manager: the pack side is kept from the
+     * last reload, so a save costs one read of the overlay chapters and one validation, not a Minecraft reload.
+     */
+    private static void rebuild() {
+        JsonObject bundle = packBundle.deepCopy();
+        if (!bundle.has("chapters") || !bundle.get("chapters").isJsonObject()) {
+            bundle.add("chapters", new JsonObject());
+        }
+        if (!bundle.has("reward_tables") || !bundle.get("reward_tables").isJsonObject()) {
+            bundle.add("reward_tables", new JsonObject());
+        }
+        if (!bundle.has("groups") || !bundle.get("groups").isJsonArray()) {
+            bundle.add("groups", new JsonArray());
+        }
+        JsonObject chapters = bundle.getAsJsonObject("chapters");
+        Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>(packSources);
+        Set<String> unreadable = new LinkedHashSet<>(packUnreadable);
+        List<ProgressValidator.Problem> found = new ArrayList<>(packProblems);
+
+        if (overlayRoot != null) {
+            try {
+                ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot.resolve(ProgressionOverlay.DIR));
+                found.addAll(overlay.problems);
+                overlay.applyTo(chapters, sources);
+            } catch (RuntimeException ex) {
+                Constants.LOG.error("Could not read the progression overlay", ex);
+                found.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, ProgressionOverlay.DIR, "",
+                        "the progression overlay could not be read: " + ex, 0));
+            }
+        }
 
         // check the data before it becomes a model: a broken node is dropped, the rest of the pack keeps working
         ProgressValidator.Result result;
         try {
             result = ProgressValidator.validate(bundle, sources, GameRegistry.INSTANCE, unreadable);
         } catch (RuntimeException ex) {
-            // the check must never take a reload down with it: keep the data as it is and report that it happened
+            // the check must never take a rebuild down with it: keep the data as it is and report that it happened
             Constants.LOG.error("Could not check the progression data", ex);
             result = new ProgressValidator.Result();
             result.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, "", "",
                     "the progression data could not be checked: " + ex, 0));
         }
-        problems.addAll(readProblems);
-        problems.addAll(result.problems);
+        found.addAll(result.problems);
         prune(chapters, result.droppedNodes);
 
         // The model build is the last reader of the bundle, and the pruning above is what makes it safe. If something
@@ -125,12 +176,12 @@ public final class ProgressData {
             built = com.kuronami.questtree.data.ProgressModel.of(bundle);
         } catch (RuntimeException ex) {
             Constants.LOG.error("Could not build the progression model", ex);
-            problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, "", "",
+            found.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, "", "",
                     "the progression data could not be read as a model: " + ex, 0));
             built = null;
         }
 
-        ProgressData.problems = List.copyOf(problems);
+        problems = List.copyOf(found);
         errorCount = 0;
         warningCount = 0;
         for (ProgressValidator.Problem p : problems) {
@@ -151,12 +202,53 @@ public final class ProgressData {
         }
 
         base = bundle;
-        langs = byLocale;
         COMPRESSED.clear();
         model = built;
         generation++;
         chapterCount = chapters.size();
-        Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount, bundleFor("en_us").length / 1024, lang.size());
+        Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount,
+                bundleFor("en_us").length / 1024, langs.size());
+    }
+
+    /** Called once the server knows which world is open; the overlay lives inside it. */
+    public static void setOverlayRoot(Path root) {
+        overlayRoot = root;
+        rebuild();
+    }
+
+    /** The server stopped: the next world must not keep reading this one's overlay. */
+    public static void clearOverlayRoot() {
+        overlayRoot = null;
+    }
+
+    /** Rebuilds after an edit (the editor asks for this at most once per server tick). */
+    public static void rebuildOverlay() {
+        rebuild();
+    }
+
+    /** The pack chapters after patches, without the overlay: what an edit is applied against. */
+    public static JsonObject packChapters() {
+        return packBundle.has("chapters") && packBundle.get("chapters").isJsonObject()
+                ? packBundle.getAsJsonObject("chapters").deepCopy() : new JsonObject();
+    }
+
+    /** The pack reward tables; the overlay does not change them in this phase. */
+    public static JsonObject packTables() {
+        return packBundle.has("reward_tables") && packBundle.get("reward_tables").isJsonObject()
+                ? packBundle.getAsJsonObject("reward_tables").deepCopy() : new JsonObject();
+    }
+
+    public static Map<String, ProgressValidator.Source> packSources() {
+        return new LinkedHashMap<>(packSources);
+    }
+
+    public static Set<String> packUnreadable() {
+        return new LinkedHashSet<>(packUnreadable);
+    }
+
+    /** The validated book the clients see, for {@code /quest_tree export}. */
+    public static JsonObject mergedBundle() {
+        return base.deepCopy();
     }
 
     /** Removes the nodes the validator marked as ERROR, so one bad node cannot take the whole pack down. */

@@ -609,6 +609,27 @@ class ProgressValidatorTest {
                 () -> "imported fixtures produced errors: " + r.problems);
     }
 
+
+    /** The editor checks only the chapter it edited, but against the whole book (2026-10-20). */
+    @Test
+    void validateChapterReturnsOnlyThatChaptersProblems() {
+        JsonObject chapters = JsonParser.parseString("""
+                {"t:basics": {"nodes": {"a": {"tasks": [{"type": "checkmark"}]}}},
+                 "t:other": {"nodes": {"b": {"requires": {"nodes": ["basics/a"]}, "tasks": [{"type": "checkmark"}]}}}}
+                """).getAsJsonObject();
+        JsonObject candidate = JsonParser.parseString("""
+                {"nodes": {"a": {"tasks": [{"type": "nope"}]}}}
+                """).getAsJsonObject();
+
+        ProgressValidator.Result r = ProgressValidator.validateChapter("t:basics", candidate, chapters,
+                new JsonObject(), Map.of(), ProgressValidator.Registry.NONE);
+
+        assertEquals(1, errors(r));
+        assertTrue(says(r, "unknown task type"));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+        assertTrue(r.problems.stream().allMatch(p -> p.path().startsWith("chapters.basics")), r.problems.toString());
+    }
+
     /** Small helper so the fixture paths read like the other tests. */
     private static final class PathOf {
         static Path resource(String name) {
