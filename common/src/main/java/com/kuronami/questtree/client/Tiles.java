@@ -74,7 +74,7 @@ final class Tiles {
         tinted(g, texture("shape/" + shapeOf(shape)), x, y, w, h, from, to, argb);
     }
 
-    /** A mark (textures/gui/icon): tick, cross, lock, link, now, plus, minus, center, chevron, dot. */
+    /** A mark (textures/gui/icon): tick, cross, lock, link, plus, minus, center, head, dot, pin. */
     static void icon(GuiGraphics g, String name, float x, float y, float size, int argb) {
         g.pose().pushPose();
         g.pose().translate(x, y, 0);
