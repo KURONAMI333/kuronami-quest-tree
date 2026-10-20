@@ -202,7 +202,11 @@ final class DevTour {
         shot(pt + 78, "19_glass_off");
         at(pt + 80, () -> ClientConfig.glass = true);
         shot(pt + 82, "20_glass_on");
-        at(pt + 84, () -> {
+        // the open chapter list over the light tiles of the same map: the text on the glass has to stay legible there
+        at(pt + 84, () -> ProgressScreen.tourRailOpen(true));
+        shot(pt + 88, "21_rail_over_tiles");
+        at(pt + 90, () -> ProgressScreen.tourRailOpen(false));
+        at(pt + 92, () -> {
             ClientConfig.glass = glassBefore;
             for (String id : new ArrayList<>(ClientConfig.railPinned())) {
                 ClientConfig.setRailPin(id, pinsBefore.contains(id));
@@ -210,7 +214,7 @@ final class DevTour {
             pinsBefore.forEach(id -> ClientConfig.setRailPin(id, true));
             ClientConfig.write();
         });
-        at(pt + 86, () -> {
+        at(pt + 94, () -> {
             ProgressScreen.tourResting(false);
             Constants.LOG.info("Dev tour finished");
         });

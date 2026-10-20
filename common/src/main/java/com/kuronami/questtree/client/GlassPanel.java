@@ -17,11 +17,12 @@ import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
+import org.lwjgl.opengl.GL11;
 
 /**
  * Liquid Glass (Apple's material, 2025) for the screen's controls and navigation: the chapter list, the details
- * sheet, the search field, the zoom buttons, tooltips and the minimap. Never on the map's tiles, which are the content
- * the glass floats over (Apple HIG, Materials: "Don't use Liquid Glass in the content layer").
+ * sheet, the search field, the zoom buttons and the minimap. Tooltips stay flat (mostly text, and often over glass).
+ * Never on the map's tiles, which are the content the glass floats over (Apple HIG, Materials: "Don't use Liquid Glass in the content layer").
  * <p>
  * The screen behind the panel is copied off-screen and drawn back through a small grid whose UVs are pushed outward
  * at the rounded edge, so the picture behind the rim bends like it is seen through a thick slab (lensing, not only a
@@ -33,7 +34,7 @@ import org.joml.Vector3f;
  *     over a busy picture (the minimap over the map).</li>
  * </ul>
  * The rim catches a light from the top left; it leans towards the pointer while the pointer is near, and the panel
- * under the pointer glows softly where it is, the way Apple's interactive glass lights up under a finger. Only the
+ * minimap glows softly under the pointer, the way Apple's interactive glass lights up under a finger. Only the
  * game's own {@code position_tex}, {@code position_tex_color} and {@code position_color} shaders are used: a shader
  * pack replaces the world shaders, and a core shader of our own is the first thing it takes with it (Iris docs).
  * All colours come from the palette.
@@ -65,8 +66,7 @@ public final class GlassPanel {
     static final Slot SEARCH = new Slot();
     static final Slot ZOOM = new Slot();
     static final Slot MINIMAP = new Slot();
-    static final Slot TOOLTIP = new Slot();
-    private static final Slot[] SLOTS = {RAIL, SHEET, SEARCH, ZOOM, MINIMAP, TOOLTIP};
+    private static final Slot[] SLOTS = {RAIL, SHEET, SEARCH, ZOOM, MINIMAP};
 
     /** GUI pixels of the screen copied around the panel, so the lens can sample outside it. */
     private static final int PAD = 14;
@@ -93,7 +93,8 @@ public final class GlassPanel {
 
     /**
      * Draws the glass at {@code x, y, w, h} (GUI coordinates under the current pose, which may only translate) with
-     * corner radius {@code radius}. Draw it after everything it floats over and before what sits on it.
+     * corner radius {@code radius}. Draw it after everything it floats over and before what sits on it. A scissor set by
+     * the caller clips the panel itself, not the passes that make it.
      */
     static void render(GuiGraphics g, Slot slot, Kind kind, int x, int y, int w, int h, int radius, int mouseX, int mouseY) {
         Minecraft mc = Minecraft.getInstance();
@@ -103,8 +104,11 @@ public final class GlassPanel {
         }
         // where the panel is on the screen: the caller may have moved the pose (tooltips are lifted, the map is not)
         Vector3f at = g.pose().last().pose().transformPosition(new Vector3f(x, y, 0));
+        Vector3f end = g.pose().last().pose().transformPosition(new Vector3f(x + w, y + h, 0));
         double sx = at.x;
         double sy = at.y;
+        double sw = end.x - at.x;
+        double sh = end.y - at.y;
 
         var main = mc.getMainRenderTarget();
         int fbw = main.width;
@@ -112,8 +116,8 @@ public final class GlassPanel {
         int pad = Math.max(1, (int) Math.round(PAD * scale));
         int px0 = (int) Math.round(sx * scale);
         int py0 = (int) Math.round(sy * scale);
-        int px1 = (int) Math.round((sx + w) * scale);
-        int py1 = (int) Math.round((sy + h) * scale);
+        int px1 = (int) Math.round((sx + sw) * scale);
+        int py1 = (int) Math.round((sy + sh) * scale);
         int pw = px1 - px0;
         int ph = py1 - py0;
         int x0 = Math.max(0, px0 - pad);
@@ -131,11 +135,17 @@ public final class GlassPanel {
         // everything drawn behind the panel has to be on the screen before it can be copied, and before a target is
         // made or resized: both rebind the framebuffer and the viewport
         g.flush();
+        int hw = Math.max(1, tw / 2);
+        int hh = Math.max(1, th / 2);
+        int qw = Math.max(1, tw / 4);
+        int qh = Math.max(1, th / 4);
+        int ew = Math.max(1, tw / 8);
+        int eh = Math.max(1, th / 8);
         slot.copy = target(slot.copy, tw, th);
         if (kind == Kind.REGULAR) {
-            slot.half = target(slot.half, Math.max(1, tw / 2), Math.max(1, th / 2));
-            slot.quarter = target(slot.quarter, Math.max(1, tw / 4), Math.max(1, th / 4));
-            slot.eighth = target(slot.eighth, Math.max(1, tw / 8), Math.max(1, th / 8));
+            slot.half = target(slot.half, hw, hh);
+            slot.quarter = target(slot.quarter, qw, qh);
+            slot.eighth = target(slot.eighth, ew, eh);
         }
         slot.panel = target(slot.panel, pw, ph);
 
@@ -144,6 +154,11 @@ public final class GlassPanel {
         GlStateManager._glBlitFrameBuffer(x0, y0, x1, y1, 0, 0, tw, th, 0x4000, 0x2600);
         GlStateManager._glBindFramebuffer(36160, main.frameBufferId);
 
+        // a caller's scissor is in window pixels and would cut the off-screen passes; it applies again to the composite
+        boolean scissor = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+        if (scissor) {
+            GlStateManager._disableScissorTest();
+        }
         RenderSystem.disableDepthTest();
         RenderSystem.disableBlend();
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
@@ -158,12 +173,16 @@ public final class GlassPanel {
         try {
             // the copied frame may have any alpha in it; the passes below want the picture's alpha out of the way
             opaque(slot.copy);
-            int source = slot.copy.getColorTextureId();
+            TextureTarget source = slot.copy;
+            int usedW = tw;
+            int usedH = th;
             if (kind == Kind.REGULAR) {
-                blur(slot.copy.getColorTextureId(), slot.half);
-                blur(slot.half.getColorTextureId(), slot.quarter);
-                blur(slot.quarter.getColorTextureId(), slot.eighth);
-                source = slot.eighth.getColorTextureId();
+                blur(slot.copy, tw, th, slot.half, hw, hh);
+                blur(slot.half, hw, hh, slot.quarter, qw, qh);
+                blur(slot.quarter, qw, qh, slot.eighth, ew, eh);
+                source = slot.eighth;
+                usedW = ew;
+                usedH = eh;
             }
 
             // the panel starts fully covered; the corner mask takes the coverage away outside the rounded shape
@@ -171,9 +190,11 @@ public final class GlassPanel {
             GlStateManager._colorMask(true, true, true, true);
             slot.panel.clear(false);
             slot.panel.bindWrite(true);
+            RenderSystem.viewport(0, 0, pw, ph);
             double lx = (mouseX - sx) * scale;
             double ly = (mouseY - sy) * scale;
-            lens(kind, px0 - x0, py0 - top, pw, ph, tw, th, scale, radius, lx, ly, source);
+            lens(kind, px0 - x0, py0 - top, pw, ph, tw, th, scale, radius, lx, ly, source.getColorTextureId(),
+                    usedW / (double) source.width, usedH / (double) source.height, source.width, source.height);
 
             // only the coverage is cut: the colour is multiplied by it once, when the panel is drawn onto the screen
             RenderSystem.enableBlend();
@@ -187,6 +208,9 @@ public final class GlassPanel {
             RenderSystem.applyModelViewMatrix();
             RenderSystem.restoreProjectionMatrix();
             main.bindWrite(true);
+            if (scissor) {
+                GlStateManager._enableScissorTest();
+            }
         }
 
         RenderSystem.enableBlend();
@@ -196,14 +220,21 @@ public final class GlassPanel {
         RenderSystem.setShaderTexture(0, slot.panel.getColorTextureId());
         Matrix4f pose = g.pose().last().pose();
         BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        // the target holds the copy in GL order (v=0 is the bottom), so the top of the panel samples v=1
-        bb.addVertex(pose, x, y, 0f).setUv(0f, 1f);
+        // the panel fills the bottom-left of its (possibly larger) target in GL order, so its top is at v = ph / height
+        float pu = pw / (float) slot.panel.width;
+        float pv = ph / (float) slot.panel.height;
+        bb.addVertex(pose, x, y, 0f).setUv(0f, pv);
         bb.addVertex(pose, x, y + h, 0f).setUv(0f, 0f);
-        bb.addVertex(pose, x + w, y + h, 0f).setUv(1f, 0f);
-        bb.addVertex(pose, x + w, y, 0f).setUv(1f, 1f);
-        BufferUploader.drawWithShader(bb.buildOrThrow());
-        RenderSystem.disableBlend();
+        bb.addVertex(pose, x + w, y + h, 0f).setUv(pu, 0f);
+        bb.addVertex(pose, x + w, y, 0f).setUv(pu, pv);
+        // written to the depth buffer at its z like the flat panels it replaces, so things drawn on it later at the
+        // same z are not dropped behind marks that were under it
         RenderSystem.enableDepthTest();
+        RenderSystem.depthFunc(GL11.GL_ALWAYS);
+        RenderSystem.depthMask(true);
+        BufferUploader.drawWithShader(bb.buildOrThrow());
+        RenderSystem.depthFunc(GL11.GL_LEQUAL);
+        RenderSystem.disableBlend();
     }
 
     /** Frees every off-screen copy; the next panel makes them again. */
@@ -213,11 +244,18 @@ public final class GlassPanel {
         }
     }
 
+    /**
+     * A target at least {@code w x h}, grown in steps and never shrunk: the chapter list and the sheet change size on
+     * every frame while they slide, and making the buffers again each frame is a driver allocation each time. The
+     * passes draw into the bottom-left {@code w x h} of it.
+     */
     private static TextureTarget target(TextureTarget target, int w, int h) {
+        int gw = (w + 63) / 64 * 64;
+        int gh = (h + 63) / 64 * 64;
         if (target == null) {
-            target = new TextureTarget(w, h, false, true);
-        } else if (target.width != w || target.height != h) {
-            target.resize(w, h, true);
+            target = new TextureTarget(gw, gh, false, true);
+        } else if (target.width < w || target.height < h) {
+            target.resize(Math.max(gw, target.width), Math.max(gh, target.height), true);
         }
         // shrinking and growing has to blend, or the frost keeps the texels of the frame before
         target.setFilterMode(9729);
@@ -238,13 +276,17 @@ public final class GlassPanel {
         GlStateManager._colorMask(true, true, true, true);
     }
 
-    /** Drops the source into a smaller target, which is the whole blur: each level averages four texels. */
-    private static void blur(int texture, TextureTarget to) {
+    /**
+     * Drops the used {@code sw x sh} of the source into {@code dw x dh} of a smaller target, which is the whole blur:
+     * each level averages four texels.
+     */
+    private static void blur(TextureTarget from, int sw, int sh, TextureTarget to, int dw, int dh) {
         to.bindWrite(true);
+        RenderSystem.viewport(0, 0, dw, dh);
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
-        RenderSystem.setShaderTexture(0, texture);
+        RenderSystem.setShaderTexture(0, from.getColorTextureId());
         BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        quad(bb, 0f, 0f, 1f, 1f, 0f, 1f, 1f, 0f);
+        quad(bb, 0f, 0f, 1f, 1f, 0f, sw / (float) from.width, sh / (float) from.height, 0f);
         BufferUploader.drawWithShader(bb.buildOrThrow());
     }
 
@@ -257,16 +299,21 @@ public final class GlassPanel {
      *     <li>Tone: the regular variant mixes the blurred picture with {@code glass_regular} (its alpha is how much);
      *     the clear one keeps the picture sharp, dims it by {@code glass_clear} and tints it with {@code glass_tint}.</li>
      *     <li>Light: a thin rim highlight from the top left, leaning towards the pointer when it is near, a fainter one
-     *     on the opposite rim, and a soft glow under the pointer while it is over the panel.</li>
+     *     on the opposite rim, and on the clear kind a soft glow under the pointer while it is over the panel.</li>
      * </ul>
      */
     private static void lens(Kind kind, int ox, int oy, int pw, int ph, int tw, int th, double scale, int radiusGui,
-                             double lx, double ly, int texture) {
+                             double lx, double ly, int texture, double su, double sv, int texW, int texH) {
         boolean clear = kind == Kind.CLEAR;
-        int nx = Math.max(2, (int) Math.ceil(pw / (CELL * scale)));
-        int ny = Math.max(2, (int) Math.ceil(ph / (CELL * scale)));
-        int vw = nx + 1;
-        int vh = ny + 1;
+        double radius = Math.min(radiusGui * scale, Math.min(pw, ph) * 0.5);
+        double rimDepth = Math.min((clear ? 12.0 : 7.0) * scale, Math.min(pw, ph) * 0.45);
+        // fine cells where the rim bends and lights; the regular kind has nothing else going on inside, so its middle
+        // is one cell (the clear one keeps the fine grid for the glow under the pointer)
+        double band = clear ? -1 : Math.max(radius, rimDepth) + CELL * scale;
+        double[] xs = axis(pw, band, CELL * scale);
+        double[] ys = axis(ph, band, CELL * scale);
+        int vw = xs.length;
+        int vh = ys.length;
         int n = vw * vh;
         float[] gx = new float[n];
         float[] gy = new float[n];
@@ -275,8 +322,6 @@ public final class GlassPanel {
         float[] mul = new float[n * 3];
         float[] add = new float[n * 3];
 
-        double radius = Math.min(radiusGui * scale, Math.min(pw, ph) * 0.5);
-        double rimDepth = Math.min((clear ? 12.0 : 7.0) * scale, Math.min(pw, ph) * 0.45);
         double refract = (clear ? 11.0 : 5.0) * scale;
         double halfW = pw * 0.5;
         double halfH = ph * 0.5;
@@ -302,7 +347,8 @@ public final class GlassPanel {
                 lightY /= ll;
             }
         }
-        boolean hover = lx >= 0 && ly >= 0 && lx < pw && ly < ph;
+        // the glow under the pointer only on the clear kind: on the panels with text it sits behind the row being read
+        boolean hover = clear && lx >= 0 && ly >= 0 && lx < pw && ly < ph;
         double glowR = 28.0 * scale;
 
         int toneArgb = clear ? Ui.GLASS_CLEAR : Ui.GLASS_REGULAR;
@@ -312,9 +358,9 @@ public final class GlassPanel {
         double[] tint = {((tintArgb >> 16) & 255) / 255.0, ((tintArgb >> 8) & 255) / 255.0, (tintArgb & 255) / 255.0};
 
         for (int j = 0; j < vh; j++) {
-            double vy = ph * (double) j / ny;
+            double vy = ys[j];
             for (int i = 0; i < vw; i++) {
-                double vx = pw * (double) i / nx;
+                double vx = xs[i];
                 int k = j * vw + i;
                 gx[k] = (float) (vx / pw);
                 gy[k] = (float) (vy / ph);
@@ -358,8 +404,9 @@ public final class GlassPanel {
                     offX *= cap / offLen;
                     offY *= cap / offLen;
                 }
-                uu[k] = (float) clamp((ox + vx + offX) / tw, 0.5 / tw, 1.0 - 0.5 / tw);
-                vv[k] = (float) clamp(1.0 - (oy + vy + offY) / th, 0.5 / th, 1.0 - 0.5 / th);
+                // the source holds the copy in its bottom-left su x sv, in GL order
+                uu[k] = (float) clamp((ox + vx + offX) / tw * su, 0.5 / texW, su - 0.5 / texW);
+                vv[k] = (float) clamp((1.0 - (oy + vy + offY) / th) * sv, 0.5 / texH, sv - 0.5 / texH);
 
                 // light on the rim: strongest where the rim faces the light, a weaker echo on the far side
                 double rim = 1.0 - smooth(0.0, rimWidth, depth);
@@ -399,6 +446,30 @@ public final class GlassPanel {
                 .setColor(unit(add[k * 3]), unit(add[k * 3 + 1]), unit(add[k * 3 + 2]), 255));
         BufferUploader.drawWithShader(light.buildOrThrow());
         GlStateManager._colorMask(true, true, true, true);
+    }
+
+    /** Vertex positions along one side: every {@code cell} within {@code band} of either end, nothing in between. */
+    private static double[] axis(int len, double band, double cell) {
+        java.util.List<Double> at = new java.util.ArrayList<>();
+        if (band < 0 || 2 * band >= len) {
+            int n = Math.max(2, (int) Math.ceil(len / cell));
+            for (int i = 0; i <= n; i++) {
+                at.add(len * (double) i / n);
+            }
+        } else {
+            int n = Math.max(1, (int) Math.ceil(band / cell));
+            for (int i = 0; i <= n; i++) {
+                at.add(band * i / n);
+            }
+            for (int i = 0; i <= n; i++) {
+                at.add(len - band + band * i / n);
+            }
+        }
+        double[] out = new double[at.size()];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = at.get(i);
+        }
+        return out;
     }
 
     private interface VertexWriter {

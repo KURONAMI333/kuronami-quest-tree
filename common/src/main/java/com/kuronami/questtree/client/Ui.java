@@ -82,7 +82,7 @@ final class Ui {
     /** Clear glass: the dimming layer, alpha = how much (Apple suggests 35% over bright content). */
     static int GLASS_CLEAR = 0x5912141A;
     /** Regular glass (panels with text): the tone the blurred picture is pulled towards, alpha = how far. */
-    static int GLASS_REGULAR = 0xB81E2025;
+    static int GLASS_REGULAR = 0xE01E2025;
     /** An open line under the pointer. */
     static int LINE_OPEN_HOVER = 0xFFEDEDEF;
     /** Behind the pinned-quest overlay and its notices (over the world). */
@@ -413,12 +413,10 @@ final class Ui {
             y = g.guiHeight() - h - 4;
         }
         y = Math.max(4, y);
-        if (GlassPanel.on()) {
-            GlassPanel.render(g, GlassPanel.TOOLTIP, GlassPanel.Kind.REGULAR, x, y, w, h, R3, mouseX, mouseY);
-        } else {
-            surface(g, x, y, w, h, R3, FLOATING);
-            outline(g, x, y, w, h, R3, HAIRLINE);
-        }
+        // flat, not glass: a tooltip is mostly text, and it often opens over the glass of the list or the minimap,
+        // where glass on glass is what Apple's guidance rules out
+        surface(g, x, y, w, h, R3, FLOATING);
+        outline(g, x, y, w, h, R3, HAIRLINE);
         int ty = y + S1 - 1;
         for (int i = 0; i < lines.size(); i++) {
             text(g, font, lines.get(i), x + S2, ty, i == 0 ? TEXT : MUTED);

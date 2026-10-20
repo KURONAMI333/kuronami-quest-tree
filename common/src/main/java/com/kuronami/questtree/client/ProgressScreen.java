@@ -556,7 +556,7 @@ public class ProgressScreen extends Screen {
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
         lastFrame = nowMs;
-        railT = docked ? 1 : Mth.clamp(railT + (overRail ? dt : -dt) / RAIL_MS, 0, 1);
+        railT = docked || tourRailOpen ? 1 : Mth.clamp(railT + (overRail ? dt : -dt) / RAIL_MS, 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? dt : -dt) / SHEET_MS, 0, 1);
         hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
         hoverGrow.values().removeIf(t -> t <= 0);
@@ -2174,6 +2174,13 @@ public class ProgressScreen extends Screen {
      */
     static void tourResting(boolean resting) {
         tourResting = resting;
+    }
+
+    /** Dev tour only: holds the chapter list open without the pointer over it. */
+    private static boolean tourRailOpen;
+
+    static void tourRailOpen(boolean open) {
+        tourRailOpen = open;
     }
 
 
