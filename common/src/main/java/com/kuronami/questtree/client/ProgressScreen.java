@@ -1505,6 +1505,15 @@ public class ProgressScreen extends Screen {
                 y += 10;
             }
         }
+        if (n.repeatable) {
+            int done = ClientProgress.completions(n.key);
+            if (done >= 1) {
+                // compact repeat count, under the subtitle: a repeated quest must not look untouched (2026-10-20)
+                y += 2;
+                Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.times_done", done), x, y, Ui.DIM);
+                y += 10;
+            }
+        }
         // the content scrolls between the header and the fixed action row; the scissor clips it to the sheet
         int contentTop = Math.max(y + 4, Ui.S1 + Ui.S2);
         int contentBottom = height - BTN - 2 * Ui.S2;

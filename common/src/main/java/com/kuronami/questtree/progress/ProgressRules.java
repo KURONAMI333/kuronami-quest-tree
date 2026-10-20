@@ -134,7 +134,12 @@ public final class ProgressRules {
 
     /** Whether a node repeats: {@code "repeat": true} or an object. */
     public static boolean repeatable(ProgressModel.Node n) {
-        JsonElement rep = n.json.get("repeat");
+        return repeatable(n.json);
+    }
+
+    /** The same from raw node JSON, which the client reads before it builds its own node type (2026-10-20). */
+    public static boolean repeatable(JsonObject node) {
+        JsonElement rep = node.get("repeat");
         return rep != null && (rep.isJsonObject() || (rep.isJsonPrimitive() && rep.getAsJsonPrimitive().isBoolean() && rep.getAsBoolean()));
     }
 

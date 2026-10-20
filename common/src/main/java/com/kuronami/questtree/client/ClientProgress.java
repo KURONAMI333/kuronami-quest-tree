@@ -114,6 +114,21 @@ public final class ClientProgress {
         return n == null || index < 0 || index >= n.tasks.size() || rules.taskOpen(progress, n, index);
     }
 
+    /**
+     * How often a repeatable quest was completed, first run included (2026-10-20): {@code repeats} counts the times
+     * it started over after a claim, and a finished quest is one more until that claim resets it. 0 for anything else.
+     */
+    public static int completions(String key) {
+        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        if (n == null || !n.json.has("repeat")) {
+            return 0;
+        }
+        if (!ProgressRules.repeatable(n)) {
+            return 0;
+        }
+        return progress.repeats.getOrDefault(key, 0) + (progress.completed.contains(key) ? 1 : 0);
+    }
+
     /** Whether a node's requirements are met; a "flexible" node can be open without it. */
     public static boolean unlocked(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);

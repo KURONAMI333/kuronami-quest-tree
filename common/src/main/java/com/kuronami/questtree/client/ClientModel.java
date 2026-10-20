@@ -252,6 +252,8 @@ public final class ClientModel {
         public final int cost;
         /** FTB Quests' {@code require_sequential_tasks}: a task waits for the one before it (2026-10-20). */
         public final boolean sequentialTasks;
+        /** A repeatable quest: the details header shows how often it was completed (2026-10-20). */
+        public final boolean repeatable;
         public final Component title;
         /** FTB Quests' subtitle: one step under the title in the sheet and on the map's hover tooltip, or null. */
         public final Component subtitle;
@@ -271,6 +273,7 @@ public final class ClientModel {
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             this.cost = o.has("cost") ? o.get("cost").getAsInt() : 0;
             this.sequentialTasks = ProgressModel.boolOf(o, "sequential_tasks");
+            this.repeatable = ProgressRules.repeatable(o);
             JsonObject req = obj(o, "requires");
             for (JsonElement r : arr(req, "nodes")) {
                 requires.add(r.getAsString());

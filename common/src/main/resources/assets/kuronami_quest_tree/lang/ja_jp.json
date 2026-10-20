@@ -10,6 +10,7 @@
   "screen.kuronami_quest_tree.needs": "必要",
   "screen.kuronami_quest_tree.leads_to": "次へ",
   "screen.kuronami_quest_tree.tasks": "やること",
+  "screen.kuronami_quest_tree.times_done": "×%s",
   "screen.kuronami_quest_tree.rewards": "報酬",
   "screen.kuronami_quest_tree.cost": "コスト: %s",
   "commands.kuronami_quest_tree.import.ftbquests.missing": "config/ftbquests/quests に FTB Quests のデータがありません",
