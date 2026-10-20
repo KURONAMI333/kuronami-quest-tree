@@ -86,6 +86,7 @@ public final class EditorClipboard {
         out.addProperty("x", GridSnap.snap(x, snap));
         out.addProperty("y", GridSnap.snap(y, snap));
         boolean elsewhere = targetChapter != null && !chapterId.isEmpty() && !targetChapter.equals(chapterId);
+        pasteTarget = targetChapter == null ? "" : targetChapter;
         if (out.has("requires") && out.get("requires").isJsonObject()) {
             JsonObject requires = out.getAsJsonObject("requires");
             if (requires.has("nodes") && requires.get("nodes").isJsonArray()) {
@@ -103,10 +104,33 @@ public final class EditorClipboard {
         for (JsonElement n : names) {
             if (n.isJsonPrimitive() && !ids.contains(n.getAsString())) {
                 String name = n.getAsString();
-                kept.add(elsewhere && !name.contains("/") ? chapterId + "/" + name : name);
+                if (!elsewhere || name.contains("/")) {
+                    kept.add(name);
+                } else if (crossRef(name) != null) {
+                    kept.add(crossRef(name));
+                }
+                // a chapter of another namespace cannot be named from here (references are "chapter/node" within one
+                // namespace, ProgressModel): that link is left out rather than refused by the validator
             }
         }
         return kept;
+    }
+
+    /** Target chapter of the paste, set by {@link #nodeAt}, for {@link #crossRef}. */
+    private String pasteTarget = "";
+
+    /**
+     * A same-chapter name as the target chapter must write it: "path/node", the chapter's path without its namespace,
+     * the only cross-chapter form the model resolves (2026-10-20 review: "ns:path/node" was refused). Null when the two
+     * chapters are in different namespaces.
+     */
+    String crossRef(String name) {
+        int a = chapterId.indexOf(':');
+        int b = pasteTarget.indexOf(':');
+        if (a < 0 || b < 0 || !chapterId.substring(0, a).equals(pasteTarget.substring(0, b))) {
+            return null;
+        }
+        return chapterId.substring(a + 1) + "/" + name;
     }
 
     /** All nodes at a position, in the order they were copied. */

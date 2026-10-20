@@ -85,14 +85,19 @@ class EditorClipboardTest {
         JsonObject a = node("""
                 {"x": 0, "y": 0, "requires": {"nodes": ["b", "outside", "other/far"]}, "exclusive_with": ["b", "rival"]}""");
         JsonObject b = node("{\"x\": 1, \"y\": 0}");
-        EditorClipboard clip = new EditorClipboard("ch", List.of(
+        // chapter ids are "<namespace>:<path>"; a reference to another chapter is "<path>/<node>" in the same namespace
+        EditorClipboard clip = new EditorClipboard("pack:ch", List.of(
                 new EditorClipboard.Entry("a", 0, 0, a),
                 new EditorClipboard.Entry("b", 1, 0, b)));
-        JsonObject made = clip.nodesAt(0, 0, true, "second").get(0);
+        JsonObject made = clip.nodesAt(0, 0, true, "pack:second").get(0);
         assertEquals("[\"ch/outside\",\"other/far\"]", made.getAsJsonObject("requires").get("nodes").toString());
         assertEquals("[\"ch/rival\"]", made.get("exclusive_with").toString());
-        JsonObject same = clip.nodesAt(0, 0, true, "ch").get(0);
+        JsonObject same = clip.nodesAt(0, 0, true, "pack:ch").get(0);
         assertEquals("[\"outside\",\"other/far\"]", same.getAsJsonObject("requires").get("nodes").toString());
+        // another namespace cannot be named: those links are left out, already-qualified ones stay
+        JsonObject foreign = clip.nodesAt(0, 0, true, "elsewhere:main").get(0);
+        assertEquals("[\"other/far\"]", foreign.getAsJsonObject("requires").get("nodes").toString());
+        assertEquals("[]", foreign.get("exclusive_with").toString());
     }
 
     @Test
