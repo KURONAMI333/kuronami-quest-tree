@@ -13,9 +13,11 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -223,6 +225,61 @@ public class ProgressScreen extends Screen {
         return path;
     }
 
+    /**
+     * What hovering a quest says (FTB Quests' {@code QuestButton.addMouseOverText}, 2026-10-20): the title and its
+     * subtitle, then only the lines that apply -- progress, optional, repeat count, a pick-one choice, the exclusive
+     * mark, or why it cannot start. No sentence is added when there is nothing to say.
+     */
+    private List<Component> nodeTooltip(ClientModel.Node n) {
+        List<Component> tip = new ArrayList<>();
+        tip.add(n.title);
+        if (n.subtitle != null) {
+            // the subtitle one step under the title, the same grey the details sheet uses
+            tip.add(n.subtitle);
+        }
+        State s = ClientProgress.state(n.key);
+        if (s == State.PROGRESS) {
+            int pct = (int) Math.floor(ClientProgress.fraction(n.key) * 100);
+            if (pct > 0) {
+                tip.add(Component.literal(pct + "%"));
+            }
+        }
+        if (n.optional) {
+            tip.add(Component.translatable("screen.kuronami_quest_tree.optional"));
+        }
+        if (n.repeatable) {
+            int done = ClientProgress.completions(n.key);
+            tip.add(done > 0
+                    ? Component.translatable("screen.kuronami_quest_tree.can_repeat_count", done)
+                    : Component.translatable("screen.kuronami_quest_tree.can_repeat"));
+        }
+        if (!n.choice.isEmpty()) {
+            tip.add(Component.translatable("screen.kuronami_quest_tree.choose"));
+        }
+        if (n.exclusive) {
+            tip.add(Component.translatable("screen.kuronami_quest_tree.exclusive"));
+        }
+        if (s == State.LOCKED) {
+            List<String> missing = new ArrayList<>();
+            for (String req : n.requireKeys) {
+                if (!ClientProgress.progress().completed.contains(req)) {
+                    ClientModel.Node r = model().nodesByKey.get(req);
+                    missing.add(r != null && ClientProgress.visible(req)
+                            ? r.title.getString() : Component.translatable("screen.kuronami_quest_tree.unknown").getString());
+                }
+            }
+            if (!missing.isEmpty()) {
+                tip.add(Component.translatable("screen.kuronami_quest_tree.needs_list",
+                        String.join(", ", missing.subList(0, Math.min(4, missing.size())))));
+            } else {
+                tip.add(Component.translatable("screen.kuronami_quest_tree.locked"));
+            }
+        } else if (s == State.EXCLUDED) {
+            tip.add(Component.translatable("screen.kuronami_quest_tree.excluded"));
+        }
+        return tip;
+    }
+
     private static boolean nodeMatches(ClientModel.Node n, String q) {
         if (n.title.getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
             return true;
@@ -298,8 +355,8 @@ public class ProgressScreen extends Screen {
     /** The node the current scroll belongs to; a new node starts at the top. */
     private String sheetScrollFor;
     private long lastFrame;
-    /** A tooltip asked for while drawing (icon buttons), drawn last so nothing covers it. */
-    private Component pendingTip;
+    /** Tooltip lines asked for while drawing (icon buttons), drawn last so nothing covers it. */
+    private List<Component> pendingTip;
     /** The node under the mouse last frame; lines are drawn before nodes, so they use this one. */
     private String hoveredNode;
     /** Per node, how far its hover growth has run (0..1). */
@@ -328,6 +385,9 @@ public class ProgressScreen extends Screen {
     private int lastMouseY;
     /** A quest to show once the screen is laid out (opened from an item, see {@link #openAt}). */
     private String pendingGoTo;
+    /** Back through the quests and chapters looked at, newest first (Backspace, 2026-10-20). */
+    private final Deque<String> nodeHistory = new ArrayDeque<>();
+    private final Deque<Integer> chapterHistory = new ArrayDeque<>();
     private final Map<String, Integer> badges = new LinkedHashMap<>();
     /** done, visible, hidden node counts per chapter. */
     private final Map<String, int[]> chapterCounts = new LinkedHashMap<>();
@@ -562,7 +622,8 @@ public class ProgressScreen extends Screen {
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
         lastFrame = nowMs;
-        railT = tourRailOpen ? 1 : Mth.clamp(railT + (overRail || (railBox != null && railBox.isFocused()) ? dt : -dt) / RAIL_MS, 0, 1);
+        railT = tourRailOpen || ClientConfig.keepRailOpen() ? 1
+                : Mth.clamp(railT + (overRail || (railBox != null && railBox.isFocused()) ? dt : -dt) / RAIL_MS, 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? dt : -dt) / SHEET_MS, 0, 1);
         hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
         hoverGrow.values().removeIf(t -> t <= 0);
@@ -582,7 +643,7 @@ public class ProgressScreen extends Screen {
         if (pendingTip != null) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 300);
-            Ui.tooltip(g, font, List.of(pendingTip), mouseX, mouseY);
+            Ui.tooltip(g, font, pendingTip, mouseX, mouseY);
             g.pose().popPose();
         }
     }
@@ -644,8 +705,12 @@ public class ProgressScreen extends Screen {
     /** Height of a group header row in the rail; chapter rows are {@link #RAIL_ROW}. */
     private static final int HEADER_H = 14;
 
+    /** Two rows kept under the list: "collect all" and the gear (2026-10-20). */
+    private static final int RAIL_FOOT_ROW = 18;
+    private static final int RAIL_FOOT_H = 2 * RAIL_FOOT_ROW + 4;
+
     private int railListBottom() {
-        return height - 8;
+        return height - 8 - RAIL_FOOT_H;
     }
 
     private float railMaxScroll() {
@@ -741,6 +806,73 @@ public class ProgressScreen extends Screen {
             g.pose().popPose();
         }
         g.disableScissor();
+        renderRailFooter(g, mouseX, mouseY);
+    }
+
+    /**
+     * The two fixed rows under the chapter list: collect every claimable reward, and the client settings (2026-10-20).
+     * Closed, they are icons with the same gold dot the chapters use for waiting rewards.
+     */
+    private void renderRailFooter(GuiGraphics g, int mouseX, int mouseY) {
+        int w = railWidth();
+        int left = 4 + Ui.S1;
+        int rowW = w - 2 * Ui.S1;
+        int top = height - 8 - RAIL_FOOT_H;
+        int waiting = ClientProgress.claimableCount();
+        boolean open = railT > 0.6f;
+
+        int cy = top + 2;
+        boolean collectHover = mouseX >= left && mouseX < left + rowW && mouseY >= cy && mouseY < cy + RAIL_FOOT_ROW;
+        if (!open) {
+            collectHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= cy && mouseY < cy + RAIL_FOOT_ROW;
+        }
+        if (collectHover && waiting > 0) {
+            Ui.surface(g, left, cy, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
+        }
+        int giftColor = waiting > 0 ? Tiles.GOLD : Ui.DIM;
+        Tiles.icon(g, "gift", RAIL_ICON_X, cy + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
+                collectHover && waiting > 0 ? Ui.TEXT : giftColor);
+        if (waiting > 0) {
+            Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, cy, 6, Tiles.GOLD);
+        }
+        if (open) {
+            int countW = waiting > 0 ? Ui.badge(g, font, String.valueOf(waiting), left + rowW - Ui.S1, cy + (RAIL_FOOT_ROW - Ui.BADGE_H) / 2) + 4 : 0;
+            Ui.text(g, font, trim(Component.translatable("screen.kuronami_quest_tree.collect_all").getString(),
+                    rowW - RAIL_TEXT_X - countW), RAIL_TEXT_X, cy + (RAIL_FOOT_ROW - 8) / 2,
+                    waiting > 0 ? Ui.TEXT : Ui.DIM);
+        }
+        if (waiting > 0) {
+            buttons.add(new Button(left, cy, rowW, RAIL_FOOT_ROW, () -> {
+                ClientProgress.send("claim_all", "", -1);
+                ProgressFeedback.click();
+            }));
+            if (collectHover) {
+                pendingTip = List.of(Component.translatable("screen.kuronami_quest_tree.collect_all"));
+            }
+        }
+
+        int sy = cy + RAIL_FOOT_ROW + 4;
+        boolean settingsHover = mouseX >= left && mouseX < left + rowW && mouseY >= sy && mouseY < sy + RAIL_FOOT_ROW;
+        if (!open) {
+            settingsHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= sy && mouseY < sy + RAIL_FOOT_ROW;
+        }
+        if (settingsHover) {
+            Ui.surface(g, left, sy, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
+        }
+        Tiles.icon(g, "gear", RAIL_ICON_X, sy + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
+                settingsHover ? Ui.TEXT : Ui.DIM);
+        if (open) {
+            Ui.text(g, font, trim(Component.translatable("screen.kuronami_quest_tree.settings").getString(),
+                    rowW - RAIL_TEXT_X), RAIL_TEXT_X, sy + (RAIL_FOOT_ROW - 8) / 2, settingsHover ? Ui.TEXT : Ui.DIM);
+        }
+        buttons.add(new Button(left, sy, rowW, RAIL_FOOT_ROW, () -> {
+            if (minecraft != null) {
+                minecraft.setScreen(new SettingsScreen(this));
+            }
+        }));
+        if (settingsHover) {
+            pendingTip = List.of(Component.translatable("screen.kuronami_quest_tree.settings"));
+        }
     }
 
     /**
@@ -1178,17 +1310,11 @@ public class ProgressScreen extends Screen {
         renderMinimap(g, ch, v, mouseX, mouseY);
         renderZoomButtons(g, ch, v, mouseX, mouseY);
         g.pose().popPose();
-        if (hovered != null && !dragging && selected == null) {
+        if (hovered != null && !dragging) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 200);
             ClientModel.Node hn = model().nodesByKey.get(hovered);
-            List<Component> tip = new ArrayList<>();
-            tip.add(hn.title);
-            if (hn.subtitle != null) {
-                // the subtitle one step under the title, the same grey the details sheet uses
-                tip.add(hn.subtitle);
-            }
-            Ui.tooltip(g, font, tip, mouseX, mouseY);
+            Ui.tooltip(g, font, nodeTooltip(hn), mouseX, mouseY);
             g.pose().popPose();
         } else if (decoTip != null && !decoTip.isEmpty()) {
             g.pose().pushPose();
@@ -1299,7 +1425,7 @@ public class ProgressScreen extends Screen {
             boolean sover = mouseX >= sx && mouseX < sx + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
             if (sover) {
                 Ui.surface(g, sx, py, pin, pin, pin / 2, Ui.OVERLAY_1);
-                pendingTip = Component.translatable("screen.kuronami_quest_tree.search");
+                pendingTip = List.of(Component.translatable("screen.kuronami_quest_tree.search"));
             }
             Tiles.icon(g, "search", sx + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH,
                     sover ? Ui.TEXT : Ui.DIM);
@@ -1316,7 +1442,7 @@ public class ProgressScreen extends Screen {
         boolean over = mouseX >= px && mouseX < px + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
         if (over) {
             Ui.surface(g, px, py, pin, pin, pin / 2, Ui.OVERLAY_1);
-            pendingTip = Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
+            pendingTip = List.of(Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin"));
         }
         Tiles.icon(g, "pin", px + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH,
                 pinned ? Tiles.GOLD : over ? Ui.TEXT : Ui.DIM);
@@ -1685,8 +1811,19 @@ public class ProgressScreen extends Screen {
             Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.rewards"), x, y, Ui.DIM);
             y += 12;
             int rx = x;
-            for (ItemStack r : n.rewards) {
-                slot(g, r, rx, y, false);
+            for (int i = 0; i < n.rewards.size(); i++) {
+                ItemStack r = n.rewards.get(i);
+                int index = i < n.rewardIndices.size() ? n.rewardIndices.get(i) : i;
+                boolean taken = ClientProgress.rewardClaimed(n.key, index);
+                boolean canTake = state == State.CLAIM && !taken
+                        && (n.choice.isEmpty() || choicePick >= 0);
+                slot(g, r, rx, y, false, taken);
+                if (canTake && y + 22 > contentTop && y < contentBottom) {
+                    buttons.add(new Button(rx, y, 22, 22, () -> {
+                        ClientProgress.send("claim_reward", n.key, index, n.choice.isEmpty() ? -1 : choicePick);
+                        flashes.put(n.key, Util.getMillis());
+                    }));
+                }
                 rx += 28;
                 if (rx + 22 > x + w) {
                     break;
@@ -1803,12 +1940,16 @@ public class ProgressScreen extends Screen {
                 cachedFor = null;
             }));
             if (hover) {
-                pendingTip = Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin");
+                pendingTip = List.of(Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin"));
             }
         }
     }
 
     private void slot(GuiGraphics g, ItemStack r, int x, int y, boolean picked) {
+        slot(g, r, x, y, picked, false);
+    }
+
+    private void slot(GuiGraphics g, ItemStack r, int x, int y, boolean picked, boolean taken) {
         if (lastMouseX >= x && lastMouseX < x + 22 && lastMouseY >= y && lastMouseY < y + 22) {
             hoverStack = r;
         }
@@ -1818,6 +1959,11 @@ public class ProgressScreen extends Screen {
         }
         g.renderItem(r, x + 3, y + 3);
         g.renderItemDecorations(font, r, x + 3, y + 3);
+        if (taken) {
+            // dimmed with a tick: this reward is already in the player's hands
+            Ui.surface(g, x, y, 22, 22, Ui.R2, 0x99000000);
+            Tiles.icon(g, "tick", x + 13, y + 13, 9, Tiles.GREEN_TEXT);
+        }
     }
 
     /**
@@ -2325,12 +2471,53 @@ public class ProgressScreen extends Screen {
     }
 
     private void select(int index) {
+        if (index >= 0 && index != chapterIndex && chapterIndex >= 0) {
+            chapterHistory.addFirst(chapterIndex);
+            // a new chapter starts its own trail; Backspace can still walk back to the chapters before it
+            nodeHistory.clear();
+        }
+        applyChapter(index);
+    }
+
+    private void applyChapter(int index) {
         panView = null;
         chapterIndex = index;
         lastChapter = index;
         selected = null;
         choicePick = -1;
         sheetT = 0;
+    }
+
+    /** Backspace: the previous quest, else the previous chapter (FTB Quests' {@code BACKSPACE_HISTORY}). */
+    private void back() {
+        if (!nodeHistory.isEmpty()) {
+            selected = nodeHistory.removeFirst();
+            choicePick = -1;
+            sheetScrollFor = null;
+            ProgressFeedback.click();
+            return;
+        }
+        if (chapterHistory.isEmpty()) {
+            return;
+        }
+        applyChapter(chapterHistory.removeFirst());
+        ProgressFeedback.click();
+    }
+
+    /** Tab / Shift+Tab: the next or previous chapter in the list, folding groups aside. */
+    private void cycleChapter(int direction) {
+        ClientModel m = model();
+        if (m == null || railChapters.isEmpty()) {
+            return;
+        }
+        ClientModel.Chapter now = chapter();
+        int at = railChapters.indexOf(now);
+        int size = railChapters.size();
+        int next = Math.floorMod(at < 0 ? (direction > 0 ? 0 : size - 1) : at + direction, size);
+        ClientModel.Chapter target = railChapters.get(next);
+        select(m.chapters.indexOf(target));
+        railScrollTarget = 0;
+        ProgressFeedback.click();
     }
 
     private void zoomButton(ClientModel.Chapter ch, float[] v, int which) {
@@ -2418,6 +2605,9 @@ public class ProgressScreen extends Screen {
             }
             String key = hit == null ? null : hit.key;
             if (key != null && !key.equals(selected)) {
+                if (selected != null) {
+                    nodeHistory.addFirst(selected);
+                }
                 choicePick = -1;
             }
             selected = key;
@@ -2500,8 +2690,13 @@ public class ProgressScreen extends Screen {
             // trackpads send both axes: pan (FTB Quests issue #2059 asked for this)
             v[0] += (float) (scrollX * 12);
             v[1] += (float) (scrollY * 12);
-        } else {
+        } else if (Screen.hasControlDown()) {
+            // FTB Quests' default wheel: a plain wheel pans, Ctrl zooms (QuestPanel.scrollPanel)
             zoomAt(v, mx, my, (float) Math.pow(1.15, scrollY));
+        } else if (Screen.hasShiftDown()) {
+            v[0] += (float) (scrollY * 12);
+        } else {
+            v[1] += (float) (scrollY * 12);
         }
         return true;
     }
@@ -2562,6 +2757,63 @@ public class ProgressScreen extends Screen {
                 viewer.showUses(it);
             }
             return true;
+        }
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB) {
+            cycleChapter(Screen.hasShiftDown() ? -1 : 1);
+            return true;
+        }
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE) {
+            back();
+            return true;
+        }
+        ClientModel.Chapter mapChapter = chapter();
+        if (mapChapter != null && !mapChapter.skills) {
+            float[] v = view(mapChapter);
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE) {
+                // recentre on the selected quest, else the whole tree
+                lastMapMove = Util.getMillis();
+                if (selected != null && model() != null && model().nodesByKey.containsKey(selected)) {
+                    ClientModel.Node n = model().nodesByKey.get(selected);
+                    v[0] = (float) ((width - sheetWidth()) / 2.0 - n.x * UNIT * v[2]);
+                    v[1] = (float) (height / 2.0 - n.y * UNIT * v[2]);
+                } else {
+                    VIEWS.put(mapChapter.id, fitView(mapChapter));
+                }
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_EQUAL || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ADD) {
+                zoomButton(mapChapter, v, 2);
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_MINUS || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_SUBTRACT) {
+                zoomButton(mapChapter, v, 1);
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_0 || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_0) {
+                zoomButton(mapChapter, v, 0);
+                return true;
+            }
+            int pan = Screen.hasShiftDown() ? 64 : 24;
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT) {
+                lastMapMove = Util.getMillis();
+                v[0] += pan;
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT) {
+                lastMapMove = Util.getMillis();
+                v[0] -= pan;
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP) {
+                lastMapMove = Util.getMillis();
+                v[1] += pan;
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN) {
+                lastMapMove = Util.getMillis();
+                v[1] -= pan;
+                return true;
+            }
         }
         if (ClientProgress.OPEN_KEY.matches(key, scan)) {
             onClose();
