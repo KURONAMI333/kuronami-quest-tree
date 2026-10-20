@@ -151,9 +151,10 @@ public final class EditorService {
             replyChapter = outcome.createdId();
         }
         reply(player, payload, replyChapter, outcome.ok(), outcome.createdId(), outcome.messages(), outcome.revision());
-        if (outcome.stale()) {
+        if (outcome.stale() && !dirty) {
             // another operator wrote this chapter first: give the client the new bundle now, so its next op is not
-            // refused against a revision it can no longer see
+            // refused against a revision it can no longer see; with a rebuild already pending the tick-end sync sends the
+            // fresh bundle, and this one would be the outdated cached copy
             ProgressData.sync(player);
         }
     }

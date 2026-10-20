@@ -29,8 +29,17 @@ import java.util.function.Consumer;
 public final class EditorSession {
 
     private static final long NOTICE_MS = 4000;
+    /** How long a settled optimistic position may wait for the synced model to show the same place. */
+    private static final long SETTLE_MS = 2500;
+    private static final Map<String, Long> settledAt = new HashMap<>();
 
-    /** A short line at the bottom of the map: the validator's message, or a warning it let through. */
+    /**
+     * A short line at the bottom of the map: the validator's message, or a warning it let through.
+     *
+     * @param text  the message
+     * @param error true when the op was refused
+     * @param at    {@code Util.getMillis()} when it arrived
+     */
     public record Notice(String text, boolean error, long at) {
     }
 
@@ -65,6 +74,8 @@ public final class EditorSession {
         if (!on) {
             active = false;
             queue.clear();
+            optimistic.clear();
+            settledAt.clear();
         }
     }
 
@@ -106,12 +117,51 @@ public final class EditorSession {
         return optimistic;
     }
 
-    /** Drop an optimistic position once the synced model already has it, or the node is gone. */
-    public static void pruneOptimistic(ClientModel model) {
+    /**
+     * Drop optimistic positions that nothing is waiting for. A key stays while the player holds it in a drag
+     * ({@code held}) or a move for it is queued or in flight. After that the synced model should already show it; if
+     * it has not caught up within {@link #SETTLE_MS} (a refused move, a lost packet) the node goes back to the synced
+     * position instead of staying where the player once dropped it.
+     */
+    public static void pruneOptimistic(ClientModel model, java.util.Set<String> held) {
+        long now = net.minecraft.Util.getMillis();
+        java.util.Set<String> busy = movesInFlight();
         optimistic.entrySet().removeIf(e -> {
-            ClientModel.Node n = model == null ? null : model.nodesByKey.get(e.getKey());
-            return n == null || (Math.abs(n.x - e.getValue()[0]) < 1e-6 && Math.abs(n.y - e.getValue()[1]) < 1e-6);
+            String key = e.getKey();
+            ClientModel.Node n = model == null ? null : model.nodesByKey.get(key);
+            if (n == null) {
+                settledAt.remove(key);
+                return true;
+            }
+            if (held.contains(key) || busy.contains(key)) {
+                settledAt.remove(key);
+                return false;
+            }
+            boolean same = Math.abs(n.x - e.getValue()[0]) < 1e-6 && Math.abs(n.y - e.getValue()[1]) < 1e-6;
+            long since = settledAt.computeIfAbsent(key, k -> now);
+            if (same || now - since > SETTLE_MS) {
+                settledAt.remove(key);
+                return true;
+            }
+            return false;
         });
+    }
+
+    private static java.util.Set<String> movesInFlight() {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        if (current != null) {
+            addMove(out, current);
+        }
+        for (Pending p : queue) {
+            addMove(out, p);
+        }
+        return out;
+    }
+
+    private static void addMove(java.util.Set<String> out, Pending p) {
+        if (p.op().equals("move_node") && p.args().has("id")) {
+            out.add(p.chapterId() + "/" + p.args().get("id").getAsString());
+        }
     }
 
     public static EditorClipboard clipboard() {
@@ -154,14 +204,17 @@ public final class EditorSession {
             return;
         }
         PasteJob job = new PasteJob(copy);
-        List<com.google.gson.JsonObject> nodes = copy.nodesAt(atX, atY, snap);
+        List<com.google.gson.JsonObject> nodes = copy.nodesAt(atX, atY, snap, chapterId);
+        Map<String, JsonObject> madeById = new HashMap<>();
         for (int i = 0; i < nodes.size(); i++) {
             EditorClipboard.Entry entry = copy.entries().get(i);
+            int index = i;
             JsonObject args = new JsonObject();
             args.add("node", nodes.get(i));
             send(chapterId, "create_node", args, reply -> {
                 if (reply.ok()) {
                     job.created(entry.id(), reply.createdId());
+                    madeById.put(reply.createdId(), nodes.get(index));
                 } else {
                     job.refused(entry.id());
                 }
@@ -171,6 +224,22 @@ public final class EditorSession {
                         linkArgs.addProperty("from", link.from());
                         linkArgs.addProperty("to", link.to());
                         send(chapterId, "link", linkArgs);
+                    }
+                    // exclusive_with names ids that did not exist when the nodes were created: patch them in now,
+                    // keeping the outside names the create already carried
+                    for (Map.Entry<String, List<String>> ex : job.resolvedExclusives().entrySet()) {
+                        com.google.gson.JsonArray names = new com.google.gson.JsonArray();
+                        JsonObject made = madeById.get(ex.getKey());
+                        if (made != null && made.has("exclusive_with") && made.get("exclusive_with").isJsonArray()) {
+                            names.addAll(made.getAsJsonArray("exclusive_with"));
+                        }
+                        ex.getValue().forEach(names::add);
+                        JsonObject patch = new JsonObject();
+                        patch.add("exclusive_with", names);
+                        JsonObject updateArgs = new JsonObject();
+                        updateArgs.addProperty("id", ex.getKey());
+                        updateArgs.add("patch", patch);
+                        send(chapterId, "update_node", updateArgs);
                     }
                 }
             });
@@ -241,6 +310,7 @@ public final class EditorSession {
         active = false;
         revisions.clear();
         optimistic.clear();
+        settledAt.clear();
         notices.clear();
         clipboard = null;
     }

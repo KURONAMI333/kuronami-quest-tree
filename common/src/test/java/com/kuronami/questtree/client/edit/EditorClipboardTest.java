@@ -24,11 +24,11 @@ class EditorClipboardTest {
                  "exclusive_with": ["b"]}""");
         JsonObject b = node("""
                 {"x": 3, "y": 4, "title": "B", "requires": {"nodes": ["outside"]}}""");
-        EditorClipboard clip = new EditorClipboard(List.of(
+        EditorClipboard clip = new EditorClipboard("ch", List.of(
                 new EditorClipboard.Entry("a", 2, 3, a),
                 new EditorClipboard.Entry("b", 3, 4, b)));
 
-        List<JsonObject> made = clip.nodesAt(10, 20, true);
+        List<JsonObject> made = clip.nodesAt(10, 20, true, "ch");
         assertEquals(10.0, made.get(0).get("x").getAsDouble());
         assertEquals(20.0, made.get(0).get("y").getAsDouble());
         assertEquals(11.0, made.get(1).get("x").getAsDouble());
@@ -51,7 +51,7 @@ class EditorClipboardTest {
                 {"x": 0, "y": 0, "requires": {"nodes": ["b"]}}""");
         JsonObject b = node("""
                 {"x": 1, "y": 0}""");
-        EditorClipboard clip = new EditorClipboard(List.of(
+        EditorClipboard clip = new EditorClipboard("ch", List.of(
                 new EditorClipboard.Entry("a", 0, 0, a),
                 new EditorClipboard.Entry("b", 1, 0, b)));
         PasteJob job = new PasteJob(clip);
@@ -70,7 +70,7 @@ class EditorClipboardTest {
                 {"x": 0, "y": 0, "requires": {"nodes": ["b"]}}""");
         JsonObject b = node("""
                 {"x": 1, "y": 0}""");
-        PasteJob job = new PasteJob(new EditorClipboard(List.of(
+        PasteJob job = new PasteJob(new EditorClipboard("ch", List.of(
                 new EditorClipboard.Entry("a", 0, 0, a),
                 new EditorClipboard.Entry("b", 1, 0, b))));
         job.refused("a");
@@ -78,5 +78,32 @@ class EditorClipboardTest {
         assertTrue(job.complete());
         assertEquals(1, job.refusedCount());
         assertTrue(job.resolvedLinks().isEmpty(), "no link is sent to a node that was not created");
+    }
+
+    @Test
+    void pasteIntoAnotherChapterNamesOutsideLinksWithTheirChapter() {
+        JsonObject a = node("""
+                {"x": 0, "y": 0, "requires": {"nodes": ["b", "outside", "other/far"]}, "exclusive_with": ["b", "rival"]}""");
+        JsonObject b = node("{\"x\": 1, \"y\": 0}");
+        EditorClipboard clip = new EditorClipboard("ch", List.of(
+                new EditorClipboard.Entry("a", 0, 0, a),
+                new EditorClipboard.Entry("b", 1, 0, b)));
+        JsonObject made = clip.nodesAt(0, 0, true, "second").get(0);
+        assertEquals("[\"ch/outside\",\"other/far\"]", made.getAsJsonObject("requires").get("nodes").toString());
+        assertEquals("[\"ch/rival\"]", made.get("exclusive_with").toString());
+        JsonObject same = clip.nodesAt(0, 0, true, "ch").get(0);
+        assertEquals("[\"outside\",\"other/far\"]", same.getAsJsonObject("requires").get("nodes").toString());
+    }
+
+    @Test
+    void internalExclusivesAreRewrittenToMintedIds() {
+        JsonObject a = node("{\"x\": 0, \"y\": 0, \"exclusive_with\": [\"b\"]}");
+        JsonObject b = node("{\"x\": 1, \"y\": 0, \"exclusive_with\": [\"a\"]}");
+        PasteJob job = new PasteJob(new EditorClipboard("ch", List.of(
+                new EditorClipboard.Entry("a", 0, 0, a),
+                new EditorClipboard.Entry("b", 1, 0, b))));
+        job.created("a", "n1");
+        job.created("b", "n2");
+        assertEquals(java.util.Map.of("n1", List.of("n2"), "n2", List.of("n1")), job.resolvedExclusives());
     }
 }

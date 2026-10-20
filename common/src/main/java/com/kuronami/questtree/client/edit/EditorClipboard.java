@@ -27,12 +27,15 @@ public final class EditorClipboard {
     public record Link(String from, String to) {
     }
 
+    private final String chapterId;
     private final List<Entry> entries;
     private final Set<String> ids = new LinkedHashSet<>();
     private final double minX;
     private final double minY;
 
-    public EditorClipboard(List<Entry> entries) {
+    /** {@code chapterId} is the chapter the nodes were copied from, so a paste elsewhere can still name their outside links. */
+    public EditorClipboard(String chapterId, List<Entry> entries) {
+        this.chapterId = chapterId == null ? "" : chapterId;
         this.entries = List.copyOf(entries);
         double x = Double.MAX_VALUE;
         double y = Double.MAX_VALUE;
@@ -43,6 +46,10 @@ public final class EditorClipboard {
         }
         this.minX = entries.isEmpty() ? 0 : x;
         this.minY = entries.isEmpty() ? 0 : y;
+    }
+
+    public String chapterId() {
+        return chapterId;
     }
 
     public boolean isEmpty() {
@@ -67,44 +74,63 @@ public final class EditorClipboard {
 
     /**
      * The JSON for one create_node op: its own fields, the copied position moved so the group's top-left sits at
-     * {@code (atX, atY)}, no id (the server mints it), and no link to another node in the same copy.
+     * {@code (atX, atY)}, no id (the server mints it), and no link to another node in the same copy. A link to a node
+     * outside the copy stays; pasted into another chapter it is rewritten to {@code chapter/node}, the form the
+     * validator accepts across chapters, so the node still points at the same quest.
      */
-    public JsonObject nodeAt(Entry entry, double atX, double atY, boolean snap) {
+    public JsonObject nodeAt(Entry entry, double atX, double atY, boolean snap, String targetChapter) {
         JsonObject out = entry.node().deepCopy();
         out.remove("id");
         double x = atX + (entry.x() - minX);
         double y = atY + (entry.y() - minY);
         out.addProperty("x", GridSnap.snap(x, snap));
         out.addProperty("y", GridSnap.snap(y, snap));
+        boolean elsewhere = targetChapter != null && !chapterId.isEmpty() && !targetChapter.equals(chapterId);
         if (out.has("requires") && out.get("requires").isJsonObject()) {
             JsonObject requires = out.getAsJsonObject("requires");
             if (requires.has("nodes") && requires.get("nodes").isJsonArray()) {
-                JsonArray kept = new JsonArray();
-                for (JsonElement n : requires.getAsJsonArray("nodes")) {
-                    if (n.isJsonPrimitive() && !ids.contains(n.getAsString())) {
-                        kept.add(n);
-                    }
-                }
-                requires.add("nodes", kept);
+                requires.add("nodes", outside(requires.getAsJsonArray("nodes"), elsewhere));
             }
         }
         if (out.has("exclusive_with") && out.get("exclusive_with").isJsonArray()) {
-            JsonArray kept = new JsonArray();
-            for (JsonElement n : out.getAsJsonArray("exclusive_with")) {
-                if (n.isJsonPrimitive() && !ids.contains(n.getAsString())) {
-                    kept.add(n);
-                }
-            }
-            out.add("exclusive_with", kept);
+            out.add("exclusive_with", outside(out.getAsJsonArray("exclusive_with"), elsewhere));
         }
         return out;
     }
 
+    private JsonArray outside(JsonArray names, boolean elsewhere) {
+        JsonArray kept = new JsonArray();
+        for (JsonElement n : names) {
+            if (n.isJsonPrimitive() && !ids.contains(n.getAsString())) {
+                String name = n.getAsString();
+                kept.add(elsewhere && !name.contains("/") ? chapterId + "/" + name : name);
+            }
+        }
+        return kept;
+    }
+
     /** All nodes at a position, in the order they were copied. */
-    public List<JsonObject> nodesAt(double atX, double atY, boolean snap) {
+    public List<JsonObject> nodesAt(double atX, double atY, boolean snap, String targetChapter) {
         List<JsonObject> out = new ArrayList<>(entries.size());
         for (Entry e : entries) {
-            out.add(nodeAt(e, atX, atY, snap));
+            out.add(nodeAt(e, atX, atY, snap, targetChapter));
+        }
+        return out;
+    }
+
+    /** The mutual-exclusion pairs inside the copy, by old id ({@code from} lists {@code to}). */
+    public List<Link> internalExclusives() {
+        List<Link> out = new ArrayList<>();
+        for (Entry e : entries) {
+            JsonElement names = e.node().get("exclusive_with");
+            if (names == null || !names.isJsonArray()) {
+                continue;
+            }
+            for (JsonElement n : names.getAsJsonArray()) {
+                if (n.isJsonPrimitive() && ids.contains(n.getAsString())) {
+                    out.add(new Link(e.id(), n.getAsString()));
+                }
+            }
         }
         return out;
     }

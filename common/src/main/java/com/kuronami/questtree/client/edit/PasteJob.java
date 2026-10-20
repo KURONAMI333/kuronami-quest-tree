@@ -58,6 +58,19 @@ public final class PasteJob {
         return refused.size();
     }
 
+    /** For each created node, the new ids of the copied nodes it excludes; sent as an update once all ids exist. */
+    public Map<String, List<String>> resolvedExclusives() {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        for (EditorClipboard.Link l : clipboard.internalExclusives()) {
+            String from = created.get(l.from());
+            String to = created.get(l.to());
+            if (from != null && to != null) {
+                out.computeIfAbsent(from, k -> new ArrayList<>()).add(to);
+            }
+        }
+        return out;
+    }
+
     /** The links whose both ends were created, rewritten to the minted ids. */
     public List<EditorClipboard.Link> resolvedLinks() {
         List<EditorClipboard.Link> out = new ArrayList<>();

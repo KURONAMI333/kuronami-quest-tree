@@ -391,6 +391,8 @@ public class ProgressScreen extends Screen {
     /** Original positions of the nodes in the current drag, by global key. */
     private Map<String, double[]> editOriginal;
     private boolean editMoved;
+    /** A press on an already picked node: the pick is narrowed to it on release unless the pointer moved (group drag). */
+    private String editPressedKey;
     private double editBoxX0;
     private double editBoxY0;
     private double editBoxX1;
@@ -658,7 +660,14 @@ public class ProgressScreen extends Screen {
         }
         refresh(m);
         refreshMatches(m);
-        EditorSession.pruneOptimistic(m);
+        EditorSession.pruneOptimistic(m, editDrag == EditDrag.MOVE && editOriginal != null
+                ? editOriginal.keySet() : Set.of());
+        if (!EditorSession.active() && (editorMenu != null || editDrag != EditDrag.NONE || linkFrom != null
+                || !editSelection.isEmpty())) {
+            // the server turned editing off under an open map: leave no half-finished gesture behind
+            editSelection.clear();
+            cancelEditGestures();
+        }
         // icon, gaps and a count like "12/127" beside the longest name, within two fifths of the screen
         railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width * 2 / 5));
         if (chapter() == null || ClientProgress.chapterHidden(chapter().id)) {
@@ -2378,6 +2387,11 @@ public class ProgressScreen extends Screen {
     }
 
     private void cancelEditGestures() {
+        if (editDrag == EditDrag.MOVE && editOriginal != null) {
+            // a drag that never reached the server: the nodes go back to where they were
+            EditorSession.optimistic().putAll(editOriginal);
+        }
+        editPressedKey = null;
         editDrag = EditDrag.NONE;
         editOriginal = null;
         editMoved = false;
@@ -2574,7 +2588,7 @@ public class ProgressScreen extends Screen {
             }
         }
         if (!entries.isEmpty()) {
-            EditorSession.setClipboard(new EditorClipboard(entries));
+            EditorSession.setClipboard(new EditorClipboard(ch.id, entries));
         }
     }
 
@@ -2668,14 +2682,19 @@ public class ProgressScreen extends Screen {
             args.addProperty("x", e.getValue()[0]);
             args.addProperty("y", e.getValue()[1]);
             EditorSession.send(ch.id, "move_node", args, reply -> {
-                if (!reply.ok() && batch.refuse()) {
-                    batch.rollback(EditorSession.optimistic());
+                if (!reply.ok()) {
+                    // only this node: the others in the batch are answered on their own
+                    batch.rollbackKey(key, EditorSession.optimistic());
                 }
             });
         }
     }
 
     private void finishMove(ClientModel.Chapter ch) {
+        if (!editMoved && editPressedKey != null) {
+            editSelection.click(editPressedKey, false);
+        }
+        editPressedKey = null;
         if (editMoved && editOriginal != null) {
             Map<String, double[]> target = new LinkedHashMap<>();
             for (String key : editOriginal.keySet()) {
@@ -2827,7 +2846,16 @@ public class ProgressScreen extends Screen {
                 return true;
             }
             if (hit != null) {
-                editSelection.click(hit.key, Screen.hasControlDown());
+                boolean ctrl = Screen.hasControlDown();
+                if (!ctrl && editSelection.contains(hit.key)) {
+                    editPressedKey = hit.key;
+                } else {
+                    editSelection.click(hit.key, ctrl);
+                    editPressedKey = null;
+                }
+                if (!editSelection.contains(hit.key)) {
+                    return true;
+                }
                 beginMove(ch);
                 editStartMx = mx;
                 editStartMy = my;
@@ -3135,9 +3163,11 @@ public class ProgressScreen extends Screen {
                 }
                 double gx = GridSnap.dragDelta(mx - editStartMx, v[2], UNIT, !Screen.hasAltDown());
                 double gy = GridSnap.dragDelta(my - editStartMy, v[2], UNIT, !Screen.hasAltDown());
-                for (Map.Entry<String, double[]> e : editOriginal.entrySet()) {
-                    EditorSession.optimistic().put(e.getKey(),
-                            new double[]{e.getValue()[0] + gx, e.getValue()[1] + gy});
+                if (editMoved) {
+                    for (Map.Entry<String, double[]> e : editOriginal.entrySet()) {
+                        EditorSession.optimistic().put(e.getKey(),
+                                new double[]{e.getValue()[0] + gx, e.getValue()[1] + gy});
+                    }
                 }
             } else if (editDrag == EditDrag.BOX) {
                 editBoxX1 = mapX(v, mx);

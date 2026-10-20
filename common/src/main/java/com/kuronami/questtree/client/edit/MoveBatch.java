@@ -50,6 +50,14 @@ public final class MoveBatch {
         overlay.putAll(copy(original));
     }
 
+    /** Put one node back: a refused move of one node must not undo the others the server accepted. */
+    public void rollbackKey(String key, Map<String, double[]> overlay) {
+        double[] p = original.get(key);
+        if (p != null) {
+            overlay.put(key, p.clone());
+        }
+    }
+
     private static Map<String, double[]> copy(Map<String, double[]> from) {
         Map<String, double[]> out = new LinkedHashMap<>();
         for (Map.Entry<String, double[]> e : from.entrySet()) {
