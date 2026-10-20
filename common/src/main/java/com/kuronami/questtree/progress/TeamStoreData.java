@@ -36,6 +36,12 @@ public final class TeamStoreData {
      * (join) or copying the team out to a new solo record (leave). A player who was never seen starts solo.
      */
     public boolean changedTeam(UUID player, UUID current) {
+        return changedTeam(player, current, t -> java.util.Set.of());
+    }
+
+    /** As above; {@code settled} names the team rewards of completed nodes, which a leaver's copy keeps as claimed. */
+    public boolean changedTeam(UUID player, UUID current,
+                               java.util.function.Function<TeamProgress, java.util.Set<String>> settled) {
         UUID old = owners.get(player);
         owners.put(player, current);
         if (old == null) {
@@ -53,7 +59,7 @@ public final class TeamStoreData {
             // left (or was kicked from) a team: take a copy of the team's progress as a new solo record
             TeamProgress source = teams.get(old);
             if (source != null) {
-                teams.put(player, source.leaveCopy(player));
+                teams.put(player, source.leaveCopy(player, settled.apply(source)));
             }
         } else {
             // joined (or moved to) a team: fold the old record into it

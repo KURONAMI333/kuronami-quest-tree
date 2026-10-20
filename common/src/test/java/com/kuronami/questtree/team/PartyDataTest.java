@@ -84,4 +84,18 @@ class PartyDataTest {
         assertEquals(2, read.members(PARTY).size());
         assertEquals(PARTY, read.teamIdOf(B));
     }
+
+    @Test
+    void anAbsentMemberCanBeFoundByNameOrId() {
+        PartyData data = new PartyData();
+        PartyData.Party party = data.create(A, PARTY, 0);
+        data.invite(A, B, 0);
+        data.accept(B, 0);
+        java.util.function.Function<UUID, String> names = id -> id.equals(A) ? "Alice" : "Bob";
+        assertEquals(B, PartyData.findMember(party, "bob", names));
+        assertEquals(B, PartyData.findMember(party, B.toString(), names));
+        assertNull(PartyData.findMember(party, "Carol", names));
+        assertTrue(data.kick(A, B));
+        assertNull(PartyData.findMember(party, "Bob", names));
+    }
 }

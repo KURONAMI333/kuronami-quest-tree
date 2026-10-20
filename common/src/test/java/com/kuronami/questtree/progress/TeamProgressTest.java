@@ -118,4 +118,16 @@ class TeamProgressTest {
         assertTrue(back.shared.completed.contains("t:q/solo"));
         assertEquals(A, store.teamOf(A));
     }
+
+    @Test
+    void leavingCannotBeUsedToTakeATeamRewardASecondTime() {
+        TeamStoreData store = new TeamStoreData();
+        store.team(TEAM).shared.completed.add("t:q/a");
+        store.owners.put(A, TEAM);
+
+        // the caller names the team rewards of completed nodes; the leaver's copy treats them as taken
+        assertTrue(store.changedTeam(A, A, team -> java.util.Set.of("t:q/a#0")));
+        assertTrue(store.team(A).view(A).rewardClaimed("t:q/a#0"));
+        assertFalse(store.team(A).view(A).rewardClaimed("t:q/a#1"));
+    }
 }

@@ -52,10 +52,41 @@ public final class ProgressStore extends SavedData {
      */
     public PlayerProgress view(MinecraftServer server, UUID player) {
         UUID teamId = TeamResolver.teamId(server, player);
-        if (data.changedTeam(player, teamId)) {
+        if (data.changedTeam(player, teamId, ProgressStore::settledTeamRewards)) {
             setDirty();
         }
         return data.team(teamId).view(player);
+    }
+
+    /**
+     * Takes a player out of their old team now, online or not: the copy is made from the team's progress at this
+     * moment, not at their next login. Returns the team they left, or null when nothing changed.
+     */
+    public UUID settleLeave(UUID player) {
+        UUID old = data.teamOf(player);
+        if (data.changedTeam(player, player, ProgressStore::settledTeamRewards)) {
+            setDirty();
+            return old;
+        }
+        return null;
+    }
+
+    /** Team rewards ({@code "team": true}) of the nodes this team completed. */
+    private static java.util.Set<String> settledTeamRewards(TeamProgress team) {
+        var nodes = ProgressService.rules().model().nodes;
+        java.util.Set<String> out = new java.util.HashSet<>();
+        for (String key : team.shared.completed) {
+            var n = nodes.get(key);
+            if (n == null) {
+                continue;
+            }
+            for (int i = 0; i < n.rewards.size(); i++) {
+                if (com.kuronami.questtree.data.ProgressModel.boolOf(n.rewards.get(i), "team")) {
+                    out.add(key + "#" + i);
+                }
+            }
+        }
+        return out;
     }
 
     public UUID teamIdOf(UUID player) {

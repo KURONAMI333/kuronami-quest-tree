@@ -4,6 +4,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.team.PartyData;
 import com.kuronami.questtree.team.PartyStore;
 import com.kuronami.questtree.team.TeamResolver;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -50,7 +51,9 @@ final class PartyCommands {
                 .then(Commands.literal("accept").executes(PartyCommands::accept))
                 .then(Commands.literal("leave").executes(PartyCommands::leave))
                 .then(Commands.literal("kick")
-                        .then(Commands.argument("player", EntityArgument.player()).executes(PartyCommands::kick)))
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests((c, b) -> SharedSuggestionProvider.suggest(rosterNames(c.getSource()), b))
+                                .executes(PartyCommands::kick)))
                 .then(Commands.literal("disband").executes(PartyCommands::disband))
                 .then(Commands.literal("info").executes(PartyCommands::info));
     }
@@ -142,26 +145,55 @@ final class PartyCommands {
         ServerPlayer player = src.getPlayerOrException();
         PartyData partyData = data(src);
         PartyData.Party old = partyData.partyOf(player.getUUID());
-        if (partyData.leave(player.getUUID(), System.currentTimeMillis()) == null) {
+        Set<UUID> oldMembers = old == null ? Set.of() : Set.copyOf(old.members);
+        UUID oldId = partyData.leave(player.getUUID(), System.currentTimeMillis());
+        if (oldId == null) {
             src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.not_in",
                     "You are not in a party"));
             return 0;
         }
         dirty(src);
-        // leaving copies the shared progress back to a solo record; the party keeps its own copy
-        ProgressService.progress(player);
-        ProgressService.flush(player);
-        if (old != null) {
-            for (UUID id : old.members) {
-                ServerPlayer online = src.getServer().getPlayerList().getPlayer(id);
-                if (online != null) {
-                    ProgressService.flush(online);
-                }
-            }
-        }
+        detach(src.getServer(), player.getUUID(), oldId, oldMembers);
         src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.left",
                 "Left the party"), false);
         return 1;
+    }
+
+    /**
+     * The player is no longer in the team {@code oldId}: they take a copy of its progress now (also when offline),
+     * and everyone who shared it is re-sent and gets their attribute modifiers recomputed.
+     */
+    private static void detach(MinecraftServer server, UUID player, UUID oldId, Set<UUID> oldMembers) {
+        ProgressStore.get(server).settleLeave(player);
+        ProgressService.teamChanged(server, player, oldId, player, oldMembers);
+    }
+
+    private static String nameOf(MinecraftServer server, UUID id) {
+        ServerPlayer online = server.getPlayerList().getPlayer(id);
+        if (online != null) {
+            return online.getGameProfile().getName();
+        }
+        var cache = server.getProfileCache();
+        if (cache != null) {
+            var profile = cache.get(id);
+            if (profile.isPresent()) {
+                return profile.get().getName();
+            }
+        }
+        return id.toString();
+    }
+
+    /** Names of the caller's party members, offline ones included, for suggestions. */
+    private static java.util.List<String> rosterNames(CommandSourceStack src) {
+        ServerPlayer self = src.getPlayer();
+        PartyData.Party party = self == null ? null : data(src).partyOf(self.getUUID());
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (party != null) {
+            for (UUID id : party.members) {
+                out.add(nameOf(src.getServer(), id));
+            }
+        }
+        return out;
     }
 
     private static int kick(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
@@ -170,29 +202,27 @@ final class PartyCommands {
             return 0;
         }
         ServerPlayer actor = src.getPlayerOrException();
-        ServerPlayer target = EntityArgument.getPlayer(c, "player");
+        MinecraftServer server = src.getServer();
         PartyData.Party old = data(src).partyOf(actor.getUUID());
-        if (!data(src).kick(actor.getUUID(), target.getUUID())) {
+        UUID target = old == null ? null : PartyData.findMember(old, StringArgumentType.getString(c, "player"),
+                id -> nameOf(server, id));
+        if (target == null || !data(src).kick(actor.getUUID(), target)) {
             src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.kick_failed",
                     "Only the owner can kick"));
             return 0;
         }
         dirty(src);
-        // the kicked player takes a copy of the party's progress, even when they are kicked while offline
-        ProgressService.progress(target);
-        ProgressService.flush(target);
-        if (old != null) {
-            for (UUID id : old.members) {
-                ServerPlayer online = src.getServer().getPlayerList().getPlayer(id);
-                if (online != null) {
-                    ProgressService.flush(online);
-                }
-            }
+        Set<UUID> oldMembers = Set.copyOf(old.members);
+        Set<UUID> before = new java.util.HashSet<>(oldMembers);
+        before.add(target);
+        detach(server, target, old.id, before);
+        ServerPlayer online = server.getPlayerList().getPlayer(target);
+        if (online != null) {
+            online.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.party.kicked_you",
+                    "You were removed from the party"));
         }
-        target.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.party.kicked_you",
-                "You were removed from the party"));
         src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.kicked",
-                "Removed %s", target.getGameProfile().getName()), false);
+                "Removed %s", nameOf(server, target)), false);
         return 1;
     }
 
@@ -210,14 +240,11 @@ final class PartyCommands {
         }
         MinecraftServer server = src.getServer();
         Set<UUID> members = Set.copyOf(old.members);
+        UUID oldId = old.id;
         data(src).disband(actor.getUUID());
         dirty(src);
         for (UUID id : members) {
-            ServerPlayer online = server.getPlayerList().getPlayer(id);
-            if (online != null) {
-                ProgressService.progress(online);
-                ProgressService.flush(online);
-            }
+            detach(server, id, oldId, members);
         }
         src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.disbanded",
                 "Party disbanded"), false);
@@ -235,26 +262,21 @@ final class PartyCommands {
         src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.team_id",
                 "Team id: %s", teamId), false);
         for (UUID id : TeamResolver.members(server, teamId)) {
-            ServerPlayer online = server.getPlayerList().getPlayer(id);
-            String name = online != null ? online.getGameProfile().getName() : id.toString();
+            String name = nameOf(server, id);
             src.sendSuccess(() -> Component.literal(" - " + name), false);
         }
         if (!ftb) {
             PartyData data = data(src);
             PartyData.Party own = data.partyOf(player.getUUID());
             if (own != null) {
-                for (UUID id : own.members) {
-                    if (id.equals(own.owner)) {
-                        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.owner",
-                                "Owner: %s", id), false);
-                        break;
-                    }
-                }
+                String owner = nameOf(server, own.owner);
+                src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.owner",
+                        "Owner: %s", owner), false);
             }
             long now = System.currentTimeMillis();
             data.invitesOf(teamId, now).forEach((target, invite) -> src.sendSuccess(() -> Component.translatableWithFallback(
                     "commands.kuronami_quest_tree.party.pending", "Invite pending: %s (%ss left)",
-                    target, Math.max(0, (invite.expires - now) / 1000)), false));
+                    nameOf(server, target), Math.max(0, (invite.expires - now) / 1000)), false));
         }
         return 1;
     }

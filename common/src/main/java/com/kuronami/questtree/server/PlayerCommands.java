@@ -136,6 +136,8 @@ final class PlayerCommands {
             for (ServerPlayer p : firstOfTeam.values()) {
                 PlayerProgress pr = ProgressService.progress(p);
                 change.accept(p, pr);
+                // shared skills changed for every member: recompute their attribute modifiers from the new state
+                Rewards.refreshTeamAttributes(p);
                 ProgressStore.get(p.server).setDirty();
                 ProgressService.recheck(p, pr);
                 ProgressService.markDirty(p);
@@ -193,7 +195,7 @@ final class PlayerCommands {
         ProgressModel.Chapter ch = chapter(c);
         pr.chapterOpen.put(ch.id, open);
         if (open) {
-            Rewards.reapplyAttributes(p, pr);
+            Rewards.refreshTeamAttributes(p);
         } else {
             Rewards.revokeChapter(p, pr, ch);
         }

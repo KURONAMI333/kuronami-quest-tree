@@ -71,6 +71,16 @@ public final class PartyData {
         return p == null ? Set.of(teamId) : Set.copyOf(p.members);
     }
 
+    /** A member of {@code party} named by a name (any case) or a UUID string; null when nobody matches. */
+    public static UUID findMember(Party party, String text, java.util.function.Function<UUID, String> names) {
+        for (UUID id : party.members) {
+            if (id.toString().equalsIgnoreCase(text) || text.equalsIgnoreCase(names.apply(id))) {
+                return id;
+            }
+        }
+        return null;
+    }
+
     public Party party(UUID id) {
         return parties.get(id);
     }

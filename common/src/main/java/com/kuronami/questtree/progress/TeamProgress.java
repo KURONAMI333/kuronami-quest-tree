@@ -68,11 +68,20 @@ public final class TeamProgress {
         views.remove(player);
     }
 
-    /** The copy a member takes when they leave: the team's shared values plus that member's own claims. */
     public TeamProgress leaveCopy(UUID player) {
+        return leaveCopy(player, java.util.Set.of());
+    }
+
+    /**
+     * The copy a member takes when they leave: the team's shared values plus that member's own claims.
+     * {@code settledTeamRewards} are the team rewards of nodes the team completed; they count as claimed in the copy,
+     * so leaving cannot be used to take a once-per-team reward a second time (FTBQ TeamData.mergeClaimedRewards).
+     */
+    public TeamProgress leaveCopy(UUID player, java.util.Set<String> settledTeamRewards) {
         TeamProgress solo = new TeamProgress(player);
         solo.shared.copySharedFrom(shared);
         solo.teamClaimedRewards.addAll(teamClaimedRewards);
+        solo.teamClaimedRewards.addAll(settledTeamRewards);
         PlayerPart own = players.get(player);
         if (own != null) {
             solo.part(player).copyFrom(own);
