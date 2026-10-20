@@ -157,10 +157,20 @@ public final class ProgressionEditor {
                 JsonElement initialNodes = initial.remove("nodes");
                 created.chapter = initial;
                 if (initialNodes != null && initialNodes.isJsonObject()) {
+                    // The client may describe a starting tree, but its ids are only labels for that request: mint
+                    // every id here and rewrite the references between the initial nodes to match. An id sent from
+                    // outside would otherwise decide a permanent name (and translation key).
+                    Set<String> mintedIds = new HashSet<>();
+                    Map<String, String> renamed = new LinkedHashMap<>();
+                    for (String oldId : initialNodes.getAsJsonObject().keySet()) {
+                        renamed.put(oldId, mintNodeId(mintedIds, created));
+                    }
                     for (Map.Entry<String, JsonElement> n : initialNodes.getAsJsonObject().entrySet()) {
                         if (n.getValue().isJsonObject()) {
-                            created.nodes.put(n.getKey(), new ProgressionOverlay.NodeChange(
-                                    ProgressionOverlay.Action.ADD, n.getValue().getAsJsonObject().deepCopy(), false));
+                            JsonObject node = n.getValue().getAsJsonObject().deepCopy();
+                            rewriteNodeReferences(node, renamed);
+                            created.nodes.put(renamed.get(n.getKey()), new ProgressionOverlay.NodeChange(
+                                    ProgressionOverlay.Action.ADD, node, false));
                         }
                     }
                 }
@@ -188,8 +198,8 @@ public final class ProgressionEditor {
                 }
                 overlayChapter = ensure(overlay, chapterId, packHasChapter);
                 String id = requiredText(args, "id");
-                if (id.isEmpty()) {
-                    return fail("node id is missing", current);
+                if (!validNodeId(id)) {
+                    return fail("node id must use only a-z, 0-9 and _", current);
                 }
                 JsonObject existing = node(currentChapter, id);
                 if (existing == null) {
@@ -233,6 +243,9 @@ public final class ProgressionEditor {
                 }
                 overlayChapter = ensure(overlay, chapterId, packHasChapter);
                 String id = requiredText(args, "id");
+                if (!validNodeId(id)) {
+                    return fail("node id must use only a-z, 0-9 and _", current);
+                }
                 JsonObject existing = node(currentChapter, id);
                 if (existing == null) {
                     return fail("node " + id + " does not exist", current);
@@ -248,6 +261,9 @@ public final class ProgressionEditor {
                 }
                 overlayChapter = ensure(overlay, chapterId, packHasChapter);
                 String id = requiredText(args, "id");
+                if (!validNodeId(id)) {
+                    return fail("node id must use only a-z, 0-9 and _", current);
+                }
                 ProgressionOverlay.NodeChange tomb = overlayChapter.nodes.get(id);
                 if (tomb == null || tomb.action() != ProgressionOverlay.Action.REMOVE) {
                     return fail("node " + id + " is not deleted", current);
@@ -275,10 +291,42 @@ public final class ProgressionEditor {
                     return fail("change nodes with the node operations", current);
                 }
                 overlayChapter = ensure(overlay, chapterId, packHasChapter);
-                JsonObject beforeChapter = overlayChapter.chapter.deepCopy();
-                mergePatch(overlayChapter.chapter, patch);
-                if (overlayChapter.chapter.equals(beforeChapter)) {
+                // RFC 7396 against the chapter the client sees, not against the overlay's fragment. The overlay keeps
+                // the full value of every key the patch changed, so a nested patch (display.title) cannot drop the
+                // siblings the pack supplied (display.icon).
+                JsonObject merged = currentChapter.deepCopy();
+                merged.remove("nodes");
+                JsonObject updated = merged.deepCopy();
+                mergePatch(updated, patch);
+                if (updated.equals(merged)) {
                     return ok("", List.of(), current, false);
+                }
+                if (overlayChapter.replace) {
+                    overlayChapter.chapter = updated.deepCopy();
+                    overlayChapter.removed.clear();
+                } else {
+                    JsonObject packChapter = object(packChapters, chapterId) ? packChapters.getAsJsonObject(chapterId) : null;
+                    Set<String> keys = new LinkedHashSet<>(merged.keySet());
+                    keys.addAll(updated.keySet());
+                    for (String key : keys) {
+                        if (key.equals("nodes")) {
+                            continue;
+                        }
+                        boolean had = merged.has(key);
+                        boolean has = updated.has(key);
+                        if (has && (!had || !merged.get(key).equals(updated.get(key)))) {
+                            overlayChapter.chapter.add(key, updated.get(key).deepCopy());
+                            overlayChapter.removed.remove(key);
+                        } else if (!has && had) {
+                            overlayChapter.chapter.remove(key);
+                            if (packChapter != null && packChapter.has(key)) {
+                                // the key came from the pack: only an explicit marker can keep it deleted
+                                overlayChapter.removed.add(key);
+                            } else {
+                                overlayChapter.removed.remove(key);
+                            }
+                        }
+                    }
                 }
             }
             case "delete_chapter" -> {
@@ -300,10 +348,11 @@ public final class ProgressionEditor {
                     return fail("chapter " + chapterId + " is not deleted", current);
                 }
                 overlayChapter.remove = false;
-                if (!overlayChapter.edited && overlayChapter.base) {
-                    // the pack's copy was untouched before the delete: bring that back rather than pinning a snapshot
+                if (!overlayChapter.edited && overlayChapter.base && packHasChapter) {
+                    // the pack still has the untouched copy: bring that back rather than pinning a snapshot
                     overlayChapter.replace = false;
                     overlayChapter.chapter = new JsonObject();
+                    overlayChapter.removed.clear();
                     overlayChapter.nodes.clear();
                 } else {
                     overlayChapter.replace = true;
@@ -318,8 +367,8 @@ public final class ProgressionEditor {
                 overlayChapter = ensure(overlay, chapterId, packHasChapter);
                 String from = requiredText(args, "from");
                 String to = requiredText(args, "to");
-                if (from.isEmpty() || to.isEmpty()) {
-                    return fail("link needs \"from\" and \"to\"", current);
+                if (!validNodeId(from) || !validReferenceId(to)) {
+                    return fail("link needs ids made of a-z, 0-9 and _", current);
                 }
                 JsonObject existing = node(currentChapter, from);
                 if (existing == null) {
@@ -384,6 +433,8 @@ public final class ProgressionEditor {
             try {
                 String previous = readText(overlayChapter);
                 write(overlayChapter);
+                overlay.revisions.put(chapterId, newRevision);
+                ProgressionOverlay.writeRevisions(overlayRoot, overlay.revisions);
                 pushChapterHistory(chapterId, new Snapshot(previous));
             } catch (IOException ex) {
                 Constants.LOG.error("Could not write the progression overlay for {}", chapterId, ex);
@@ -404,7 +455,7 @@ public final class ProgressionEditor {
         if (from.isEmpty()) {
             return fail("nothing to " + op, current);
         }
-        Snapshot target = from.peek();
+        Snapshot target = from.peekLast();
         ProgressionOverlay.ChapterOverlay currentChapter = overlay.chapter(chapterId);
         String currentText = currentChapter == null ? null : readTextQuietly(currentChapter);
         ProgressionOverlay.Overlay restoredOverlay = ProgressionOverlay.read(overlayRoot);
@@ -433,7 +484,7 @@ public final class ProgressionEditor {
         if (!refusal.isEmpty()) {
             return fail(refusal, current);
         }
-        long newRevision = target.text() == null ? 0 : current + 1;
+        long newRevision = current + 1;
         try {
             if (target.text() == null) {
                 Path file = fileFor(chapterId);
@@ -444,10 +495,12 @@ public final class ProgressionEditor {
                 parsed.addProperty("revision", newRevision);
                 writeRaw(fileFor(chapterId), parsed);
             }
+            restoredOverlay.revisions.put(chapterId, newRevision);
+            ProgressionOverlay.writeRevisions(overlayRoot, restoredOverlay.revisions);
         } catch (IOException ex) {
             return fail("could not write the overlay: " + ex.getMessage(), current);
         }
-        from.pop();
+        from.pollLast();
         push(to, new Snapshot(currentText));
         return new Outcome(true, false, true, "", newRevision, List.of());
     }
@@ -582,7 +635,20 @@ public final class ProgressionEditor {
 
     private static void writeRaw(Path file, JsonObject json) throws IOException {
         Files.createDirectories(file.getParent());
-        Files.writeString(file, GSON.toJson(json), StandardCharsets.UTF_8);
+        // A crash between truncate and the last byte would leave a half-written chapter the next build refuses. Write
+        // beside it and move the finished file into place; same-directory keeps the move atomic on every platform.
+        Path temp = Files.createTempFile(file.getParent(), file.getFileName().toString(), ".tmp");
+        try {
+            Files.writeString(temp, GSON.toJson(json), StandardCharsets.UTF_8);
+            try {
+                Files.move(temp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
+                Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 
     /** Keeps the version a write replaced, next to it, for a human who has to recover by hand. */
@@ -613,7 +679,8 @@ public final class ProgressionEditor {
     private String mintNodeId(Set<String> used, ProgressionOverlay.ChapterOverlay chapter) {
         for (int i = 0; i < 1000; i++) {
             String id = ids.get();
-            if (safeSegment(id) && !used.contains(id) && !chapter.nodes.containsKey(id)) {
+            if (validNodeId(id) && !used.contains(id) && !chapter.nodes.containsKey(id)) {
+                used.add(id);
                 return id;
             }
         }
@@ -655,6 +722,51 @@ public final class ProgressionEditor {
                 mergePatch(target.getAsJsonObject(e.getKey()), value.getAsJsonObject());
             } else {
                 target.add(e.getKey(), value.deepCopy());
+            }
+        }
+    }
+
+    /** A node id the editor accepts from outside: lower-case letters, digits and underscore only. */
+    static boolean validNodeId(String id) {
+        return id != null && !id.isEmpty()
+                && id.chars().allMatch(c -> c == '_' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9');
+    }
+
+    /** A reference to another node: a node id, or {@code chapter/node} for another chapter. */
+    static boolean validReferenceId(String id) {
+        if (id == null || id.isEmpty()) {
+            return false;
+        }
+        for (String part : id.split("/", -1)) {
+            if (!validNodeId(part)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Rewrites references between the initial nodes of a {@code create_chapter} request to their minted ids. */
+    private static void rewriteNodeReferences(JsonObject node, Map<String, String> renamed) {
+        JsonElement requires = node.get("requires");
+        if (requires != null && requires.isJsonObject()) {
+            rewriteNames(requires.getAsJsonObject().get("nodes"), renamed);
+        }
+        rewriteNames(node.get("exclusive_with"), renamed);
+    }
+
+    private static void rewriteNames(JsonElement names, Map<String, String> renamed) {
+        if (names == null || !names.isJsonArray()) {
+            return;
+        }
+        JsonArray array = names.getAsJsonArray();
+        for (int i = 0; i < array.size(); i++) {
+            JsonElement name = array.get(i);
+            if (!name.isJsonPrimitive() || !name.getAsJsonPrimitive().isString()) {
+                continue;
+            }
+            String replacement = renamed.get(name.getAsString());
+            if (replacement != null) {
+                array.set(i, new com.google.gson.JsonPrimitive(replacement));
             }
         }
     }

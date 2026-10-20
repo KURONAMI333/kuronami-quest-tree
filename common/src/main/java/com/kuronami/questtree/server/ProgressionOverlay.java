@@ -1,5 +1,8 @@
 package com.kuronami.questtree.server;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -10,8 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -45,6 +50,7 @@ import java.util.stream.Stream;
  */
 public final class ProgressionOverlay {
 
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     public static final String DIR = "kuronami_quest_tree/progression";
 
     /** What an overlay node entry does to the chapter. */
@@ -65,6 +71,8 @@ public final class ProgressionOverlay {
         public boolean remove;
         public boolean edited;
         public JsonObject chapter = new JsonObject();
+        /** Top-level chapter fields a {@code null} patch removed from the pack chapter (RFC 7396 deletion). */
+        public final Set<String> removed = new LinkedHashSet<>();
         public final Map<String, NodeChange> nodes = new LinkedHashMap<>();
         /** Where the overlay file is; empty for a chapter the editor created in memory and has not written yet. */
         public String file = "";
@@ -90,6 +98,11 @@ public final class ProgressionOverlay {
             if (chapter.size() > 0) {
                 out.add("chapter", chapter.deepCopy());
             }
+            if (!removed.isEmpty()) {
+                JsonArray names = new JsonArray();
+                removed.forEach(names::add);
+                out.add("removed", names);
+            }
             if (!nodes.isEmpty()) {
                 JsonObject n = new JsonObject();
                 for (Map.Entry<String, NodeChange> e : nodes.entrySet()) {
@@ -114,6 +127,8 @@ public final class ProgressionOverlay {
     /** Everything the overlay directory held, plus what could not be read. */
     public static final class Overlay {
         public final Map<String, ChapterOverlay> chapters = new LinkedHashMap<>();
+        /** Per-chapter revisions, including chapters whose file an undo deleted (see {@code revisions.json}). */
+        public final Map<String, Long> revisions = new LinkedHashMap<>();
         public final List<ProgressValidator.Problem> problems = new ArrayList<>();
 
         public ChapterOverlay chapter(String id) {
@@ -121,8 +136,17 @@ public final class ProgressionOverlay {
         }
 
         public long revision(String id) {
-            ChapterOverlay c = chapters.get(id);
-            return c == null ? 0 : c.revision;
+            Long revision = revisions.get(id);
+            return revision == null ? 0 : revision;
+        }
+
+        /** The revisions the clients receive with the bundle, so an editor knows what to send without a reply. */
+        public JsonObject revisionsJson() {
+            JsonObject out = new JsonObject();
+            for (Map.Entry<String, Long> e : revisions.entrySet()) {
+                out.addProperty(e.getKey(), e.getValue());
+            }
+            return out;
         }
 
         /**
@@ -141,6 +165,11 @@ public final class ProgressionOverlay {
                     merged = overlay.chapter.deepCopy();
                 } else {
                     merged = pack != null && pack.isJsonObject() ? pack.getAsJsonObject().deepCopy() : new JsonObject();
+                    for (String removed : overlay.removed) {
+                        if (!removed.equals("nodes")) {
+                            merged.remove(removed);
+                        }
+                    }
                     for (Map.Entry<String, JsonElement> f : overlay.chapter.entrySet()) {
                         if (f.getKey().equals("nodes")) {
                             continue;
@@ -177,6 +206,7 @@ public final class ProgressionOverlay {
         Overlay out = new Overlay();
         Path chaptersDir = progressionRoot.resolve("chapters");
         if (!Files.isDirectory(chaptersDir)) {
+            readRevisions(progressionRoot, out);
             return out;
         }
         List<Path> files = new ArrayList<>();
@@ -224,8 +254,78 @@ public final class ProgressionOverlay {
                 continue;
             }
             out.chapters.put(id, overlay);
+            out.revisions.merge(id, overlay.revision, Math::max);
         }
+        readRevisions(progressionRoot, out);
         return out;
+    }
+
+    /**
+     * Reads {@code revisions.json}, the small sidecar that keeps each chapter's revision going across an undo that
+     * deleted the chapter file. The highest of the file's own number and the sidecar wins, so a hand edit cannot make a
+     * chapter look older than it was.
+     */
+    private static void readRevisions(Path progressionRoot, Overlay out) {
+        Path file = progressionRoot.resolve("revisions.json");
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        String shown = display(progressionRoot, file);
+        try {
+            JsonElement parsed = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
+            if (!parsed.isJsonObject()) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "the revision sidecar is not a JSON object", 0));
+                return;
+            }
+            for (Map.Entry<String, JsonElement> e : parsed.getAsJsonObject().entrySet()) {
+                JsonElement value = e.getValue();
+                if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+                    continue;
+                }
+                out.revisions.merge(e.getKey(), Math.max(0, value.getAsLong()), Math::max);
+            }
+        } catch (IOException ex) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                    "could not be read: " + ex.getMessage(), 0));
+        } catch (RuntimeException ex) {
+            out.problems.add(ProgressValidator.parseError(shown,
+                    readQuietly(file), ex));
+        }
+    }
+
+    /** Writes the revision sidecar atomically; the caller passes the overlay's complete map. */
+    public static void writeRevisions(Path progressionRoot, Map<String, Long> revisions) throws IOException {
+        JsonObject out = new JsonObject();
+        for (Map.Entry<String, Long> e : revisions.entrySet()) {
+            out.addProperty(e.getKey(), e.getValue());
+        }
+        Path file = progressionRoot.resolve("revisions.json");
+        Files.createDirectories(progressionRoot);
+        Path temp = Files.createTempFile(progressionRoot, "revisions", ".tmp");
+        try {
+            Files.writeString(temp, GSON.toJson(out), StandardCharsets.UTF_8);
+            moveAtomically(temp, file);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
+    private static String readQuietly(Path file) {
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            return "";
+        }
+    }
+
+    private static void moveAtomically(Path temp, Path file) throws IOException {
+        try {
+            Files.move(temp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
+            Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     static ChapterOverlay readChapter(String id, JsonObject o, String file, String raw,
@@ -245,6 +345,19 @@ public final class ProgressionOverlay {
             } else {
                 problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, file, "chapter",
                         "\"chapter\" is not an object, so nothing in it is read", 0));
+            }
+        }
+        JsonElement removed = o.get("removed");
+        if (removed != null) {
+            if (!removed.isJsonArray()) {
+                problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, file, "removed",
+                        "\"removed\" is not an array, so no field removal is read", 0));
+            } else {
+                for (JsonElement name : removed.getAsJsonArray()) {
+                    if (name.isJsonPrimitive() && name.getAsJsonPrimitive().isString()) {
+                        overlay.removed.add(name.getAsString());
+                    }
+                }
             }
         }
         JsonElement nodes = o.get("nodes");

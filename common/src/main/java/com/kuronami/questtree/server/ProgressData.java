@@ -62,6 +62,8 @@ public final class ProgressData {
     private static Map<String, ProgressValidator.Source> packSources = new LinkedHashMap<>();
     private static Set<String> packUnreadable = new LinkedHashSet<>();
     private static List<ProgressValidator.Problem> packProblems = List.of();
+    /** Node keys ({@code chapter/node}) the validator dropped in the last rebuild, for the export report. */
+    private static Set<String> droppedNodes = Set.of();
     /** The open world's root; null before a server has told us which world it is. */
     private static Path overlayRoot;
 
@@ -138,6 +140,8 @@ public final class ProgressData {
             bundle.add("groups", new JsonArray());
         }
         JsonObject chapters = bundle.getAsJsonObject("chapters");
+        JsonObject revisions = new JsonObject();
+        bundle.add("revisions", revisions);
         Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>(packSources);
         Set<String> unreadable = new LinkedHashSet<>(packUnreadable);
         List<ProgressValidator.Problem> found = new ArrayList<>(packProblems);
@@ -147,6 +151,9 @@ public final class ProgressData {
                 ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot.resolve(ProgressionOverlay.DIR));
                 found.addAll(overlay.problems);
                 overlay.applyTo(chapters, sources);
+                // editors learn each chapter's current revision from the bundle, without spending a request
+                revisions = overlay.revisionsJson();
+                bundle.add("revisions", revisions);
             } catch (RuntimeException ex) {
                 Constants.LOG.error("Could not read the progression overlay", ex);
                 found.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, ProgressionOverlay.DIR, "",
@@ -166,6 +173,7 @@ public final class ProgressData {
                     "the progression data could not be checked: " + ex, 0));
         }
         found.addAll(result.problems);
+        droppedNodes = Set.copyOf(result.droppedNodes);
         prune(chapters, result.droppedNodes);
 
         // The model build is the last reader of the bundle, and the pruning above is what makes it safe. If something
@@ -249,6 +257,18 @@ public final class ProgressData {
     /** The validated book the clients see, for {@code /quest_tree export}. */
     public static JsonObject mergedBundle() {
         return base.deepCopy();
+    }
+
+    /** The namespace's translations as the readers hold them, for {@code /quest_tree export}. */
+    public static Map<String, JsonObject> langs() {
+        Map<String, JsonObject> out = new TreeMap<>();
+        langs.forEach((locale, entries) -> out.put(locale, entries.deepCopy()));
+        return out;
+    }
+
+    /** Node keys ({@code chapter/node}) the validator dropped in the last rebuild. */
+    public static Set<String> droppedNodes() {
+        return droppedNodes;
     }
 
     /** Removes the nodes the validator marked as ERROR, so one bad node cannot take the whole pack down. */

@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.network.EditorOpAssembler;
 import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.platform.Services;
@@ -11,8 +12,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,6 +34,7 @@ import java.util.UUID;
 public final class EditorService {
 
     private static final Set<UUID> editing = new HashSet<>();
+    private static final Map<UUID, EditorOpAssembler> assemblers = new HashMap<>();
     private static Path worldRoot;
     private static ProgressionEditor editor;
     private static boolean dirty;
@@ -43,6 +47,7 @@ public final class EditorService {
         worldRoot = server.getWorldPath(LevelResource.ROOT);
         editor = new ProgressionEditor(worldRoot, GameRegistry.INSTANCE);
         editing.clear();
+        assemblers.clear();
         dirty = false;
         ProgressData.setOverlayRoot(worldRoot);
     }
@@ -50,6 +55,7 @@ public final class EditorService {
     /** The server stopped: the next world must not write into this one. */
     public static void onServerStopped() {
         editing.clear();
+        assemblers.clear();
         dirty = false;
         editor = null;
         worldRoot = null;
@@ -71,6 +77,7 @@ public final class EditorService {
 
     public static void onLogout(ServerPlayer player) {
         editing.remove(player.getUUID());
+        assemblers.remove(player.getUUID());
     }
 
     /** One edit request, on the server thread. Every request gets a reply, including a refusal. */
@@ -91,6 +98,17 @@ public final class EditorService {
                     payload.chapterRevision());
             return;
         }
+        try {
+            payload = assemblers.computeIfAbsent(player.getUUID(), k -> new EditorOpAssembler()).accept(payload);
+        } catch (IllegalArgumentException ex) {
+            reply(player, payload, chapterId, false, "", List.of(ex.getMessage()), payload.chapterRevision());
+            return;
+        }
+        if (payload == null) {
+            // more parts are still on the way; the reply comes when the last one is applied or refused
+            return;
+        }
+        chapterId = payload.chapterId() == null ? "" : payload.chapterId();
 
         JsonObject args;
         try {

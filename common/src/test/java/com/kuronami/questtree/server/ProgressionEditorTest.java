@@ -11,6 +11,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,6 +41,10 @@ class ProgressionEditorTest {
     private static JsonObject chapter(JsonObject nodes) {
         JsonObject c = new JsonObject();
         c.addProperty("title", "Basics");
+        c.addProperty("subtitle", "Pack subtitle");
+        JsonObject display = new JsonObject();
+        display.addProperty("icon", "minecraft:book");
+        c.add("display", display);
         c.add("nodes", nodes);
         return c;
     }
@@ -141,12 +147,13 @@ class ProgressionEditorTest {
 
         ProgressionEditor.Outcome undone = apply(editor, CHAPTER, 1, "undo", "{}");
         assertTrue(undone.ok());
-        assertEquals(0, undone.revision());
+        // the file is gone, but the revision keeps counting: a late client must not be able to reuse number 1
+        assertEquals(2, undone.revision());
         assertFalse(Files.exists(overlayFile(CHAPTER)));
 
-        ProgressionEditor.Outcome redone = apply(editor, CHAPTER, 0, "redo", "{}");
+        ProgressionEditor.Outcome redone = apply(editor, CHAPTER, 2, "redo", "{}");
         assertTrue(redone.ok());
-        assertEquals(1, redone.revision());
+        assertEquals(3, redone.revision());
         assertTrue(Files.exists(overlayFile(CHAPTER)));
     }
 
@@ -235,13 +242,16 @@ class ProgressionEditorTest {
     }
 
     @Test
-    void createChapterIgnoresTheIncomingIdAndMintsOne() {
+    void createChapterIgnoresTheIncomingIdAndMintsOne() throws Exception {
         ProgressionEditor.Outcome out = apply(editor(), "", 0, "create_chapter",
-                "{\"namespace\":\"t\",\"chapter\":{\"nodes\":{\"a\":{\"tasks\":[{\"type\":\"checkmark\"}]}}}}");
+                "{\"namespace\":\"t\",\"chapter\":{\"title\":\"New\"}}");
 
         assertTrue(out.ok(), out.messages().toString());
         assertEquals("t:minted", out.createdId());
         assertTrue(Files.exists(overlayFile("t:minted")));
+        JsonObject written = JsonParser.parseString(Files.readString(overlayFile("t:minted"), StandardCharsets.UTF_8))
+                .getAsJsonObject();
+        assertEquals("New", written.getAsJsonObject("chapter").get("title").getAsString());
     }
 
     @Test
@@ -255,4 +265,164 @@ class ProgressionEditorTest {
                 .getAsJsonObject();
         assertTrue(written.getAsJsonObject("nodes").has("minted"));
     }
+    private int mergedX() {
+        JsonObject merged = pack();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(merged, new java.util.LinkedHashMap<>());
+        return merged.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").get("x").getAsInt();
+    }
+
+    private JsonObject overlayJson(String chapterId) throws Exception {
+        return JsonParser.parseString(Files.readString(overlayFile(chapterId), StandardCharsets.UTF_8)).getAsJsonObject();
+    }
+
+    @Test
+    void undoAndRedoWalkTheStepsInOrder() {
+        ProgressionEditor editor = editor();
+        assertTrue(apply(editor, CHAPTER, 0, "update_node", "{\"id\":\"a\",\"patch\":{\"x\":1}}").ok());
+        assertTrue(apply(editor, CHAPTER, 1, "update_node", "{\"id\":\"a\",\"patch\":{\"x\":2}}").ok());
+        ProgressionEditor.Outcome last = apply(editor, CHAPTER, 2, "update_node", "{\"id\":\"a\",\"patch\":{\"x\":3}}");
+        assertTrue(last.ok());
+        assertEquals(3, mergedX());
+
+        long revision = last.revision();
+        for (int expected : new int[]{2, 1}) {
+            ProgressionEditor.Outcome undone = apply(editor, CHAPTER, revision, "undo", "{}");
+            assertTrue(undone.ok(), undone.messages().toString());
+            revision = undone.revision();
+            assertEquals(expected, mergedX());
+        }
+        ProgressionEditor.Outcome removed = apply(editor, CHAPTER, revision, "undo", "{}");
+        assertTrue(removed.ok(), removed.messages().toString());
+        revision = removed.revision();
+        assertEquals(0, mergedX());
+        assertFalse(Files.exists(overlayFile(CHAPTER)));
+
+        for (int expected : new int[]{1, 2, 3}) {
+            ProgressionEditor.Outcome redone = apply(editor, CHAPTER, revision, "redo", "{}");
+            assertTrue(redone.ok(), redone.messages().toString());
+            revision = redone.revision();
+            assertEquals(expected, mergedX());
+        }
+    }
+
+    @Test
+    void updateChapterMergesNestedFieldsAndCanDeleteAPackField() throws Exception {
+        ProgressionEditor editor = editor();
+        ProgressionEditor.Outcome changed = apply(editor, CHAPTER, 0, "update_chapter",
+                "{\"patch\":{\"display\":{\"title\":\"Edited\"}}}");
+        assertTrue(changed.ok(), changed.messages().toString());
+
+        JsonObject written = overlayJson(CHAPTER);
+        JsonObject stored = written.getAsJsonObject("chapter").getAsJsonObject("display");
+        assertEquals("Edited", stored.get("title").getAsString());
+        assertEquals("minecraft:book", stored.get("icon").getAsString());
+
+        JsonObject merged = pack();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(merged, new java.util.LinkedHashMap<>());
+        assertEquals("Pack subtitle", merged.getAsJsonObject(CHAPTER).get("subtitle").getAsString());
+
+        ProgressionEditor.Outcome deleted = apply(editor, CHAPTER, changed.revision(), "update_chapter",
+                "{\"patch\":{\"subtitle\":null}}");
+        assertTrue(deleted.ok(), deleted.messages().toString());
+        written = overlayJson(CHAPTER);
+        assertFalse(written.getAsJsonObject("chapter").has("subtitle"));
+        assertTrue(written.getAsJsonArray("removed").toString().contains("subtitle"));
+
+        JsonObject after = pack();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(after, new java.util.LinkedHashMap<>());
+        assertFalse(after.getAsJsonObject(CHAPTER).has("subtitle"));
+        assertEquals("Edited", after.getAsJsonObject(CHAPTER).getAsJsonObject("display").get("title").getAsString());
+        assertEquals("minecraft:book", after.getAsJsonObject(CHAPTER).getAsJsonObject("display").get("icon").getAsString());
+    }
+
+    @Test
+    void restoringAChapterPinsTheSnapshotWhenThePackNoLongerHasIt() {
+        ProgressionEditor editor = editor();
+        assertTrue(apply(editor, OTHER, 0, "delete_chapter", "{}").ok());
+
+        JsonObject packWithoutIt = pack();
+        packWithoutIt.remove(OTHER);
+        ProgressionEditor.Outcome restored = editor.apply(packWithoutIt, new JsonObject(), Map.of(), OTHER, 1,
+                "restore_chapter", new JsonObject(), Set.of());
+
+        assertTrue(restored.ok(), restored.messages().toString());
+        JsonObject merged = packWithoutIt.deepCopy();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(merged, new java.util.LinkedHashMap<>());
+        assertTrue(merged.has(OTHER));
+        assertEquals("Basics", merged.getAsJsonObject(OTHER).get("title").getAsString());
+    }
+
+    @Test
+    void revisionsKeepCountingAcrossAnUndoThatDeletesTheFile() {
+        ProgressionEditor editor = editor();
+        assertTrue(apply(editor, CHAPTER, 0, "update_node", "{\"id\":\"a\",\"patch\":{\"x\":1}}").ok());
+        ProgressionEditor.Outcome undone = apply(editor, CHAPTER, 1, "undo", "{}");
+        assertTrue(undone.ok());
+        assertEquals(2, undone.revision());
+        assertFalse(Files.exists(overlayFile(CHAPTER)));
+
+        ProgressionEditor.Outcome stale = apply(editor, CHAPTER, 1, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"x\":2}}");
+        assertFalse(stale.ok());
+        assertTrue(stale.stale());
+
+        // a restart loses the history but not the revision: the sidecar is what the next number comes from
+        ProgressionEditor restarted = editor();
+        ProgressionEditor.Outcome staleAfterRestart = apply(restarted, CHAPTER, 1, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"x\":2}}");
+        assertFalse(staleAfterRestart.ok());
+        assertTrue(staleAfterRestart.stale());
+
+        ProgressionEditor.Outcome next = apply(restarted, CHAPTER, 2, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"x\":3}}");
+        assertTrue(next.ok(), next.messages().toString());
+        assertEquals(3, next.revision());
+        JsonObject revisions = ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).revisionsJson();
+        assertEquals(3, revisions.get(CHAPTER).getAsLong());
+    }
+
+    @Test
+    void writesAndUndoLeaveNoTemporaryFiles() throws Exception {
+        ProgressionEditor editor = editor();
+        assertTrue(apply(editor, CHAPTER, 0, "update_node", "{\"id\":\"a\",\"patch\":{\"x\":1}}").ok());
+        assertTrue(apply(editor, CHAPTER, 1, "undo", "{}").ok());
+
+        try (Stream<Path> files = Files.walk(temp.resolve(ProgressionOverlay.DIR))) {
+            assertTrue(files.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")));
+        }
+    }
+
+    @Test
+    void createChapterMintsEveryInitialNodeIdAndRewritesTheirReferences() {
+        AtomicInteger next = new AtomicInteger();
+        ProgressionEditor editor = new ProgressionEditor(temp, () -> "c" + next.getAndIncrement(),
+                ProgressValidator.Registry.NONE);
+        ProgressionEditor.Outcome out = apply(editor, "", 0, "create_chapter",
+                "{\"namespace\":\"t\",\"chapter\":{\"nodes\":{"
+                        + "\"client\":{\"tasks\":[{\"type\":\"checkmark\"}],\"rewards\":[]},"
+                        + "\"target\":{\"tasks\":[{\"type\":\"checkmark\"}],\"rewards\":[],"
+                        + "\"requires\":{\"nodes\":[\"client\"]}}}}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        try {
+            JsonObject nodes = overlayJson(out.createdId()).getAsJsonObject("nodes");
+            assertFalse(nodes.has("client"));
+            assertFalse(nodes.has("target"));
+            assertEquals("c1", nodes.getAsJsonObject("c2").getAsJsonObject("node")
+                    .getAsJsonObject("requires").getAsJsonArray("nodes").get(0).getAsString());
+            assertTrue(nodes.has("c1"));
+        } catch (Exception ex) {
+            throw new AssertionError(ex);
+        }
+    }
+
+    @Test
+    void nodeIdsWithCharactersOutsideTheRuleAreRefused() {
+        ProgressionEditor.Outcome out = apply(editor(), CHAPTER, 0, "update_node",
+                "{\"id\":\"bad-id\",\"patch\":{\"x\":1}}");
+
+        assertFalse(out.ok());
+        assertTrue(out.messages().get(0).contains("a-z"), out.messages().toString());
+    }
+
 }

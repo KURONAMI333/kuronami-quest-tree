@@ -92,4 +92,35 @@ class ProgressionOverlayTest {
         assertEquals(1, overlay.problems.size());
         assertTrue(overlay.problems.get(0).message().contains("chapters/<namespace>"));
     }
+    @Test
+    void aRemovalMarkerDeletesAPackFieldTheOverlayDoesNotReplace() throws Exception {
+        writeOverlay("t:basics", """
+                {"revision": 4, "base": true,
+                 "chapter": {"title": "Edited"},
+                 "removed": ["subtitle"]}
+                """);
+        JsonObject chapters = new JsonObject();
+        JsonObject pack = JsonParser.parseString(
+                "{\"title\":\"Pack\",\"subtitle\":\"Gone\",\"nodes\":{}}").getAsJsonObject();
+        chapters.add("t:basics", pack);
+
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(chapters, new LinkedHashMap<>());
+
+        JsonObject merged = chapters.getAsJsonObject("t:basics");
+        assertEquals("Edited", merged.get("title").getAsString());
+        assertFalse(merged.has("subtitle"));
+    }
+
+    @Test
+    void aSidecarKeepsTheRevisionOfAChapterWhoseFileIsGone() throws Exception {
+        Path root = temp.resolve(ProgressionOverlay.DIR);
+        Files.createDirectories(root);
+        Files.writeString(root.resolve("revisions.json"), "{\"t:basics\": 9}", StandardCharsets.UTF_8);
+
+        ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(root);
+
+        assertEquals(9, overlay.revision("t:basics"));
+        assertEquals(9, overlay.revisionsJson().get("t:basics").getAsLong());
+    }
+
 }

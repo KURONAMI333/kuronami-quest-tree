@@ -68,7 +68,9 @@ public final class ProgressCommands {
                         .then(Commands.literal("off").executes(c -> edit(c, false))))
                 .then(Commands.literal("export")
                         .then(Commands.argument("namespace", StringArgumentType.word())
-                                .executes(c -> export(c, StringArgumentType.getString(c, "namespace"))))));
+                                .executes(c -> export(c, StringArgumentType.getString(c, "namespace"), false))
+                                .then(Commands.literal("force")
+                                        .executes(c -> export(c, StringArgumentType.getString(c, "namespace"), true))))));
         PlayerCommands.register(dispatcher);
     }
 
@@ -121,50 +123,28 @@ public final class ProgressCommands {
     /**
      * Writes the validated book as a data pack for one namespace, without enabling it or reloading. This is the way
      * out of the world overlay: what the editor accepted becomes ordinary files an author can keep in a mod or pack.
+     * An existing folder is only replaced when the caller adds {@code force}, because {@link ImportOutput#writeTo}
+     * deletes the namespace's previous progression files first.
      */
-    private static int export(CommandContext<CommandSourceStack> c, String requested) {
+    private static int export(CommandContext<CommandSourceStack> c, String requested, boolean force) {
         CommandSourceStack src = c.getSource();
-        String ns = validNamespace(requested);
-        ImportOutput out = new ImportOutput(ns);
-        JsonObject bundle = ProgressData.mergedBundle();
-        JsonObject chapters = bundle.has("chapters") && bundle.get("chapters").isJsonObject()
-                ? bundle.getAsJsonObject("chapters") : new JsonObject();
-        String prefix = ns + ":";
-        int nodes = 0;
-        for (Map.Entry<String, JsonElement> e : chapters.entrySet()) {
-            if (!e.getKey().startsWith(prefix) || !e.getValue().isJsonObject()) {
-                continue;
-            }
-            JsonObject chapter = e.getValue().getAsJsonObject().deepCopy();
-            String path = e.getKey().substring(prefix.length());
-            out.chapters.put(path, chapter);
-            JsonElement chapterNodes = chapter.get("nodes");
-            if (chapterNodes != null && chapterNodes.isJsonObject()) {
-                nodes += chapterNodes.getAsJsonObject().size();
-            }
+        String ns = ProgressExport.validNamespace(requested);
+        if (ns == null) {
+            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.export.namespace",
+                    "%s is not a valid resource namespace", requested));
+            return 0;
         }
-        JsonObject tables = bundle.has("reward_tables") && bundle.get("reward_tables").isJsonObject()
-                ? bundle.getAsJsonObject("reward_tables") : new JsonObject();
-        for (Map.Entry<String, JsonElement> e : tables.entrySet()) {
-            if (e.getKey().startsWith(prefix) && e.getValue().isJsonObject()) {
-                out.tables.put(e.getKey().substring(prefix.length()), e.getValue().getAsJsonObject().deepCopy());
-            }
-        }
-        JsonElement groups = bundle.get("groups");
-        if (groups != null && groups.isJsonArray()) {
-            for (JsonElement el : groups.getAsJsonArray()) {
-                if (el.isJsonObject() && el.getAsJsonObject().has("namespace")
-                        && ns.equals(el.getAsJsonObject().get("namespace").getAsString())) {
-                    out.groups.add(el.deepCopy());
-                }
-            }
-        }
-        int nodeCount = nodes;
-        out.count("chapters", out.chapters.size());
-        out.count("nodes", nodeCount);
-        Path root = src.getServer().getWorldPath(LevelResource.DATAPACK_DIR).resolve("quest_tree_export_" + ns);
+        ImportOutput out = ProgressExport.collect(ns, ProgressData.mergedBundle(), ProgressData.langs(),
+                ProgressData.droppedNodes());
+        int nodeCount = out.counts.getOrDefault("nodes", 0);
+        int dropped = out.counts.getOrDefault("dropped_nodes", 0);
+        Path root = src.getServer().getWorldPath(LevelResource.DATAPACK_DIR).resolve(ProgressExport.packFolder(ns));
         try {
-            out.writeTo(root);
+            ProgressExport.write(out, root, force);
+        } catch (java.nio.file.FileAlreadyExistsException ex) {
+            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.export.exists",
+                    "%s already exists; add force to replace it", root.getFileName()));
+            return 0;
         } catch (IOException ex) {
             Constants.LOG.error("Exporting progression data failed", ex);
             src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.export.failed",
@@ -172,8 +152,14 @@ public final class ProgressCommands {
             return 0;
         }
         src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.export.done",
-                "Exported %s chapters with %s nodes to %s (not enabled; review it before turning it on)",
-                out.chapters.size(), nodeCount, root.getFileName()), true);
+                "Exported %s chapters with %s nodes and %s translations to %s (not enabled; review it before turning it on)",
+                out.chapters.size(), nodeCount, out.counts.getOrDefault("lang", 0), root.getFileName()), true);
+        if (dropped > 0) {
+            int count = dropped;
+            src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.export.dropped",
+                    "%s nodes were left out because the validator marked them as ERROR", count)
+                    .withStyle(ChatFormatting.YELLOW), false);
+        }
         return Math.max(1, nodeCount);
     }
 
@@ -185,7 +171,11 @@ public final class ProgressCommands {
             c.getSource().sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.import.ftbquests.missing", "No FTB Quests data found in config/ftbquests/quests"));
             return 0;
         }
-        ImportOutput out = new ImportOutput(validNamespace(ns));
+        String namespace = validNamespace(c.getSource(), ns);
+        if (namespace == null) {
+            return 0;
+        }
+        ImportOutput out = new ImportOutput(namespace);
         try {
             FtbQuestsImporter.convert(quests, out);
         } catch (Exception ex) {
@@ -234,7 +224,11 @@ public final class ProgressCommands {
             c.getSource().sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.import.puffish.missing", "No Pufferfish's Skills categories found"));
             return 0;
         }
-        ImportOutput out = new ImportOutput(validNamespace(ns));
+        String namespace = validNamespace(c.getSource(), ns);
+        if (namespace == null) {
+            return 0;
+        }
+        ImportOutput out = new ImportOutput(namespace);
         cats.forEach((k, files) -> PuffishImporter.convert(k, files, out));
         return finish(c, out);
     }
@@ -264,9 +258,13 @@ public final class ProgressCommands {
         return Math.max(1, nodes);
     }
 
-    /** Namespaces become folder names; only [a-z0-9_] so "." or ".." can never point outside the data pack. */
-    static String validNamespace(String ns) {
-        String s = ns.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]", "_");
-        return s.isEmpty() || s.chars().allMatch(c -> c == '_') ? "imported" : s;
+    /** The import commands' namespace; an invalid one is reported instead of being silently rewritten. */
+    static String validNamespace(CommandSourceStack src, String requested) {
+        String ns = ProgressExport.validNamespace(requested);
+        if (ns == null) {
+            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.import.namespace",
+                    "%s is not a valid resource namespace", requested));
+        }
+        return ns;
     }
 }
