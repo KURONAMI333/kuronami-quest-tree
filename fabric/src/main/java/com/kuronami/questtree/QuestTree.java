@@ -3,6 +3,8 @@ package com.kuronami.questtree;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
+import com.kuronami.questtree.network.EditorOpPayload;
+import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import net.fabricmc.api.ModInitializer;
@@ -40,8 +42,11 @@ public class QuestTree implements ModInitializer {
         // the quest_book item is synced, so the client mod is required (like FTB Quests)
         PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(ActionPayload.TYPE, ActionPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(EditorOpPayload.TYPE, EditorOpPayload.STREAM_CODEC);
         ServerPlayNetworking.registerGlobalReceiver(ActionPayload.TYPE, (payload, context) -> CommonClass.onAction(context.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(EditorOpPayload.TYPE, (payload, context) -> CommonClass.onEditorOp(context.player(), payload));
         ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new SimpleSynchronousResourceReloadListener() {
             @Override
             public ResourceLocation getFabricId() {
@@ -55,8 +60,13 @@ public class QuestTree implements ModInitializer {
         });
         // fires for every player on join and after /reload
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> CommonClass.onSyncToPlayer(player));
+        ServerLifecycleEvents.SERVER_STARTED.register(CommonClass::onServerStarted);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> CommonClass.onServerStopped());
         CommandRegistrationCallback.EVENT.register((dispatcher, registry, env) -> CommonClass.registerCommands(dispatcher));
-        ServerTickEvents.END_SERVER_TICK.register(server -> server.getPlayerList().getPlayers().forEach(CommonClass::onPlayerTick));
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            CommonClass.onServerTick(server);
+            server.getPlayerList().getPlayers().forEach(CommonClass::onPlayerTick);
+        });
         ServerEntityCombatEvents.AFTER_KILLED_OTHER_ENTITY.register((level, killer, killed) -> {
             if (killer instanceof ServerPlayer sp) {
                 CommonClass.onKill(sp, killed);

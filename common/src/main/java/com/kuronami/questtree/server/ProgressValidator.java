@@ -282,6 +282,45 @@ public final class ProgressValidator {
     }
 
     /**
+     * Checks one candidate chapter without reloading packs (2026-10-20), for the editor's validate-before-write.
+     * <p>
+     * References and reachability are book-wide — a node may require {@code other_chapter/node}, and deleting one can
+     * break a node that is not in this chapter — so the check still walks the whole book. What changes is the source
+     * of the candidate: it is the in-memory result of an op, not a file that was just read. Only the candidate's own
+     * problems are returned; the caller compares the full book's ERRORs before and after to catch a break elsewhere.
+     *
+     * @param candidate the chapter after the edit, or null when the edit removes it
+     * @param chapters  the book the candidate belongs in (the candidate is added to a copy, replacing the old one)
+     */
+    public static Result validateChapter(String chapterId, JsonObject candidate, JsonObject chapters, JsonObject tables,
+                                         Map<String, Source> sources, Registry registry) {
+        JsonObject merged = chapters.deepCopy();
+        if (candidate == null) {
+            merged.remove(chapterId);
+        } else {
+            merged.add(chapterId, candidate);
+        }
+        JsonObject bundle = new JsonObject();
+        bundle.add("chapters", merged);
+        bundle.add("reward_tables", tables);
+        Result all = validate(bundle, sources, registry, Set.of());
+        Result out = new Result();
+        String prefix = "chapters." + local(chapterId);
+        for (Problem p : all.problems) {
+            String path = p.path() == null ? "" : p.path();
+            if (path.equals(prefix) || path.startsWith(prefix + ".")) {
+                out.problems.add(p);
+            }
+        }
+        for (String key : all.droppedNodes) {
+            if (key.startsWith(chapterId + "/")) {
+                out.droppedNodes.add(key);
+            }
+        }
+        return out;
+    }
+
+    /**
      * What it costs the gate when a "requires" name does not resolve. ProgressModel keeps only the names it can
      * resolve, so the node needs fewer things than written: with mode "all" and no "min" it can end up needing none of
      * them, which drops the gate the author built. "any" and "one" already only ask for one name, and a "min" is still
