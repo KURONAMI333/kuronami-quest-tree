@@ -93,6 +93,8 @@ public class ProgressScreen extends Screen {
     private final java.util.Set<String> matchSet = new java.util.HashSet<>();
     private final Map<String, Integer> matchCount = new HashMap<>();
     private int matchCursor = -1;
+    /** The search row's hit area (x, y, w, h), set every frame by {@link #renderSearch}. */
+    private int[] searchRect = new int[4];
     /**
      * Chapter decorations (FTB Quests' chapter images) name a texture from the pack they came from, so a pack used
      * without that pack's resource pack draws the magenta "missing texture" across the map. Record what this client
@@ -498,7 +500,7 @@ public class ProgressScreen extends Screen {
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
         lastFrame = nowMs;
-        railT = tourRailOpen ? 1 : Mth.clamp(railT + (overRail ? dt : -dt) / RAIL_MS, 0, 1);
+        railT = tourRailOpen ? 1 : Mth.clamp(railT + (overRail || (searchBox != null && searchBox.isFocused()) ? dt : -dt) / RAIL_MS, 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? dt : -dt) / SHEET_MS, 0, 1);
         hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
         hoverGrow.values().removeIf(t -> t <= 0);
@@ -524,37 +526,47 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * The search box sits in a corner nothing else uses, so it never covers a title, a button or the details sheet:
-     * bottom left on chapter maps (zoom buttons and minimap are bottom right), bottom right on Now (its recent list is
-     * bottom left). The match count is on the box's open side.
+     * The search sits at the top of the chapter list, where it belongs (2026-10-20, the player: it moved sideways with
+     * the list and left a second box at the bottom left). Search finds where things are, and the list already shows
+     * each chapter's match count while searching, so the field is part of the list: closed, one magnifier in the icon
+     * column; open, a rounded field over the list's width. The EditBox is placed every frame so it fits the drawn rail.
      */
     private void renderSearch(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        boolean map = chapter() != null;
-        int w = searchBox.getWidth() + 2 * Ui.S2;
-        int y = height - Ui.S2 - BTN;
-        // on maps it moves aside with the chapter list, so it never sits on the list's rows
-        int x = railRight() + Ui.S2;
-        boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + BTN;
-        if (GlassPanel.on()) {
-            GlassPanel.render(g, GlassPanel.SEARCH, GlassPanel.Kind.REGULAR, x, y, w, BTN, Ui.R3, mouseX, mouseY);
-            if (hover) {
-                Ui.surface(g, x, y, w, BTN, Ui.R3, Ui.OVERLAY_1);
-            }
-            if (searchBox.isFocused()) {
-                Ui.outline(g, x, y, w, BTN, Ui.R3, Ui.FOCUS);
-            }
-        } else {
-            Ui.surface(g, x, y, w, BTN, Ui.R3, hover ? Ui.OVERLAY_1 : Ui.PANEL_TRANSLUCENT);
-            Ui.outline(g, x, y, w, BTN, Ui.R3, searchBox.isFocused() ? Ui.FOCUS : Ui.HAIRLINE);
+        int w = railWidth();
+        int y = RAIL_TOP;
+        boolean open = railT > 0.6f;
+        if (!open) {
+            boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + SEARCH_H;
+            Tiles.icon(g, "search", RAIL_ICON_X, y + (SEARCH_H - RAIL_ICON) / 2f, RAIL_ICON,
+                    searching() ? Ui.ACCENT : hover ? Ui.TEXT : Ui.DIM);
+            // the box is hidden with the open rail, but stays where a click can reach it without jumping
+            searchBox.setX(RAIL_ICON_X);
+            searchBox.setY(y + (SEARCH_H - EDIT_H) / 2);
+            searchBox.setWidth(RAIL_ICON);
+            searchRect = new int[]{4, y, w, SEARCH_H};
+            return;
         }
-        searchBox.setX(x + Ui.S2);
-        searchBox.setY(y + (BTN - EDIT_H) / 2);
+        int fx = 4 + Ui.S1;
+        int fw = w - 2 * Ui.S1;
+        Ui.surface(g, fx, y, fw, SEARCH_H, SEARCH_H / 2, Ui.OVERLAY_1);
+        if (searchBox.isFocused()) {
+            Ui.outline(g, fx, y, fw, SEARCH_H, SEARCH_H / 2, Ui.FOCUS);
+        }
+        int ix = fx + Ui.S1;
+        Tiles.icon(g, "search", ix, y + (SEARCH_H - RAIL_ICON) / 2f, RAIL_ICON,
+                searchBox.isFocused() ? Ui.TEXT : Ui.MUTED);
+        String n = searching() ? (matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size()) : null;
+        int countW = n == null ? 0 : font.width(n) + Ui.S1;
+        int ex = ix + RAIL_ICON + Ui.S1;
+        searchBox.setX(ex);
+        searchBox.setY(y + (SEARCH_H - EDIT_H) / 2);
+        searchBox.setWidth(Math.max(10, fx + fw - Ui.S2 - countW - ex));
         searchBox.render(g, mouseX, mouseY, partialTick);
-        if (searching()) {
-            String n = matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size();
-            int nx = map ? x + w + 6 : x - font.width(n) - 6;
-            Ui.text(g, font, n, nx, y + (BTN - 9) / 2 + 1, matches.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
+        if (n != null) {
+            Ui.textRight(g, font, n, fx + fw - Ui.S2, y + (SEARCH_H - 8) / 2 + 1,
+                    matches.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
         }
+        searchRect = new int[]{fx, y, fw, SEARCH_H};
     }
 
     @Override
@@ -563,7 +575,11 @@ public class ProgressScreen extends Screen {
         this.renderBlurredBackground(partialTick);
     }
 
-    private static final int RAIL_LIST_TOP = 8;
+    /** Top of the rail's panel. */
+    private static final int RAIL_TOP = 4;
+    /** The rail's first row is the search; the chapter list starts under it. */
+    private static final int SEARCH_H = 18;
+    private static final int RAIL_LIST_TOP = RAIL_TOP + SEARCH_H + Ui.S1;
     /** Height of a group header row in the rail; chapter rows are {@link #RAIL_ROW}. */
     private static final int HEADER_H = 14;
 
@@ -1831,11 +1847,11 @@ public class ProgressScreen extends Screen {
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         ClientModel m = model();
-        if (searchBox != null && mx >= searchBox.getX() - Ui.S2 && mx < searchBox.getX() + searchBox.getWidth() + Ui.S2
-                && my >= searchBox.getY() - EDIT_H && my < searchBox.getY() - EDIT_H + BTN) {
+        if (searchBox != null && inRect(searchRect, mx, my)) {
             setFocused(searchBox);
             searchBox.setFocused(true);
-            return searchBox.mouseClicked(mx, my, button);
+            searchBox.mouseClicked(mx, my, button);
+            return true;
         }
         if (searchBox != null && searchBox.isFocused()) {
             searchBox.setFocused(false);

@@ -37,7 +37,7 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
   towards the later quest: a chevron pointing right over a faint band, white, tinted by the line's colour. It repeats
   left to right, so its left and right edges must meet.
 - `icon/<name>.png`: small white glyphs (`fold` the group fold mark in the chapter list, drawn pointing right and turned down while the group is open;
-  `dot` the badge, `pin`, `lock`, `tick`, `cross`, `link`, `plus`, `minus`, `center`).
+  `dot` the badge, `search` the search at the top of the chapter list, `pin`, `lock`, `tick`, `cross`, `link`, `plus`, `minus`, `center`).
 
 ## Sounds
 
