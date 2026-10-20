@@ -1,10 +1,12 @@
 package com.kuronami.questtree;
 
 import com.kuronami.questtree.client.ClientProgress;
+import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
+import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
@@ -100,14 +102,15 @@ public class QuestTree {
 
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {
         // the quest_book item is synced as a registry entry, so the client mod is required (like FTB Quests). The
-        // version is bumped when a payload changes shape (2: ActionPayload gained its choice field), so an older
-        // client fails the handshake with a version mismatch instead of disconnecting on the first claim.
-        var r = event.registrar("2");
+        // version is bumped when a payload changes shape (2: ActionPayload gained its choice field; 3: the editor
+        // gained its state payload), so an older client fails the handshake instead of silently missing a feature.
+        var r = event.registrar("3");
         r.playToClient(SyncPayload.TYPE, SyncPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onSync(payload));
         r.playToClient(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onProgress(payload));
-        // phase 1: no editor screen consumes replies yet, but the server answers every op
-        r.playToClient(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC, (payload, context) -> {
-        });
+        r.playToClient(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC,
+                (payload, context) -> EditorSession.onReply(payload));
+        r.playToClient(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC,
+                (payload, context) -> EditorSession.setAllowed(payload.canEdit()));
         r.playToServer(ActionPayload.TYPE, ActionPayload.STREAM_CODEC, (payload, context) -> {
             if (context.player() instanceof ServerPlayer sp) {
                 CommonClass.onAction(sp, payload);

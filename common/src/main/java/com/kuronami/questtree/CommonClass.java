@@ -37,6 +37,7 @@ public final class CommonClass {
     /** A player joined, or data packs were reloaded: send the current bundle. */
     public static void onSyncToPlayer(ServerPlayer player) {
         ProgressData.sync(player);
+        EditorService.sendState(player);
         ProgressService.onJoin(player);
         // an operator gets one line when the pack has errors, so a broken pack is not silent; the details need a command
         if (ProgressData.errorCount() > 0 && player.hasPermissions(2)) {

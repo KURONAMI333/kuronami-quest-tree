@@ -115,5 +115,15 @@
   "screen.kuronami_quest_tree.needs_list": "必要: %s",
   "screen.kuronami_quest_tree.locked": "ロック中",
   "screen.kuronami_quest_tree.excluded": "対象外",
-  "screen.kuronami_quest_tree.unknown": "???"
+  "screen.kuronami_quest_tree.unknown": "???",
+  "screen.kuronami_quest_tree.editing.on": "編集オン (E)",
+  "screen.kuronami_quest_tree.editing.off": "マップを編集 (E)",
+  "screen.kuronami_quest_tree.editor.new": "ここにクエストを作成",
+  "screen.kuronami_quest_tree.editor.paste": "貼り付け",
+  "screen.kuronami_quest_tree.editor.duplicate": "複製",
+  "screen.kuronami_quest_tree.editor.copy": "コピー",
+  "screen.kuronami_quest_tree.editor.delete": "削除",
+  "screen.kuronami_quest_tree.editor.link": "ここからリンク",
+  "screen.kuronami_quest_tree.editor.unlink": "リンク解除",
+  "screen.kuronami_quest_tree.editor.unlink.edge": "%s への依存を解除"
 }

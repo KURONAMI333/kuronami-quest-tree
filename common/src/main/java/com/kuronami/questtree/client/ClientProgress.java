@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.network.ActionPayload;
+import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.progress.PlayerProgress;
@@ -37,6 +38,10 @@ public final class ClientProgress {
     private static boolean haveProgress;
     /** Set by the loader module: sends a payload to the server. */
     public static Consumer<ActionPayload> sender = a -> { };
+    /** Set by the loader module: sends one editor op to the server. */
+    public static Consumer<EditorOpPayload> editorSender = p -> { };
+    /** The chapter JSON exactly as the server sent it, for copying nodes without a round trip. */
+    private static JsonObject rawChapters;
     private static int receivingGeneration = -1;
     private static ByteArrayOutputStream buffer;
     private static int nextPart;
@@ -65,6 +70,9 @@ public final class ClientProgress {
                 com.kuronami.questtree.progress.ItemFilter.clearCache();
                 model = new ClientModel(bundle);
                 rules = new ProgressRules(ProgressModel.of(bundle));
+                rawChapters = bundle.has("chapters") && bundle.get("chapters").isJsonObject()
+                        ? bundle.getAsJsonObject("chapters").deepCopy() : new JsonObject();
+                EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
                 Constants.LOG.info("Received {} progression chapters", model.chapters.size());
@@ -102,6 +110,23 @@ public final class ClientProgress {
 
     public static ClientModel model() {
         return model;
+    }
+
+    /** One node's raw chapter JSON, or null; editing copies this so a paste keeps fields the display model drops. */
+    public static JsonObject rawNode(String chapterId, String nodeId) {
+        if (rawChapters == null || !rawChapters.has(chapterId)) {
+            return null;
+        }
+        com.google.gson.JsonElement chapter = rawChapters.get(chapterId);
+        if (!chapter.isJsonObject()) {
+            return null;
+        }
+        com.google.gson.JsonElement nodes = chapter.getAsJsonObject().get("nodes");
+        if (nodes == null || !nodes.isJsonObject() || !nodes.getAsJsonObject().has(nodeId)) {
+            return null;
+        }
+        com.google.gson.JsonElement node = nodes.getAsJsonObject().get(nodeId);
+        return node != null && node.isJsonObject() ? node.getAsJsonObject().deepCopy() : null;
     }
 
     /** State of a node for this player; nodes the rules do not know (should not happen) count as open. */
@@ -305,6 +330,8 @@ public final class ClientProgress {
         haveProgress = false;
         receivingGeneration = -1;
         buffer = null;
+        rawChapters = null;
+        EditorSession.onLogout();
         ProgressScreen.clearViews();
         ProgressHud.clear();
         Motion.clear();

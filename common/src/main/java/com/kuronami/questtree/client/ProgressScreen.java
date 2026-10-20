@@ -1,5 +1,10 @@
 package com.kuronami.questtree.client;
 
+import com.google.gson.JsonObject;
+import com.kuronami.questtree.client.edit.EditorClipboard;
+import com.kuronami.questtree.client.edit.EditorSelection;
+import com.kuronami.questtree.client.edit.GridSnap;
+import com.kuronami.questtree.client.edit.MoveBatch;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
@@ -21,8 +26,10 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The progression screen (layout of the accepted v12-v14 mocks, see _research/progression_ui/).
@@ -373,6 +380,49 @@ public class ProgressScreen extends Screen {
     private final Map<String, Long> flashes = new HashMap<>();
     private final Map<String, Long> shakes = new HashMap<>();
 
+    // ------------------------------------------------------------------ editing (phase 2)
+    private enum EditDrag { NONE, MOVE, BOX, LINK }
+
+    private final EditorSelection editSelection = new EditorSelection();
+    private EditDrag editDrag = EditDrag.NONE;
+    private double editStartMx;
+    private double editStartMy;
+    private boolean editAdditive;
+    /** Original positions of the nodes in the current drag, by global key. */
+    private Map<String, double[]> editOriginal;
+    private boolean editMoved;
+    private double editBoxX0;
+    private double editBoxY0;
+    private double editBoxX1;
+    private double editBoxY1;
+    private String linkFrom;
+    private boolean linkKeyHeld;
+    private boolean linkArmed;
+    private EditorMenu editorMenu;
+
+    /** One row of the right-click menu. */
+    private record EditorMenuEntry(Component label, boolean enabled, Runnable run) {
+    }
+
+    private static final class EditorMenu {
+        final int x;
+        final int y;
+        final int w;
+        final int h;
+        final List<EditorMenuEntry> entries;
+
+        EditorMenu(int x, int y, int w, List<EditorMenuEntry> entries) {
+            this.x = x;
+            this.y = y;
+            this.w = w;
+            this.h = entries.size() * MENU_ROW + 2 * Ui.S1;
+            this.entries = entries;
+        }
+    }
+
+    private static final int MENU_ROW = 18;
+    private static final int EDIT_NOTICE_MS = 4000;
+
     // derived from the progress; rebuilt when a new progress object arrives
     private PlayerProgress cachedFor;
     private ClientModel cachedModel;
@@ -608,6 +658,7 @@ public class ProgressScreen extends Screen {
         }
         refresh(m);
         refreshMatches(m);
+        EditorSession.pruneOptimistic(m);
         // icon, gaps and a count like "12/127" beside the longest name, within two fifths of the screen
         railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width * 2 / 5));
         if (chapter() == null || ClientProgress.chapterHidden(chapter().id)) {
@@ -641,6 +692,8 @@ public class ProgressScreen extends Screen {
         renderRail(g, m, mouseX, mouseY, dt);
         renderRailField(g, mouseX, mouseY, partialTick);
         g.pose().popPose();
+        renderEditorNotices(g);
+        renderEditorMenu(g, mouseX, mouseY);
         if (pendingTip != null) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 300);
@@ -1224,8 +1277,8 @@ public class ProgressScreen extends Screen {
                 continue;
             }
             int s = (int) Math.round(NODE * n.size);
-            int x = (int) Math.round(n.x * UNIT) - s / 2 + shake(n.key, now);
-            int y = (int) Math.round(n.y * UNIT) - s / 2;
+            int x = (int) Math.round(editX(n) * UNIT) - s / 2 + shake(n.key, now);
+            int y = (int) Math.round(editY(n) * UNIT) - s / 2;
             String shape = Tiles.shapeOf(n.shape);
             // the node under the mouse grows a little (120ms), so the map answers the pointer
             int grow = Math.round(s * 0.12f * ease(hoverGrow.getOrDefault(n.key, 0f)) / 2) * 2;
@@ -1234,6 +1287,15 @@ public class ProgressScreen extends Screen {
                 int rs = Tiles.drawnSize(shape, s + grow);
                 int ro = (rs - s) / 2;
                 Tiles.ring(g, shape, x - ro - 3, y - ro - 3, rs + 6, rs + 6, Ui.SELECTION);
+            }
+            if (editActive() && editSelection.contains(n.key)) {
+                // the editor's own selection: the same ring shape, in the one accent the chrome uses
+                int rs = Tiles.drawnSize(shape, s + grow);
+                int ro = (rs - s) / 2;
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z + 5);
+                Tiles.ring(g, shape, x - ro - 3, y - ro - 3, rs + 6, rs + 6, Ui.ACCENT);
+                g.pose().popPose();
             }
             if (n.optional && !far) {
                 // optional quests: a faint outline that follows the tile's shape (a dashed square until 2026-10-20 sat
@@ -1261,8 +1323,8 @@ public class ProgressScreen extends Screen {
                 Tiles.shape(g, shape, x - 1, y - 1, s + 2, s + 2, SINK);
                 g.pose().popPose();
             }
-            double sx = v[0] + n.x * UNIT * v[2];
-            double sy = v[1] + n.y * UNIT * v[2];
+            double sx = v[0] + editX(n) * UNIT * v[2];
+            double sy = v[1] + editY(n) * UNIT * v[2];
             if (Math.abs(mouseX - sx) < s * v[2] / 2 && Math.abs(mouseY - sy) < s * v[2] / 2 && overMap(mouseX, mouseY)) {
                 hovered = n.key;
             }
@@ -1291,10 +1353,11 @@ public class ProgressScreen extends Screen {
             }
         }
         g.pose().popPose();
+        renderEditorMapOverlay(g, ch, v, mouseX, mouseY);
         if (tourHoverKey != null) {
             hovered = tourHoverKey;
         }
-        hoveredNode = dragging ? null : hovered;
+        hoveredNode = dragging || editDrag == EditDrag.MOVE ? null : hovered;
         if (hoveredNode != null) {
             hoverGrow.putIfAbsent(hoveredNode, 0f);
         }
@@ -1358,6 +1421,8 @@ public class ProgressScreen extends Screen {
     private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY, float partialTick) {
         claimRect[2] = 0;
         int pin = TITLE_BTN;
+        boolean canEdit = EditorSession.allowed();
+        int editBtn = canEdit ? TITLE_BTN : 0;
         int icon = 12;
         int ty = Ui.S2 + 6;
         int left = RAIL + 4;
@@ -1372,7 +1437,7 @@ public class ProgressScreen extends Screen {
         // had moved into the chapter list, which now filters itself, so it comes back up to the title row)
         boolean field = searchBox != null && (searchBox.isFocused() || !query.isBlank());
         int searchBtn = field ? 0 : TITLE_BTN;
-        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - pin - searchBtn - skillW - Ui.S2);
+        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - editBtn - pin - searchBtn - skillW - Ui.S2);
         Component title = ch.title;
         int titleW = font.width(title);
         int contentW;
@@ -1387,14 +1452,15 @@ public class ProgressScreen extends Screen {
             }
             contentW = titleW;
         }
-        int gw = icon + Ui.S1 + contentW + Ui.S1 + pin + searchBtn + skillW;
+        int gw = icon + Ui.S1 + contentW + Ui.S1 + editBtn + pin + searchBtn + skillW;
         int x = left + (avail - gw) / 2;
         if (x + gw > limitRight) {
             x = limitRight - gw;
         }
         x = Math.max(left + Ui.S2, x);
         int tx = x + icon + Ui.S1;
-        int px = tx + contentW + Ui.S1;
+        int ex = tx + contentW + Ui.S1;
+        int px = ex + editBtn;
         // the magnifier sits directly right of the pin; the field already holds one at its left
         int sx = px + pin;
         int skillX = (field ? px : sx) + pin + Ui.S2;
@@ -1434,6 +1500,23 @@ public class ProgressScreen extends Screen {
                 buttons.add(new Button(sx, py, pin, pin, this::focusSearch));
             }
             searchRect = new int[]{sx, py, pin, pin};
+        }
+        if (canEdit) {
+            // a quiet gear beside the pin: dim until editing is on, then the one accent; no new texture
+            boolean on = EditorSession.active();
+            boolean eover = mouseX >= ex && mouseX < ex + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
+            if (on || eover) {
+                Ui.surface(g, ex, py, pin, pin, pin / 2, on ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
+            }
+            if (eover) {
+                pendingTip = List.of(Component.translatable(on ? "screen.kuronami_quest_tree.editing.on"
+                        : "screen.kuronami_quest_tree.editing.off"));
+            }
+            Tiles.icon(g, "gear", ex + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH,
+                    on ? Ui.ACCENT : eover ? Ui.TEXT : Ui.DIM);
+            if (ex + pin <= open) {
+                buttons.add(new Button(ex, py, pin, pin, this::toggleEditor));
+            }
         }
         if (ch.skills) {
             renderSkillHeader(g, ch, skillX, ty);
@@ -2195,6 +2278,442 @@ public class ProgressScreen extends Screen {
         };
     }
 
+    // ------------------------------------------------------------------ editing (phase 2)
+
+    private boolean editActive() {
+        return EditorSession.active() && chapter() != null;
+    }
+
+    /** A node's drawn position: the optimistic one while its move waits for the server, else the synced one. */
+    private double editX(ClientModel.Node n) {
+        double[] p = EditorSession.optimistic().get(n.key);
+        return p == null ? n.x : p[0];
+    }
+
+    private double editY(ClientModel.Node n) {
+        double[] p = EditorSession.optimistic().get(n.key);
+        return p == null ? n.y : p[1];
+    }
+
+    /** The gear beside the pin: E or a click turns the map into the editor and back. */
+    private void toggleEditor() {
+        if (!EditorSession.allowed()) {
+            return;
+        }
+        EditorSession.toggle();
+        selected = null;
+        editSelection.clear();
+        cancelEditGestures();
+        ProgressFeedback.click();
+    }
+
+    private ClientModel.Node nodeAt(ClientModel.Chapter ch, float[] v, double mx, double my) {
+        ClientModel.Node hit = null;
+        for (ClientModel.Node n : ch.nodes.values()) {
+            if (!ClientProgress.visible(n.key)) {
+                continue;
+            }
+            double sx = v[0] + editX(n) * UNIT * v[2];
+            double sy = v[1] + editY(n) * UNIT * v[2];
+            double half = NODE * n.size * v[2] / 2;
+            if (Math.abs(mx - sx) <= half && Math.abs(my - sy) <= half) {
+                hit = n;
+            }
+        }
+        return hit;
+    }
+
+    /** A requirement line under the pointer: the dependent, the raw reference, and the required node's key. */
+    private record Edge(String from, String ref, String toKey) {
+    }
+
+    private Edge edgeAt(ClientModel.Chapter ch, float[] v, double mx, double my) {
+        ClientModel cm = model();
+        if (cm == null) {
+            return null;
+        }
+        Edge best = null;
+        double bestD = 6;
+        for (ClientModel.Node n : ch.nodes.values()) {
+            if (!ClientProgress.visible(n.key)) {
+                continue;
+            }
+            for (int i = 0; i < n.requireKeys.size(); i++) {
+                String key = n.requireKeys.get(i);
+                ClientModel.Node p = cm.nodesByKey.get(key);
+                if (p == null || cm.chapterOf.get(key) != ch || !ClientProgress.visible(key)) {
+                    continue;
+                }
+                double x1 = v[0] + editX(p) * UNIT * v[2];
+                double y1 = v[1] + editY(p) * UNIT * v[2];
+                double x2 = v[0] + editX(n) * UNIT * v[2];
+                double y2 = v[1] + editY(n) * UNIT * v[2];
+                double d = segmentDistance(mx, my, x1, y1, x2, y2);
+                if (d < bestD) {
+                    bestD = d;
+                    best = new Edge(n.id, n.requires.get(i), key);
+                }
+            }
+        }
+        return best;
+    }
+
+    private static double segmentDistance(double px, double py, double x1, double y1, double x2, double y2) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double len = dx * dx + dy * dy;
+        if (len < 1e-6) {
+            return Math.hypot(px - x1, py - y1);
+        }
+        double t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len));
+        return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+
+    private double mapX(float[] v, double mx) {
+        return (mx - v[0]) / (UNIT * v[2]);
+    }
+
+    private double mapY(float[] v, double my) {
+        return (my - v[1]) / (UNIT * v[2]);
+    }
+
+    private void cancelEditGestures() {
+        editDrag = EditDrag.NONE;
+        editOriginal = null;
+        editMoved = false;
+        linkFrom = null;
+        linkArmed = false;
+        editorMenu = null;
+    }
+
+    private void openEditorMenu(double mx, double my, List<EditorMenuEntry> entries) {
+        if (entries.isEmpty()) {
+            editorMenu = null;
+            return;
+        }
+        int w = 120;
+        for (EditorMenuEntry e : entries) {
+            w = Math.max(w, font.width(e.label()) + 2 * Ui.S2);
+        }
+        w = Math.min(w, width - 8);
+        int h = entries.size() * MENU_ROW + 2 * Ui.S1;
+        int x = Mth.clamp((int) mx, 4, Math.max(4, width - w - 4));
+        int y = Mth.clamp((int) my, 4, Math.max(4, height - h - 4));
+        editorMenu = new EditorMenu(x, y, w, entries);
+    }
+
+    private boolean editorMenuClick(double mx, double my) {
+        EditorMenu menu = editorMenu;
+        if (menu == null) {
+            return false;
+        }
+        editorMenu = null;
+        for (int i = 0; i < menu.entries.size(); i++) {
+            int top = menu.y + Ui.S1 + i * MENU_ROW;
+            if (mx >= menu.x && mx < menu.x + menu.w && my >= top && my < top + MENU_ROW) {
+                EditorMenuEntry e = menu.entries.get(i);
+                if (e.enabled()) {
+                    e.run().run();
+                }
+                return true;
+            }
+        }
+        return true;
+    }
+
+    private void renderEditorMenu(GuiGraphics g, int mouseX, int mouseY) {
+        EditorMenu menu = editorMenu;
+        if (menu == null) {
+            return;
+        }
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z + 320);
+        Ui.floating(g, menu.x, menu.y, menu.w, menu.h, Ui.FLOATING);
+        Ui.outline(g, menu.x, menu.y, menu.w, menu.h, Ui.R2, Ui.HAIRLINE);
+        for (int i = 0; i < menu.entries.size(); i++) {
+            EditorMenuEntry e = menu.entries.get(i);
+            int top = menu.y + Ui.S1 + i * MENU_ROW;
+            boolean over = mouseX >= menu.x && mouseX < menu.x + menu.w && mouseY >= top && mouseY < top + MENU_ROW;
+            if (over && e.enabled()) {
+                Ui.surface(g, menu.x + 2, top, menu.w - 4, MENU_ROW, Ui.R1, Ui.OVERLAY_1);
+            }
+            Ui.text(g, font, e.label(), menu.x + Ui.S2, top + (MENU_ROW - 8) / 2, e.enabled() ? Ui.TEXT : Ui.DIM);
+        }
+        g.pose().popPose();
+    }
+
+    private void renderEditorNotices(GuiGraphics g) {
+        List<EditorSession.Notice> notices = EditorSession.notices();
+        if (notices.isEmpty()) {
+            return;
+        }
+        long now = Util.getMillis();
+        int shown = Math.min(4, notices.size());
+        int y = height - 28 - shown * 16;
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z + 280);
+        for (int i = notices.size() - shown; i < notices.size(); i++) {
+            EditorSession.Notice n = notices.get(i);
+            long left = EDIT_NOTICE_MS - (now - n.at());
+            float alpha = left < 700 ? Math.max(0, left / 700f) : 1f;
+            int w = font.width(n.text()) + 2 * Ui.S2;
+            int x = (width - w) / 2;
+            Ui.surface(g, x, y, w, 14, 7, Tiles.withAlpha(Ui.FLOATING, alpha * 0.95f));
+            Ui.text(g, font, n.text(), x + Ui.S2, y + 3, Tiles.withAlpha(n.error() ? Ui.TEXT_ERROR : Ui.TEXT, alpha));
+            y += 16;
+        }
+        g.pose().popPose();
+    }
+
+    private void renderEditorMapOverlay(GuiGraphics g, ClientModel.Chapter ch, float[] v, int mouseX, int mouseY) {
+        if (editDrag == EditDrag.BOX) {
+            double x0 = v[0] + Math.min(editBoxX0, editBoxX1) * UNIT * v[2];
+            double y0 = v[1] + Math.min(editBoxY0, editBoxY1) * UNIT * v[2];
+            double x1 = v[0] + Math.max(editBoxX0, editBoxX1) * UNIT * v[2];
+            double y1 = v[1] + Math.max(editBoxY0, editBoxY1) * UNIT * v[2];
+            g.fill((int) x0, (int) y0, (int) Math.ceil(x1), (int) Math.ceil(y1), 0x335865F2);
+            Ui.outline(g, (int) x0, (int) y0, Math.max(1, (int) Math.ceil(x1 - x0)),
+                    Math.max(1, (int) Math.ceil(y1 - y0)), 0, Ui.ACCENT);
+        }
+        if (linkFrom != null) {
+            ClientModel.Node source = model() == null ? null : model().nodesByKey.get(linkFrom);
+            if (source != null) {
+                float x1 = (float) (v[0] + editX(source) * UNIT * v[2]);
+                float y1 = (float) (v[1] + editY(source) * UNIT * v[2]);
+                g.pose().pushPose();
+                g.pose().translate(0, 0, OVERLAY_Z + 30);
+                drawLine(g, new LineDraw(x1, y1, mouseX, mouseY, 2.5f, 5f, Ui.ACCENT, 0, -1), true);
+                drawLine(g, new LineDraw(x1, y1, mouseX, mouseY, 2.5f, 5f, Ui.ACCENT, 0, -1), false);
+                g.pose().popPose();
+            }
+        }
+    }
+
+    private void newQuestAt(ClientModel.Chapter ch, double x, double y) {
+        JsonObject node = new JsonObject();
+        node.addProperty("x", GridSnap.snap(x));
+        node.addProperty("y", GridSnap.snap(y));
+        JsonObject args = new JsonObject();
+        args.add("node", node);
+        EditorSession.send(ch.id, "create_node", args);
+    }
+
+    private void editorEmptyMenu(ClientModel.Chapter ch, float[] v, double mx, double my) {
+        List<EditorMenuEntry> entries = new ArrayList<>();
+        double x = GridSnap.snap(mapX(v, mx));
+        double y = GridSnap.snap(mapY(v, my));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.new"), true,
+                () -> newQuestAt(ch, x, y)));
+        EditorClipboard copy = EditorSession.clipboard();
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.paste"),
+                copy != null && !copy.isEmpty(), () -> EditorSession.paste(ch.id, copy, x, y, true)));
+        openEditorMenu(mx, my, entries);
+    }
+
+    private void editorNodeMenu(ClientModel.Node n, ClientModel.Chapter ch, double mx, double my) {
+        if (!editSelection.contains(n.key)) {
+            editSelection.click(n.key, false);
+        }
+        List<EditorMenuEntry> entries = new ArrayList<>();
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.duplicate"), true,
+                () -> duplicateSelection(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.copy"), true,
+                () -> copySelection(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.delete"), true,
+                () -> deleteSelection(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.link"), true,
+                () -> beginLink(n.key)));
+        if (!n.requires.isEmpty()) {
+            entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.unlink"), true,
+                    () -> editorUnlinkMenu(n, ch, mx, my)));
+        }
+        openEditorMenu(mx, my, entries);
+    }
+
+    private void editorUnlinkMenu(ClientModel.Node n, ClientModel.Chapter ch, double mx, double my) {
+        List<EditorMenuEntry> entries = new ArrayList<>();
+        ClientModel cm = model();
+        for (int i = 0; i < n.requireKeys.size(); i++) {
+            String key = n.requireKeys.get(i);
+            ClientModel.Node p = cm == null ? null : cm.nodesByKey.get(key);
+            Component name = p == null ? Component.literal(key) : p.title;
+            String ref = n.requires.get(i);
+            entries.add(new EditorMenuEntry(
+                    Component.translatable("screen.kuronami_quest_tree.editor.unlink.edge", name), true,
+                    () -> unlink(ch, n.id, ref)));
+        }
+        openEditorMenu(mx, my, entries);
+    }
+
+    private void editorEdgeMenu(Edge edge, ClientModel.Chapter ch, double mx, double my) {
+        ClientModel.Node target = model() == null ? null : model().nodesByKey.get(edge.toKey());
+        Component name = target == null ? Component.literal(edge.toKey()) : target.title;
+        openEditorMenu(mx, my, List.of(new EditorMenuEntry(
+                Component.translatable("screen.kuronami_quest_tree.editor.unlink.edge", name), true,
+                () -> unlink(ch, edge.from(), edge.ref()))));
+    }
+
+    private void unlink(ClientModel.Chapter ch, String from, String to) {
+        JsonObject args = new JsonObject();
+        args.addProperty("from", from);
+        args.addProperty("to", to);
+        EditorSession.send(ch.id, "unlink", args);
+    }
+
+    /** Copy the picked nodes from the raw bundle JSON, keeping their relative positions. */
+    private void copySelection(ClientModel.Chapter ch) {
+        List<EditorClipboard.Entry> entries = new ArrayList<>();
+        for (String key : editSelection.ids()) {
+            ClientModel.Node n = model() == null ? null : model().nodesByKey.get(key);
+            if (n == null) {
+                continue;
+            }
+            JsonObject raw = ClientProgress.rawNode(ch.id, n.id);
+            if (raw != null) {
+                entries.add(new EditorClipboard.Entry(n.id, editX(n), editY(n), raw));
+            }
+        }
+        if (!entries.isEmpty()) {
+            EditorSession.setClipboard(new EditorClipboard(entries));
+        }
+    }
+
+    private void pasteSelection(ClientModel.Chapter ch) {
+        EditorClipboard copy = EditorSession.clipboard();
+        if (copy == null || copy.isEmpty()) {
+            return;
+        }
+        float[] v = view(ch);
+        if (overMap(lastMouseX, lastMouseY)) {
+            EditorSession.paste(ch.id, copy, GridSnap.snap(mapX(v, lastMouseX)), GridSnap.snap(mapY(v, lastMouseY)), true);
+        } else {
+            EditorSession.paste(ch.id, copy, copy.minX() + 1, copy.minY() + 1, true);
+        }
+    }
+
+    private void duplicateSelection(ClientModel.Chapter ch) {
+        copySelection(ch);
+        EditorClipboard copy = EditorSession.clipboard();
+        if (copy != null && !copy.isEmpty()) {
+            EditorSession.paste(ch.id, copy, copy.minX() + 1, copy.minY() + 1, true);
+        }
+    }
+
+    private void deleteSelection(ClientModel.Chapter ch) {
+        for (String key : editSelection.ids()) {
+            String id = key.substring(ch.id.length() + 1);
+            JsonObject args = new JsonObject();
+            args.addProperty("id", id);
+            EditorSession.send(ch.id, "delete_node", args);
+        }
+        editSelection.clear();
+    }
+
+    private Map<String, double[]> selectionPositions(ClientModel.Chapter ch) {
+        Map<String, double[]> out = new LinkedHashMap<>();
+        ClientModel cm = model();
+        for (String key : editSelection.ids()) {
+            ClientModel.Node n = cm == null ? null : cm.nodesByKey.get(key);
+            if (n != null) {
+                out.put(key, new double[]{editX(n), editY(n)});
+            }
+        }
+        return out;
+    }
+
+    private void beginMove(ClientModel.Chapter ch) {
+        editOriginal = selectionPositions(ch);
+        editDrag = EditDrag.MOVE;
+        editMoved = false;
+        editStartMx = lastMouseX;
+        editStartMy = lastMouseY;
+    }
+
+    /** The menu's "Link from here": the source is fixed, the next click on a node is the one that requires it. */
+    private void beginLink(String key) {
+        linkFrom = key;
+        linkArmed = true;
+        editDrag = EditDrag.NONE;
+    }
+
+    private void finishLink(ClientModel.Chapter ch, double mx, double my) {
+        float[] v = view(ch);
+        ClientModel.Node target = nodeAt(ch, v, mx, my);
+        ClientModel.Node source = linkFrom == null || model() == null ? null : model().nodesByKey.get(linkFrom);
+        if (target != null && source != null && !target.key.equals(source.key)) {
+            // the node under the pointer requires the node the drag started on
+            JsonObject args = new JsonObject();
+            args.addProperty("from", target.id);
+            args.addProperty("to", source.id);
+            EditorSession.send(ch.id, "link", args);
+        }
+        linkFrom = null;
+        linkArmed = false;
+        editDrag = EditDrag.NONE;
+    }
+
+    private void commitMove(ClientModel.Chapter ch, Map<String, double[]> original, Map<String, double[]> target) {
+        if (target.isEmpty()) {
+            return;
+        }
+        MoveBatch batch = new MoveBatch(original, target);
+        batch.apply(EditorSession.optimistic());
+        for (Map.Entry<String, double[]> e : target.entrySet()) {
+            String key = e.getKey();
+            if (!key.startsWith(ch.id + "/")) {
+                continue;
+            }
+            JsonObject args = new JsonObject();
+            args.addProperty("id", key.substring(ch.id.length() + 1));
+            args.addProperty("x", e.getValue()[0]);
+            args.addProperty("y", e.getValue()[1]);
+            EditorSession.send(ch.id, "move_node", args, reply -> {
+                if (!reply.ok() && batch.refuse()) {
+                    batch.rollback(EditorSession.optimistic());
+                }
+            });
+        }
+    }
+
+    private void finishMove(ClientModel.Chapter ch) {
+        if (editMoved && editOriginal != null) {
+            Map<String, double[]> target = new LinkedHashMap<>();
+            for (String key : editOriginal.keySet()) {
+                double[] p = EditorSession.optimistic().get(key);
+                if (p != null) {
+                    target.put(key, p.clone());
+                }
+            }
+            commitMove(ch, editOriginal, target);
+        }
+        editDrag = EditDrag.NONE;
+        editOriginal = null;
+        editMoved = false;
+    }
+
+    private void nudgeSelection(ClientModel.Chapter ch, int dx, int dy, int step) {
+        Map<String, double[]> original = selectionPositions(ch);
+        Map<String, double[]> target = new LinkedHashMap<>();
+        for (Map.Entry<String, double[]> e : original.entrySet()) {
+            target.put(e.getKey(), new double[]{e.getValue()[0] + dx * step, e.getValue()[1] + dy * step});
+        }
+        commitMove(ch, original, target);
+    }
+
+    private void finishBox(ClientModel.Chapter ch) {
+        float[] v = view(ch);
+        EditorSelection.Rect rect = EditorSelection.Rect.of(editBoxX0, editBoxY0, editBoxX1, editBoxY1);
+        List<EditorSelection.Hit> hits = new ArrayList<>();
+        for (ClientModel.Node n : ch.nodes.values()) {
+            if (ClientProgress.visible(n.key)) {
+                double half = NODE * n.size / (double) UNIT / 2;
+                hits.add(new EditorSelection.Hit(n.key, editX(n), editY(n), half, half));
+            }
+        }
+        editSelection.box(rect, hits, editAdditive);
+        editDrag = EditDrag.NONE;
+    }
+
     // ------------------------------------------------------------------ input
 
     @Override
@@ -2227,7 +2746,32 @@ public class ProgressScreen extends Screen {
             searchBox.setFocused(false);
             setFocused(null);
         }
-        if (m == null || button != 0) {
+        if (editorMenu != null) {
+            return editorMenuClick(mx, my);
+        }
+        if (m == null) {
+            return super.mouseClicked(mx, my, button);
+        }
+        ClientModel.Chapter editChapter = chapter();
+        float[] editView = editChapter == null ? null : view(editChapter);
+        if (button == 1) {
+            if (!editActive() || !overMap(mx, my) || editChapter == null || editView == null) {
+                return super.mouseClicked(mx, my, button);
+            }
+            ClientModel.Node hit = nodeAt(editChapter, editView, mx, my);
+            if (hit != null) {
+                editorNodeMenu(hit, editChapter, mx, my);
+            } else {
+                Edge edge = edgeAt(editChapter, editView, mx, my);
+                if (edge != null) {
+                    editorEdgeMenu(edge, editChapter, mx, my);
+                } else {
+                    editorEmptyMenu(editChapter, editView, mx, my);
+                }
+            }
+            return true;
+        }
+        if (button != 0) {
             return super.mouseClicked(mx, my, button);
         }
         for (int i = buttons.size() - 1; i >= 0; i--) {
@@ -2268,6 +2812,38 @@ public class ProgressScreen extends Screen {
             return true;
         }
         float[] v = view(ch);
+        if (editActive()) {
+            ClientModel.Node hit = nodeAt(ch, v, mx, my);
+            if (linkArmed && linkFrom != null) {
+                // "Link from here" picked the source; this click picks the node that will require it
+                finishLink(ch, mx, my);
+                return true;
+            }
+            if (linkKeyHeld) {
+                if (hit != null) {
+                    linkFrom = hit.key;
+                    editDrag = EditDrag.LINK;
+                }
+                return true;
+            }
+            if (hit != null) {
+                editSelection.click(hit.key, Screen.hasControlDown());
+                beginMove(ch);
+                editStartMx = mx;
+                editStartMy = my;
+                return true;
+            }
+            if (Screen.hasShiftDown()) {
+                editDrag = EditDrag.BOX;
+                editAdditive = Screen.hasControlDown();
+                editBoxX0 = mapX(v, mx);
+                editBoxY0 = mapY(v, my);
+                editBoxX1 = editBoxX0;
+                editBoxY1 = editBoxY0;
+                return true;
+            }
+            editSelection.clear();
+        }
         int[] r = minimapShown() ? minimapRect(ch, v) : null;
         if (r != null && mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3]) {
             double[] b = bounds(ch);
@@ -2488,6 +3064,8 @@ public class ProgressScreen extends Screen {
         selected = null;
         choicePick = -1;
         sheetT = 0;
+        editSelection.clear();
+        cancelEditGestures();
     }
 
     /** Backspace: the previous quest, else the previous chapter (FTB Quests' {@code BACKSPACE_HISTORY}). */
@@ -2549,6 +3127,24 @@ public class ProgressScreen extends Screen {
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
         ClientModel.Chapter ch = chapter();
+        if (editDrag != EditDrag.NONE && ch != null && button == 0) {
+            float[] v = view(ch);
+            if (editDrag == EditDrag.MOVE && editOriginal != null) {
+                if (!editMoved && Math.hypot(mx - editStartMx, my - editStartMy) > 3) {
+                    editMoved = true;
+                }
+                double gx = GridSnap.dragDelta(mx - editStartMx, v[2], UNIT, !Screen.hasAltDown());
+                double gy = GridSnap.dragDelta(my - editStartMy, v[2], UNIT, !Screen.hasAltDown());
+                for (Map.Entry<String, double[]> e : editOriginal.entrySet()) {
+                    EditorSession.optimistic().put(e.getKey(),
+                            new double[]{e.getValue()[0] + gx, e.getValue()[1] + gy});
+                }
+            } else if (editDrag == EditDrag.BOX) {
+                editBoxX1 = mapX(v, mx);
+                editBoxY1 = mapY(v, my);
+            }
+            return true;
+        }
         if (dragging && ch != null) {
             if (!moved && Math.hypot(mx - dragStartX, my - dragStartY) > 3) {
                 moved = true;
@@ -2567,7 +3163,20 @@ public class ProgressScreen extends Screen {
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
         ClientModel.Chapter ch = chapter();
-        if (dragging && ch != null && !moved) {
+        if (editDrag != EditDrag.NONE && ch != null) {
+            EditDrag was = editDrag;
+            if (was == EditDrag.MOVE) {
+                finishMove(ch);
+            } else if (was == EditDrag.BOX) {
+                finishBox(ch);
+            } else if (was == EditDrag.LINK) {
+                finishLink(ch, mx, my);
+            }
+            dragging = false;
+            moved = false;
+            return true;
+        }
+        if (dragging && ch != null && !moved && !editActive()) {
             float[] v = view(ch);
             ClientModel.Node hit = null;
             for (ClientModel.Node n : ch.nodes.values()) {
@@ -2748,6 +3357,73 @@ public class ProgressScreen extends Screen {
             nextMatch();
             return true;
         }
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_E && EditorSession.allowed()
+                && !Screen.hasControlDown() && !Screen.hasAltDown() && !Screen.hasShiftDown()) {
+            toggleEditor();
+            return true;
+        }
+        if (editActive()) {
+            ClientModel.Chapter ech = chapter();
+            if (ech != null && Screen.hasControlDown()) {
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_A) {
+                    List<String> all = ech.nodes.values().stream()
+                            .filter(n -> ClientProgress.visible(n.key)).map(n -> n.key).toList();
+                    editSelection.selectAll(all);
+                    return true;
+                }
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_C) {
+                    copySelection(ech);
+                    return true;
+                }
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_V) {
+                    pasteSelection(ech);
+                    return true;
+                }
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_D) {
+                    duplicateSelection(ech);
+                    return true;
+                }
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_Z && !Screen.hasShiftDown()) {
+                    EditorSession.send(ech.id, "undo", new JsonObject());
+                    editSelection.clear();
+                    return true;
+                }
+                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_Z || key == org.lwjgl.glfw.GLFW.GLFW_KEY_Y) {
+                    EditorSession.send(ech.id, "redo", new JsonObject());
+                    editSelection.clear();
+                    return true;
+                }
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_DELETE && ech != null) {
+                deleteSelection(ech);
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_L) {
+                linkKeyHeld = true;
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+                if (linkFrom != null || editDrag != EditDrag.NONE) {
+                    cancelEditGestures();
+                    return true;
+                }
+                if (!editSelection.isEmpty()) {
+                    editSelection.clear();
+                    return true;
+                }
+            }
+            if (ech != null && !editSelection.isEmpty() && switch (key) {
+                case org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT, org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT,
+                     org.lwjgl.glfw.GLFW.GLFW_KEY_UP, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN -> true;
+                default -> false;
+            }) {
+                int step = Screen.hasShiftDown() ? 5 : 1;
+                int dx = key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT ? -1 : key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT ? 1 : 0;
+                int dy = key == org.lwjgl.glfw.GLFW.GLFW_KEY_UP ? -1 : key == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN ? 1 : 0;
+                nudgeSelection(ech, dx, dy, step);
+                return true;
+            }
+        }
         RecipeViewer viewer = RecipeViewer.Holder.get();
         if (viewer != null && !hoverStack.isEmpty()
                 && (key == org.lwjgl.glfw.GLFW.GLFW_KEY_R || key == org.lwjgl.glfw.GLFW.GLFW_KEY_U)) {
@@ -2825,6 +3501,14 @@ public class ProgressScreen extends Screen {
     }
 
     @Override
+    public boolean keyReleased(int key, int scan, int modifiers) {
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_L) {
+            linkKeyHeld = false;
+        }
+        return super.keyReleased(key, scan, modifiers);
+    }
+
+    @Override
     public void removed() {
         lastChapter = chapterIndex;
         GlassPanel.release();
@@ -2892,10 +3576,10 @@ public class ProgressScreen extends Screen {
      * tiles, so each tile covers the end that runs in under it. The belt and its casing keep a minimum size on screen.
      */
     private LineDraw lineGeometry(ClientModel.Node p, ClientModel.Node n, int color, int role, float open, float zoom) {
-        float x1 = (float) (p.x * UNIT);
-        float y1 = (float) (p.y * UNIT);
-        float x2 = (float) (n.x * UNIT);
-        float y2 = (float) (n.y * UNIT);
+        float x1 = (float) (editX(p) * UNIT);
+        float y1 = (float) (editY(p) * UNIT);
+        float x2 = (float) (editX(n) * UNIT);
+        float y2 = (float) (editY(n) * UNIT);
         float dx = x2 - x1;
         float dy = y2 - y1;
         float len = (float) Math.sqrt(dx * dx + dy * dy);

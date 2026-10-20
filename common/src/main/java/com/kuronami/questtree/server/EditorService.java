@@ -6,6 +6,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.network.EditorOpAssembler;
 import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
+import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.platform.Services;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -72,7 +73,15 @@ public final class EditorService {
         } else {
             editing.remove(player.getUUID());
         }
+        sendState(player);
         return isEditing(player);
+    }
+
+    /** Tell one client whether the map should offer editing (permission level 2 and {@code /quest_tree edit on}). */
+    public static void sendState(ServerPlayer player) {
+        if (player != null) {
+            Services.PLATFORM.sendToPlayer(player, new EditorStatePayload(player.hasPermissions(2) && isEditing(player)));
+        }
     }
 
     public static void onLogout(ServerPlayer player) {
@@ -84,11 +93,13 @@ public final class EditorService {
     public static void onAction(ServerPlayer player, EditorOpPayload payload) {
         String chapterId = payload.chapterId() == null ? "" : payload.chapterId();
         if (!player.hasPermissions(2)) {
+            sendState(player);
             reply(player, payload, chapterId, false, "", List.of("you do not have permission to edit quests"),
                     payload.chapterRevision());
             return;
         }
         if (!isEditing(player)) {
+            sendState(player);
             reply(player, payload, chapterId, false, "", List.of("editing mode is off; use /quest_tree edit on"),
                     payload.chapterRevision());
             return;
@@ -140,6 +151,11 @@ public final class EditorService {
             replyChapter = outcome.createdId();
         }
         reply(player, payload, replyChapter, outcome.ok(), outcome.createdId(), outcome.messages(), outcome.revision());
+        if (outcome.stale()) {
+            // another operator wrote this chapter first: give the client the new bundle now, so its next op is not
+            // refused against a revision it can no longer see
+            ProgressData.sync(player);
+        }
     }
 
     /** End of a server tick: publish one rebuild for every edit made since the last tick. */

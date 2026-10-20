@@ -115,5 +115,15 @@
   "screen.kuronami_quest_tree.needs_list": "Needs: %s",
   "screen.kuronami_quest_tree.locked": "Locked",
   "screen.kuronami_quest_tree.excluded": "Excluded",
-  "screen.kuronami_quest_tree.unknown": "???"
+  "screen.kuronami_quest_tree.unknown": "???",
+  "screen.kuronami_quest_tree.editing.on": "Editing on (E)",
+  "screen.kuronami_quest_tree.editing.off": "Edit map (E)",
+  "screen.kuronami_quest_tree.editor.new": "New quest here",
+  "screen.kuronami_quest_tree.editor.paste": "Paste",
+  "screen.kuronami_quest_tree.editor.duplicate": "Duplicate",
+  "screen.kuronami_quest_tree.editor.copy": "Copy",
+  "screen.kuronami_quest_tree.editor.delete": "Delete",
+  "screen.kuronami_quest_tree.editor.link": "Link from here",
+  "screen.kuronami_quest_tree.editor.unlink": "Unlink",
+  "screen.kuronami_quest_tree.editor.unlink.edge": "Unlink %s"
 }
