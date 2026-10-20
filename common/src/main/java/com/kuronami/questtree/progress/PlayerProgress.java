@@ -15,8 +15,10 @@ public final class PlayerProgress {
 
     /** Nodes whose tasks are all done (quests) — rewards may still be unclaimed. */
     public final Set<String> completed = new HashSet<>();
-    /** Nodes whose rewards were claimed. */
+    /** Nodes whose rewards were claimed (all of them; kept for data from before per-reward claims). */
     public final Set<String> claimed = new HashSet<>();
+    /** Individual rewards claimed, key {@code <node key>#<reward index>} (2026-10-20). */
+    public final Set<String> claimedRewards = new HashSet<>();
     /** Task counters, key {@code <node key>#<task index>}. */
     public final Map<String, Long> tasks = new HashMap<>();
     /** Skill nodes taken, with the number of ranks taken (1 for nodes without ranks). */
@@ -31,6 +33,8 @@ public final class PlayerProgress {
     public final Map<String, Long> cooldown = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public final Deque<String> recent = new ArrayDeque<>();
+    /** The quest book was handed out on first join (server config, 2026-10-20). */
+    public boolean bookGiven;
 
     public static final int RECENT_MAX = 20;
 
@@ -47,6 +51,7 @@ public final class PlayerProgress {
         completed.remove(node);
         claimed.remove(node);
         tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
+        claimedRewards.removeIf(k -> k.startsWith(node + "#"));
     }
 
     public void event(String kind, String node, long time) {

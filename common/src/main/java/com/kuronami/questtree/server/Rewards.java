@@ -107,7 +107,8 @@ public final class Rewards {
                 }
             }
         }
-        // claimed quests, and repeatable quests claimed before (a repeat clears "claimed")
+        // claimed quests, and repeatable quests claimed before (a repeat clears "claimed" and the per-reward marks).
+        // Rewards claimed one by one (2026-10-20) put back only the attribute rewards that were actually taken.
         java.util.Set<String> claimedOnce = new java.util.HashSet<>(p.claimed);
         p.repeats.forEach((k, v) -> {
             if (v > 0) {
@@ -121,6 +122,29 @@ public final class Rewards {
                     if (ProgressService.type(rw).equals("attribute")) {
                         attribute(player, n.key, slotOf(n, rw), rw);
                     }
+                }
+            }
+        }
+        for (String mark : p.claimedRewards) {
+            int hash = mark.lastIndexOf('#');
+            if (hash <= 0) {
+                continue;
+            }
+            ProgressModel.Node n = model.nodes.get(mark.substring(0, hash));
+            if (n == null || claimedOnce.contains(n.key)) {
+                // a wholly claimed node already put every attribute back above
+                continue;
+            }
+            int index;
+            try {
+                index = Integer.parseInt(mark.substring(hash + 1));
+            } catch (NumberFormatException ex) {
+                continue;
+            }
+            if (n != null && index >= 0 && index < n.rewards.size()) {
+                JsonObject rw = n.rewards.get(index);
+                if (ProgressService.type(rw).equals("attribute")) {
+                    attribute(player, n.key, slotOf(n, rw), rw);
                 }
             }
         }

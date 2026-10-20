@@ -234,4 +234,46 @@ class ProgressRulesTest {
         p.completed.add("v:c/secret");
         assertTrue(r.visible(p, m.nodes.get("v:c/secret")), "done nodes are always visible");
     }
+
+    /**
+     * Per-reward claims (2026-10-20): a completed quest stays claimable until the last reward is taken, and a repeat
+     * clears the per-reward marks with the rest of the node.
+     */
+    @Test
+    void completedQuestWaitsForEveryReward() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"s:c": {"nodes": {
+                  "q": {"rewards": [{"type": "item", "item": "minecraft:stone"},
+                                    {"type": "item", "item": "minecraft:dirt"}]}
+                }}}}""").getAsJsonObject();
+        ProgressRules r = new ProgressRules(ProgressModel.of(bundle));
+        ProgressModel.Node q = r.model().nodes.get("s:c/q");
+        PlayerProgress p = new PlayerProgress();
+        p.completed.add(q.key);
+        assertEquals(ProgressRules.State.CLAIM, r.state(p, q));
+        assertFalse(ProgressRules.allRewardsClaimed(p, q));
+        p.claimedRewards.add(q.key + "#0");
+        assertFalse(ProgressRules.allRewardsClaimed(p, q));
+        assertEquals(ProgressRules.State.CLAIM, r.state(p, q), "one reward left still needs a claim");
+        p.claimedRewards.add(q.key + "#1");
+        assertTrue(ProgressRules.allRewardsClaimed(p, q));
+        assertEquals(ProgressRules.State.DONE, r.state(p, q));
+        p.clearNode(q.key);
+        assertTrue(p.claimedRewards.isEmpty(), "a repeat forgets which rewards were taken");
+        assertFalse(ProgressRules.allRewardsClaimed(p, q));
+    }
+
+    /** The new per-reward marks and the first-join flag survive the save file (2026-10-20). */
+    @Test
+    void perRewardClaimsAndBookFlagRoundTrip() {
+        PlayerProgress p = new PlayerProgress();
+        p.completed.add("s:c/q");
+        p.claimedRewards.add("s:c/q#0");
+        p.claimedRewards.add("s:c/q#2");
+        p.bookGiven = true;
+        PlayerProgress back = ProgressJson.read(ProgressJson.write(p));
+        assertEquals(p.claimedRewards, back.claimedRewards);
+        assertTrue(back.bookGiven);
+        assertFalse(ProgressJson.read(new JsonObject()).bookGiven, "older saves start without the gift");
+    }
 }

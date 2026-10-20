@@ -52,12 +52,22 @@ public final class ProgressRules {
             return State.LOCKED;
         }
         if (p.completed.contains(n.key)) {
-            return !n.rewards.isEmpty() && !p.claimed.contains(n.key) ? State.CLAIM : State.DONE;
+            return !n.rewards.isEmpty() && !p.claimed.contains(n.key) && !allRewardsClaimed(p, n) ? State.CLAIM : State.DONE;
         }
         if (!unlocked(p, n) && !flexible(n)) {
             return State.LOCKED;
         }
         return fraction(p, n) > 0 ? State.PROGRESS : State.OPEN;
+    }
+
+    /** Whether every reward of a node was claimed one by one (2026-10-20). */
+    public static boolean allRewardsClaimed(PlayerProgress p, ProgressModel.Node n) {
+        for (int i = 0; i < n.rewards.size(); i++) {
+            if (!p.claimedRewards.contains(n.key + "#" + i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

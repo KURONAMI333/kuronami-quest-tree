@@ -4,7 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.config.ServerConfig;
 import com.kuronami.questtree.data.ProgressModel;
+import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.platform.Services;
@@ -84,10 +86,28 @@ public final class ProgressService {
 
     /** Join or data reload: re-check everything and send the full state. */
     public static void onJoin(ServerPlayer player) {
-        Rewards.reapplyAttributes(player, progress(player));
-        recheck(player, progress(player));
+        PlayerProgress p = progress(player);
+        Rewards.reapplyAttributes(player, p);
+        recheck(player, p);
+        giveBookOnce(player, p);
         markDirty(player);
         flush(player);
+    }
+
+    /**
+     * The first-join quest book (2026-10-20), once per player and only while the server config asks for it. A full
+     * inventory drops it at the player rather than losing it; the flag is set either way so it is not given twice.
+     */
+    private static void giveBookOnce(ServerPlayer player, PlayerProgress p) {
+        if (p.bookGiven || !ServerConfig.giveBookOnFirstJoin() || ModItems.questBook() == null) {
+            return;
+        }
+        ItemStack book = new ItemStack(ModItems.questBook());
+        if (!player.getInventory().add(book)) {
+            player.drop(book, false);
+        }
+        p.bookGiven = true;
+        markDirty(player);
     }
 
     /** Respawning copies only base attribute values, so skill and quest attribute modifiers are put back. */
@@ -194,6 +214,11 @@ public final class ProgressService {
             case "claim" -> {
                 if (n != null) {
                     claim(player, p, n, a.index());
+                }
+            }
+            case "claim_reward" -> {
+                if (n != null) {
+                    claimOne(player, p, n, a.index(), a.choice());
                 }
             }
             case "claim_all", "claim_chapter" -> {
@@ -528,30 +553,76 @@ public final class ProgressService {
         }
     }
 
+    /**
+     * Rewards marked {@code "auto": true} are handed out at completion, one by one since 2026-10-20; the quest stays
+     * claimable while another (manual) reward waits.
+     */
     static void autoRewards(ServerPlayer player, PlayerProgress p, ProgressModel.Node n) {
         if (n.rewards.isEmpty()) {
             return;
         }
-        boolean allAuto = n.rewards.stream().allMatch(rw -> ProgressModel.boolOf(rw, "auto"));
-        if (allAuto) {
-            claim(player, p, n, -1);
+        for (int i = 0; i < n.rewards.size(); i++) {
+            JsonObject rw = n.rewards.get(i);
+            if (ProgressModel.boolOf(rw, "auto") && !p.claimedRewards.contains(n.key + "#" + i)) {
+                Rewards.give(player, p, n, rw, -1);
+                p.claimedRewards.add(n.key + "#" + i);
+            }
         }
+        finishClaim(player, p, n);
     }
 
+    /**
+     * Takes every reward still waiting on a completed node (the claim button and "claim all"). A choice table without
+     * its option claimed yet leaves the whole node waiting, as before per-reward claims existed.
+     */
     private static void claim(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int choice) {
         if (!p.completed.contains(n.key) || p.claimed.contains(n.key)) {
             return;
         }
-        // a choice table needs the player to pick first; claiming without a pick leaves the node claimable
         for (JsonObject rw : n.rewards) {
-            if (type(rw).equals("table") && "choice".equals(str(rw, "mode")) && (choice < 0 || choice >= Rewards.tableSize(rw))) {
+            if (choiceMissing(rw, choice)) {
                 return;
             }
         }
-        p.claimed.add(n.key);
-        for (JsonObject rw : n.rewards) {
-            Rewards.give(player, p, n, rw, choice);
+        for (int i = 0; i < n.rewards.size(); i++) {
+            if (p.claimedRewards.contains(n.key + "#" + i)) {
+                continue;
+            }
+            Rewards.give(player, p, n, n.rewards.get(i), choice);
+            p.claimedRewards.add(n.key + "#" + i);
         }
+        finishClaim(player, p, n);
+    }
+
+    /** Takes one reward from the details sheet (FTB Quests' per-reward claim, 2026-10-20). */
+    private static void claimOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int index, int choice) {
+        if (!p.completed.contains(n.key) || p.claimed.contains(n.key) || index < 0 || index >= n.rewards.size()) {
+            return;
+        }
+        if (p.claimedRewards.contains(n.key + "#" + index)) {
+            return;
+        }
+        JsonObject rw = n.rewards.get(index);
+        if (choiceMissing(rw, choice)) {
+            return;
+        }
+        Rewards.give(player, p, n, rw, choice);
+        p.claimedRewards.add(n.key + "#" + index);
+        finishClaim(player, p, n);
+    }
+
+    /** A choice table needs the player to pick a valid option before anything on the node is claimed. */
+    private static boolean choiceMissing(JsonObject rw, int choice) {
+        return type(rw).equals("table") && "choice".equals(str(rw, "mode"))
+                && (choice < 0 || choice >= Rewards.tableSize(rw));
+    }
+
+    /** Marks the node claimed and starts a repeat once its last reward was taken. */
+    private static void finishClaim(ServerPlayer player, PlayerProgress p, ProgressModel.Node n) {
+        if (p.claimed.contains(n.key) || !ProgressRules.allRewardsClaimed(p, n)) {
+            return;
+        }
+        p.claimed.add(n.key);
         event(player, p, "claim", n.key);
         rules().repeatAfterClaim(p, n, System.currentTimeMillis());
         ProgressStore.get(player.server).setDirty();

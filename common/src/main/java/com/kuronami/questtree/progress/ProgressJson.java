@@ -16,6 +16,7 @@ public final class ProgressJson {
         JsonObject o = new JsonObject();
         o.add("completed", strings(p.completed));
         o.add("claimed", strings(p.claimed));
+        o.add("claimed_rewards", strings(p.claimedRewards));
         JsonObject tasks = new JsonObject();
         p.tasks.forEach(tasks::addProperty);
         o.add("tasks", tasks);
@@ -31,6 +32,7 @@ public final class ProgressJson {
         JsonObject cd = new JsonObject();
         p.cooldown.forEach(cd::addProperty);
         o.add("cooldown", cd);
+        o.addProperty("book_given", p.bookGiven);
         return o;
     }
 
@@ -41,6 +43,9 @@ public final class ProgressJson {
         }
         for (JsonElement e : arr(o, "claimed")) {
             p.claimed.add(e.getAsString());
+        }
+        for (JsonElement e : arr(o, "claimed_rewards")) {
+            p.claimedRewards.add(e.getAsString());
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
             p.tasks.put(e.getKey(), e.getValue().getAsLong());
@@ -59,6 +64,7 @@ public final class ProgressJson {
         for (JsonElement e : arr(o, "recent")) {
             p.recent.addLast(e.getAsString());
         }
+        p.bookGiven = o.has("book_given") && o.get("book_given").isJsonPrimitive() && o.get("book_given").getAsBoolean();
         return p;
     }
 
