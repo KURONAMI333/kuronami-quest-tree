@@ -194,6 +194,65 @@ class PuffishMigrationTest {
     }
 
     @Test
+    void exchangeCountComesAcrossAndTheLargerValueStays() throws Exception {
+        ProgressModel model = model(false);
+        TeamStoreData store = new TeamStoreData();
+        Map<UUID, JsonObject> data = players(null, """
+                {"categories": {"ftb:mining": {"level": 3, "points": 3}}}
+                """);
+        MigrationReport first = run(model, store, data, p -> p);
+        assertEquals(3, store.team(ALICE).shared.exchange.get(CHAPTER));
+        assertEquals(1, first.get("exchange_added"));
+
+        store.team(ALICE).shared.exchange.put(CHAPTER, 8);
+        run(model, store, data, p -> p);
+        assertEquals(8, store.team(ALICE).shared.exchange.get(CHAPTER));
+        assertEquals(0, run(model, store, data, p -> p).get("exchange_added"));
+    }
+
+    private static ProgressModel valuesModel() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:skill_ftb_mining": {
+                  "points": {"per_level": {"type": "values", "data": {"values": [10, 20, 30]}}},
+                  "nodes": {"root": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        return ProgressModel.of(bundle);
+    }
+
+    @Test
+    void valuesCurveReadsTheLastEntryForHigherLevelsAndMigratesWithoutFailing() {
+        ProgressModel model = valuesModel();
+        var rules = new com.kuronami.questtree.progress.ProgressRules(model);
+        var chapter = model.chapters.get(CHAPTER);
+        assertEquals(10, rules.experienceForLevel(chapter, 0));
+        assertEquals(30, rules.experienceForLevel(chapter, 2));
+        assertEquals(30, rules.experienceForLevel(chapter, 9));
+
+        TeamStoreData store = new TeamStoreData();
+        run(model, store, players(null, """
+                {"categories": {"ftb:mining": {"experience": 65}}}
+                """), p -> p);
+        // 10 + 20 + 30 would be 60: level 3 with 5 left, and the last value repeats from here on
+        assertEquals(3, store.team(ALICE).shared.level.get(CHAPTER));
+        assertEquals(5.0, store.team(ALICE).shared.xp.get(CHAPTER), 1e-9);
+    }
+
+    @Test
+    void levelRequirementsAreWholeNumbersLikePufferfish() throws Exception {
+        ProgressModel model = model(false);
+        var rules = new com.kuronami.questtree.progress.ProgressRules(model);
+        // level^1.5 * 100 at level 2 is 282.84...; Pufferfish rounds each requirement
+        assertEquals(283.0, rules.experienceForLevel(model.chapters.get(CHAPTER), 2));
+        TeamStoreData store = new TeamStoreData();
+        run(model, store, players(null, """
+                {"categories": {"ftb:mining": {"experience": 384}}}
+                """), p -> p);
+        // 1 + 100 + 283 = 384 exactly: level 3 with nothing left (unrounded it would have been 0.16 short of it)
+        assertEquals(3, store.team(ALICE).shared.level.get(CHAPTER));
+        assertEquals(0.0, store.team(ALICE).shared.xp.get(CHAPTER), 1e-9);
+    }
+
+    @Test
     void pointsTotalReadsBothFormats() {
         assertEquals(7, PuffishMigration.pointsTotal(JsonParser.parseString("7")));
         assertEquals(5, PuffishMigration.pointsTotal(JsonParser.parseString("{\"a\": 2, \"b\": 3}")));

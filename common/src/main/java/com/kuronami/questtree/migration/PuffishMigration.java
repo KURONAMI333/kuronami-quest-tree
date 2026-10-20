@@ -33,7 +33,8 @@ import java.util.function.Function;
  *       {@code points_over_source}: taking points a player already earned is worse than giving one extra.</li>
  *   <li>A category that was unlocked in Pufferfish but is locked by default in the pack gets an "open" override.</li>
  * </ul>
- * Pufferfish's exchange level has no KQT counterpart and is not carried.
+ * Pufferfish's {@code level} counts the exchanges of experience for a point; it becomes KQT's exchange count (so the
+ * exchange limit still applies), and the points those exchanges gave are already in the points total, hence in the bonus.
  */
 public final class PuffishMigration {
 
@@ -140,6 +141,11 @@ public final class PuffishMigration {
             }
             shared.level.put(pool, level);
             shared.xp.put(pool, rest);
+        }
+        int exchanged = (int) number(data.get("level"));
+        if (exchanged > shared.exchange.getOrDefault(pool, 0)) {
+            shared.exchange.put(pool, exchanged);
+            report.add("exchange_added", 1);
         }
         int finalLevel = shared.level.getOrDefault(pool, 0);
 

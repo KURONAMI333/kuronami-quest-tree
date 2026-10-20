@@ -39,7 +39,7 @@ To undo an apply, stop the server and put the `.bak` file back over `data/kurona
 | `player_data` (pins), `rewards_blocked`, timestamps | not carried |
 
 A node is marked claimed for a player only when every reward of the node is claimed by them or by the team. Ids in
-`completed` that belong to tasks or chapters are expected and are not reported. The KQT team a FTB Quests team lands in is
+`completed` that belong to tasks, chapters or the book itself (id 1) are expected and are not reported. The KQT team a FTB Quests team lands in is
 whatever the server resolves for its members now: with FTB Teams the FTB Quests team itself, with KQT's own parties the
 party or the player alone. FTB Teams `server` teams are read from their `ranks`; that membership has not been confirmed
 against a live world.
@@ -53,7 +53,15 @@ against a live world.
 | spent points | `spent` grows by the cost of each skill the run takes |
 | `points` (total of all sources) | `bonus = total - start - level`, never below 0 (`points_over_source` counts the shortfall) |
 | `unlocked` on a category locked by default | the chapter is opened for the team |
-| exchange `level` | not carried |
+| exchange `level` (how often experience was exchanged for a point) | exchange count, larger value wins; the points it gave are in the `points` total |
+
+## Applying twice
+
+An apply records its source (`ftbquests:<namespace>` or `puffish:<namespace or *>`) and a hash of the input files in the
+KQT store. A second `apply` of the same source is refused, because after people have played it could bring back
+repeatable state that was cleared and skills that were erased. `apply force` repeats it anyway. A dry run of an applied
+source says so in the report notes. The FTB Quests hash covers the team files in `<world>/ftbquests/`, the Pufferfish's
+Skills hash the whole `puffish_skills.dat`.
 
 ## Rules the commands follow
 

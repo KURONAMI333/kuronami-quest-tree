@@ -402,6 +402,32 @@ class FtbqMigrationTest {
     }
 
     @Test
+    void theBookItselfIsObjectOneAndIsNotReportedAsUnknown() {
+        FtbqBook other = FtbqBook.of(Map.of("x", Snbt.parse("{ id: \"0000000000000AAA\" filename: \"x\" quests: [] }").getAsJsonObject()));
+        assertTrue(other.isChapter(1L));
+        FtbqMigration.run(new FtbqMigration.Input("t", model, other,
+                List.of(team("{ uuid: \"0000000000000000000000000000000a\" completed: { \"0000000000000001\": 5L } }")),
+                null, p -> p), store, report);
+        assertEquals(0, report.get("unresolved"));
+        assertEquals(1, report.get("completed_tasks_and_chapters_skipped"));
+    }
+
+    @Test
+    void appliedMigrationsSurviveSaveAndLoadAndTheHashFollowsTheContent(@TempDir Path tmp) throws Exception {
+        store.migrations.put("ftbquests:t", "abc@20261020-120000");
+        TeamStoreData back = TeamStoreData.fromJson(store.toJson());
+        assertEquals("abc@20261020-120000", back.migrations.get("ftbquests:t"));
+        assertEquals(store.migrations, back.migrations);
+
+        Path f = tmp.resolve("a-b.snbt");
+        Files.writeString(f, "{ uuid: \"x\" }");
+        String one = MigrationHash.of(List.of(f));
+        assertEquals(one, MigrationHash.of(List.of(f)));
+        Files.writeString(f, "{ uuid: \"y\" }");
+        assertFalse(one.equals(MigrationHash.of(List.of(f))));
+    }
+
+    @Test
     void idsAreUnsignedAndAcceptDecimalNumbers() {
         assertEquals(0xFEDCBA9876543210L, FtbqIds.parse("FEDCBA9876543210").getAsLong());
         assertEquals(0x1234L, FtbqIds.parse("#1234").getAsLong());

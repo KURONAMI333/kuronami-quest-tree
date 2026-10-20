@@ -152,6 +152,8 @@
   "commands.kuronami_quest_tree.migrate.more": "...and %s more (see the report)",
   "commands.kuronami_quest_tree.migrate.backup": "Backup: %s",
   "commands.kuronami_quest_tree.migrate.report": "Report: %s",
+  "commands.kuronami_quest_tree.migrate.already_applied": "Already applied: %s (%s); add force to repeat",
+  "commands.kuronami_quest_tree.migrate.label.exchange_added": "Exchange counts added",
   "commands.kuronami_quest_tree.migrate.failed": "Migration failed: %s",
   "commands.kuronami_quest_tree.migrate.no_book": "No imported book in namespace %s",
   "commands.kuronami_quest_tree.migrate.ftbquests.no_progress": "No progress folder: %s",

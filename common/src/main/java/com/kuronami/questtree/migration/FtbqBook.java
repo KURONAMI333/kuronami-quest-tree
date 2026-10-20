@@ -68,6 +68,8 @@ public final class FtbqBook {
     /** @param chapterFiles chapter SNBT objects by file name without extension */
     public static FtbqBook of(Map<String, JsonObject> chapterFiles) {
         FtbqBook book = new FtbqBook();
+        // the book itself is object 1; FTB Quests writes it into "completed" once everything is done
+        book.chapters.add(1L);
         for (Map.Entry<String, JsonObject> file : chapterFiles.entrySet()) {
             JsonObject ch = file.getValue();
             String chapter = FtbQuestsImporter.slug(ch.has("filename") ? ch.get("filename").getAsString() : file.getKey());

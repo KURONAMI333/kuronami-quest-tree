@@ -8,6 +8,7 @@ import com.kuronami.questtree.migration.FtbTeamsMembers;
 import com.kuronami.questtree.migration.FtbqBook;
 import com.kuronami.questtree.migration.FtbqMigration;
 import com.kuronami.questtree.migration.FtbqTeamData;
+import com.kuronami.questtree.migration.MigrationHash;
 import com.kuronami.questtree.migration.MigrationReport;
 import com.kuronami.questtree.migration.NbtJson;
 import com.kuronami.questtree.migration.PuffishMigration;
@@ -58,33 +59,40 @@ final class MigrationCommands {
     private MigrationCommands() {
     }
 
+    /** What a run does: look only, write, or write even though the same source was applied before. */
+    private enum Mode { DRY_RUN, APPLY, FORCE }
+
+    private interface Run {
+        int run(CommandContext<CommandSourceStack> c, String namespace, Mode mode);
+    }
+
     static LiteralArgumentBuilder<CommandSourceStack> node() {
         return Commands.literal("migrate").requires(s -> s.hasPermission(4))
-                .then(Commands.literal("ftbquests")
-                        .executes(c -> ftbquests(c, "ftbquests", false))
-                        .then(Commands.literal("dry_run").executes(c -> ftbquests(c, "ftbquests", false)))
-                        .then(Commands.literal("apply").executes(c -> ftbquests(c, "ftbquests", true)))
-                        .then(Commands.argument("namespace", StringArgumentType.word())
-                                .executes(c -> ftbquests(c, StringArgumentType.getString(c, "namespace"), false))
-                                .then(Commands.literal("dry_run")
-                                        .executes(c -> ftbquests(c, StringArgumentType.getString(c, "namespace"), false)))
-                                .then(Commands.literal("apply")
-                                        .executes(c -> ftbquests(c, StringArgumentType.getString(c, "namespace"), true)))))
-                .then(Commands.literal("puffish")
-                        .executes(c -> puffish(c, null, false))
-                        .then(Commands.literal("dry_run").executes(c -> puffish(c, null, false)))
-                        .then(Commands.literal("apply").executes(c -> puffish(c, null, true)))
-                        .then(Commands.argument("namespace", StringArgumentType.word())
-                                .executes(c -> puffish(c, StringArgumentType.getString(c, "namespace"), false))
-                                .then(Commands.literal("dry_run")
-                                        .executes(c -> puffish(c, StringArgumentType.getString(c, "namespace"), false)))
-                                .then(Commands.literal("apply")
-                                        .executes(c -> puffish(c, StringArgumentType.getString(c, "namespace"), true)))));
+                .then(source("ftbquests", "ftbquests", MigrationCommands::ftbquests))
+                .then(source("puffish", null, MigrationCommands::puffish));
+    }
+
+    /** {@code <source> [namespace] [dry_run | apply [force]]}; a literal wins over the namespace word. */
+    private static LiteralArgumentBuilder<CommandSourceStack> source(String name, String defaultNamespace, Run run) {
+        LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal(name);
+        root.executes(c -> run.run(c, defaultNamespace, Mode.DRY_RUN));
+        root.then(Commands.literal("dry_run").executes(c -> run.run(c, defaultNamespace, Mode.DRY_RUN)));
+        root.then(Commands.literal("apply").executes(c -> run.run(c, defaultNamespace, Mode.APPLY))
+                .then(Commands.literal("force").executes(c -> run.run(c, defaultNamespace, Mode.FORCE))));
+        root.then(Commands.argument("namespace", StringArgumentType.word())
+                .executes(c -> run.run(c, StringArgumentType.getString(c, "namespace"), Mode.DRY_RUN))
+                .then(Commands.literal("dry_run")
+                        .executes(c -> run.run(c, StringArgumentType.getString(c, "namespace"), Mode.DRY_RUN)))
+                .then(Commands.literal("apply")
+                        .executes(c -> run.run(c, StringArgumentType.getString(c, "namespace"), Mode.APPLY))
+                        .then(Commands.literal("force")
+                                .executes(c -> run.run(c, StringArgumentType.getString(c, "namespace"), Mode.FORCE)))));
+        return root;
     }
 
     // ------------------------------------------------------------------ ftbquests
 
-    private static int ftbquests(CommandContext<CommandSourceStack> c, String requested, boolean apply) {
+    private static int ftbquests(CommandContext<CommandSourceStack> c, String requested, Mode mode) {
         CommandSourceStack src = c.getSource();
         String ns = ProgressCommands.validNamespace(src, requested);
         if (ns == null) {
@@ -134,7 +142,12 @@ final class MigrationCommands {
             TeamStoreData copy = store.copyData();
             FtbqMigration.run(new FtbqMigration.Input(ns, model, book, teams, membership,
                     player -> TeamResolver.teamId(server, player)), copy, report);
-            return finish(src, store, copy, report, "FTB Quests", apply);
+            List<Path> inputs = new ArrayList<>();
+            try (Stream<Path> list = Files.list(progressDir)) {
+                list.filter(p -> p.getFileName().toString().contains("-") && p.getFileName().toString().endsWith(".snbt"))
+                        .sorted().forEach(inputs::add);
+            }
+            return finish(src, store, copy, report, "FTB Quests", "ftbquests:" + ns, MigrationHash.of(inputs), mode);
         } catch (IOException | RuntimeException ex) {
             Constants.LOG.error("FTB Quests progress migration failed", ex);
             return fail(src, "commands.kuronami_quest_tree.migrate.failed", String.valueOf(ex.getMessage()));
@@ -143,7 +156,7 @@ final class MigrationCommands {
 
     // ------------------------------------------------------------------ puffish
 
-    private static int puffish(CommandContext<CommandSourceStack> c, String requested, boolean apply) {
+    private static int puffish(CommandContext<CommandSourceStack> c, String requested, Mode mode) {
         CommandSourceStack src = c.getSource();
         String ns = null;
         if (requested != null) {
@@ -177,7 +190,8 @@ final class MigrationCommands {
             TeamStoreData copy = store.copyData();
             PuffishMigration.run(new PuffishMigration.Input(ns, model, byPlayer,
                     player -> TeamResolver.teamId(server, player)), copy, report);
-            return finish(src, store, copy, report, "Pufferfish's Skills", apply);
+            return finish(src, store, copy, report, "Pufferfish's Skills", "puffish:" + (ns == null ? "*" : ns),
+                    MigrationHash.of(List.of(file)), mode);
         } catch (IOException | RuntimeException ex) {
             Constants.LOG.error("Pufferfish's Skills progress migration failed", ex);
             return fail(src, "commands.kuronami_quest_tree.migrate.failed", String.valueOf(ex.getMessage()));
@@ -187,7 +201,16 @@ final class MigrationCommands {
     // ------------------------------------------------------------------ shared
 
     private static int finish(CommandSourceStack src, ProgressStore store, TeamStoreData merged, MigrationReport report,
-                              String title, boolean apply) throws IOException {
+                              String title, String source, String hash, Mode mode) throws IOException {
+        boolean apply = mode != Mode.DRY_RUN;
+        String before = merged.migrations.get(source);
+        if (apply && before != null && mode != Mode.FORCE) {
+            // a second apply after people have played can bring back repeatable state that was cleared since
+            return fail(src, "commands.kuronami_quest_tree.migrate.already_applied", source, before);
+        }
+        if (before != null) {
+            report.note("already applied: " + source + " " + before);
+        }
         MinecraftServer server = src.getServer();
         Path world = server.getWorldPath(LevelResource.ROOT);
         String stamp = LocalDateTime.now().format(STAMP);
@@ -200,6 +223,7 @@ final class MigrationCommands {
                 backup = storeFile.resolveSibling(Constants.MOD_ID + ".dat.migrate-" + stamp + ".bak");
                 Files.copy(storeFile, backup, StandardCopyOption.COPY_ATTRIBUTES);
             }
+            merged.migrations.put(source, hash + "@" + stamp);
             store.replaceData(merged);
             server.overworld().getDataStorage().save();
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {

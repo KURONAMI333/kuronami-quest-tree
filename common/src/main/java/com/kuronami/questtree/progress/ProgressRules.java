@@ -574,20 +574,37 @@ public final class ProgressRules {
         return Math.max(0, total - p.spent.getOrDefault(key, 0));
     }
 
-    /** Experience needed to go from {@code level} to the next one (Pufferfish: expression of "level"). */
+    /**
+     * Experience needed to go from {@code level} to the next one (Pufferfish: expression of "level", or a
+     * {@code values} list read at {@code min(level, size - 1)}). Each requirement is a whole number, rounded the way
+     * Pufferfish's Skills rounds it, so a level converted from Pufferfish's total and the level-ups that follow agree
+     * (2026-10-20). A requirement is never below 1.
+     */
     public double experienceForLevel(ProgressModel.Chapter c, int level) {
         JsonElement per = c.points == null ? null : c.points.get("per_level");
         if (per == null) {
             return 100;
         }
         if (per.isJsonPrimitive() && per.getAsJsonPrimitive().isNumber()) {
-            return per.getAsDouble();
+            return Math.max(1, Math.round(per.getAsDouble()));
+        }
+        if (per.isJsonObject() && per.getAsJsonObject().has("data") && per.getAsJsonObject().get("data").isJsonObject()) {
+            JsonObject data = per.getAsJsonObject().getAsJsonObject("data");
+            if (data.has("values") && data.get("values").isJsonArray()) {
+                var values = data.getAsJsonArray("values");
+                if (values.isEmpty()) {
+                    return 100;
+                }
+                return Math.max(1, values.get(Math.max(0, Math.min(level, values.size() - 1))).getAsLong());
+            }
         }
         String expr = per.isJsonPrimitive() ? per.getAsString()
-                : per.isJsonObject() && per.getAsJsonObject().has("data") ? per.getAsJsonObject().getAsJsonObject("data").get("expression").getAsString()
+                : per.isJsonObject() && per.getAsJsonObject().has("data") && per.getAsJsonObject().getAsJsonObject("data").has("expression")
+                ? per.getAsJsonObject().getAsJsonObject("data").get("expression").getAsString()
                 : "100";
         Expression e = curves.computeIfAbsent(c.id + "|" + expr, k -> Expression.parse(expr));
-        return Math.max(1, e.eval(Map.of("level", (double) level)));
+        double value = e.eval(Map.of("level", (double) level));
+        return Double.isFinite(value) ? Math.max(1, Math.round(value)) : value;
     }
 
     /**

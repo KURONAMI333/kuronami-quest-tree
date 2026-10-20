@@ -145,6 +145,12 @@ public final class ProgressStore extends SavedData {
                 owners.addProperty(key, savedOwners.getString(key));
             }
             root.add("owners", owners);
+            JsonObject migrations = new JsonObject();
+            CompoundTag savedMigrations = tag.getCompound("migrations");
+            for (String key : savedMigrations.getAllKeys()) {
+                migrations.addProperty(key, savedMigrations.getString(key));
+            }
+            root.add("migrations", migrations);
             store.data = TeamStoreData.fromJson(root);
             return store;
         }
@@ -174,6 +180,9 @@ public final class ProgressStore extends SavedData {
         CompoundTag owners = new CompoundTag();
         data.owners.forEach((player, team) -> owners.putString(player.toString(), team.toString()));
         tag.put("owners", owners);
+        CompoundTag migrations = new CompoundTag();
+        data.migrations.forEach(migrations::putString);
+        tag.put("migrations", migrations);
         return tag;
     }
 }

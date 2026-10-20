@@ -152,6 +152,8 @@
   "commands.kuronami_quest_tree.migrate.more": "ほか%s件(レポート参照)",
   "commands.kuronami_quest_tree.migrate.backup": "バックアップ: %s",
   "commands.kuronami_quest_tree.migrate.report": "レポート: %s",
+  "commands.kuronami_quest_tree.migrate.already_applied": "適用済み: %s (%s)。繰り返すには force を付ける",
+  "commands.kuronami_quest_tree.migrate.label.exchange_added": "交換回数(追加)",
   "commands.kuronami_quest_tree.migrate.failed": "移行に失敗: %s",
   "commands.kuronami_quest_tree.migrate.no_book": "名前空間 %s に取り込み済みの本がありません",
   "commands.kuronami_quest_tree.migrate.ftbquests.no_progress": "進行フォルダがありません: %s",
