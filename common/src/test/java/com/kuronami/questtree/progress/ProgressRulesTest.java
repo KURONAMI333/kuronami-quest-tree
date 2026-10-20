@@ -341,10 +341,10 @@ class ProgressRulesTest {
         p.completed.add("s:c/q");
         p.claimedRewards.add("s:c/q#0");
         p.claimedRewards.add("s:c/q#2");
-        p.bookGiven = true;
+        p.setBookGiven(true);
         PlayerProgress back = ProgressJson.read(ProgressJson.write(p));
         assertEquals(p.claimedRewards, back.claimedRewards);
-        assertTrue(back.bookGiven);
-        assertFalse(ProgressJson.read(new JsonObject()).bookGiven, "older saves start without the gift");
+        assertTrue(back.bookGiven());
+        assertFalse(ProgressJson.read(new JsonObject()).bookGiven(), "older saves start without the gift");
     }
 }

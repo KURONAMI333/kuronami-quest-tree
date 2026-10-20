@@ -42,6 +42,15 @@ repositories {
         name = 'BlameJared'
         url = 'https://maven.blamejared.com'
     }
+    // FTB Teams is optional (compiled against, never required); loaders need it too because common's sources
+    // are compiled again as part of each loader.
+    maven { url = 'https://maven.ftb.dev/releases' }
+    maven { url = 'https://maven.architectury.dev/' }
+}
+
+dependencies {
+    compileOnly "dev.ftb.mods:ftb-teams:2101.1.11"
+    compileOnly "dev.ftb.mods:ftb-library:2101.1.30"
 }
 
 // Declare capabilities on the outgoing configurations.

@@ -64,12 +64,27 @@ public final class Rewards {
 
     /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
+        giveSkillOne(player, p, n, rank, true);
+        // the skill belongs to the team: its per-player effects (attributes, commands, tags) reach every online member.
+        // Shared values (points) and one-off pay-outs are applied once, by the player who took it
+        for (ServerPlayer member : members(player)) {
+            if (!member.getUUID().equals(player.getUUID())) {
+                giveSkillOne(member, p, n, rank, false);
+            }
+        }
+    }
+
+    private static List<ServerPlayer> members(ServerPlayer player) {
+        return new ArrayList<>(com.kuronami.questtree.team.TeamResolver.onlineMembers(player.server, player.getUUID()));
+    }
+
+    private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank, boolean full) {
         List<JsonObject> list = rewardsOfRank(n, rank);
         int i = 0;
         for (JsonObject rw : list) {
             if (ProgressService.type(rw).equals("attribute")) {
                 attribute(player, n.key, rank * 100 + i, rw);
-            } else {
+            } else if (full || ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag")) {
                 give(player, p, n, rw, -1);
             }
             i++;
@@ -96,6 +111,36 @@ public final class Rewards {
      * Puts back every attribute modifier the player earned: taken skills (each rank so far) and claimed quests. Used on
      * join and respawn, because respawning copies only base values. Fixed modifier ids make repeating it harmless.
      */
+    /**
+     * Recomputes the attribute modifiers of every online member of the player's team from the team's current skills:
+     * all of this mod's modifiers are removed first, so none outlive a respec, reset, lock or leaving the team.
+     */
+    static void refreshTeamAttributes(ServerPlayer player) {
+        for (ServerPlayer member : members(player)) {
+            refreshAttributes(member, ProgressService.progress(member));
+        }
+    }
+
+    static void refreshAttributes(ServerPlayer player, PlayerProgress p) {
+        clearAttributes(player);
+        reapplyAttributes(player, p);
+    }
+
+    /** Removes every attribute modifier this mod added, whatever node it came from. */
+    static void clearAttributes(ServerPlayer player) {
+        for (Holder<Attribute> attr : BuiltInRegistries.ATTRIBUTE.holders().toList()) {
+            AttributeInstance inst = player.getAttribute(attr);
+            if (inst == null) {
+                continue;
+            }
+            for (AttributeModifier m : new ArrayList<>(inst.getModifiers())) {
+                if (Constants.MOD_ID.equals(m.id().getNamespace())) {
+                    inst.removeModifier(m.id());
+                }
+            }
+        }
+    }
+
     static void reapplyAttributes(ServerPlayer player, PlayerProgress p) {
         var model = ProgressService.rules().model();
         for (var e : p.taken.entrySet()) {
@@ -131,7 +176,9 @@ public final class Rewards {
                 }
             }
         }
-        for (String mark : p.claimedRewards) {
+        java.util.Set<String> marks = new java.util.HashSet<>(p.claimedRewards);
+        marks.addAll(p.teamClaimedRewards);
+        for (String mark : marks) {
             int hash = mark.lastIndexOf('#');
             if (hash <= 0) {
                 continue;
@@ -162,7 +209,13 @@ public final class Rewards {
      * {@code lock_command}, and tag rewards are removed, as Pufferfish's Skills does on a respec.
      */
     static void revokeSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
-        removeAttributes(player, n);
+        for (ServerPlayer member : members(player)) {
+            revokeSkillOne(member, p, n, taken);
+        }
+    }
+
+    private static void revokeSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
+        removeAttributesOne(player, n);
         for (int rank = 0; rank < Math.max(1, Math.min(taken, Math.max(1, n.ranks))); rank++) {
             for (JsonObject rw : rewardsOfRank(n, rank)) {
                 try {
@@ -186,12 +239,18 @@ public final class Rewards {
      * {@link #reapplyAttributes}.
      */
     static void revokeChapter(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
+        for (ServerPlayer member : members(player)) {
+            revokeChapterOne(member, p, c);
+        }
+    }
+
+    private static void revokeChapterOne(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
         for (ProgressModel.Node n : c.nodes.values()) {
             int taken = p.taken.getOrDefault(n.key, 0);
             if (taken > 0) {
-                revokeSkill(player, p, n, taken);
+                revokeSkillOne(player, p, n, taken);
             } else if (p.claimed.contains(n.key)) {
-                removeAttributes(player, n);
+                removeAttributesOne(player, n);
             }
             // a locked chapter shows no score, whatever its skills still are
             for (JsonObject rw : n.rewards) {
@@ -203,6 +262,12 @@ public final class Rewards {
     }
 
     static void removeAttributes(ServerPlayer player, ProgressModel.Node n) {
+        for (ServerPlayer member : members(player)) {
+            removeAttributesOne(member, n);
+        }
+    }
+
+    private static void removeAttributesOne(ServerPlayer player, ProgressModel.Node n) {
         int ranks = Math.max(1, n.ranks);
         for (int rank = 0; rank < ranks; rank++) {
             List<JsonObject> list = rewardsOfRank(n, rank);

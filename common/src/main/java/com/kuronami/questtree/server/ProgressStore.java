@@ -1,54 +1,166 @@
 package com.kuronami.questtree.server;
 
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.progress.PlayerProgress;
-import com.kuronami.questtree.progress.ProgressJson;
+import com.kuronami.questtree.progress.TeamProgress;
+import com.kuronami.questtree.progress.TeamStoreData;
+import com.kuronami.questtree.team.TeamResolver;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.LevelResource;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 /**
- * All players' progress, saved with the world (data/kuronami_quest_tree.dat). Each player is stored as one JSON string so
- * the format can grow without NBT migrations.
+ * All progress, saved with the world ({@code data/kuronami_quest_tree.dat}). Version 2 keys one record per team id
+ * (a solo player's id is their UUID); version 1 held one record per player and is upgraded on first load, with a
+ * backup of the old file next to it ({@code .dat.v1.bak}).
  */
 public final class ProgressStore extends SavedData {
 
     private static final String NAME = Constants.MOD_ID;
-    private final Map<UUID, PlayerProgress> players = new HashMap<>();
+    private TeamStoreData data = new TeamStoreData();
+    /** The file was version 1 when it was read: save it as version 2 and leave a backup of the old one. */
+    private boolean loadedLegacy;
 
     public static ProgressStore get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(
+        ProgressStore store = server.overworld().getDataStorage().computeIfAbsent(
                 new SavedData.Factory<>(ProgressStore::new, ProgressStore::load, null), NAME);
+        if (store.loadedLegacy) {
+            store.loadedLegacy = false;
+            store.backup(server);
+            store.setDirty();
+        }
+        return store;
     }
 
-    public PlayerProgress of(UUID player) {
-        return players.computeIfAbsent(player, k -> new PlayerProgress());
+    public TeamProgress team(UUID id) {
+        return data.team(id);
+    }
+
+    /**
+     * The record the player currently acts on. A change of team is detected here: joining folds the player's own
+     * record into the team, leaving copies the team back to a new solo record.
+     */
+    public PlayerProgress view(MinecraftServer server, UUID player) {
+        UUID teamId = TeamResolver.teamId(server, player);
+        if (data.changedTeam(player, teamId, ProgressStore::settledTeamRewards)) {
+            setDirty();
+        }
+        return data.team(teamId).view(player);
+    }
+
+    /**
+     * Takes a player out of their old team now, online or not: the copy is made from the team's progress at this
+     * moment, not at their next login. Returns the team they left, or null when nothing changed.
+     */
+    public UUID settleLeave(UUID player) {
+        UUID old = data.teamOf(player);
+        if (data.changedTeam(player, player, ProgressStore::settledTeamRewards)) {
+            setDirty();
+            return old;
+        }
+        return null;
+    }
+
+    /** Team rewards ({@code "team": true}) of the nodes this team completed. */
+    private static java.util.Set<String> settledTeamRewards(TeamProgress team) {
+        var nodes = ProgressService.rules().model().nodes;
+        java.util.Set<String> out = new java.util.HashSet<>();
+        for (String key : team.shared.completed) {
+            var n = nodes.get(key);
+            if (n == null) {
+                continue;
+            }
+            for (int i = 0; i < n.rewards.size(); i++) {
+                if (com.kuronami.questtree.data.ProgressModel.boolOf(n.rewards.get(i), "team")) {
+                    out.add(key + "#" + i);
+                }
+            }
+        }
+        return out;
+    }
+
+    public UUID teamIdOf(UUID player) {
+        return data.teamOf(player);
+    }
+
+    private void backup(MinecraftServer server) {
+        Path file = server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(NAME + ".dat");
+        Path backup = file.resolveSibling(NAME + ".dat.v1.bak");
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        if (Files.exists(backup)) {
+            Constants.LOG.info("Keeping the existing progress backup {}", backup);
+            return;
+        }
+        try {
+            Files.copy(file, backup, StandardCopyOption.COPY_ATTRIBUTES);
+            Constants.LOG.info("Backed up the version 1 progress file to {}", backup);
+        } catch (IOException ex) {
+            Constants.LOG.warn("Could not back up {}: {}", file, ex.toString());
+        }
     }
 
     private static ProgressStore load(CompoundTag tag, HolderLookup.Provider registries) {
-        ProgressStore s = new ProgressStore();
+        ProgressStore store = new ProgressStore();
+        if (tag.contains("version") && tag.getInt("version") >= TeamStoreData.VERSION && tag.contains("teams")) {
+            JsonObject root = new JsonObject();
+            root.addProperty("version", tag.getInt("version"));
+            JsonObject teams = new JsonObject();
+            CompoundTag saved = tag.getCompound("teams");
+            for (String key : saved.getAllKeys()) {
+                try {
+                    teams.add(key, JsonParser.parseString(saved.getString(key)));
+                } catch (RuntimeException ex) {
+                    Constants.LOG.error("Could not read team {}: {}", key, ex.toString());
+                }
+            }
+            root.add("teams", teams);
+            JsonObject owners = new JsonObject();
+            CompoundTag savedOwners = tag.getCompound("owners");
+            for (String key : savedOwners.getAllKeys()) {
+                owners.addProperty(key, savedOwners.getString(key));
+            }
+            root.add("owners", owners);
+            store.data = TeamStoreData.fromJson(root);
+            return store;
+        }
+
+        // version 1: one progress object per player; every player becomes their own solo team, nothing is dropped
         CompoundTag all = tag.getCompound("players");
+        JsonObject legacy = new JsonObject();
         for (String key : all.getAllKeys()) {
             try {
-                s.players.put(UUID.fromString(key), ProgressJson.read(JsonParser.parseString(all.getString(key)).getAsJsonObject()));
+                legacy.add(key, JsonParser.parseString(all.getString(key)));
             } catch (RuntimeException ex) {
                 Constants.LOG.error("Could not read progress of {}: {}", key, ex.toString());
             }
         }
-        return s;
+        store.data = TeamStoreData.fromLegacy(legacy);
+        store.loadedLegacy = true;
+        Constants.LOG.info("Upgraded {} per-player progress records to team records", store.data.teams.size());
+        return store;
     }
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        CompoundTag all = new CompoundTag();
-        players.forEach((id, p) -> all.putString(id.toString(), ProgressJson.write(p).toString()));
-        tag.put("players", all);
+        tag.putInt("version", TeamStoreData.VERSION);
+        CompoundTag teams = new CompoundTag();
+        data.teams.forEach((id, team) -> teams.putString(id.toString(), team.toJson().toString()));
+        tag.put("teams", teams);
+        CompoundTag owners = new CompoundTag();
+        data.owners.forEach((player, team) -> owners.putString(player.toString(), team.toString()));
+        tag.put("owners", owners);
         return tag;
     }
 }

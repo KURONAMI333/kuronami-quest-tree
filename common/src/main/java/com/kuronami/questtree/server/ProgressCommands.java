@@ -41,14 +41,16 @@ import java.util.stream.Stream;
 public final class ProgressCommands {
 
     private static final String PACK_DIR = "quest_tree_import";
+    private static final java.util.function.Predicate<CommandSourceStack> ADMIN = s -> s.hasPermission(2);
 
     private ProgressCommands() {
     }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal(Constants.COMMAND)
-                .requires(s -> s.hasPermission(2))
-                .then(Commands.literal("import")
+                // party commands are for every player; the book/admin commands below keep the old permission gate
+                .then(PartyCommands.node())
+                .then(Commands.literal("import").requires(ADMIN)
                         .then(Commands.literal("ftbquests")
                                 .executes(c -> importFtb(c, "ftbquests"))
                                 .then(Commands.argument("namespace", StringArgumentType.word())
@@ -57,16 +59,16 @@ public final class ProgressCommands {
                                 .executes(c -> importPuffish(c, "skills"))
                                 .then(Commands.argument("namespace", StringArgumentType.word())
                                         .executes(c -> importPuffish(c, StringArgumentType.getString(c, "namespace"))))))
-                .then(Commands.literal("status").executes(c -> {
+                .then(Commands.literal("status").requires(ADMIN).executes(c -> {
                     c.getSource().sendSuccess(() -> Component.literal(ProgressData.chapterCount() + " chapters loaded"), false);
                     return ProgressData.chapterCount();
                 }))
-                .then(Commands.literal("validate").executes(ProgressCommands::validate))
-                .then(Commands.literal("edit")
+                .then(Commands.literal("validate").requires(ADMIN).executes(ProgressCommands::validate))
+                .then(Commands.literal("edit").requires(ADMIN)
                         .executes(c -> edit(c, null))
                         .then(Commands.literal("on").executes(c -> edit(c, true)))
                         .then(Commands.literal("off").executes(c -> edit(c, false))))
-                .then(Commands.literal("export")
+                .then(Commands.literal("export").requires(ADMIN)
                         .then(Commands.argument("namespace", StringArgumentType.word())
                                 .executes(c -> export(c, StringArgumentType.getString(c, "namespace"), false))
                                 .then(Commands.literal("force")
