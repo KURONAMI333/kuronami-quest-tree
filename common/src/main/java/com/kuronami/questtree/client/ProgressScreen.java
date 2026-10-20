@@ -1117,68 +1117,83 @@ public class ProgressScreen extends Screen {
         }
     }
 
-    /** Whether the pointer is over the map itself, not over the chapter list, the details sheet or the header. */
+    /** Whether the pointer is over the map itself, not over the chapter list, the details sheet or the title row. */
     private boolean overMap(double mx, double my) {
-        return mx > railRight() && mx < (sheetT > 0 ? sheetLeft() : width)
-                && !(mx >= headerRect[0] && mx < headerRect[0] + headerRect[2] && my >= headerRect[1] && my < headerRect[1] + headerRect[3]);
+        return mx > railRight() && mx < (sheetT > 0 ? sheetLeft() : width) && !overHeader(mx, my);
     }
 
-    /** The chapter header's box on screen (x, y, w, h), for clicks that must not reach the map under it. */
-    private int[] headerRect = new int[4];
+    /** The title+pin and claim button areas (x, y, w, h): clicks on either must not reach the map under them. */
+    private int[] titleRect = new int[4];
+    private int[] claimRect = new int[4];
+
+    private boolean overHeader(double mx, double my) {
+        return inRect(titleRect, mx, my) || (claimRect[2] > 0 && inRect(claimRect, mx, my));
+    }
+
+    private static boolean inRect(int[] r, double mx, double my) {
+        return mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3];
+    }
+
+    /** How far down the soft scrim behind the chapter title runs. */
+    private static final int TITLE_SCRIM_H = 40;
 
     /**
-     * The chapter's name, its count and its pin, in one glass box fixed to the top right (2026-10-20). Until then the
-     * title sat on the map at the top left: it was hard to read over the pack's own title pictures and bright tiles, and
-     * it slid sideways whenever the chapter list opened (the player). The pin that marks a chapter for the top of the
-     * list moved here from the list's rows, so the list's rows only open chapters. The details sheet slides over the
-     * box instead of pushing it. "Claim all" sits under it while anything without a choice waits.
+     * The chapter's name and its pin, written plainly across the top (2026-10-20, the player: the glass box at the top
+     * right spent its room on the done/total and hidden counts and cut the title). The title now keeps the chapter's own
+     * colours and is shown in full, centred over the map's area — from the closed chapter list's edge to the screen's,
+     * not the drawn rail or sheet — so opening either never moves it. A soft scrim under it keeps it readable over the
+     * pack's pictures and bright tiles; it and the title sit under the rail, which is drawn later at a higher z. The pin
+     * marks the chapter for the top of the list. "Claim all" stays in the top right corner while anything without a
+     * choice waits.
      */
     private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY) {
-        int h = BTN;
-        int pin = h - 8;
-        int[] cnt = chapterCounts.getOrDefault(ch.id, new int[]{0, ch.nodes.size(), 0});
-        String count = ch.skills ? "" : cnt[0] + "/" + cnt[1];
-        Component hidden = !ch.skills && cnt[2] > 0 ? Component.translatable("screen.kuronami_quest_tree.hidden", cnt[2]) : null;
-        int tail = ch.skills ? skillHeaderWidth(ch) : font.width(count) + (hidden != null ? Ui.S1 + font.width(hidden) : 0);
-        int fixed = Ui.S2 + 12 + Ui.S2 + Ui.S2 + tail + Ui.S2 + pin + 4;
-        int maxW = Math.max(160, width / 2);
-        int titleW = Math.min(font.width(ch.title), maxW - fixed);
-        int w = fixed + titleW;
-        int x = width - Ui.S2 - w;
-        int y = Ui.S2;
-        headerRect = new int[]{x, y, w, h};
-        if (GlassPanel.on()) {
-            GlassPanel.render(g, GlassPanel.HEADER, GlassPanel.Kind.REGULAR, x, y, w, h, h / 2, mouseX, mouseY);
-        } else {
-            Ui.surface(g, x, y, w, h, h / 2, Ui.PANEL_TRANSLUCENT);
-            Ui.outline(g, x, y, w, h, Ui.R4, Ui.HAIRLINE);
+        claimRect[2] = 0;
+        int pin = BTN - 8;
+        int icon = 12;
+        int ty = Ui.S2 + 6;
+        int left = RAIL + 4;
+        int avail = width - left;
+        int waiting = claimable.getOrDefault(ch.id, 0);
+        Component claimLabel = Component.translatable("screen.kuronami_quest_tree.claim_all");
+        int bh = 20;
+        int bw = waiting > 0 ? font.width(claimLabel) + Ui.S1 + font.width(String.valueOf(waiting)) + 2 * Ui.S2 + 4 : 0;
+        int limitRight = width - Ui.S2 - (waiting > 0 ? bw + Ui.S1 : 0);
+        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - pin - Ui.S2);
+        Component title = ch.title;
+        int titleW = font.width(title);
+        if (titleW > maxTitleW) {
+            // last resort: a title wider than the map's room is cut, as the box used to cut it, but only then
+            title = Component.literal(trim(ch.title.getString(), maxTitleW));
+            titleW = font.width(title);
         }
-        int cx = x + Ui.S2 + 2;
-        int ty = y + (h - 8) / 2;
+        int skillW = ch.skills ? Ui.S2 + skillHeaderWidth(ch) : 0;
+        int gw = icon + Ui.S1 + titleW + Ui.S1 + pin + skillW;
+        int x = left + (avail - gw) / 2;
+        if (x + gw > limitRight) {
+            x = limitRight - gw;
+        }
+        x = Math.max(left + Ui.S2, x);
+        int tx = x + icon + Ui.S1;
+        int px = tx + titleW + Ui.S1;
+        int py = Ui.S2;
+        titleRect = new int[]{x, py, px + pin - x, pin};
+        // a soft landing for the title over whatever the chapter draws at the top of the map
+        g.fillGradient(0, 0, width, TITLE_SCRIM_H, 0xB0000000 | (Ui.GROUND & 0xFFFFFF), Ui.GROUND & 0xFFFFFF);
         g.pose().pushPose();
-        g.pose().translate(cx, y + (h - 12) / 2f, 0);
+        g.pose().translate(x, ty - 2, 0);
         g.pose().scale(0.75f, 0.75f, 1);
         g.renderItem(ch.displayIcon(), 0, 0);
         g.pose().popPose();
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        cx += 12 + Ui.S2;
-        Ui.text(g, font, trim(ch.title.getString(), titleW), cx, ty, Ui.BRIGHT);
-        cx += titleW + Ui.S2;
+        // the component itself, shadowed: FTB Quests titles carry their own colours
+        g.drawString(font, title, tx, ty, Ui.BRIGHT, true);
         if (ch.skills) {
-            renderSkillHeader(g, ch, cx, ty);
-        } else {
-            Ui.text(g, font, count, cx, ty, Ui.MUTED);
-            if (hidden != null) {
-                // more is hidden (Steam's "n hidden achievements remaining"): the count, never what it is
-                Ui.text(g, font, hidden, cx + font.width(count) + Ui.S1, ty, Ui.DIM);
-            }
+            renderSkillHeader(g, ch, px + pin + Ui.S2, ty);
         }
         // the pin: gold while the chapter is pinned to the top of the list
-        int px = x + w - 4 - pin;
-        int py = y + 4;
         boolean pinned = ClientConfig.railPinned(ch.id);
-        // the details sheet slides over the box: whatever it covers neither lights up nor takes clicks
+        // the details sheet slides over the row: whatever it covers neither lights up nor takes clicks
         int open = sheetT > 0 ? sheetLeft() : width;
         boolean over = mouseX >= px && mouseX < px + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
         if (over) {
@@ -1192,18 +1207,14 @@ public class ProgressScreen extends Screen {
                 ProgressFeedback.click();
             }));
         }
-        int waiting = claimable.getOrDefault(ch.id, 0);
         if (waiting > 0) {
-            // this chapter's rewards only: the count and the claim are the chapter's, as the box they sit under is
-            Component ca = Component.translatable("screen.kuronami_quest_tree.claim_all");
+            // this chapter's rewards only: the count and the claim are the chapter's
             String n = String.valueOf(waiting);
-            int bh = 20;
-            int bw = font.width(ca) + Ui.S1 + font.width(n) + 2 * Ui.S2 + 4;
             int bx = width - Ui.S2 - bw;
-            int by = y + h + Ui.S1;
+            int by = Ui.S2;
             boolean bo = mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh && mouseX < open;
             Ui.surface(g, bx, by, bw, bh, bh / 2, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
-            Ui.text(g, font, ca, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
+            Ui.text(g, font, claimLabel, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
             Ui.text(g, font, n, bx + bw - Ui.S2 - font.width(n), by + (bh - 8) / 2, Tiles.INK);
             Runnable claim = () -> {
                 ClientProgress.send("claim_chapter", ch.id, -1);
@@ -1221,7 +1232,7 @@ public class ProgressScreen extends Screen {
             if (bx + bw <= open) {
                 buttons.add(new Button(bx, by, bw, bh, claim));
             }
-            headerRect = new int[]{Math.min(x, bx), y, Math.max(w, bw), by + bh - y};
+            claimRect = new int[]{bx, by, bw, bh};
         }
         g.pose().popPose();
     }
@@ -1856,7 +1867,7 @@ public class ProgressScreen extends Screen {
         if (sheetT > 0 && selected != null && mx >= sheetLeft()) {
             return true;
         }
-        if (mx >= headerRect[0] && mx < headerRect[0] + headerRect[2] && my >= headerRect[1] && my < headerRect[1] + headerRect[3]) {
+        if (overHeader(mx, my)) {
             return true;
         }
         ClientModel.Chapter ch = chapter();
