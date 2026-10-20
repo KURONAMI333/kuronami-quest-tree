@@ -844,15 +844,14 @@ public class ProgressScreen extends Screen {
     static int LINE_CASING_COLOR = 0xE6313338;
     /**
      * Belt and casing widths in map units (they grow with the zoom along with the tiles), and the least each may shrink
-     * to on screen in GUI pixels, so zoomed out the chevrons still read.
+     * to on screen in GUI pixels, so zoomed out the chevrons still read. Widened on 2026-10-20 (the player: the belt
+     * read thin, and the texture looked cheap): the casing is a hairline again now that the chevron reaches the edges.
      */
-    private static final float LINE_W = 5f;
-    private static final float LINE_CASING = 1f;
-    private static final float LINE_MIN_PX = 4f;
+    private static final float LINE_W = 6f;
+    private static final float LINE_CASING = 0.75f;
+    private static final float LINE_MIN_PX = 5f;
     private static final float CASING_MIN_PX = 1f;
-    /** How far a belt stops from the edge of the tile it runs into, in map units. */
-    private static final float ARROW_PAD = 1f;
-    /** How fast the chevrons move, in belt widths per second. */
+    /** How fast the chevrons move, in belt widths per second (only around the node in focus). */
     private static final float BELT_SPEED = 0.8f;
 
     /** Colours worked out from the palette, refreshed when it is read again. */
@@ -2374,20 +2373,21 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * One line from an earlier node to a later one, worked out once per frame: where it starts, where the tip of its
-     * arrowhead touches the later node's edge, and its colour. {@code role}: 0 = nothing in focus, 1 = into the focused
-     * node (what it needs), 2 = out of it (what it opens), 3 = unrelated while something is in focus.
+     * One line from an earlier node to a later one, worked out once per frame: its two ends and its colour. {@code
+     * role}: 0 = nothing in focus, 1 = into the focused node (what it needs), 2 = out of it (what it opens), 3 =
+     * unrelated while something is in focus.
      */
     private record LineDraw(float x1, float y1, float x2, float y2, float w, float casing, int color, int role, float open) {
     }
 
     /**
-     * Straight conveyor belts from tile edge to tile edge, chevrons moving towards the later quest (2026-10-20, the
-     * player, after FTB Quests: a line with one arrowhead at its end only told its direction at that end, and once the
-     * other lines dimmed the head and the bar came apart). Straight because the books come from FTB Quests, whose
-     * authors laid out their trees for straight lines: the elbows of 2026-10-18 invented routes that ran through other
-     * tiles and merged siblings into one trunk. Both ends stop at the tiles' real edges for their shapes
-     * ({@link Tiles#edge}), and the belt and its casing keep a minimum size on screen.
+     * Straight conveyor belts from the centre of the earlier tile to the centre of the later one, chevrons moving
+     * towards the later quest (2026-10-20, the player, after FTB Quests: a line with one arrowhead at its end only told
+     * its direction at that end, and once the other lines dimmed the head and the bar came apart). Straight because the
+     * books come from FTB Quests, whose authors laid out their trees for straight lines: the elbows of 2026-10-18
+     * invented routes that ran through other tiles and merged siblings into one trunk. Since 2026-10-20 the ends run to
+     * the tiles' centres instead of their edges (the player: the ends looked bad): the lines are drawn before the
+     * tiles, so each tile covers the end that runs in under it. The belt and its casing keep a minimum size on screen.
      */
     private LineDraw lineGeometry(ClientModel.Node p, ClientModel.Node n, int color, int role, float open, float zoom) {
         float x1 = (float) (p.x * UNIT);
@@ -2400,19 +2400,9 @@ public class ProgressScreen extends Screen {
         if (len < 1) {
             return null;
         }
-        float ux = dx / len;
-        float uy = dy / len;
-        String shape = Tiles.shapeOf(n.shape);
-        float size = Tiles.drawnSize(shape, (int) Math.round(NODE * n.size));
-        float stop = Tiles.edge(shape, -dx, -dy) * size + ARROW_PAD;
-        float from = Tiles.edge(Tiles.shapeOf(p.shape), dx, dy) * Tiles.drawnSize(Tiles.shapeOf(p.shape), (int) Math.round(NODE * p.size));
-        float visible = len - stop - from;
-        if (visible <= 0.5f) {
-            return null;
-        }
         float w = Math.max(LINE_W, LINE_MIN_PX / zoom);
         float casing = Math.max(LINE_CASING, CASING_MIN_PX / zoom);
-        return new LineDraw(x1 + ux * from, y1 + uy * from, x2 - ux * stop, y2 - uy * stop, w, casing, color, role, open);
+        return new LineDraw(x1, y1, x2, y2, w, casing, color, role, open);
     }
 
     private static void drawLine(GuiGraphics g, LineDraw l, boolean casing) {
@@ -2436,7 +2426,13 @@ public class ProgressScreen extends Screen {
             // the pattern is pinned to the map, not to the line's start: lines that run along the same track (a
             // column of quests all feeding one tile) show their chevrons on top of each other instead of a solid bar
             float along = (l.x1 * dx + l.y1 * dy) / len;
-            float phase = (Util.getMillis() % 1_000_000L) / 1000f * BELT_SPEED * l.w - along;
+            // 2026-10-20 (the player): only the lines around the hovered or selected node flow, like FTB Quests, so a
+            // resting map is still and the one node being read is the one that moves; the other lines keep the map
+            // anchor alone, so their chevrons still line up with their neighbours'
+            float phase = -along;
+            if (l.role == 1 || l.role == 2) {
+                phase += (Util.getMillis() % 1_000_000L) / 1000f * BELT_SPEED * l.w;
+            }
             if (l.open >= 0) {
                 // the way just opened: colour runs in from the earlier tile over the closed belt
                 float e = ease(l.open);

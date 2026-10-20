@@ -33,9 +33,12 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
   the 1-pixel panel edge (corners 12 of 32).
 - `glass_mask.png`: what lies outside the glass minimap's rounded corners, opaque outside and clear inside (corners 23
   of 128, nine-sliced).
-- `line/belt.png`: one square tile of the conveyor belt the lines are drawn with, repeated along each line and moving
-  towards the later quest: a chevron pointing right over a faint band, white, tinted by the line's colour. It repeats
-  left to right, so its left and right edges must meet.
+- `line/belt.png`: one tile of the conveyor belt the lines are drawn with, 32 pixels along the line and 64 across it. It
+  is repeated along each line and moves towards the later quest (only around the node under the pointer or selected):
+  one chevron pointing right whose arms reach both long edges, over a faint band, with its shading in the picture
+  itself, white, tinted by the line's colour. One tile covers the belt's full width across and half of it along the
+  line, so the arms meet the edges and the period is half the belt width. It repeats left to right, so its left and
+  right edges must meet.
 - `icon/<name>.png`: small white glyphs (`fold` the group fold mark in the chapter list, drawn pointing right and turned down while the group is open;
   `dot` the badge, `search` the search at the top of the chapter list, `pin`, `lock`, `tick`, `cross`, `link`, `plus`, `minus`, `center`).
 

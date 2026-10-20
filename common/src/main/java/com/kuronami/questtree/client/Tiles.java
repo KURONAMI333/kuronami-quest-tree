@@ -85,9 +85,12 @@ final class Tiles {
 
     /**
      * A conveyor belt along the x axis of the current pose, from {@code from} to {@code to}, {@code w} wide and centred
-     * on the axis: {@code line/belt} repeated every {@code w} (its tile is square, one chevron pointing along +x over a
-     * faint band), slid forward by {@code phase}. Direction reads anywhere along the line, the way FTB Quests' moving
-     * lines do (2026-10-20, the player: with one arrowhead at the end you had to find the end to know the direction).
+     * on the axis. Since 2026-10-20 the picture is 32 texels along the line and 64 across it: one tile covers the belt's
+     * full width {@code w} and {@code w / 2} along the line, so the chevron's arms reach both long edges and the period
+     * is half the belt width (the player: the square tile looked cheap and its arms stopped short of the edges). The
+     * picture is repeated along the line, slid forward by {@code phase} in map units, and tinted by the line's colour.
+     * Direction reads anywhere along the line, the way FTB Quests' moving lines do (the player: with one arrowhead at
+     * the end you had to find the end to know the direction).
      */
     static void belt(GuiGraphics g, float from, float to, float w, float phase, int argb) {
         if (to - from <= 0.01f || w <= 0) {
@@ -96,13 +99,14 @@ final class Tiles {
         ResourceLocation tex = texture("line/belt");
         prepareRepeat(tex);
         float len = to - from;
-        int uw = Math.max(1, Math.round(len / w * 32));
+        float period = w / 2f;
+        int uw = Math.max(1, Math.round(len / period * 32));
         g.pose().pushPose();
         g.pose().translate(from, -w / 2f, 0);
         g.pose().scale(len / 64f, w / 32f, 1);
         RenderSystem.enableBlend();
         g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
-        g.blit(tex, 0, 0, 64, 32, -phase / w * 32, 0, uw, 32, 32, 32);
+        g.blit(tex, 0, 0, 64, 32, -phase / period * 32, 0, uw, 64, 32, 64);
         g.setColor(1, 1, 1, 1);
         g.pose().popPose();
     }
