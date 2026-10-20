@@ -51,6 +51,77 @@ class ProgressRulesTest {
     }
 
     @Test
+    void poolSharesExperienceAndSpentPoints() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {
+                  "t:a": {"points": {"per_level": 1, "start": 1, "pool": "shared"},
+                           "nodes": {"n": {"cost": 1}}},
+                  "t:b": {"points": {"per_level": 1, "start": 1, "pool": "shared"},
+                           "nodes": {"m": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel pooled = ProgressModel.of(bundle);
+        ProgressRules rules = new ProgressRules(pooled);
+        PlayerProgress p = new PlayerProgress();
+        ProgressModel.Chapter a = pooled.chapters.get("t:a");
+        ProgressModel.Chapter b = pooled.chapters.get("t:b");
+        rules.addExperience(p, a, 1);
+        assertEquals(1, p.level.get(ProgressRules.key(a)));
+        assertEquals(1, p.level.get(ProgressRules.key(b)));
+        assertEquals(2, rules.availablePoints(p, a));
+        assertEquals(2, rules.availablePoints(p, b));
+        assertTrue(rules.take(p, a.nodes.get("n")));
+        assertEquals(1, rules.availablePoints(p, a));
+        assertEquals(1, rules.availablePoints(p, b));
+    }
+
+    @Test
+    void spentLimitCapsThePointsEverAvailable() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": 1, "spent_limit": 2},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel capped = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = capped.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(capped);
+        PlayerProgress p = new PlayerProgress();
+        rules.addExperience(p, a, 5);
+        assertEquals(2, rules.availablePoints(p, a));
+    }
+
+    @Test
+    void chapterLockHidesAndHoldsItsNodes() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": false},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel locked = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = locked.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(locked);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(ProgressRules.State.LOCKED, rules.state(p, a.nodes.get("n")));
+        p.chapterOpen.put(a.id, true);
+        assertEquals(ProgressRules.State.CLAIM, rules.state(p, a.nodes.get("n")));
+        p.chapterOpen.put(a.id, false);
+        assertEquals(ProgressRules.State.LOCKED, rules.state(p, a.nodes.get("n")));
+    }
+
+    @Test
+    void pooledExperienceSurvivesSaveAndLoad() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": 1, "start": 1, "pool": "shared"}, "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel pooled = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = pooled.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(pooled);
+        PlayerProgress p = new PlayerProgress();
+        rules.addExperience(p, a, 3);
+        JsonObject saved = ProgressJson.write(p);
+        PlayerProgress back = ProgressJson.read(saved);
+        assertEquals(p.level.get(ProgressRules.key(a)), back.level.get(ProgressRules.key(a)));
+        assertEquals(p.xp.get(ProgressRules.key(a)), back.xp.get(ProgressRules.key(a)), 1e-9);
+    }
+
+    @Test
     void questsOpenInOrder() {
         ProgressRules rules = new ProgressRules(model);
         PlayerProgress p = new PlayerProgress();

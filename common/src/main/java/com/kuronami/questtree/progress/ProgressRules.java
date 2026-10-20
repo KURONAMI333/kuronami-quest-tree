@@ -30,6 +30,9 @@ public final class ProgressRules {
     }
 
     public State state(PlayerProgress p, ProgressModel.Node n) {
+        if (!chapterUnlocked(p, n.chapter)) {
+            return State.LOCKED;
+        }
         if (excluded(p, n)) {
             return State.EXCLUDED;
         }
@@ -85,6 +88,22 @@ public final class ProgressRules {
             mode = n.chapter.defaults.get("progression_mode").getAsString();
         }
         return mode.equals("flexible");
+    }
+
+    /**
+     * Whether the chapter itself is open (Pufferfish's Skills category lock). A pack locks a chapter with
+     * {@code points.unlocked_by_default: false}; commands store an override per player, so unlocking one player does not
+     * open it for the whole server. Locked chapters are left out of the rail, and their XP sources do not count.
+     */
+    public static boolean chapterUnlocked(PlayerProgress p, ProgressModel.Chapter c) {
+        Boolean override = p.chapterOpen.get(c.id);
+        if (override != null) {
+            return override;
+        }
+        return c.points == null || !c.points.has("unlocked_by_default")
+                || !c.points.get("unlocked_by_default").isJsonPrimitive()
+                || c.points.get("unlocked_by_default").getAsJsonPrimitive().isBoolean()
+                && c.points.get("unlocked_by_default").getAsBoolean();
     }
 
     /** Whether the requirements are met (not considering exclusivity). */
@@ -313,16 +332,32 @@ public final class ProgressRules {
 
     // ------------------------------------------------------------------ skill points
 
+    /**
+     * Where a chapter's experience, level and points live (2026-10-20). Chapters that name the same
+     * {@code points.pool} share one progression; the stored key is prefixed so it cannot collide with a chapter id.
+     */
+    public static String key(ProgressModel.Chapter c) {
+        JsonElement pool = c.points == null ? null : c.points.get("pool");
+        String name = pool != null && pool.isJsonPrimitive() && pool.getAsJsonPrimitive().isString() ? pool.getAsString() : "";
+        return name.isBlank() ? c.id : key(c.id, name);
+    }
+
+    /** The client has the chapter id and {@code points.pool} but not the whole chapter. */
+    public static String key(String chapterId, String pool) {
+        return pool == null || pool.isBlank() ? chapterId : "@pool:" + pool;
+    }
+
     /** Points that can be spent now in a skill chapter. */
     public int availablePoints(PlayerProgress p, ProgressModel.Chapter c) {
         JsonObject pts = c.points == null ? new JsonObject() : c.points;
         int start = pts.has("start") ? pts.get("start").getAsInt() : 0;
-        int earned = p.level.getOrDefault(c.id, 0);
-        int total = start + earned + p.bonus.getOrDefault(c.id, 0);
+        String key = key(c);
+        int earned = p.level.getOrDefault(key, 0);
+        int total = start + earned + p.bonus.getOrDefault(key, 0);
         if (pts.has("spent_limit") && pts.get("spent_limit").isJsonPrimitive()) {
             total = Math.min(total, pts.get("spent_limit").getAsInt());
         }
-        return Math.max(0, total - p.spent.getOrDefault(c.id, 0));
+        return Math.max(0, total - p.spent.getOrDefault(key, 0));
     }
 
     /** Experience needed to go from {@code level} to the next one (Pufferfish: expression of "level"). */
@@ -350,8 +385,9 @@ public final class ProgressRules {
             return 0;
         }
         int limit = c.points != null && c.points.has("level_limit") ? c.points.get("level_limit").getAsInt() : Integer.MAX_VALUE;
-        int lvl = p.level.getOrDefault(c.id, 0);
-        double x = p.xp.getOrDefault(c.id, 0.0) + amount;
+        String key = key(c);
+        int lvl = p.level.getOrDefault(key, 0);
+        double x = p.xp.getOrDefault(key, 0.0) + amount;
         int gained = 0;
         while (lvl < limit) {
             double need = experienceForLevel(c, lvl);
@@ -366,8 +402,8 @@ public final class ProgressRules {
         if (lvl >= limit) {
             x = 0;
         }
-        p.level.put(c.id, lvl);
-        p.xp.put(c.id, x);
+        p.level.put(key, lvl);
+        p.xp.put(key, x);
         return gained;
     }
 
@@ -453,7 +489,7 @@ public final class ProgressRules {
         if (state(p, n) != State.CLAIM || !n.chapter.isSkills() || !n.tasks.isEmpty()) {
             return false;
         }
-        p.spent.merge(n.chapter.id, Math.max(0, n.cost), Integer::sum);
+        p.spent.merge(key(n.chapter), Math.max(0, n.cost), Integer::sum);
         p.taken.merge(n.key, 1, Integer::sum);
         return true;
     }

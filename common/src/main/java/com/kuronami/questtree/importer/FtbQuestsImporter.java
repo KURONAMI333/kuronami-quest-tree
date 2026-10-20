@@ -3,6 +3,7 @@ package com.kuronami.questtree.importer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
 import java.io.IOException;
@@ -44,8 +45,9 @@ public final class FtbQuestsImporter {
     private static final Map<String, String> TASK_COMMON = Map.of("id", "", "type", "", "icon", "icon", "title", "lang:title",
             "optional_task", "optional", "disable_toast", "toast");
     private static final Map<String, Map<String, String>> TASK = Map.ofEntries(
-            Map.entry("item", Map.of("item", "item", "count", "count", "consume_items", "consume", "match_components", "match_components",
-                    "match_nbt", "match_components", "only_from_crafting", "only_from_crafting", "weak_nbt_match", "match_components")),
+            Map.entry("item", Map.of("item", "item", "count", "count", "consume_items", "consume",
+                    "only_from_crafting", "only_from_crafting", "match_components", "", "match_nbt", "",
+                    "weak_nbt_match", "")),
             Map.entry("checkmark", Map.of()), Map.entry("kill", Map.of("entity", "entity", "value", "count", "custom_name", "custom_name")),
             Map.entry("advancement", Map.of("advancement", "advancement", "criterion", "criterion")),
             Map.entry("structure", Map.of("structure", "structure", "tags", "")), Map.entry("biome", Map.of("biome", "biome")),
@@ -55,7 +57,8 @@ public final class FtbQuestsImporter {
             Map.entry("stat", Map.of("stat", "stat", "value", "count")), Map.entry("xp", Map.of("value", "count", "points", "points")),
             Map.entry("fluid", Map.of("fluid", "fluid", "amount", "amount")), Map.entry("forge_energy", Map.of("value", "amount", "max_input", "max_input")),
             Map.entry("gamestage", Map.of("stage", "stage", "team_stage", "team")), Map.entry("stage", Map.of("stage", "stage")),
-            Map.entry("interaction", Map.of()), Map.entry("custom", Map.of()),
+            Map.entry("interaction", Map.of()),
+            Map.entry("custom", Map.of("max_progress", "count", "enable_button", "enable_button")),
             Map.entry("block", Map.of("block", "block", "count", "count")));
     private static final Map<String, String> TASK_RENAME = Map.of("forge_energy", "energy", "gamestage", "stage", "block", "break");
     private static final Map<String, String> REWARD_COMMON = Map.of("id", "", "type", "", "icon", "icon", "title", "lang:title",
@@ -92,7 +95,9 @@ public final class FtbQuestsImporter {
                 String cid = slug(ch.has("filename") ? ch.get("filename").getAsString() : name(f));
                 raw.put(cid, ch);
                 for (JsonElement q : arr(ch, "quests")) {
-                    idToNode.put(q.getAsJsonObject().get("id").getAsString(), new String[]{cid, q.getAsJsonObject().get("id").getAsString().toLowerCase(Locale.ROOT)});
+                    if (q.isJsonObject() && q.getAsJsonObject().has("id")) {
+                        indexQuest(idToNode, cid, q.getAsJsonObject().get("id"));
+                    }
                 }
             }
         }
@@ -146,7 +151,12 @@ public final class FtbQuestsImporter {
                 case "autofocus_id" -> o.addProperty("autofocus", v.getAsString().toLowerCase(Locale.ROOT));
                 case "title" -> out.text("en_us", "progression." + ns + "." + cid + ".title", v);
                 case "subtitle" -> out.text("en_us", "progression." + ns + "." + cid + ".subtitle", v);
-                case "default_quest_shape" -> put(o, "defaults.shape", v);
+                // 1.19 and earlier wrote "default" for "no chapter shape"; that is not a shape a node can use
+                case "default_quest_shape" -> {
+                    if (!v.isJsonPrimitive() || !v.getAsString().equals("default")) {
+                        put(o, "defaults.shape", v);
+                    }
+                }
                 case "default_quest_size" -> put(o, "defaults.size", v);
                 case "default_hide_dependency_lines" -> put(o, "defaults.hide_lines", v);
                 case "default_min_width" -> put(o, "defaults.detail_width", v);
@@ -194,10 +204,7 @@ public final class FtbQuestsImporter {
             if (i.has("click") && i.get("click").isJsonPrimitive()) {
                 // FTB Quests: a quest id (optionally "#id") opens that quest; anything else (a URL) is kept as it is
                 String click = i.get("click").getAsString().trim();
-                String[] t = idToNode.get(click.startsWith("#") ? click.substring(1) : click);
-                if (t == null) {
-                    t = idToNode.get((click.startsWith("#") ? click.substring(1) : click).toUpperCase(Locale.ROOT));
-                }
+                String[] t = node(idToNode, click);
                 if (t != null) {
                     JsonObject c = new JsonObject();
                     c.addProperty("type", "node");
@@ -212,7 +219,7 @@ public final class FtbQuestsImporter {
             }
             copy(i, "click_action", d, "click_action");
             if (i.has("dependency")) {
-                String[] t = idToNode.get(i.get("dependency").getAsString());
+                String[] t = node(idToNode, i.get("dependency"));
                 if (t != null) {
                     d.addProperty("visible_after", t[0].equals(cid) ? t[1] : t[0] + "/" + t[1]);
                 }
@@ -234,7 +241,7 @@ public final class FtbQuestsImporter {
         JsonArray links = new JsonArray();
         for (JsonElement l : arr(ch, "quest_links")) {
             JsonObject lo = l.getAsJsonObject();
-            String[] t = lo.has("linked_quest") ? idToNode.get(lo.get("linked_quest").getAsString()) : null;
+            String[] t = lo.has("linked_quest") ? node(idToNode, lo.get("linked_quest")) : null;
             if (t == null) {
                 out.note("link to missing quest");
                 continue;
@@ -300,6 +307,10 @@ public final class FtbQuestsImporter {
             mapValue(n, target, k, kv.getValue(), prefix, out);
         }
         // values whose meaning changes, not just the name
+        if (n.has("shape") && n.get("shape").isJsonPrimitive() && n.get("shape").getAsString().equals("default")) {
+            // 1.19 and earlier: "default" means the chapter's shape, not a shape of its own
+            n.remove("shape");
+        }
         if (n.has("visibility") && n.getAsJsonObject("visibility").has("hidden_until")) {
             n.getAsJsonObject("visibility").remove("hidden_until");
             JsonObject vis = n.getAsJsonObject("visibility");
@@ -341,7 +352,7 @@ public final class FtbQuestsImporter {
         }
         JsonArray deps = new JsonArray();
         for (JsonElement d : arr(q, "dependencies")) {
-            String[] t = idToNode.get(d.getAsString());
+            String[] t = node(idToNode, d);
             if (t == null) {
                 out.note("dependency on missing quest");
                 continue;
@@ -383,6 +394,12 @@ public final class FtbQuestsImporter {
             }
             if (ty.equals("observation")) {
                 o.addProperty("observe_type", observeType(t));
+            }
+            if (ty.equals("item")) {
+                String match = matchComponents(t);
+                if (!match.equals("none")) {
+                    o.addProperty("match_components", match);
+                }
             }
             // where the task's own title lives in the language files (from the quest file or FTB's lang files)
             o.addProperty("text", tp);
@@ -433,6 +450,24 @@ public final class FtbQuestsImporter {
             o.getAsJsonObject("item").add("count", o.remove("count"));
         }
         return o;
+    }
+
+    /**
+     * FTB Quests 1.20.1 had two booleans ({@code match_nbt}, {@code weak_nbt_match}); 1.21 replaced them with the
+     * three-valued {@code match_components} (none / fuzzy / strict). Both are read so an older book keeps its
+     * component check instead of being silently loosened to "any item with this id".
+     */
+    private static String matchComponents(JsonObject t) {
+        JsonElement v = t.get("match_components");
+        if (v != null && v.isJsonPrimitive() && !v.getAsJsonPrimitive().isBoolean()) {
+            String s = v.getAsString().toLowerCase(Locale.ROOT);
+            return s.equals("fuzzy") || s.equals("strict") ? s : "none";
+        }
+        boolean match = v != null && v.isJsonPrimitive() ? v.getAsBoolean() : bool(t, "match_nbt");
+        if (!match) {
+            return "none";
+        }
+        return bool(t, "weak_nbt_match") ? "fuzzy" : "strict";
     }
 
     /** FTB Quests' observation kinds in the order of its enum; older files store the position, newer ones the name. */
@@ -536,7 +571,7 @@ public final class FtbQuestsImporter {
                     String fld = field.getOrDefault(parts[parts.length - 1], parts[parts.length - 1]);
                     switch (kind) {
                         case "quest" -> {
-                            String[] t = idToNode.get(oid);
+                            String[] t = node(idToNode, oid);
                             if (t != null) {
                                 out.text(locale, "progression." + ns + "." + t[0] + "." + t[1] + "." + fld, kv.getValue());
                             } else {
@@ -582,7 +617,11 @@ public final class FtbQuestsImporter {
         put(into, target, v);
     }
 
-    /** FTB Quests writes items either as "minecraft:stone" or {id, count, components}. */
+    /**
+     * FTB Quests writes items either as "minecraft:stone" or {id, count, components}. Books made for 1.20.1 and
+     * earlier use vanilla NBT instead: {@code Count} (capital) and a {@code tag} compound. The common NBT keys are
+     * carried over to the matching 1.21 components so a component-checking task still checks the same thing.
+     */
     static JsonObject itemStack(JsonElement v) {
         JsonObject o = new JsonObject();
         if (v.isJsonPrimitive()) {
@@ -592,16 +631,84 @@ public final class FtbQuestsImporter {
             o.addProperty("id", s.has("id") ? s.get("id").getAsString() : "minecraft:air");
             if (s.has("count") && s.get("count").getAsInt() != 1) {
                 o.add("count", s.get("count"));
+            } else if (s.has("Count") && s.get("Count").getAsInt() != 1) {
+                o.add("count", s.get("Count"));
             }
             if (s.has("components")) {
                 o.add("components", s.get("components"));
-            } else if (s.has("tag")) {
-                o.add("components", s.get("tag"));
+            } else if (s.has("tag") && s.get("tag").isJsonObject()) {
+                o.add("components", legacyComponents(s.getAsJsonObject("tag")));
             }
         } else {
             o.addProperty("id", "minecraft:air");
         }
         return o;
+    }
+
+    /** The 1.20.1 item NBT keys that have a direct 1.21 component, keyed by the component id. */
+    private static JsonObject legacyComponents(JsonObject tag) {
+        JsonObject c = new JsonObject();
+        copy(tag, "Damage", c, "minecraft:damage");
+        copy(tag, "RepairCost", c, "minecraft:repair_cost");
+        copy(tag, "CustomModelData", c, "minecraft:custom_model_data");
+        if (tag.has("Unbreakable") && tag.get("Unbreakable").getAsBoolean()) {
+            c.add("minecraft:unbreakable", new JsonObject());
+        }
+        JsonObject display = tag.has("display") && tag.get("display").isJsonObject()
+                ? tag.getAsJsonObject("display") : null;
+        if (display != null) {
+            if (display.has("Name")) {
+                c.add("minecraft:custom_name", text(display.get("Name")));
+            }
+            if (display.has("Lore") && display.get("Lore").isJsonArray()) {
+                JsonArray lore = new JsonArray();
+                for (JsonElement line : display.getAsJsonArray("Lore")) {
+                    lore.add(text(line));
+                }
+                c.add("minecraft:lore", lore);
+            }
+            if (display.has("color") && display.get("color").isJsonPrimitive()) {
+                JsonObject color = new JsonObject();
+                color.addProperty("rgb", display.get("color").getAsInt());
+                c.add("minecraft:dyed_color", color);
+            }
+        }
+        enchantments(tag, "Enchantments", c, "minecraft:enchantments");
+        enchantments(tag, "StoredEnchantments", c, "minecraft:stored_enchantments");
+        return c;
+    }
+
+    private static void enchantments(JsonObject tag, String key, JsonObject out, String component) {
+        if (!tag.has(key) || !tag.get(key).isJsonArray()) {
+            return;
+        }
+        JsonObject levels = new JsonObject();
+        for (JsonElement e : tag.getAsJsonArray(key)) {
+            if (!e.isJsonObject()) {
+                continue;
+            }
+            JsonObject ench = e.getAsJsonObject();
+            if (ench.has("id") && ench.has("lvl")) {
+                levels.addProperty(ench.get("id").getAsString(), ench.get("lvl").getAsInt());
+            }
+        }
+        if (!levels.isEmpty()) {
+            JsonObject value = new JsonObject();
+            value.add("levels", levels);
+            out.add(component, value);
+        }
+    }
+
+    /** Old display names and lore are JSON text components stored as strings; a plain string becomes literal text. */
+    private static JsonElement text(JsonElement raw) {
+        if (!raw.isJsonPrimitive()) {
+            return raw;
+        }
+        try {
+            return JsonParser.parseString(raw.getAsString());
+        } catch (RuntimeException notJson) {
+            return new JsonPrimitive(raw.getAsString());
+        }
     }
 
     static void put(JsonObject obj, String path, JsonElement value) {
@@ -636,6 +743,51 @@ public final class FtbQuestsImporter {
 
     private static String id(JsonObject o) {
         return o.has("id") ? o.get("id").getAsString().toLowerCase(Locale.ROOT) : "x";
+    }
+
+    /**
+     * Indexes a quest under every spelling older books may use for its id: the 16 hex digits of 1.20.1+, the same
+     * number in decimal (what 1.19 and earlier wrote into dependency int arrays), and a leading {@code #}.
+     */
+    private static void indexQuest(Map<String, String[]> index, String chapter, JsonElement id) {
+        String raw = id.getAsString().trim();
+        String[] value = {chapter, raw.toLowerCase(Locale.ROOT)};
+        index.putIfAbsent(raw, value);
+        index.putIfAbsent(raw.toLowerCase(Locale.ROOT), value);
+        index.putIfAbsent(raw.toUpperCase(Locale.ROOT), value);
+        String bare = raw.startsWith("#") ? raw.substring(1) : raw;
+        try {
+            long n = id.isJsonPrimitive() && id.getAsJsonPrimitive().isNumber()
+                    ? id.getAsLong() : Long.parseUnsignedLong(bare, 16);
+            for (String key : new String[]{Long.toUnsignedString(n), Long.toString(n),
+                    String.format(Locale.ROOT, "%016X", n), String.format(Locale.ROOT, "%016x", n)}) {
+                index.putIfAbsent(key, value);
+            }
+        } catch (NumberFormatException ignored) {
+            // not an id in either form (a hand-written name); the raw key is all there is
+        }
+    }
+
+    private static String[] node(Map<String, String[]> index, String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim();
+        String[] found = index.get(s);
+        if (found == null) {
+            found = index.get(s.startsWith("#") ? s.substring(1) : "#" + s);
+        }
+        if (found == null) {
+            found = index.get(s.toUpperCase(Locale.ROOT));
+        }
+        return found == null ? index.get(s.toLowerCase(Locale.ROOT)) : found;
+    }
+
+    private static String[] node(Map<String, String[]> index, JsonElement raw) {
+        if (raw == null || !raw.isJsonPrimitive()) {
+            return null;
+        }
+        return raw.getAsJsonPrimitive().isNumber() ? node(index, Long.toString(raw.getAsLong())) : node(index, raw.getAsString());
     }
 
     static String slug(String s) {

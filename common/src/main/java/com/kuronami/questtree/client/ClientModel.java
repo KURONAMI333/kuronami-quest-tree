@@ -143,6 +143,8 @@ public final class ClientModel {
         /** The chapter's group id (as written by the pack, lower-cased), or null when it has none. */
         public final String group;
         public final boolean skills;
+        /** {@code points.pool}: chapters naming the same pool share experience and points. */
+        public final String pool;
         public final Component title;
         public final Map<String, Node> nodes = new LinkedHashMap<>();
         public final List<Decoration> decorations = new ArrayList<>();
@@ -174,6 +176,8 @@ public final class ClientModel {
             this.group = gid.isBlank() ? null : gid;
             this.groupOrder = group == null ? -1 : groupOrder.getOrDefault(group, 999);
             this.skills = o.has("points") && o.get("points").isJsonObject();
+            JsonObject pointsJson = obj(o, "points");
+            this.pool = pointsJson.has("pool") && pointsJson.get("pool").isJsonPrimitive() ? pointsJson.get("pool").getAsString() : null;
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
             this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive();
@@ -427,6 +431,8 @@ public final class ClientModel {
          * task and its quest with an icon that steps through the items the filter takes; so does {@link #icon()}.
          */
         public final com.kuronami.questtree.progress.ItemFilter filter;
+        /** The item (or tag/filter) plus the component check of FTB Quests' {@code match_components}. */
+        private final com.kuronami.questtree.progress.ItemRequirement requirement;
         public final long count;
         /** Item tasks that take the items (a Submit button) instead of checking the inventory. */
         public final boolean consume;
@@ -447,6 +453,7 @@ public final class ClientModel {
             String fx = type.equals("item") && o.has("item") && o.get("item").isJsonObject()
                     ? com.kuronami.questtree.progress.ItemFilter.filterExpression(o.getAsJsonObject("item")) : null;
             this.filter = fx == null ? null : com.kuronami.questtree.progress.ItemFilter.parse(fx);
+            this.requirement = com.kuronami.questtree.progress.ItemRequirement.of(o);
             this.item = filter != null ? ItemStack.EMPTY : type.equals("item") && o.has("item") ? stack(o.get("item")) : ItemStack.EMPTY;
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
             this.count = ProgressRules.target(o);
@@ -483,11 +490,8 @@ public final class ClientModel {
 
         /** Whether a stack counts for this item task. */
         public boolean matches(ItemStack st) {
-            if (st.isEmpty()) {
-                return false;
-            }
             var level = Minecraft.getInstance().level;
-            return filter != null ? filter.test(st, level == null ? null : level.registryAccess()) : !item.isEmpty() && st.is(item.getItem());
+            return requirement.matches(st, level == null ? null : level.registryAccess());
         }
 
         public Component name() {

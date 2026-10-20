@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client;
 
 import com.kuronami.questtree.progress.PlayerProgress;
+import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
@@ -770,7 +771,7 @@ public class ProgressScreen extends Screen {
                     ClientModel.Chapter c = row.chapter();
                     int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
                     String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
-                            ClientProgress.progress().level.getOrDefault(c.id, 0)).getString() : cnt[0] + "/" + cnt[1];
+                            ClientProgress.progress().level.getOrDefault(ProgressRules.key(c.id, c.pool), 0)).getString() : cnt[0] + "/" + cnt[1];
                     boolean hover = mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + RAIL_ROW;
                     if (searching()) {
                         // while searching, the rail shows where the matches are instead
@@ -1530,7 +1531,7 @@ public class ProgressScreen extends Screen {
     }
 
     private int skillHeaderWidth(ClientModel.Chapter ch) {
-        String lv = Component.translatable("screen.kuronami_quest_tree.level_short", ClientProgress.progress().level.getOrDefault(ch.id, 0)).getString();
+        String lv = Component.translatable("screen.kuronami_quest_tree.level_short", ClientProgress.progress().level.getOrDefault(ProgressRules.key(ch.id, ch.pool), 0)).getString();
         int pts = ClientProgress.points(ch.id);
         return font.width(lv) + Ui.S1 + 60 + (pts > 0 ? 8 + font.width(pointsLabel(pts)) : 0);
     }
@@ -1538,14 +1539,15 @@ public class ProgressScreen extends Screen {
     /** Level, experience bar and points to spend, under a skill chapter's title. */
     private void renderSkillHeader(GuiGraphics g, ClientModel.Chapter ch, int x, int y) {
         PlayerProgress p = ClientProgress.progress();
-        int level = p.level.getOrDefault(ch.id, 0);
+        String key = ProgressRules.key(ch.id, ch.pool);
+        int level = p.level.getOrDefault(key, 0);
         String lv = Component.translatable("screen.kuronami_quest_tree.level_short", level).getString();
         Ui.text(g, font, lv, x, y, Ui.TEXT);
         int bx = x + font.width(lv) + Ui.S1;
         var rules = ClientProgress.rules();
         var mc = rules == null ? null : rules.model().chapters.get(ch.id);
         double need = mc == null ? 0 : rules.experienceForLevel(mc, level);
-        double frac = need <= 0 ? 0 : Mth.clamp(p.xp.getOrDefault(ch.id, 0.0) / need, 0, 1);
+        double frac = need <= 0 ? 0 : Mth.clamp(p.xp.getOrDefault(key, 0.0) / need, 0, 1);
         Ui.surface(g, bx, y + 2, 60, 4, 2, Ui.OVERLAY_2);
         Ui.surface(g, bx, y + 2, frac <= 0 ? 0 : Math.max(1, (int) (60 * frac)), 4, 2, Tiles.GREEN_TEXT);
         int pts = ClientProgress.points(ch.id);

@@ -164,7 +164,7 @@ public final class ClientProgress {
     /** Chapters hidden from the list as a whole. */
     public static boolean chapterHidden(String id) {
         ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(id);
-        return c != null && c.alwaysHidden;
+        return c != null && (c.alwaysHidden || !ProgressRules.chapterUnlocked(progress, c));
     }
 
     /**

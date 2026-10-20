@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
+import com.kuronami.questtree.progress.ProgressRules;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -29,6 +30,7 @@ import java.util.function.BiConsumer;
  * /quest_tree respec &lt;players&gt; &lt;chapter&gt;          give back every point spent in a skill chapter
  * /quest_tree points &lt;players&gt; &lt;chapter&gt; &lt;n&gt;      add (or remove) spendable points
  * /quest_tree experience &lt;players&gt; &lt;chapter&gt; &lt;n&gt;  add experience to a skill chapter
+ * /quest_tree lock|unlock &lt;players&gt; &lt;chapter&gt;    hide/show one chapter for those players
  * </pre>
  * Ids are {@code <namespace>:<chapter>} and {@code <namespace>:<chapter>/<node>}.
  */
@@ -63,11 +65,19 @@ final class PlayerCommands {
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
                                         .executes(c -> each(c, (p, pr) -> respec(p, pr, id(c)))))))
+                .then(Commands.literal("lock")
+                        .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
+                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, pr, false))))))
+                .then(Commands.literal("unlock")
+                        .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(CHAPTERS)
+                                        .executes(c -> each(c, (p, pr) -> chapterOpen(c, pr, true))))))
                 .then(Commands.literal("points")
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
                                         .then(Commands.argument("amount", IntegerArgumentType.integer())
-                                                .executes(c -> each(c, (p, pr) -> pr.bonus.merge(chapter(c).id,
+                                                .executes(c -> each(c, (p, pr) -> pr.bonus.merge(ProgressRules.key(chapter(c)),
                                                         IntegerArgumentType.getInteger(c, "amount"), Integer::sum)))))))
                 .then(Commands.literal("experience")
                         .then(Commands.argument("players", EntityArgument.players())
@@ -123,6 +133,12 @@ final class PlayerCommands {
         pr.recent.clear();
     }
 
+    /** Pufferfish's Skills' category lock/unlock: a per-player override of {@code points.unlocked_by_default}. */
+    private static void chapterOpen(CommandContext<CommandSourceStack> c, PlayerProgress pr, boolean open) {
+        ProgressModel.Chapter ch = chapter(c);
+        pr.chapterOpen.put(ch.id, open);
+    }
+
     private static void reset(ServerPlayer p, PlayerProgress pr, String id) {
         ProgressModel model = ProgressService.rules().model();
         if (model.chapters.containsKey(id)) {
@@ -134,14 +150,16 @@ final class PlayerCommands {
         }
     }
 
-    private static void resetChapter(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch) {
+    static void resetChapter(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch) {
         for (ProgressModel.Node n : ch.nodes.values()) {
             resetNode(p, pr, n);
         }
-        pr.xp.remove(ch.id);
-        pr.level.remove(ch.id);
-        pr.spent.remove(ch.id);
-        pr.bonus.remove(ch.id);
+        String key = ProgressRules.key(ch);
+        pr.xp.remove(key);
+        pr.level.remove(key);
+        pr.spent.remove(key);
+        pr.bonus.remove(key);
+        pr.exchange.remove(ch.id);
     }
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {
@@ -154,7 +172,7 @@ final class PlayerCommands {
         }
         if (taken != null && n.chapter.isSkills()) {
             // give the points back, as a chapter reset or respec would
-            pr.spent.computeIfPresent(n.chapter.id, (k, v) -> Math.max(0, v - Math.max(0, n.cost) * taken));
+            pr.spent.computeIfPresent(ProgressRules.key(n.chapter), (k, v) -> Math.max(0, v - Math.max(0, n.cost) * taken));
         }
         pr.clearNode(n.key);
         pr.repeats.remove(n.key);
@@ -190,6 +208,6 @@ final class PlayerCommands {
                 Rewards.revokeSkill(p, n, taken);
             }
         }
-        pr.spent.remove(ch.id);
+        pr.spent.remove(ProgressRules.key(ch));
     }
 }

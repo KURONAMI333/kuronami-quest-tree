@@ -114,11 +114,21 @@ class ProgressValidatorTest {
     @Test
     void anUnknownTaskOrRewardTypeEmitsAWarningNotAnError() {
         ProgressValidator.Result r = validate(chapter(
-                "{\"type\": \"custom\", \"count\": 1}",
-                "{\"type\": \"scoreboard\"}"));
+                "{\"type\": \"interaction\", \"count\": 1}",
+                "{\"type\": \"dummy\"}"));
         assertEquals(0, errors(r));
         assertTrue(says(r, "is not implemented yet"));
         assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
+    void customTaskWarnsOnlyWithoutItsButtonAndScoreboardIsImplemented() {
+        ProgressValidator.Result blocked = validate(chapter("{\"type\": \"custom\", \"count\": 1}", ""));
+        assertEquals(0, errors(blocked));
+        assertTrue(says(blocked, "never completes"));
+        ProgressValidator.Result manual = validate(chapter(
+                "{\"type\": \"custom\", \"count\": 1, \"enable_button\": true}", "{\"type\": \"scoreboard\", \"objective\": \"points\"}"));
+        assertEquals(List.of(), manual.problems);
     }
 
     @Test

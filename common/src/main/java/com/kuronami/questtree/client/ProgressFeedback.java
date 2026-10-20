@@ -51,10 +51,11 @@ final class ProgressFeedback {
             if (!c.skills) {
                 continue;
             }
-            double xpBefore = old.xp.getOrDefault(c.id, 0.0);
-            int lvBefore = old.level.getOrDefault(c.id, 0);
-            double xp = now.xp.getOrDefault(c.id, 0.0);
-            int lv = now.level.getOrDefault(c.id, 0);
+            String key = ProgressRules.key(c.id, c.pool);
+            double xpBefore = old.xp.getOrDefault(key, 0.0);
+            int lvBefore = old.level.getOrDefault(key, 0);
+            double xp = now.xp.getOrDefault(key, 0.0);
+            int lv = now.level.getOrDefault(key, 0);
             if (lv > lvBefore || xp > xpBefore) {
                 ExperienceToast.show(c, xp, lv, lv > lvBefore);
             }

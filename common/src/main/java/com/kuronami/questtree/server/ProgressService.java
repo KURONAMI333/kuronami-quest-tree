@@ -10,6 +10,7 @@ import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
 import com.kuronami.questtree.progress.ProgressRules;
@@ -31,7 +32,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -116,14 +116,26 @@ public final class ProgressService {
         PlayerProgress p = progress(player);
         Rewards.reapplyAttributes(player, p);
         if (died) {
-            // "reset_on_death": the experience towards the next level is lost (levels and points stay)
             for (ProgressModel.Chapter c : rules().model().chapters.values()) {
-                if (c.isSkills() && ProgressModel.boolOf(c.points, "reset_on_death") && p.xp.getOrDefault(c.id, 0.0) > 0) {
-                    p.xp.put(c.id, 0.0);
+                if (!c.isSkills()) {
+                    continue;
+                }
+                // "erase_on_death" (Pufferfish's Skills): the whole chapter starts over, skills and points included
+                if (ProgressModel.boolOf(c.points, "erase_on_death")) {
+                    PlayerCommands.resetChapter(player, p, c);
+                    ProgressStore.get(player.server).setDirty();
+                    markDirty(player);
+                    continue;
+                }
+                // "reset_on_death": the experience towards the next level is lost (levels and points stay)
+                String key = ProgressRules.key(c);
+                if (ProgressModel.boolOf(c.points, "reset_on_death") && p.xp.getOrDefault(key, 0.0) > 0) {
+                    p.xp.put(key, 0.0);
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
                 }
             }
+            recheck(player, p);
         }
     }
 
@@ -211,6 +223,10 @@ public final class ProgressService {
         PlayerProgress p = progress(player);
         ProgressRules r = rules();
         ProgressModel.Node n = r.model().nodes.get(a.node());
+        if (n != null && !ProgressRules.chapterUnlocked(p, n.chapter)) {
+            flush(player);
+            return;
+        }
         switch (a.action()) {
             case "claim" -> {
                 if (n != null) {
@@ -247,8 +263,20 @@ public final class ProgressService {
             }
             case "check" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
-                        && type(n.tasks.get(a.index())).equals("checkmark")) {
+                        && manual(n.tasks.get(a.index()))) {
+                    JsonObject task = n.tasks.get(a.index());
+                    if (type(task).equals("custom")) {
+                        // no addon check to run: the button itself is the progress, as a checkmark
+                        QuestEvents.fire(player, n, task, true, a.index());
+                    }
                     bump(player, p, n, a.index(), 1);
+                }
+            }
+            case "exchange" -> {
+                // the skills screen's buy button: spend vanilla levels for one point (DATA_MODEL points.exchange)
+                ProgressModel.Chapter c = r.model().chapters.get(a.node());
+                if (c != null) {
+                    exchange(player, p, c);
                 }
             }
             default -> Constants.LOG.debug("Unknown progression action {}", a.action());
@@ -257,11 +285,43 @@ public final class ProgressService {
         flush(player);
     }
 
+    /**
+     * One exchange purchase: the chapter's {@code points.exchange.xp_levels} vanilla levels become one point, up to
+     * {@code level_limit} purchases (2026-10-20). Pufferfish's Skills computes a cost per exchange level; the data
+     * model keeps a fixed cost, which is what packs write.
+     */
+    private static void exchange(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
+        if (!c.isSkills() || !c.points.has("exchange") || !c.points.get("exchange").isJsonObject()) {
+            return;
+        }
+        JsonObject exchange = c.points.getAsJsonObject("exchange");
+        int cost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
+                ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
+        int limit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
+                ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
+        int bought = p.exchange.getOrDefault(c.id, 0);
+        if (cost <= 0 || bought >= limit || player.experienceLevel < cost) {
+            return;
+        }
+        player.giveExperienceLevels(-cost);
+        p.exchange.put(c.id, bought + 1);
+        p.bonus.merge(ProgressRules.key(c), 1, Integer::sum);
+        ProgressStore.get(player.server).setDirty();
+        markDirty(player);
+    }
+
     // ------------------------------------------------------------------ detection
+
+    /** Tasks a click can move: FTB Quests' {@code checkmark}, and {@code custom} when it enables its button. */
+    private static boolean manual(JsonObject task) {
+        String type = type(task);
+        return type.equals("checkmark") || type.equals("custom")
+                && task.has("enable_button") && task.get("enable_button").getAsBoolean();
+    }
 
     /** Whether the node's tasks may move now: visible, unlocked, not excluded, not done. */
     private static boolean working(ProgressRules r, PlayerProgress p, ProgressModel.Node n) {
-        if (n.tasks.isEmpty() || p.completed.contains(n.key)) {
+        if (!ProgressRules.chapterUnlocked(p, n.chapter) || n.tasks.isEmpty() || p.completed.contains(n.key)) {
             return false;
         }
         State s = r.state(p, n);
@@ -288,7 +348,7 @@ public final class ProgressService {
                 String key;
                 long target = ProgressRules.target(t);
                 switch (ty) {
-                    case "item" -> key = "i:" + itemSpec(t);
+                    case "item" -> key = "i:" + ItemRequirement.of(t).key();
                     case "fluid" -> key = "f:" + fluidSpec(t);
                     case "energy" -> key = "e";
                     default -> {
@@ -303,7 +363,7 @@ public final class ProgressService {
                     now = switch (ty) {
                         case "fluid" -> inventoryFluid(player, fluidSpec(t));
                         case "energy" -> inventoryEnergy(player);
-                        default -> (long) countItems(player, itemSpec(t));
+                        default -> (long) countItems(player, ItemRequirement.of(t));
                     };
                     held.put(key, now);
                 }
@@ -475,13 +535,13 @@ public final class ProgressService {
         }
         long missing = target - have;
         if (type(t).equals("item")) {
-            String spec = itemSpec(t);
+            ItemRequirement requirement = ItemRequirement.of(t);
             long taken = 0;
             var inv = player.getInventory();
             // main inventory and hotbar only: never take worn armour or the offhand item
             for (int s = 0; s < inv.items.size() && taken < missing; s++) {
                 ItemStack st = inv.items.get(s);
-                if (!st.isEmpty() && itemMatches(spec, st, player.registryAccess())) {
+                if (!st.isEmpty() && requirement.matches(st, player.registryAccess())) {
                     int n2 = (int) Math.min(st.getCount(), missing - taken);
                     st.shrink(n2);
                     taken += n2;
@@ -696,22 +756,7 @@ public final class ProgressService {
      * 2026-10-20 its id was compared as it stood, so only the filter item itself counted and those tasks could not be done.
      */
     static String itemSpec(JsonObject task) {
-        JsonElement it = task.get("item");
-        if (it == null) {
-            return "";
-        }
-        if (it.isJsonPrimitive()) {
-            return it.getAsString();
-        }
-        JsonObject o = it.getAsJsonObject();
-        String filter = com.kuronami.questtree.progress.ItemFilter.filterExpression(o);
-        if (filter != null) {
-            return "~" + filter;
-        }
-        if (o.has("tag")) {
-            return "#" + o.get("tag").getAsString();
-        }
-        return o.has("id") ? o.get("id").getAsString() : "";
+        return ItemRequirement.of(task).spec();
     }
 
     /** A fluid task's matcher as one string: a fluid id, or {@code #tag}. */
@@ -741,39 +786,12 @@ public final class ProgressService {
         return o.has("fluid") ? o.get("fluid").getAsString() : "";
     }
 
-    static boolean itemMatches(String spec, ItemStack st) {
-        return itemMatches(spec, st, null);
-    }
-
-    /**
-     * {@code registries} lets a smart filter's component(...) terms read values that point into registries (stored
-     * enchantments, datapack entries); without them those terms never match.
-     */
-    static boolean itemMatches(String spec, ItemStack st, net.minecraft.core.HolderLookup.Provider registries) {
-        if (spec.isEmpty()) {
-            return false;
-        }
-        if (spec.startsWith("~")) {
-            return com.kuronami.questtree.progress.ItemFilter.parse(spec.substring(1)).test(st, registries);
-        }
-        if (spec.startsWith("#")) {
-            ResourceLocation id = ResourceLocation.tryParse(spec.substring(1));
-            return id != null && st.is(TagKey.create(Registries.ITEM, id));
-        }
-        ResourceLocation id = ResourceLocation.tryParse(spec);
-        if (id == null) {
-            return false;
-        }
-        Item item = BuiltInRegistries.ITEM.get(id);
-        return st.is(item);
-    }
-
-    private static int countItems(ServerPlayer player, String spec) {
+    private static int countItems(ServerPlayer player, ItemRequirement requirement) {
         int c = 0;
         var inv = player.getInventory();
         for (int s = 0; s < inv.getContainerSize(); s++) {
             ItemStack st = inv.getItem(s);
-            if (!st.isEmpty() && itemMatches(spec, st, player.registryAccess())) {
+            if (requirement.matches(st, player.registryAccess())) {
                 c += st.getCount();
             }
         }

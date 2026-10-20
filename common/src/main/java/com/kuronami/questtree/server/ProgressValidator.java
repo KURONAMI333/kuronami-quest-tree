@@ -100,11 +100,11 @@ public final class ProgressValidator {
     private static final Set<String> TASK_TYPES = Set.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
             "observation", "stat", "xp", "fluid", "energy", "break", "stage", "custom", "interaction");
-    private static final Set<String> TASK_UNIMPLEMENTED = Set.of("custom", "interaction");
+    private static final Set<String> TASK_UNIMPLEMENTED = Set.of("interaction");
     private static final Set<String> REWARD_TYPES = Set.of(
             "item", "xp", "xp_levels", "command", "table", "advancement", "stage", "attribute", "points",
             "tag", "toast", "trophy", "scoreboard", "custom", "dummy");
-    private static final Set<String> REWARD_UNIMPLEMENTED = Set.of("scoreboard", "custom", "dummy");
+    private static final Set<String> REWARD_UNIMPLEMENTED = Set.of("custom", "dummy");
 
     /** The observation kinds {@code ProgressService.observing} answers; any other kind never matches. */
     private static final Set<String> OBSERVE_KINDS = Set.of(
@@ -480,6 +480,10 @@ public final class ProgressValidator {
         if (TASK_UNIMPLEMENTED.contains(name)) {
             problem(out, Severity.WARNING, ref, path + ".type", "task type " + quote(name) + " is not implemented yet");
         }
+        if (name.equals("custom") && (!t.has("enable_button") || !t.get("enable_button").getAsBoolean())) {
+            problem(out, Severity.WARNING, ref, path + ".type",
+                    "custom task has no check hook here and no submit button, so it never completes");
+        }
         switch (name) {
             case "item" -> {
                 String filter = t.get("item") != null && t.get("item").isJsonObject()
@@ -504,6 +508,7 @@ public final class ProgressValidator {
                 } else {
                     id(out, ref, path + ".item", "item", s.text(), registry);
                 }
+                matchComponents(out, ref, path, t);
             }
             case "kill" -> {
                 textShape(out, ref, path, t, "entity", Severity.WARNING);
@@ -555,6 +560,35 @@ public final class ProgressValidator {
         // ProgressRules reads these on the server tick too, or while a hand-in settles, with no handler above it
         tickFlag(out, ref, path, t, "optional");
         tickFlag(out, ref, path, t, "consume");
+    }
+
+    /**
+     * FTB Quests' {@code match_components} (none / fuzzy / strict). A typo would silently turn a component-checking
+     * hand-in into "any item with this id", so it is an error; two older booleans are still read by the importer.
+     */
+    private static void matchComponents(Result out, ChapterRef ref, String path, JsonObject t) {
+        JsonElement v = t.get("match_components");
+        if (v == null) {
+            return;
+        }
+        if (!v.isJsonPrimitive() || v.getAsJsonPrimitive().isBoolean()) {
+            problem(out, Severity.ERROR, ref, path + ".match_components", "match_components must be none, fuzzy or strict");
+            return;
+        }
+        String mode = v.getAsString().toLowerCase(java.util.Locale.ROOT);
+        if (!mode.equals("none") && !mode.equals("fuzzy") && !mode.equals("strict")) {
+            problem(out, Severity.ERROR, ref, path + ".match_components",
+                    "match_components must be none, fuzzy or strict, not " + quote(v.getAsString()));
+            return;
+        }
+        JsonElement item = t.get("item");
+        boolean hasComponents = item != null && item.isJsonObject()
+                && item.getAsJsonObject().has("components") && item.getAsJsonObject().get("components").isJsonObject()
+                && !item.getAsJsonObject().getAsJsonObject("components").isEmpty();
+        if (!mode.equals("none") && !hasComponents) {
+            problem(out, Severity.WARNING, ref, path + ".match_components",
+                    "match_components is " + mode + " but the item has no components, so only its id is checked");
+        }
     }
 
     private static void location(Result out, ChapterRef ref, String path, JsonObject t) {
@@ -732,8 +766,8 @@ public final class ProgressValidator {
         }
         whole(out, ref, path, table, "rolls");
         numberShape(out, ref, path, table, "empty_weight");
-        if (table.has("loot_crate") && !table.get("loot_crate").isJsonNull()) {
-            problem(out, Severity.WARNING, ref, path + ".loot_crate", "loot crates are not implemented yet");
+        if (table.has("loot_crate") && !table.get("loot_crate").isJsonNull() && !table.get("loot_crate").isJsonObject()) {
+            problem(out, Severity.WARNING, ref, path + ".loot_crate", "loot crate settings must be an object; rolled as a normal table");
         }
     }
 
