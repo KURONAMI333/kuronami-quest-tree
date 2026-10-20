@@ -34,6 +34,7 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
 - `glass_mask.png`: what lies outside the glass minimap's rounded corners, opaque outside and clear inside (corners 23
   of 128, nine-sliced).
 - `icon/<name>.png`: small white glyphs (`head` is the line arrowhead, pointing right with its tip at the right edge;
+  `fold` the group fold mark in the chapter list, drawn pointing right and turned down while the group is open;
   `dot` the badge, `pin`, `lock`, `tick`, `cross`, `link`, `plus`, `minus`, `center`).
 
 ## Sounds

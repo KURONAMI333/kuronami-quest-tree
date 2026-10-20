@@ -31,6 +31,9 @@ public final class ClientConfig {
     /** Chapters kept at the top of the chapter list, in pin order. Not per world: it follows the player. */
     public static final List<String> railPinned = new ArrayList<>();
 
+    /** Groups folded shut in the chapter list (group ids, {@code #pinned} for the pinned block), as in FTB Quests. */
+    public static final List<String> railFolded = new ArrayList<>();
+
     private static int railPinVersion;
 
     private static boolean loaded;
@@ -59,6 +62,13 @@ public final class ClientConfig {
                     for (JsonElement e : o.getAsJsonArray("rail_pinned")) {
                         if (e.isJsonPrimitive() && !railPinned.contains(e.getAsString())) {
                             railPinned.add(e.getAsString());
+                        }
+                    }
+                }
+                if (o.has("rail_folded") && o.get("rail_folded").isJsonArray()) {
+                    for (JsonElement e : o.getAsJsonArray("rail_folded")) {
+                        if (e.isJsonPrimitive() && !railFolded.contains(e.getAsString())) {
+                            railFolded.add(e.getAsString());
                         }
                     }
                 }
@@ -115,7 +125,31 @@ public final class ClientConfig {
         return pinned;
     }
 
-    /** Changes whenever the pins change, so the screen knows to rebuild its rows. */
+    public static boolean railFolded(String group) {
+        ensureLoaded();
+        return railFolded.contains(group);
+    }
+
+    /** Folds a group of the chapter list shut, or opens it again. */
+    public static void toggleRailFold(String group) {
+        ensureLoaded();
+        if (!railFolded.remove(group)) {
+            railFolded.add(group);
+        }
+        railPinVersion++;
+        write();
+    }
+
+    /** Puts back a saved set of folded groups (the dev tour leaves the config as it found it). */
+    public static void setRailFolded(List<String> groups) {
+        ensureLoaded();
+        railFolded.clear();
+        railFolded.addAll(groups);
+        railPinVersion++;
+        write();
+    }
+
+    /** Changes whenever the pins or folds change, so the screen knows to rebuild its rows. */
     public static int railPinVersion() {
         return railPinVersion;
     }
@@ -135,6 +169,9 @@ public final class ClientConfig {
             JsonArray a = new JsonArray();
             railPinned.forEach(a::add);
             o.add("rail_pinned", a);
+            JsonArray f = new JsonArray();
+            railFolded.forEach(f::add);
+            o.add("rail_folded", f);
             Files.createDirectories(file().getParent());
             // written next to it and moved over, so a crash mid-write never leaves a cut-off file
             Path tmp = file().resolveSibling(file().getFileName() + ".tmp");

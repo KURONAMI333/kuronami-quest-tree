@@ -192,8 +192,18 @@ final class DevTour {
         // the developer's own pins and glass setting are put back at the end, so the tour leaves the config as it found it
         List<String> pinsBefore = new ArrayList<>(ClientConfig.railPinned());
         boolean glassBefore = ClientConfig.glass();
+        List<String> foldsBefore = new ArrayList<>(ClientConfig.railFolded);
         at(pt + 64, () -> {
             screen.tourPin(2);
+            // and the first titled group folded shut, so the fold mark is in the same photo both ways
+            for (ClientModel.Chapter c : m.chapters) {
+                if (c.group != null && m.groupTitle(c) != null) {
+                    if (!ClientConfig.railFolded(c.group)) {
+                        ClientConfig.toggleRailFold(c.group);
+                    }
+                    break;
+                }
+            }
             ProgressScreen.tourRailOpen(true);
         });
         shot(pt + 68, "18_rail_pins");
@@ -221,6 +231,7 @@ final class DevTour {
                 ClientConfig.setRailPin(id, pinsBefore.contains(id));
             }
             pinsBefore.forEach(id -> ClientConfig.setRailPin(id, true));
+            ClientConfig.setRailFolded(foldsBefore);
             ClientConfig.write();
         });
         // ATM10's own chapters, to put next to the player's screenshots: Chapter 1 and the ATM Star, then the star's

@@ -241,11 +241,11 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * A rail entry: a group's header (title while open, a divider while closed; never clickable) or a chapter row.
-     * {@code chapter} is null on a header. Mixed heights (chapter rows RAIL_ROW, headers HEADER_H) keep groups
-     * readable the way FTB Quests' chapter list does.
+     * A rail entry: a group's header (title while open, a divider while closed) or a chapter row. {@code chapter} is
+     * null on a header, and {@code fold} is the key a click on the header folds the group under, as FTB Quests' chapter
+     * list does (2026-10-20, the player). Mixed heights (chapter rows RAIL_ROW, headers HEADER_H) keep groups readable.
      */
-    private record RailRow(ClientModel.Chapter chapter, Component header) {
+    private record RailRow(ClientModel.Chapter chapter, Component header, String fold) {
         boolean isHeader() {
             return chapter == null;
         }
@@ -289,6 +289,8 @@ public class ProgressScreen extends Screen {
     private ClientModel cachedModel;
     /** Pin version the rows were built from: pinning reorders them without any progress changing. */
     private int railPins = -1;
+    /** Whether the rows were built while searching: a search opens every folded group so its matches show. */
+    private boolean railBuiltSearching;
     /** The item under the pointer in the detail panel (a task or a reward), for the recipe viewer's keys. */
     private ItemStack hoverStack = ItemStack.EMPTY;
     private int lastMouseX;
@@ -333,12 +335,13 @@ public class ProgressScreen extends Screen {
 
     private void refresh(ClientModel m) {
         PlayerProgress p = ClientProgress.progress();
-        if (p == cachedFor && m == cachedModel && railPins == ClientConfig.railPinVersion()) {
+        if (p == cachedFor && m == cachedModel && railPins == ClientConfig.railPinVersion() && railBuiltSearching == searching()) {
             return;
         }
         cachedFor = p;
         cachedModel = m;
         railPins = ClientConfig.railPinVersion();
+        railBuiltSearching = searching();
         badges.clear();
         chapterCounts.clear();
         claimable.clear();
@@ -404,27 +407,43 @@ public class ProgressScreen extends Screen {
             }
         }
         if (!pinnedRail.isEmpty()) {
-            railRows.add(new RailRow(null, Component.translatable("screen.kuronami_quest_tree.pin")));
-            for (ClientModel.Chapter c : pinnedRail) {
-                railRows.add(new RailRow(c, null));
+            railRows.add(new RailRow(null, Component.translatable("screen.kuronami_quest_tree.pin"), PINNED_FOLD));
+            if (!folded(PINNED_FOLD)) {
+                for (ClientModel.Chapter c : pinnedRail) {
+                    railRows.add(new RailRow(c, null, null));
+                }
             }
         }
         // chapters are sorted by group order, so a group's chapters are contiguous: drop its header before the first.
         // A group without a title (or chapters with no group) simply gets no header, keeping the old rail.
         String lastGroup = null;
+        boolean shut = false;
         for (ClientModel.Chapter c : railChapters) {
             if (ClientConfig.railPinned(c.id)) {
                 continue;
             }
             if (c.group != null && !c.group.equals(lastGroup)) {
                 Component header = m.groupTitle(c);
+                shut = header != null && folded(c.group);
                 if (header != null) {
-                    railRows.add(new RailRow(null, header));
+                    railRows.add(new RailRow(null, header, c.group));
                 }
+            } else if (c.group == null) {
+                shut = false;
             }
             lastGroup = c.group;
-            railRows.add(new RailRow(c, null));
+            if (!shut) {
+                railRows.add(new RailRow(c, null, null));
+            }
         }
+    }
+
+    /** Fold key of the pinned block (group ids come from the pack and never start with '#'). */
+    private static final String PINNED_FOLD = "#pinned";
+
+    /** A group stays open while searching, so every match can be seen. */
+    private boolean folded(String fold) {
+        return !searching() && ClientConfig.railFolded(fold);
     }
 
     private static boolean hasTakeable(ClientModel.Chapter c) {
@@ -603,7 +622,8 @@ public class ProgressScreen extends Screen {
             }
             if (ry + hgt - shown > 0) {
                 if (row.isHeader()) {
-                    drawRailHeader(g, ry, row.header(), w);
+                    boolean hover = !searching() && mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + HEADER_H;
+                    drawRailHeader(g, ry, row.header(), w, hover, folded(row.fold()));
                 } else {
                     ClientModel.Chapter c = row.chapter();
                     int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
@@ -689,18 +709,44 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * A group header. Open rail: the title in grey, at the same fade the chapter labels use. Closed rail: a thin
-     * divider so the groups still read as separate blocks while only icons are shown.
+     * A group header. Open rail: a fold mark (pointing down while open, right while folded) and the title in grey, at
+     * the same fade the chapter labels use; hover is the chapter rows' faint pill, since a click folds the group.
+     * Closed rail: a thin divider so the groups still read as separate blocks while only icons are shown, with the
+     * fold mark on it while the group is folded, so a group whose chapters are hidden is not mistaken for an empty one.
      */
-    private void drawRailHeader(GuiGraphics g, int y, Component title, int w) {
+    private void drawRailHeader(GuiGraphics g, int y, Component title, int w, boolean hover, boolean shut) {
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
-            String s = trim(title.getString(), w - 2 * Ui.S2);
-            Ui.text(g, font, s, RAIL_ICON_X, y + (HEADER_H - 8) / 2 + 1, (Ui.DIM & 0xFFFFFF) | alpha);
+            if (hover) {
+                Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, HEADER_H, HEADER_H / 2, Ui.OVERLAY_1);
+            }
+            int color = ((hover ? Ui.TEXT : Ui.DIM) & 0xFFFFFF) | alpha;
+            foldMark(g, RAIL_ICON_X + (RAIL_ICON - FOLD) / 2f, y + (HEADER_H - FOLD) / 2f, shut, color);
+            String s = trim(title.getString(), w - RAIL_TEXT_X - Ui.S2);
+            Ui.text(g, font, s, RAIL_TEXT_X, y + (HEADER_H - 8) / 2 + 1, color);
         } else {
             int my = y + HEADER_H / 2;
-            g.fill(8, my, 4 + w - 4, my + 1, Ui.HAIRLINE);
+            if (shut) {
+                g.fill(8, my, RAIL_ICON_X, my + 1, Ui.HAIRLINE);
+                foldMark(g, RAIL_ICON_X + (RAIL_ICON - FOLD) / 2f, y + (HEADER_H - FOLD) / 2f, true, Ui.DIM);
+                g.fill(RAIL_ICON_X + RAIL_ICON, my, 4 + w - 4, my + 1, Ui.HAIRLINE);
+            } else {
+                g.fill(8, my, 4 + w - 4, my + 1, Ui.HAIRLINE);
+            }
         }
+    }
+
+    private static final int FOLD = 6;
+
+    /** The fold mark ({@code icon/fold}, drawn pointing right), turned to point down while the group is open. */
+    private static void foldMark(GuiGraphics g, float x, float y, boolean shut, int argb) {
+        g.pose().pushPose();
+        g.pose().translate(x + FOLD / 2f, y + FOLD / 2f, 0);
+        if (!shut) {
+            g.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90));
+        }
+        Tiles.icon(g, "fold", -FOLD / 2f, -FOLD / 2f, FOLD, argb);
+        g.pose().popPose();
     }
 
     // ------------------------------------------------------------------ map
@@ -1796,9 +1842,11 @@ public class ProgressScreen extends Screen {
                 for (RailRow row : railRows) {
                     int hgt = row.isHeader() ? HEADER_H : RAIL_ROW;
                     if (at >= rowY && at < rowY + hgt) {
-                        // a header is a label, not a target
                         if (!row.isHeader()) {
                             select(m.chapters.indexOf(row.chapter()));
+                        } else if (!searching()) {
+                            // FTB Quests folds a group shut on its name; while searching every group stays open
+                            ClientConfig.toggleRailFold(row.fold());
                         }
                         break;
                     }
