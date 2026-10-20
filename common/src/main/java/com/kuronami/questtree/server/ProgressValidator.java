@@ -100,11 +100,11 @@ public final class ProgressValidator {
     private static final Set<String> TASK_TYPES = Set.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
             "observation", "stat", "xp", "fluid", "energy", "break", "stage", "custom", "interaction");
-    private static final Set<String> TASK_UNIMPLEMENTED = Set.of("custom", "interaction");
+    private static final Set<String> TASK_UNIMPLEMENTED = Set.of("interaction");
     private static final Set<String> REWARD_TYPES = Set.of(
             "item", "xp", "xp_levels", "command", "table", "advancement", "stage", "attribute", "points",
             "tag", "toast", "trophy", "scoreboard", "custom", "dummy");
-    private static final Set<String> REWARD_UNIMPLEMENTED = Set.of("scoreboard", "custom", "dummy");
+    private static final Set<String> REWARD_UNIMPLEMENTED = Set.of("custom", "dummy");
 
     /** The observation kinds {@code ProgressService.observing} answers; any other kind never matches. */
     private static final Set<String> OBSERVE_KINDS = Set.of(
@@ -479,6 +479,10 @@ public final class ProgressValidator {
         }
         if (TASK_UNIMPLEMENTED.contains(name)) {
             problem(out, Severity.WARNING, ref, path + ".type", "task type " + quote(name) + " is not implemented yet");
+        }
+        if (name.equals("custom") && (!t.has("enable_button") || !t.get("enable_button").getAsBoolean())) {
+            problem(out, Severity.WARNING, ref, path + ".type",
+                    "custom task has no check hook here and no submit button, so it never completes");
         }
         switch (name) {
             case "item" -> {

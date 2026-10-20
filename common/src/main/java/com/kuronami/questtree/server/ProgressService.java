@@ -237,7 +237,12 @@ public final class ProgressService {
             }
             case "check" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
-                        && type(n.tasks.get(a.index())).equals("checkmark")) {
+                        && manual(n.tasks.get(a.index()))) {
+                    JsonObject task = n.tasks.get(a.index());
+                    if (type(task).equals("custom")) {
+                        // no addon check to run: the button itself is the progress, as a checkmark
+                        QuestEvents.fire(player, n, task, true, a.index());
+                    }
                     bump(player, p, n, a.index(), 1);
                 }
             }
@@ -280,6 +285,13 @@ public final class ProgressService {
     }
 
     // ------------------------------------------------------------------ detection
+
+    /** Tasks a click can move: FTB Quests' {@code checkmark}, and {@code custom} when it enables its button. */
+    private static boolean manual(JsonObject task) {
+        String type = type(task);
+        return type.equals("checkmark") || type.equals("custom")
+                && task.has("enable_button") && task.get("enable_button").getAsBoolean();
+    }
 
     /** Whether the node's tasks may move now: visible, unlocked, not excluded, not done. */
     private static boolean working(ProgressRules r, PlayerProgress p, ProgressModel.Node n) {

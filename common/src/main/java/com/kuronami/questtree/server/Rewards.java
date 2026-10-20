@@ -44,6 +44,9 @@ public final class Rewards {
                 case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
                 case "toast" -> ProgressService.event(player, p, "toast", n.key);
+                case "scoreboard" -> scoreboard(player, rw);
+                // FTB Quests' custom reward: its effect is addon Java code; hand the claim to QuestEvents and do nothing else
+                case "custom" -> QuestEvents.fire(player, n, rw, false, -1);
                 // Kuronami's Trophies (mod-108): it gives each trophy once per player and engraves it; no dependency, only its command
                 case "trophy" -> {
                     // only a valid id reaches the command line
@@ -326,6 +329,24 @@ public final class Rewards {
             case "multiply_total", "add_multiplied_total" -> AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL;
             default -> AttributeModifier.Operation.ADD_VALUE;
         };
+    }
+
+    /**
+     * Pufferfish's Skills' scoreboard reward: set the player's score (not add to it), so claiming twice gives the same
+     * number. {@code objective} is the current key; {@code scoreboard} is the name books written before it used.
+     */
+    private static void scoreboard(ServerPlayer player, JsonObject rw) {
+        String name = ProgressService.str(rw, "objective");
+        if (name.isEmpty()) {
+            name = ProgressService.str(rw, "scoreboard");
+        }
+        if (name.isEmpty()) {
+            return;
+        }
+        var objective = player.getScoreboard().getObjective(name);
+        if (objective != null) {
+            player.getScoreboard().getOrCreatePlayerScore(player, objective).set(intOf(rw, "value", intOf(rw, "amount", 0)));
+        }
     }
 
     private static String pointsChapter(ProgressModel.Node n, JsonObject rw) {
