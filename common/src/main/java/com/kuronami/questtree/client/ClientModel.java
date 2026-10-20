@@ -34,6 +34,11 @@ public final class ClientModel {
     public final Map<String, Node> nodesByKey = new LinkedHashMap<>();
     /** Chapter of every node, by node key. */
     public final Map<String, Chapter> chapterOf = new LinkedHashMap<>();
+    /**
+     * Nodes that require a node, by the required node's key (2026-10-20): the details sheet's "Leads to" list. Built
+     * in the data's own order, so the list is stable between openings.
+     */
+    public final Map<String, List<Node>> dependants = new LinkedHashMap<>();
     private final Map<String, String> text = new LinkedHashMap<>();
     private final Map<String, String> fallback = new LinkedHashMap<>();
 
@@ -65,6 +70,11 @@ public final class ClientModel {
             for (Node n : c.nodes.values()) {
                 nodesByKey.put(n.key, n);
                 chapterOf.put(n.key, c);
+            }
+        }
+        for (Node n : nodesByKey.values()) {
+            for (String r : n.requireKeys) {
+                dependants.computeIfAbsent(r, k -> new ArrayList<>()).add(n);
             }
         }
         chapters.sort(Comparator.comparingInt((Chapter c) -> c.groupOrder).thenComparingInt(c -> c.order).thenComparing(c -> c.id));

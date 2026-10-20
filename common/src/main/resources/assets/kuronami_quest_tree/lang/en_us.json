@@ -8,6 +8,7 @@
   "screen.kuronami_quest_tree.nodes": "%s",
   "screen.kuronami_quest_tree.hidden": "%s hidden",
   "screen.kuronami_quest_tree.needs": "Needs",
+  "screen.kuronami_quest_tree.leads_to": "Leads to",
   "screen.kuronami_quest_tree.tasks": "Tasks",
   "screen.kuronami_quest_tree.rewards": "Rewards",
   "screen.kuronami_quest_tree.cost": "Cost: %s",

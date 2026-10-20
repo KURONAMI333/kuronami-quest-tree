@@ -1566,6 +1566,41 @@ public class ProgressScreen extends Screen {
                 y += 20;
             }
         }
+        if (details) {
+            // the quests this one opens in the same book; hidden ones are left out completely, so the section is not
+            // a hint about quests the player may not see yet (2026-10-20)
+            List<ClientModel.Node> leads = m.dependants.getOrDefault(n.key, List.of()).stream()
+                    .filter(d -> {
+                        ClientModel.Chapter dc = m.chapterOf.get(d.key);
+                        return dc != null && dc.namespace.equals(ch.namespace) && ClientProgress.visible(d.key);
+                    })
+                    .toList();
+            if (!leads.isEmpty()) {
+                y += 8;
+                Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.leads_to"), x, y, Ui.DIM);
+                y += 12;
+                for (ClientModel.Node d : leads) {
+                    Tiles.tile(g, d.shape, x, y, 16, ClientProgress.look(d.key), ClientProgress.fraction(d.key), ClientProgress.iconFor(d), false);
+                    g.pose().pushPose();
+                    g.pose().translate(0, 0, OVERLAY_Z);
+                    ClientModel.Chapter other = m.chapterOf.get(d.key);
+                    if (other != ch) {
+                        // the same row as a requirement in another chapter: its chapter name above the title
+                        Ui.text(g, font, trim(d.title.getString(), w - 22), x + 22, y, Ui.TEXT);
+                        Ui.text(g, font, trim(other.title.getString(), w - 22), x + 22, y + 9, Ui.DIM);
+                    } else {
+                        Ui.text(g, font, trim(d.title.getString(), w - 22), x + 22, y + 4, Ui.TEXT);
+                    }
+                    g.pose().popPose();
+                    String key = d.key;
+                    // only a row still inside the sheet may catch a click (a scrolled-away row must not)
+                    if (y + 18 > contentTop && y < contentBottom) {
+                        buttons.add(new Button(x, y, w, 18, () -> goTo(key)));
+                    }
+                    y += 20;
+                }
+            }
+        }
         if (!n.tasks.isEmpty() && details) {
             y += 8;
             Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.tasks"), x, y, Ui.DIM);
