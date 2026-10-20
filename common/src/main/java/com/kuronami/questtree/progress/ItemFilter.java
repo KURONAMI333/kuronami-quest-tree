@@ -657,15 +657,17 @@ public final class ItemFilter {
             if (actual == null || codec == null) {
                 return false;
             }
+            Optional<T> decoded = codec.parse(ops, wanted).result();
             if (!strict) {
                 // fuzzy: what the filter lists has to be in the stack's value; more is allowed (a book that also
-                // carries another enchantment still counts)
+                // carries another enchantment still counts). The filter's value is read and written back first, so
+                // both sides have the codec's own form: stored enchantments read {"a:b":1} but write {levels:{...}}
                 Optional<Tag> encoded = codec.encodeStart(ops, actual).result();
-                if (encoded.isPresent() && NbtUtils.compareNbt(wanted, encoded.get(), true)) {
+                Tag want = decoded.flatMap(d -> codec.encodeStart(ops, d).result()).orElse(wanted);
+                if (encoded.isPresent() && NbtUtils.compareNbt(want, encoded.get(), true)) {
                     return true;
                 }
             }
-            Optional<T> decoded = codec.parse(ops, wanted).result();
             if (decoded.isPresent()) {
                 return decoded.get().equals(actual);
             }

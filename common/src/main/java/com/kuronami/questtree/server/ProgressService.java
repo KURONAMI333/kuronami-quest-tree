@@ -184,10 +184,10 @@ public final class ProgressService {
                     claim(player, p, n, a.index());
                 }
             }
-            case "claim_all" -> {
-                // the node field may name a chapter: the header's button claims that chapter only (2026-10-20). Empty
-                // keeps the old meaning, every chapter
-                String only = a.node().isEmpty() || n != null ? null : a.node();
+            case "claim_all", "claim_chapter" -> {
+                // claim_chapter names a chapter in the node field: the header's button claims that chapter only
+                // (2026-10-20); claim_all takes every chapter
+                String only = a.action().equals("claim_chapter") ? a.node() : null;
                 for (ProgressModel.Node m : r.model().nodes.values()) {
                     if (r.state(p, m) == State.CLAIM && !m.chapter.isSkills() && !ProgressModel.excludedFromClaimAll(m)
                             && (only == null || m.chapter.id.equals(only))) {

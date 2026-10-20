@@ -1162,11 +1162,13 @@ public class ProgressScreen extends Screen {
             Ui.text(g, font, ca, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
             Ui.text(g, font, n, bx + bw - Ui.S2 - font.width(n), by + (bh - 8) / 2, Tiles.INK);
             Runnable claim = () -> {
-                ClientProgress.send("claim_all", ch.id, -1);
+                ClientProgress.send("claim_chapter", ch.id, -1);
                 long start = Util.getMillis();
                 int i = 0;
                 for (ClientModel.Node node : ch.nodes.values()) {
-                    if (ClientProgress.state(node.key) == State.CLAIM && node.choice.isEmpty()) {
+                    var pn = ClientProgress.rules() == null ? null : ClientProgress.rules().model().nodes.get(node.key);
+                    if (ClientProgress.state(node.key) == State.CLAIM && node.choice.isEmpty()
+                            && (pn == null || !com.kuronami.questtree.data.ProgressModel.excludedFromClaimAll(pn))) {
                         // one tile after another, 140ms apart
                         flashes.put(node.key, start + 140L * i++);
                     }
