@@ -89,6 +89,19 @@ public final class ProgressStore extends SavedData {
         return out;
     }
 
+    /**
+     * A deep copy of every record (through the saved form), so a migration dry run can be computed and thrown away.
+     */
+    public TeamStoreData copyData() {
+        return TeamStoreData.fromJson(data.toJson());
+    }
+
+    /** Swaps in the result of a migration run on {@link #copyData()}. Views are made per call, so none go stale. */
+    public void replaceData(TeamStoreData replacement) {
+        data = replacement;
+        setDirty();
+    }
+
     public UUID teamIdOf(UUID player) {
         return data.teamOf(player);
     }
