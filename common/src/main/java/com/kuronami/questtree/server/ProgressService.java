@@ -226,10 +226,42 @@ public final class ProgressService {
                     bump(player, p, n, a.index(), 1);
                 }
             }
+            case "exchange" -> {
+                // the skills screen's buy button: spend vanilla levels for one point (DATA_MODEL points.exchange)
+                ProgressModel.Chapter c = r.model().chapters.get(a.node());
+                if (c != null) {
+                    exchange(player, p, c);
+                }
+            }
             default -> Constants.LOG.debug("Unknown progression action {}", a.action());
         }
         recheck(player, p);
         flush(player);
+    }
+
+    /**
+     * One exchange purchase: the chapter's {@code points.exchange.xp_levels} vanilla levels become one point, up to
+     * {@code level_limit} purchases (2026-10-20). Pufferfish's Skills computes a cost per exchange level; the data
+     * model keeps a fixed cost, which is what packs write.
+     */
+    private static void exchange(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
+        if (!c.isSkills() || !c.points.has("exchange") || !c.points.get("exchange").isJsonObject()) {
+            return;
+        }
+        JsonObject exchange = c.points.getAsJsonObject("exchange");
+        int cost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
+                ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
+        int limit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
+                ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
+        int bought = p.exchange.getOrDefault(c.id, 0);
+        if (cost <= 0 || bought >= limit || player.experienceLevel < cost) {
+            return;
+        }
+        player.giveExperienceLevels(-cost);
+        p.exchange.put(c.id, bought + 1);
+        p.bonus.merge(ProgressRules.key(c), 1, Integer::sum);
+        ProgressStore.get(player.server).setDirty();
+        markDirty(player);
     }
 
     // ------------------------------------------------------------------ detection

@@ -75,6 +75,22 @@ class ProgressRulesTest {
     }
 
     @Test
+    void pooledExperienceSurvivesSaveAndLoad() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": 1, "start": 1, "pool": "shared"}, "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel pooled = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = pooled.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(pooled);
+        PlayerProgress p = new PlayerProgress();
+        rules.addExperience(p, a, 3);
+        JsonObject saved = ProgressJson.write(p);
+        PlayerProgress back = ProgressJson.read(saved);
+        assertEquals(p.level.get(ProgressRules.key(a)), back.level.get(ProgressRules.key(a)));
+        assertEquals(p.xp.get(ProgressRules.key(a)), back.xp.get(ProgressRules.key(a)), 1e-9);
+    }
+
+    @Test
     void questsOpenInOrder() {
         ProgressRules rules = new ProgressRules(model);
         PlayerProgress p = new PlayerProgress();

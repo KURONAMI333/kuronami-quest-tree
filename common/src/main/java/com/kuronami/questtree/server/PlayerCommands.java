@@ -144,6 +144,7 @@ final class PlayerCommands {
         pr.level.remove(key);
         pr.spent.remove(key);
         pr.bonus.remove(key);
+        pr.exchange.remove(ch.id);
     }
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {
