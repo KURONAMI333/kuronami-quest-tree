@@ -150,7 +150,7 @@ final class PlayerCommands {
         }
     }
 
-    private static void resetChapter(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch) {
+    static void resetChapter(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch) {
         for (ProgressModel.Node n : ch.nodes.values()) {
             resetNode(p, pr, n);
         }

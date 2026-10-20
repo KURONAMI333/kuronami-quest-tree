@@ -75,6 +75,20 @@ class ProgressRulesTest {
     }
 
     @Test
+    void spentLimitCapsThePointsEverAvailable() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": 1, "spent_limit": 2},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel capped = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = capped.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(capped);
+        PlayerProgress p = new PlayerProgress();
+        rules.addExperience(p, a, 5);
+        assertEquals(2, rules.availablePoints(p, a));
+    }
+
+    @Test
     void chapterLockHidesAndHoldsItsNodes() {
         JsonObject bundle = JsonParser.parseString("""
                 {"chapters": {"t:a": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": false},

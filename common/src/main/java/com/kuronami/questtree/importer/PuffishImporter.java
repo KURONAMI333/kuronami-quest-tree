@@ -59,6 +59,7 @@ public final class PuffishImporter {
                 case "unlocked_by_default" -> points.add("unlocked_by_default", v);
                 case "exclusive_root" -> points.add("exclusive_root", v);
                 case "spent_points_limit" -> points.add("spent_limit", v);
+                case "erase_on_death" -> points.add("erase_on_death", v);
                 case "starting_points" -> points.add("start", v);
                 case "colors" -> o.add("line_colors", v);
                 default -> out.unknown("category", kv.getKey());

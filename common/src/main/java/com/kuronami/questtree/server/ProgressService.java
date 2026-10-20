@@ -95,15 +95,26 @@ public final class ProgressService {
         PlayerProgress p = progress(player);
         Rewards.reapplyAttributes(player, p);
         if (died) {
-            // "reset_on_death": the experience towards the next level is lost (levels and points stay)
             for (ProgressModel.Chapter c : rules().model().chapters.values()) {
+                if (!c.isSkills()) {
+                    continue;
+                }
+                // "erase_on_death" (Pufferfish's Skills): the whole chapter starts over, skills and points included
+                if (ProgressModel.boolOf(c.points, "erase_on_death")) {
+                    PlayerCommands.resetChapter(player, p, c);
+                    ProgressStore.get(player.server).setDirty();
+                    markDirty(player);
+                    continue;
+                }
+                // "reset_on_death": the experience towards the next level is lost (levels and points stay)
                 String key = ProgressRules.key(c);
-                if (c.isSkills() && ProgressModel.boolOf(c.points, "reset_on_death") && p.xp.getOrDefault(key, 0.0) > 0) {
+                if (ProgressModel.boolOf(c.points, "reset_on_death") && p.xp.getOrDefault(key, 0.0) > 0) {
                     p.xp.put(key, 0.0);
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
                 }
             }
+            recheck(player, p);
         }
     }
 
