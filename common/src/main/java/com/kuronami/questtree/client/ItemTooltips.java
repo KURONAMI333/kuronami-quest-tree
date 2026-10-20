@@ -6,10 +6,7 @@ import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -24,7 +21,7 @@ import java.util.Map;
  */
 public final class ItemTooltips {
 
-    private record Want(String node, int task, String spec) {
+    private record Want(String node, int task, com.kuronami.questtree.progress.ItemRequirement requirement) {
     }
 
     private static final Map<String, List<Want>> BY_ITEM = new HashMap<>();
@@ -53,10 +50,16 @@ public final class ItemTooltips {
             builtFor = p;
             builtPins = Pins.version();
         }
-        List<Want> wants = new ArrayList<>(BY_ITEM.getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), List.of()));
+        var registries = net.minecraft.client.Minecraft.getInstance().level == null ? null
+                : net.minecraft.client.Minecraft.getInstance().level.registryAccess();
+        List<Want> wants = new ArrayList<>();
+        for (Want w : BY_ITEM.getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), List.of())) {
+            if (w.requirement.matches(stack, registries)) {
+                wants.add(w);
+            }
+        }
         for (Want w : BY_TAG) {
-            ResourceLocation tag = ResourceLocation.tryParse(w.spec.substring(1));
-            if (tag != null && stack.is(TagKey.create(Registries.ITEM, tag))) {
+            if (w.requirement.matches(stack, registries)) {
                 wants.add(w);
             }
         }
@@ -94,21 +97,15 @@ public final class ItemTooltips {
             builtFor = p;
             builtPins = Pins.version();
         }
-        List<Want> wants = BY_ITEM.getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), List.of());
-        if (!wants.isEmpty()) {
-            return wants.get(0).node;
+        var registries = net.minecraft.client.Minecraft.getInstance().level == null ? null
+                : net.minecraft.client.Minecraft.getInstance().level.registryAccess();
+        for (Want w : BY_ITEM.getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), List.of())) {
+            if (w.requirement.matches(stack, registries)) {
+                return w.node;
+            }
         }
         for (Want w : BY_TAG) {
-            if (w.spec.startsWith("~")) {
-                // an FTB Filter System smart filter: the item counts when the filter takes it
-                var level = net.minecraft.client.Minecraft.getInstance().level;
-                if (com.kuronami.questtree.progress.ItemFilter.parse(w.spec.substring(1)).test(stack, level == null ? null : level.registryAccess())) {
-                    return w.node;
-                }
-                continue;
-            }
-            ResourceLocation tag = ResourceLocation.tryParse(w.spec.substring(1));
-            if (tag != null && stack.is(TagKey.create(Registries.ITEM, tag))) {
+            if (w.requirement.matches(stack, registries)) {
                 return w.node;
             }
         }
@@ -131,31 +128,16 @@ public final class ItemTooltips {
                 if (!"item".equals(t.has("type") ? t.get("type").getAsString() : "") || p.task(n.key, i) >= ProgressRules.target(t)) {
                     continue;
                 }
-                String spec = spec(t);
+                var requirement = com.kuronami.questtree.progress.ItemRequirement.of(t);
+                String spec = requirement.spec();
                 if (spec.startsWith("#") || spec.startsWith("~")) {
-                    BY_TAG.add(new Want(n.key, i, spec));
+                    BY_TAG.add(new Want(n.key, i, requirement));
                 } else if (!spec.isEmpty()) {
-                    BY_ITEM.computeIfAbsent(spec, k -> new ArrayList<>()).add(new Want(n.key, i, spec));
+                    BY_ITEM.computeIfAbsent(spec, k -> new ArrayList<>()).add(new Want(n.key, i, requirement));
                 }
             }
         }
         // pinned quests first
         BY_ITEM.values().forEach(l -> l.sort((a, b) -> Boolean.compare(Pins.has(b.node), Pins.has(a.node))));
-    }
-
-    private static String spec(JsonObject task) {
-        var it = task.get("item");
-        if (it == null) {
-            return "";
-        }
-        if (it.isJsonPrimitive()) {
-            return it.getAsString();
-        }
-        JsonObject o = it.getAsJsonObject();
-        String filter = com.kuronami.questtree.progress.ItemFilter.filterExpression(o);
-        if (filter != null) {
-            return "~" + filter;
-        }
-        return o.has("tag") ? "#" + o.get("tag").getAsString() : o.has("id") ? o.get("id").getAsString() : "";
     }
 }

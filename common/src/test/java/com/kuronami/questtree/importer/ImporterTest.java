@@ -175,6 +175,49 @@ class ImporterTest {
         assertFalse(nodes.getAsJsonObject("2").get("sequential_tasks").getAsBoolean(), "explicit false overrides");
     }
 
+    /**
+     * A 1.20.1 book (2026-10-20): dependencies may still be an int array, items use vanilla NBT ({@code Count},
+     * {@code tag}) instead of {@code count}/{@code components}, and the two old NBT flags become one match mode.
+     */
+    @Test
+    void olderFtbQuestsFormatConverts(@TempDir Path tmp) throws Exception {
+        Path chapters = tmp.resolve("chapters");
+        Files.createDirectories(chapters);
+        Files.writeString(chapters.resolve("legacy.snbt"), """
+                {
+                  filename: "legacy"
+                  quests: [
+                    {id: "1", tasks: [{id: "11", type: "item",
+                      item: {id: "minecraft:diamond_sword", Count: 3, tag: {
+                        Damage: 5,
+                        display: {Name: "{\\"text\\":\\"Old Blade\\"}", Lore: ["{\\"text\\":\\"line\\"}"]},
+                        Enchantments: [{id: "minecraft:sharpness", lvl: 2}]
+                      }},
+                      match_nbt: true, weak_nbt_match: true}]}
+                    {id: "2", dependencies: [I; 1], tasks: [{id: "21", type: "item",
+                      item: {id: "minecraft:stone", Count: 1}, match_nbt: true}]}
+                  ]
+                }
+                """);
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(tmp, out);
+        JsonObject nodes = out.chapters.get("legacy").getAsJsonObject("nodes");
+        JsonArray first = nodes.getAsJsonObject("1").getAsJsonArray("tasks");
+        JsonObject item = first.get(0).getAsJsonObject();
+        assertEquals(3, item.getAsJsonObject("item").get("count").getAsInt(), "Count must become count");
+        assertEquals("fuzzy", item.get("match_components").getAsString(), "weak_nbt_match must become fuzzy");
+        JsonObject comps = item.getAsJsonObject("item").getAsJsonObject("components");
+        assertEquals(5, comps.get("minecraft:damage").getAsInt());
+        assertEquals("Old Blade", comps.getAsJsonObject("minecraft:custom_name").get("text").getAsString());
+        assertTrue(comps.has("minecraft:enchantments"), "old Enchantments must become the enchantments component");
+        JsonArray second = nodes.getAsJsonObject("2").getAsJsonArray("tasks");
+        assertEquals("strict", second.get(0).getAsJsonObject().get("match_components").getAsString(),
+                "match_nbt without weak_nbt_match must become strict");
+        assertEquals("1", nodes.getAsJsonObject("2").getAsJsonObject("requires").getAsJsonArray("nodes").get(0).getAsString(),
+                "an int-array dependency must resolve to the quest");
+        assertTrue(out.unmapped.isEmpty(), "unmapped: " + out.unmapped);
+    }
+
     /** FTB Quests points at reward tables by a decimal long; the table files carry the same id as 16 hex digits. */    @org.junit.jupiter.api.Test
     void tableIdMatchesTheTableFileName() {
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("6996929552069196378"));

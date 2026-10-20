@@ -504,6 +504,7 @@ public final class ProgressValidator {
                 } else {
                     id(out, ref, path + ".item", "item", s.text(), registry);
                 }
+                matchComponents(out, ref, path, t);
             }
             case "kill" -> {
                 textShape(out, ref, path, t, "entity", Severity.WARNING);
@@ -555,6 +556,35 @@ public final class ProgressValidator {
         // ProgressRules reads these on the server tick too, or while a hand-in settles, with no handler above it
         tickFlag(out, ref, path, t, "optional");
         tickFlag(out, ref, path, t, "consume");
+    }
+
+    /**
+     * FTB Quests' {@code match_components} (none / fuzzy / strict). A typo would silently turn a component-checking
+     * hand-in into "any item with this id", so it is an error; two older booleans are still read by the importer.
+     */
+    private static void matchComponents(Result out, ChapterRef ref, String path, JsonObject t) {
+        JsonElement v = t.get("match_components");
+        if (v == null) {
+            return;
+        }
+        if (!v.isJsonPrimitive() || v.getAsJsonPrimitive().isBoolean()) {
+            problem(out, Severity.ERROR, ref, path + ".match_components", "match_components must be none, fuzzy or strict");
+            return;
+        }
+        String mode = v.getAsString().toLowerCase(java.util.Locale.ROOT);
+        if (!mode.equals("none") && !mode.equals("fuzzy") && !mode.equals("strict")) {
+            problem(out, Severity.ERROR, ref, path + ".match_components",
+                    "match_components must be none, fuzzy or strict, not " + quote(v.getAsString()));
+            return;
+        }
+        JsonElement item = t.get("item");
+        boolean hasComponents = item != null && item.isJsonObject()
+                && item.getAsJsonObject().has("components") && item.getAsJsonObject().get("components").isJsonObject()
+                && !item.getAsJsonObject().getAsJsonObject("components").isEmpty();
+        if (!mode.equals("none") && !hasComponents) {
+            problem(out, Severity.WARNING, ref, path + ".match_components",
+                    "match_components is " + mode + " but the item has no components, so only its id is checked");
+        }
     }
 
     private static void location(Result out, ChapterRef ref, String path, JsonObject t) {

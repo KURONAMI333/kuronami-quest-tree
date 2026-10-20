@@ -391,6 +391,8 @@ public final class ClientModel {
          * task and its quest with an icon that steps through the items the filter takes; so does {@link #icon()}.
          */
         public final com.kuronami.questtree.progress.ItemFilter filter;
+        /** The item (or tag/filter) plus the component check of FTB Quests' {@code match_components}. */
+        private final com.kuronami.questtree.progress.ItemRequirement requirement;
         public final long count;
         /** Item tasks that take the items (a Submit button) instead of checking the inventory. */
         public final boolean consume;
@@ -411,6 +413,7 @@ public final class ClientModel {
             String fx = type.equals("item") && o.has("item") && o.get("item").isJsonObject()
                     ? com.kuronami.questtree.progress.ItemFilter.filterExpression(o.getAsJsonObject("item")) : null;
             this.filter = fx == null ? null : com.kuronami.questtree.progress.ItemFilter.parse(fx);
+            this.requirement = com.kuronami.questtree.progress.ItemRequirement.of(o);
             this.item = filter != null ? ItemStack.EMPTY : type.equals("item") && o.has("item") ? stack(o.get("item")) : ItemStack.EMPTY;
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
             this.count = ProgressRules.target(o);
@@ -447,11 +450,8 @@ public final class ClientModel {
 
         /** Whether a stack counts for this item task. */
         public boolean matches(ItemStack st) {
-            if (st.isEmpty()) {
-                return false;
-            }
             var level = Minecraft.getInstance().level;
-            return filter != null ? filter.test(st, level == null ? null : level.registryAccess()) : !item.isEmpty() && st.is(item.getItem());
+            return requirement.matches(st, level == null ? null : level.registryAccess());
         }
 
         public Component name() {
