@@ -99,6 +99,13 @@ public final class ItemTooltips {
             return wants.get(0).node;
         }
         for (Want w : BY_TAG) {
+            if (w.spec.startsWith("~")) {
+                // an FTB Filter System smart filter: the item counts when the filter takes it
+                if (com.kuronami.questtree.progress.ItemFilter.parse(w.spec.substring(1)).test(stack)) {
+                    return w.node;
+                }
+                continue;
+            }
             ResourceLocation tag = ResourceLocation.tryParse(w.spec.substring(1));
             if (tag != null && stack.is(TagKey.create(Registries.ITEM, tag))) {
                 return w.node;
@@ -124,7 +131,7 @@ public final class ItemTooltips {
                     continue;
                 }
                 String spec = spec(t);
-                if (spec.startsWith("#")) {
+                if (spec.startsWith("#") || spec.startsWith("~")) {
                     BY_TAG.add(new Want(n.key, i, spec));
                 } else if (!spec.isEmpty()) {
                     BY_ITEM.computeIfAbsent(spec, k -> new ArrayList<>()).add(new Want(n.key, i, spec));
@@ -144,6 +151,10 @@ public final class ItemTooltips {
             return it.getAsString();
         }
         JsonObject o = it.getAsJsonObject();
+        String filter = com.kuronami.questtree.progress.ItemFilter.filterExpression(o);
+        if (filter != null) {
+            return "~" + filter;
+        }
         return o.has("tag") ? "#" + o.get("tag").getAsString() : o.has("id") ? o.get("id").getAsString() : "";
     }
 }

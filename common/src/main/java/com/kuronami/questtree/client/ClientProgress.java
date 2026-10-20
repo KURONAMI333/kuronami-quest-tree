@@ -61,6 +61,8 @@ public final class ClientProgress {
         if (nextPart == p.total()) {
             try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(buffer.toByteArray()))) {
                 JsonObject bundle = JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+                // a filter's items come from the tags this server sent, so items worked out for another world are dropped
+                com.kuronami.questtree.progress.ItemFilter.clearCache();
                 model = new ClientModel(bundle);
                 rules = new ProgressRules(ProgressModel.of(bundle));
                 Pins.load();
@@ -175,6 +177,12 @@ public final class ClientProgress {
 
     /** The icon a node's tile shows (its own; claiming is shown by the tile, not by swapping the icon). */
     static net.minecraft.world.item.ItemStack iconFor(ClientModel.Node n) {
+        if (n.iconTask != null) {
+            net.minecraft.world.item.ItemStack shown = n.iconTask.icon();
+            if (!shown.isEmpty()) {
+                return shown;
+            }
+        }
         return n.icon;
     }
 

@@ -482,8 +482,19 @@ public final class ProgressValidator {
         }
         switch (name) {
             case "item" -> {
+                String filter = t.get("item") != null && t.get("item").isJsonObject()
+                        ? com.kuronami.questtree.progress.ItemFilter.filterExpression(t.getAsJsonObject("item")) : null;
                 Spec s = itemSpecText(t.get("item"));
-                if (s.unreadable()) {
+                if (filter != null) {
+                    // an FTB Filter System smart filter: the expression decides, not the filter item's id
+                    var f = com.kuronami.questtree.progress.ItemFilter.parse(filter);
+                    if (!f.isValid()) {
+                        problem(out, Severity.ERROR, ref, path + ".item", "item filter cannot be read (" + f.error() + "), so it never counts");
+                    } else if (!f.unsupportedFunctions().isEmpty()) {
+                        problem(out, Severity.WARNING, ref, path + ".item", "item filter uses " + f.unsupportedFunctions()
+                                + ", which Quest Tree cannot check; those parts never match");
+                    }
+                } else if (s.unreadable()) {
                     specProblem(out, ref, path + ".item", "item");
                 } else if (s.empty()) {
                     problem(out, Severity.ERROR, ref, path + ".item", "item task has no item, so it never counts");

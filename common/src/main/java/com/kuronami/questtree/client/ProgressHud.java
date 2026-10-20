@@ -212,14 +212,21 @@ public final class ProgressHud {
         var p = ClientProgress.progress();
         for (int i = 0; i < n.tasks.size() && out.size() < 4; i++) {
             ClientModel.Task t = n.tasks.get(i);
-            if (!t.type.equals("item") || t.item.isEmpty()) {
+            if (!t.type.equals("item") || (t.item.isEmpty() && t.filter == null)) {
                 continue;
             }
             long need = t.count - Math.min(p.task(n.key, i), t.count);
             if (need <= 0) {
                 continue;
             }
-            out.add(new long[]{i, player.getInventory().countItem(t.item.getItem()), need});
+            long have = 0;
+            var inv = player.getInventory();
+            for (int s = 0; s < inv.getContainerSize(); s++) {
+                if (t.matches(inv.getItem(s))) {
+                    have += inv.getItem(s).getCount();
+                }
+            }
+            out.add(new long[]{i, have, need});
         }
         return out;
     }

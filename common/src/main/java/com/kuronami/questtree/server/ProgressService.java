@@ -593,7 +593,11 @@ public final class ProgressService {
         return i >= 0 && i < n.tasks.size();
     }
 
-    /** An item task's matcher as one string: an item id, or {@code #tag}. */
+    /**
+     * An item task's matcher as one string: an item id, {@code #tag}, or {@code ~expression} for an FTB Filter System
+     * smart filter. FTB Quests packs (ATM10: 437 tasks) ask for "any of these" through a smart filter item; until
+     * 2026-10-20 its id was compared as it stood, so only the filter item itself counted and those tasks could not be done.
+     */
     static String itemSpec(JsonObject task) {
         JsonElement it = task.get("item");
         if (it == null) {
@@ -603,6 +607,10 @@ public final class ProgressService {
             return it.getAsString();
         }
         JsonObject o = it.getAsJsonObject();
+        String filter = com.kuronami.questtree.progress.ItemFilter.filterExpression(o);
+        if (filter != null) {
+            return "~" + filter;
+        }
         if (o.has("tag")) {
             return "#" + o.get("tag").getAsString();
         }
@@ -639,6 +647,9 @@ public final class ProgressService {
     static boolean itemMatches(String spec, ItemStack st) {
         if (spec.isEmpty()) {
             return false;
+        }
+        if (spec.startsWith("~")) {
+            return com.kuronami.questtree.progress.ItemFilter.parse(spec.substring(1)).test(st);
         }
         if (spec.startsWith("#")) {
             ResourceLocation id = ResourceLocation.tryParse(spec.substring(1));

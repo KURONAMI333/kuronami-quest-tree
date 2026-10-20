@@ -155,8 +155,12 @@ public final class ClientModel {
             this.path = id.substring(colon + 1);
             this.icon = stack(o.get("icon"));
             this.order = o.has("order") ? o.get("order").getAsInt() : 0;
-            this.groupOrder = o.has("group") ? groupOrder.getOrDefault(o.get("group").getAsString(), 999) : 999;
-            this.group = o.has("group") ? o.get("group").getAsString() : null;
+            // no group, or FTB Quests' default group (an empty id), comes first and has no header, as in FTB Quests'
+            // own list. ATM10's "Welcome", "Bounty Board" and "Building Tips" sorted last until 2026-10-20 because the
+            // empty id was looked up as a group that does not exist
+            String gid = o.has("group") && o.get("group").isJsonPrimitive() ? o.get("group").getAsString() : "";
+            this.group = gid.isBlank() ? null : gid;
+            this.groupOrder = group == null ? -1 : groupOrder.getOrDefault(group, 999);
             this.skills = o.has("points") && o.get("points").isJsonObject();
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
@@ -218,6 +222,8 @@ public final class ClientModel {
         public final double size;
         public final String shape;
         public final ItemStack icon;
+        /** The task whose cycling icon the node shows (a smart filter and no icon of the node's own), or null. */
+        public final Task iconTask;
         public final boolean optional;
         public final List<String> requires = new ArrayList<>();
         /** Requirements as global keys (may point into other chapters). */
@@ -307,6 +313,7 @@ public final class ClientModel {
                 }
             }
             ItemStack ic = stack(o.get("icon"));
+            this.iconTask = ic.isEmpty() && !tasks.isEmpty() && tasks.get(0).filter != null ? tasks.get(0) : null;
             if (ic.isEmpty() && !tasks.isEmpty()) {
                 ic = tasks.get(0).icon();
             }
@@ -348,10 +355,23 @@ public final class ClientModel {
         }
     }
 
+    /** One item every second from a list, the way FTB Quests steps through a filter's items. */
+    static ItemStack cycle(List<ItemStack> items) {
+        if (items.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        return items.get((int) ((net.minecraft.Util.getMillis() / 1000L) % items.size()));
+    }
+
     public static final class Task {
         public final String type;
-        /** The item to collect for item tasks; empty for every other type. */
+        /** The item to collect for item tasks; empty for every other type and for smart filters (see {@link #filter}). */
         public final ItemStack item;
+        /**
+         * An FTB Filter System smart filter ("any log", "one of these three parts"), or null. FTB Quests shows such a
+         * task and its quest with an icon that steps through the items the filter takes; so does {@link #icon()}.
+         */
+        public final com.kuronami.questtree.progress.ItemFilter filter;
         public final long count;
         /** Item tasks that take the items (a Submit button) instead of checking the inventory. */
         public final boolean consume;
@@ -369,7 +389,10 @@ public final class ClientModel {
             // same rule as ProgressRules.consumes: repeatable quests take their items
             this.consume = (type.equals("item") && (repeatable || (o.has("consume") && o.get("consume").getAsBoolean()))) || type.equals("xp");
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
-            this.item = type.equals("item") && o.has("item") ? stack(o.get("item")) : ItemStack.EMPTY;
+            String fx = type.equals("item") && o.has("item") && o.get("item").isJsonObject()
+                    ? com.kuronami.questtree.progress.ItemFilter.filterExpression(o.getAsJsonObject("item")) : null;
+            this.filter = fx == null ? null : com.kuronami.questtree.progress.ItemFilter.parse(fx);
+            this.item = filter != null ? ItemStack.EMPTY : type.equals("item") && o.has("item") ? stack(o.get("item")) : ItemStack.EMPTY;
             JsonObject it = o.has("item") && o.get("item").isJsonObject() ? o.getAsJsonObject("item") : new JsonObject();
             this.count = ProgressRules.target(o);
             this.source = o;
@@ -392,7 +415,23 @@ public final class ClientModel {
 
         public ItemStack icon() {
             resolve();
+            if (filter != null && !source.has("icon")) {
+                return shown();
+            }
             return icon;
+        }
+
+        /** The item this task stands for right now: its item, or for a smart filter the one its icon is showing. */
+        public ItemStack shown() {
+            return filter == null ? item : cycle(filter.examples());
+        }
+
+        /** Whether a stack counts for this item task. */
+        public boolean matches(ItemStack st) {
+            if (st.isEmpty()) {
+                return false;
+            }
+            return filter != null ? filter.test(st) : !item.isEmpty() && st.is(item.getItem());
         }
 
         public Component name() {
