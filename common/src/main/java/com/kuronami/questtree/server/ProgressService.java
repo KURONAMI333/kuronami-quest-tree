@@ -728,7 +728,8 @@ public final class ProgressService {
             if (!working(r, p, n)) {
                 continue;
             }
-            if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
+            boolean conditions = conditionsMet(player, p, n, t, true);
+            if (!r.taskOpen(p, n, i) || !conditions) {
                 continue;
             }
             long target = ProgressRules.target(t);
@@ -741,7 +742,6 @@ public final class ProgressService {
             seen.put(key, run);
             if (persist || run >= target) {
                 long before = p.task(n.key, i);
-                boolean conditions = conditionsMet(player, p, n, t, true);
                 if (ObservationWrite.writes(before, run, conditions)) {
                     // quiet write: a look that lasts a while would otherwise send a packet every tick
                     p.setTask(n.key, i, run);
