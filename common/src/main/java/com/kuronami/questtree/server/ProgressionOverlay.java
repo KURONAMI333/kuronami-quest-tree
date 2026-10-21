@@ -196,6 +196,35 @@ public final class ProgressionOverlay {
         }
 
         /**
+         * The tombstones the restore list offers, for the bundle: deleted chapters by id, and each live chapter's
+         * deleted node ids. A deleted chapter keeps its node tombstones in its file, but restoring the chapter is the
+         * one meaningful action there, so its nodes are not listed until it is back.
+         */
+        public JsonObject deletedJson() {
+            JsonObject out = new JsonObject();
+            JsonArray deletedChapters = new JsonArray();
+            JsonObject deletedNodes = new JsonObject();
+            for (ChapterOverlay chapter : chapters.values()) {
+                if (chapter.remove) {
+                    deletedChapters.add(chapter.id);
+                    continue;
+                }
+                JsonArray ids = new JsonArray();
+                for (Map.Entry<String, NodeChange> e : chapter.nodes.entrySet()) {
+                    if (e.getValue().action() == Action.REMOVE) {
+                        ids.add(e.getKey());
+                    }
+                }
+                if (!ids.isEmpty()) {
+                    deletedNodes.add(chapter.id, ids);
+                }
+            }
+            out.add("chapters", deletedChapters);
+            out.add("nodes", deletedNodes);
+            return out;
+        }
+
+        /**
          * Merges this layer into {@code chapters} in place and points the validator's sources at the overlay files.
          * The caller passes the pack's chapters (after patches) and a mutable copy of the pack sources.
          */

@@ -393,6 +393,9 @@ public class ProgressScreen extends Screen {
     private boolean editMoved;
     /** A press on an already picked node: the pick is narrowed to it on release unless the pointer moved (group drag). */
     private String editPressedKey;
+    /** The node of the previous plain click and when it happened, for a double-click that opens the editor. */
+    private String editClickKey;
+    private long editClickAt;
     private double editBoxX0;
     private double editBoxY0;
     private double editBoxX1;
@@ -2521,7 +2524,58 @@ public class ProgressScreen extends Screen {
         EditorClipboard copy = EditorSession.clipboard();
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.paste"),
                 copy != null && !copy.isEmpty(), () -> EditorSession.paste(ch.id, copy, x, y, true)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.chapter.title"), true,
+                () -> openChapterEditor(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.chapter.new"), true,
+                () -> openNewChapter(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.deleted.title"), true,
+                this::openDeleted));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.export"), true,
+                () -> exportChapter(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.test"), true,
+                () -> confirmTest(ch)));
         openEditorMenu(mx, my, entries);
+    }
+
+    private void openNodeEditor(ClientModel.Chapter ch, ClientModel.Node n) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new NodeEditScreen(this, ch.id, n.id));
+    }
+
+    private void openChapterEditor(ClientModel.Chapter ch) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new ChapterEditScreen(this, ch.id));
+    }
+
+    private void openNewChapter(ClientModel.Chapter ch) {
+        int colon = ch.id.indexOf(':');
+        String namespace = colon < 0 ? ch.id : ch.id.substring(0, colon);
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new NewChapterScreen(this, namespace));
+    }
+
+    private void openDeleted() {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new RestoreScreen(this));
+    }
+
+    private void exportChapter(ClientModel.Chapter ch) {
+        int colon = ch.id.indexOf(':');
+        JsonObject args = new JsonObject();
+        args.addProperty("namespace", colon < 0 ? ch.id : ch.id.substring(0, colon));
+        EditorSession.send(ch.id, "export", args);
+    }
+
+    private void confirmTest(ClientModel.Chapter ch) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(confirmed -> {
+            mc.setScreen(this);
+            if (confirmed) {
+                EditorSession.send(ch.id, "test_chapter", new JsonObject());
+            }
+        }, Component.translatable("screen.kuronami_quest_tree.editor.test"),
+                Component.literal(ch.id), Component.translatable("screen.kuronami_quest_tree.editor.test.yes"),
+                Component.translatable("screen.kuronami_quest_tree.editor.cancel")));
     }
 
     private void editorNodeMenu(ClientModel.Node n, ClientModel.Chapter ch, double mx, double my) {
@@ -2529,6 +2583,8 @@ public class ProgressScreen extends Screen {
             editSelection.click(n.key, false);
         }
         List<EditorMenuEntry> entries = new ArrayList<>();
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.edit"), true,
+                () -> openNodeEditor(ch, n)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.duplicate"), true,
                 () -> duplicateSelection(ch)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.copy"), true,
@@ -2846,6 +2902,14 @@ public class ProgressScreen extends Screen {
                 return true;
             }
             if (hit != null) {
+                long now = Util.getMillis();
+                if (!Screen.hasControlDown() && hit.key.equals(editClickKey) && now - editClickAt < 350) {
+                    editClickKey = null;
+                    openNodeEditor(ch, hit);
+                    return true;
+                }
+                editClickKey = hit.key;
+                editClickAt = now;
                 boolean ctrl = Screen.hasControlDown();
                 if (!ctrl && editSelection.contains(hit.key)) {
                     editPressedKey = hit.key;
@@ -3394,6 +3458,14 @@ public class ProgressScreen extends Screen {
         }
         if (editActive()) {
             ClientModel.Chapter ech = chapter();
+            if (ech != null && (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER
+                    || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) && editSelection.ids().size() == 1) {
+                ClientModel.Node n = model() == null ? null : model().nodesByKey.get(editSelection.ids().get(0));
+                if (n != null) {
+                    openNodeEditor(ech, n);
+                    return true;
+                }
+            }
             if (ech != null && Screen.hasControlDown()) {
                 if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_A) {
                     List<String> all = ech.nodes.values().stream()

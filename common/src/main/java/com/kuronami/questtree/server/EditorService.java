@@ -131,6 +131,11 @@ public final class EditorService {
             return;
         }
 
+        if (payload.op().equals("export") || payload.op().equals("test_chapter")) {
+            control(player, payload, chapterId, args);
+            return;
+        }
+
         ProgressionEditor.Outcome outcome;
         try {
             outcome = editor.apply(ProgressData.packChapters(), ProgressData.packTables(), ProgressData.packSources(),
@@ -175,6 +180,39 @@ public final class EditorService {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             ProgressData.sync(player);
         }
+    }
+
+    /**
+     * Export and test drive the commands rather than reimplementing them. Both echo the request's revision: they do
+     * not write a chapter, and a control reply must not move the client's revision for the one it named.
+     */
+    private static void control(ServerPlayer player, EditorOpPayload request, String chapterId, JsonObject args) {
+        long revision = request.chapterRevision();
+        if (request.op().equals("export")) {
+            String namespace = EditorOps.exportNamespace(args, chapterId);
+            String command = EditorOps.exportCommand(namespace == null ? "" : namespace);
+            if (command == null) {
+                reply(player, request, chapterId, false, "", List.of("no namespace to export"), revision);
+                return;
+            }
+            player.server.getCommands().performPrefixedCommand(
+                    player.createCommandSourceStack().withPermission(2), command);
+            Path folder = player.server.getWorldPath(LevelResource.DATAPACK_DIR)
+                    .resolve(ProgressExport.packFolder(namespace));
+            reply(player, request, chapterId, true, "", List.of(folder.toString()), revision);
+            return;
+        }
+        String command = EditorOps.testCommand(chapterId);
+        JsonObject chapters = ProgressData.mergedBundle().getAsJsonObject("chapters");
+        if (command == null || chapters == null || !chapters.has(chapterId)) {
+            reply(player, request, chapterId, false, "", List.of("this chapter is not in the book"), revision);
+            return;
+        }
+        player.server.getCommands().performPrefixedCommand(
+                player.createCommandSourceStack().withPermission(2), command);
+        // the point of the button is to see the chapter as a player: the map must stop offering editing at once
+        setEditing(player, false);
+        reply(player, request, chapterId, true, "", List.of(), revision);
     }
 
     private static void reply(ServerPlayer player, EditorOpPayload request, String chapterId, boolean ok,

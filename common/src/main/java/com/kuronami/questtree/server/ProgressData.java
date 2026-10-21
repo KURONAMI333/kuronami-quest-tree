@@ -142,6 +142,8 @@ public final class ProgressData {
         JsonObject chapters = bundle.getAsJsonObject("chapters");
         JsonObject revisions = new JsonObject();
         bundle.add("revisions", revisions);
+        JsonObject deleted = emptyDeleted();
+        bundle.add("deleted", deleted);
         Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>(packSources);
         Set<String> unreadable = new LinkedHashSet<>(packUnreadable);
         List<ProgressValidator.Problem> found = new ArrayList<>(packProblems);
@@ -157,6 +159,7 @@ public final class ProgressData {
                 revisions = overlay.revisionsJson();
                 bundle.add("revisions", revisions);
                 bundle.add("table_revisions", overlay.tableRevisionsJson());
+                bundle.add("deleted", overlay.deletedJson());
             } catch (RuntimeException ex) {
                 Constants.LOG.error("Could not read the progression overlay", ex);
                 found.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, ProgressionOverlay.DIR, "",
@@ -235,6 +238,14 @@ public final class ProgressData {
     /** Rebuilds after an edit (the editor asks for this at most once per server tick). */
     public static void rebuildOverlay() {
         rebuild();
+    }
+
+    /** The bundle's restore list: no deleted chapters, no deleted nodes. */
+    private static JsonObject emptyDeleted() {
+        JsonObject deleted = new JsonObject();
+        deleted.add("chapters", new JsonArray());
+        deleted.add("nodes", new JsonObject());
+        return deleted;
     }
 
     /** The pack chapters after patches, without the overlay: what an edit is applied against. */
