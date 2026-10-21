@@ -23,6 +23,7 @@ neoForge {
         mappingsVersion = parchment_version
     }
     addModdingDependenciesTo sourceSets.gametest
+    addModdingDependenciesTo sourceSets.test
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
@@ -86,4 +87,11 @@ dependencies {
     compileOnly "mezz.jei:jei-1.21.1-common-api:19.57.0.447"
     compileOnly "me.shedaniel:RoughlyEnoughItems-neoforge:${rei_version}"
     compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }

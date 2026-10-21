@@ -3,6 +3,8 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.api.QuestRewardType;
+import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
@@ -29,7 +31,10 @@ public final class Rewards {
     private Rewards() {
     }
 
-    static void give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+    static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+        if (!QuestTreeApi.conditionsMet(player, n, rw, false)) {
+            return false;
+        }
         try {
             switch (ProgressService.type(rw)) {
                 case "item" -> item(player, rw);
@@ -55,10 +60,19 @@ public final class Rewards {
                         ServerCommands.run(player, "trophy award @s " + ProgressService.str(rw, "trophy"), 2, true);
                     }
                 }
-                default -> Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                default -> {
+                    QuestRewardType addon = QuestTreeApi.rewardType(ProgressService.type(rw));
+                    if (addon != null) {
+                        addon.give(new QuestRewardType.RewardContext(player, n, rw, choice));
+                    } else {
+                        Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                    }
+                }
             }
+            return true;
         } catch (RuntimeException ex) {
             Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+            return false;
         }
     }
 

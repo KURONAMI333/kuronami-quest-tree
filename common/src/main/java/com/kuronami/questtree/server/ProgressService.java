@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.api.QuestTreeApi;
+import com.kuronami.questtree.api.QuestTaskType;
 import com.kuronami.questtree.config.ServerConfig;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.item.ModItems;
@@ -567,7 +569,19 @@ public final class ProgressService {
                     case "advancement" -> advancementDone(player, str(t, "advancement"), str(t, "criterion")) ? 1 : 0;
                     case "stat" -> stat(player, str(t, "stat"));
                     case "stage" -> hasStage(player, str(t, "stage")) ? 1 : 0;
-                    default -> -1;
+                    default -> {
+                        QuestTaskType addon = QuestTreeApi.taskType(type(t));
+                        if (addon == null) {
+                            yield -1;
+                        }
+                        try {
+                            yield addon.progress(new QuestTaskType.TaskContext(
+                                    player, n, t, i, p.task(n.key, i), ProgressRules.target(t)));
+                        } catch (RuntimeException ex) {
+                            Constants.LOG.error("Task '{}' of {} failed: {}", type(t), n.key, ex.toString());
+                            yield -1;
+                        }
+                    }
                 };
                 if (value < 0) {
                     continue;
@@ -583,6 +597,9 @@ public final class ProgressService {
     /** Hands in items (or experience) for a task that consumes them. */
     private static void submit(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int i) {
         JsonObject t = n.tasks.get(i);
+        if (!conditionsMet(player, n, t, true)) {
+            return;
+        }
         long target = ProgressRules.target(t);
         long have = p.task(n.key, i);
         if (have >= target) {
@@ -630,8 +647,21 @@ public final class ProgressService {
         return sum + (long) (player.experienceProgress * player.getXpNeededForNextLevel());
     }
 
+    private static boolean conditionsMet(ServerPlayer player, ProgressModel.Node n, JsonObject data, boolean task) {
+        return QuestTreeApi.conditionsMet(player, n, data, task);
+    }
+
     private static void bump(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int i, long value) {
+        JsonObject task = n.tasks.get(i);
+        if (!conditionsMet(player, n, task, true)) {
+            return;
+        }
+        long target = ProgressRules.target(task);
+        long before = p.task(n.key, i);
         p.setTask(n.key, i, value);
+        if (before < target && value >= target) {
+            QuestTreeApi.fire(QuestTreeApi.QuestEvent.Kind.TASK, player, n, i);
+        }
         ProgressStore.get(player.server).setDirty();
         markDirty(player);
     }
@@ -714,8 +744,9 @@ public final class ProgressService {
             if (ProgressModel.boolOf(rw, "team") && !actor) {
                 continue;
             }
-            Rewards.give(player, p, n, rw, -1);
-            markReward(p, rw, key);
+            if (Rewards.give(player, p, n, rw, -1)) {
+                markReward(p, rw, key);
+            }
             ProgressStore.get(player.server).setDirty();
         }
     }
@@ -738,8 +769,9 @@ public final class ProgressService {
             if (p.rewardClaimed(key)) {
                 continue;
             }
-            Rewards.give(player, p, n, n.rewards.get(i), choice);
-            markReward(p, n.rewards.get(i), key);
+            if (Rewards.give(player, p, n, n.rewards.get(i), choice)) {
+                markReward(p, n.rewards.get(i), key);
+            }
         }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
@@ -758,8 +790,9 @@ public final class ProgressService {
         if (choiceMissing(rw, choice)) {
             return;
         }
-        Rewards.give(player, p, n, rw, choice);
-        markReward(p, rw, key);
+        if (Rewards.give(player, p, n, rw, choice)) {
+            markReward(p, rw, key);
+        }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
     }
@@ -815,6 +848,15 @@ public final class ProgressService {
             }
         }
         ProgressStore.get(server).setDirty();
+        ProgressModel.Node eventNode = rules().model().nodes.get(node);
+        if (eventNode != null) {
+            switch (kind) {
+                case "complete" -> QuestTreeApi.fire(QuestTreeApi.QuestEvent.Kind.COMPLETE, player, eventNode, -1);
+                case "claim" -> QuestTreeApi.fire(QuestTreeApi.QuestEvent.Kind.CLAIM, player, eventNode, -1);
+                default -> {
+                }
+            }
+        }
     }
 
     /** Marks every online member of the player's team, because the change was to shared progress. */

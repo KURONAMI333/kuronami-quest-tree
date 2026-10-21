@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.api.QuestTreeApi;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -512,7 +513,7 @@ public final class ProgressValidator {
             problem(out, Severity.ERROR, ref, path, type == null ? "task has no \"type\"" : "\"type\" is not a string");
             return;
         }
-        if (!TASK_TYPES.contains(name)) {
+        if (!TASK_TYPES.contains(name) && !QuestTreeApi.taskTypeRegistered(name)) {
             problem(out, Severity.ERROR, ref, path + ".type", "unknown task type " + quote(name) + ", so the task never counts");
             return;
         }
@@ -599,6 +600,7 @@ public final class ProgressValidator {
         // ProgressRules reads these on the server tick too, or while a hand-in settles, with no handler above it
         tickFlag(out, ref, path, t, "optional");
         tickFlag(out, ref, path, t, "consume");
+        conditions(out, ref, path, t, true);
     }
 
     /**
@@ -692,7 +694,7 @@ public final class ProgressValidator {
             }
             return;
         }
-        if (!REWARD_TYPES.contains(name)) {
+        if (!REWARD_TYPES.contains(name) && !QuestTreeApi.rewardTypeRegistered(name)) {
             problem(out, Severity.WARNING, ref, path + ".type", "unknown reward type " + quote(name) + ", so nothing is given");
             return;
         }
@@ -734,6 +736,39 @@ public final class ProgressValidator {
             }
             case "xp", "xp_levels" -> amount(out, ref, path, rw);
             default -> {
+            }
+        }
+        conditions(out, ref, path, rw, false);
+    }
+
+    /**
+     * A {@code conditions} array. An unregistered type is a warning, not an error: the built-in condition vocabulary
+     * is documented but not implemented in this version, and dropping a node for one would open everything behind it.
+     */
+    private static void conditions(Result out, ChapterRef ref, String path, JsonObject o, boolean task) {
+        JsonElement value = o.get("conditions");
+        if (value == null) {
+            return;
+        }
+        if (!value.isJsonArray()) {
+            problem(out, Severity.WARNING, ref, path + ".conditions", "\"conditions\" is not an array, so the "
+                    + (task ? "task" : "reward") + " never runs");
+            return;
+        }
+        JsonArray list = value.getAsJsonArray();
+        for (int i = 0; i < list.size(); i++) {
+            if (!list.get(i).isJsonObject()) {
+                problem(out, Severity.WARNING, ref, path + ".conditions[" + i + "]", "condition is not an object");
+                continue;
+            }
+            JsonObject condition = list.get(i).getAsJsonObject();
+            String type = str(condition, "type");
+            if (type.isEmpty()) {
+                problem(out, Severity.WARNING, ref, path + ".conditions[" + i + "]", "condition has no \"type\"");
+            } else if (!QuestTreeApi.conditionTypeRegistered(type)) {
+                problem(out, Severity.WARNING, ref, path + ".conditions[" + i + "].type",
+                        "condition type " + quote(type) + " is not registered, so this " + (task ? "task" : "reward")
+                                + " never runs");
             }
         }
     }
