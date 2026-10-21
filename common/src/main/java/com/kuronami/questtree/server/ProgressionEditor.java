@@ -64,6 +64,8 @@ public final class ProgressionEditor {
     private final Supplier<String> ids;
     private final ProgressValidator.Registry registry;
     private final Map<String, History> histories = new LinkedHashMap<>();
+    /** Table undo steps, kept apart from {@link #histories} so a table and a chapter that share an id never mix. */
+    private final Map<String, History> tableHistories = new LinkedHashMap<>();
 
     public ProgressionEditor(Path worldRoot) {
         this(worldRoot, ProgressionEditor::randomId, ProgressValidator.Registry.NONE);
@@ -100,7 +102,8 @@ public final class ProgressionEditor {
         // A chapter does not exist yet when it is being created, so it has no id to carry: the request sends an empty
         // chapterId and the namespace in the args, and the server mints the id. Every other op needs a real one.
         boolean creatingChapter = op.equals("create_chapter");
-        if (!creatingChapter && !validChapterId(chapterId)) {
+        boolean tableOp = op.equals("update_table") || op.equals("delete_table") || op.equals("restore_table");
+        if (!creatingChapter && !tableOp && !validChapterId(chapterId)) {
             return fail("chapter id is not <namespace>:<chapter>", 0);
         }
         ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot);
@@ -109,10 +112,19 @@ public final class ProgressionEditor {
             // writing on top of a layer that cannot be read would hide the hand edit that broke it
             return fail(readErrors, creatingChapter ? 0 : overlay.revision(chapterId));
         }
+        args = args == null ? new JsonObject() : args;
+        if (tableOp) {
+            return applyTable(overlay, packChapters, tables, packSources, chapterId, revision, op, args, unreadable);
+        }
         JsonObject before = packChapters.deepCopy();
         Map<String, ProgressValidator.Source> beforeSources = new LinkedHashMap<>(packSources);
         overlay.applyTo(before, beforeSources);
         long current = creatingChapter ? 0 : overlay.revision(chapterId);
+        // a table undo names the table's revision, not a chapter's, so it is checked by tableHistory itself
+        if ((op.equals("undo") || op.equals("redo"))
+                && undoIsAboutATable(overlay, packChapters, tables, chapterId)) {
+            return tableHistory(overlay, packChapters, tables, packSources, chapterId, revision, op, unreadable);
+        }
         if (!creatingChapter && revision != current) {
             return new Outcome(false, true, false, "", current,
                     List.of("chapter changed while you were editing it; reload it and try again"));
@@ -121,7 +133,7 @@ public final class ProgressionEditor {
             return history(overlay, packChapters, tables, packSources, chapterId, current, op, unreadable);
         }
         return applyOp(overlay, packChapters, tables, packSources, before, beforeSources, chapterId, current,
-                op, args == null ? new JsonObject() : args, unreadable);
+                op, args, unreadable);
     }
 
     // ------------------------------------------------------------------ operations
@@ -444,6 +456,222 @@ public final class ProgressionEditor {
         return new Outcome(true, false, true, createdId, newRevision, warnings);
     }
 
+    // ------------------------------------------------------------------ reward tables
+
+    /**
+     * The reward-table ops. A table is written whole: its entries are an array, so a patch of an array index would
+     * silently move when another operator reordered the entries. {@code create} lets the id come from the form for a
+     * table that does not exist yet; every other update names an existing table.
+     */
+    private Outcome applyTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
+                               Map<String, ProgressValidator.Source> packSources, String chapterId, long revision,
+                               String op, JsonObject args, Set<String> unreadable) {
+        String id = text(args, "id", chapterId);
+        if (!validChapterId(id)) {
+            return fail("table id is not <namespace>:<table>", 0);
+        }
+        return switch (op) {
+            case "update_table" -> updateTable(overlay, packChapters, packTables, packSources, chapterId, id,
+                    revision, args, unreadable);
+            case "delete_table" -> deleteTable(overlay, packChapters, packTables, packSources, id, revision,
+                    unreadable);
+            case "restore_table" -> restoreTable(overlay, packChapters, packTables, packSources, id, revision,
+                    unreadable);
+            default -> fail("unknown operation " + op, overlay.tableRevision(id));
+        };
+    }
+
+    private Outcome updateTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
+                                Map<String, ProgressValidator.Source> packSources, String chapterId, String id,
+                                long revision, JsonObject args, Set<String> unreadable) {
+        boolean create = args.has("create") && args.get("create").isJsonPrimitive()
+                && args.get("create").getAsJsonPrimitive().isBoolean() && args.get("create").getAsBoolean();
+        long current = overlay.tableRevision(id);
+        if (!create && revision != current) {
+            return staleTable(current);
+        }
+        ProgressionOverlay.TableOverlay existingOverlay = overlay.tables.get(id);
+        JsonObject existing = existingOverlay != null && !existingOverlay.remove ? existingOverlay.table
+                : object(packTables, id) ? packTables.getAsJsonObject(id) : null;
+        if (create && existing != null) {
+            return fail("table " + id + " already exists", current);
+        }
+        if (!create && existing == null) {
+            return fail("table " + id + " does not exist", current);
+        }
+        JsonObject updated;
+        if (args.has("table") && args.get("table").isJsonObject()) {
+            updated = args.getAsJsonObject("table").deepCopy();
+        } else if (args.has("patch") && args.get("patch").isJsonObject() && existing != null) {
+            updated = existing.deepCopy();
+            mergePatch(updated, args.getAsJsonObject("patch"));
+        } else {
+            return fail("update_table needs a JSON table object", current);
+        }
+        if (existing != null && updated.equals(existing)) {
+            return ok(create && chapterId.isEmpty() ? id : "", List.of(), current, false);
+        }
+
+        JsonObject before = packChapters.deepCopy();
+        Map<String, ProgressValidator.Source> beforeSources = new LinkedHashMap<>(packSources);
+        overlay.applyTo(before, beforeSources);
+        JsonObject beforeTables = packTables.deepCopy();
+        overlay.applyTablesTo(beforeTables, beforeSources);
+
+        ProgressionOverlay.TableOverlay table = existingOverlay == null
+                ? new ProgressionOverlay.TableOverlay(id) : existingOverlay;
+        table.base = object(packTables, id);
+        table.remove = false;
+        table.revision = current + 1;
+        table.table = updated;
+        overlay.tables.put(id, table);
+
+        JsonObject afterTables = packTables.deepCopy();
+        Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
+        overlay.applyTablesTo(afterTables, afterSources);
+        List<String> refusal = newErrors(before, beforeSources, beforeTables, before, afterSources, afterTables,
+                unreadable);
+        if (!refusal.isEmpty()) {
+            return fail(refusal, current);
+        }
+        try {
+            Path file = tableFileFor(id);
+            String previous = readFileQuietly(file);
+            backup(file);
+            writeRaw(file, table.toJson());
+            table.file = tableDisplayPath(file);
+            table.raw = GSON.toJson(table.toJson());
+            overlay.tableRevisions.put(id, table.revision);
+            ProgressionOverlay.writeTableRevisions(overlayRoot, overlay.tableRevisions);
+            // a table's write is undoable like a chapter's: the snapshot is the table file the write replaced
+            pushTableHistory(id, new Snapshot(previous));
+        } catch (IOException ex) {
+            Constants.LOG.error("Could not write the progression table overlay for {}", id, ex);
+            return fail("could not write the overlay: " + ex.getMessage(), current);
+        }
+        return new Outcome(true, false, true, create && chapterId.isEmpty() ? id : "", table.revision, List.of());
+    }
+
+    /** {@code delete_table}: hide the table and keep its content, so {@code restore_table} can put it back. */
+    private Outcome deleteTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
+                                Map<String, ProgressValidator.Source> packSources, String id, long revision,
+                                Set<String> unreadable) {
+        long current = overlay.tableRevision(id);
+        if (revision != current) {
+            return staleTable(current);
+        }
+        ProgressionOverlay.TableOverlay existingOverlay = overlay.tables.get(id);
+        JsonObject existing = existingOverlay != null && !existingOverlay.remove ? existingOverlay.table
+                : object(packTables, id) ? packTables.getAsJsonObject(id) : null;
+        if (existing == null) {
+            return fail("table " + id + " does not exist", current);
+        }
+
+        JsonObject before = packChapters.deepCopy();
+        Map<String, ProgressValidator.Source> beforeSources = new LinkedHashMap<>(packSources);
+        overlay.applyTo(before, beforeSources);
+        JsonObject beforeTables = packTables.deepCopy();
+        overlay.applyTablesTo(beforeTables, beforeSources);
+
+        ProgressionOverlay.TableOverlay tomb = existingOverlay == null
+                ? new ProgressionOverlay.TableOverlay(id) : existingOverlay;
+        tomb.base = object(packTables, id);
+        tomb.remove = true;
+        tomb.table = existing.deepCopy();
+        tomb.revision = current + 1;
+        overlay.tables.put(id, tomb);
+
+        JsonObject afterTables = packTables.deepCopy();
+        Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
+        overlay.applyTablesTo(afterTables, afterSources);
+        List<String> refusal = newErrors(before, beforeSources, beforeTables, before, afterSources, afterTables,
+                unreadable);
+        if (!refusal.isEmpty()) {
+            return fail(refusal, current);
+        }
+        List<String> warnings = newTableWarnings(before, beforeSources, beforeTables, before, afterSources, afterTables,
+                unreadable);
+        try {
+            Path file = tableFileFor(id);
+            String previous = readFileQuietly(file);
+            backup(file);
+            writeRaw(file, tomb.toJson());
+            tomb.file = tableDisplayPath(file);
+            tomb.raw = GSON.toJson(tomb.toJson());
+            overlay.tableRevisions.put(id, tomb.revision);
+            ProgressionOverlay.writeTableRevisions(overlayRoot, overlay.tableRevisions);
+            pushTableHistory(id, new Snapshot(previous));
+        } catch (IOException ex) {
+            Constants.LOG.error("Could not write the progression table overlay for {}", id, ex);
+            return fail("could not write the overlay: " + ex.getMessage(), current);
+        }
+        return new Outcome(true, false, true, "", tomb.revision, warnings);
+    }
+
+    /** {@code restore_table}: bring back the tombstone's content, or the pack's copy when it was never edited. */
+    private Outcome restoreTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
+                                 Map<String, ProgressValidator.Source> packSources, String id, long revision,
+                                 Set<String> unreadable) {
+        long current = overlay.tableRevision(id);
+        if (revision != current) {
+            return staleTable(current);
+        }
+        ProgressionOverlay.TableOverlay table = overlay.tables.get(id);
+        if (table == null || !table.remove) {
+            return fail("table " + id + " is not deleted", current);
+        }
+
+        JsonObject before = packChapters.deepCopy();
+        Map<String, ProgressValidator.Source> beforeSources = new LinkedHashMap<>(packSources);
+        overlay.applyTo(before, beforeSources);
+        JsonObject beforeTables = packTables.deepCopy();
+        overlay.applyTablesTo(beforeTables, beforeSources);
+
+        JsonObject packTable = object(packTables, id) ? packTables.getAsJsonObject(id) : null;
+        boolean packCopy = table.base && packTable != null && packTable.equals(table.table);
+        if (packCopy) {
+            // the pack still has the untouched table: let its copy come back instead of pinning a snapshot
+            overlay.tables.remove(id);
+        } else {
+            table.remove = false;
+            table.revision = current + 1;
+        }
+
+        JsonObject afterTables = packTables.deepCopy();
+        Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
+        overlay.applyTablesTo(afterTables, afterSources);
+        List<String> refusal = newErrors(before, beforeSources, beforeTables, before, afterSources, afterTables,
+                unreadable);
+        if (!refusal.isEmpty()) {
+            return fail(refusal, current);
+        }
+        long newRevision = current + 1;
+        try {
+            Path file = tableFileFor(id);
+            String previous = readFileQuietly(file);
+            backup(file);
+            if (packCopy) {
+                Files.deleteIfExists(file);
+            } else {
+                table.file = tableDisplayPath(file);
+                table.raw = GSON.toJson(table.toJson());
+                writeRaw(file, table.toJson());
+            }
+            overlay.tableRevisions.put(id, newRevision);
+            ProgressionOverlay.writeTableRevisions(overlayRoot, overlay.tableRevisions);
+            pushTableHistory(id, new Snapshot(previous));
+        } catch (IOException ex) {
+            Constants.LOG.error("Could not write the progression table overlay for {}", id, ex);
+            return fail("could not write the overlay: " + ex.getMessage(), current);
+        }
+        return new Outcome(true, false, true, packCopy ? "" : id, newRevision, List.of());
+    }
+
+    private static Outcome staleTable(long current) {
+        return new Outcome(false, true, false, "", current,
+                List.of("table changed while you were editing it; reload it and try again"));
+    }
+
     // ------------------------------------------------------------------ undo and redo
 
     private Outcome history(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject tables,
@@ -505,17 +733,110 @@ public final class ProgressionEditor {
         return new Outcome(true, false, true, "", newRevision, List.of());
     }
 
+    /**
+     * Undo/redo for a table. Its history is separate from a chapter's, because a table is written whole and its
+     * revisions travel in their own sidecar: a chapter undo must not touch a table and the reverse.
+     */
+    private Outcome tableHistory(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
+                                 Map<String, ProgressValidator.Source> packSources, String tableId, long revision,
+                                 String op, Set<String> unreadable) {
+        long current = overlay.tableRevision(tableId);
+        History history = tableHistories.computeIfAbsent(tableId, k -> new History());
+        Deque<Snapshot> from = op.equals("undo") ? history.undo : history.redo;
+        Deque<Snapshot> to = op.equals("undo") ? history.redo : history.undo;
+        if (revision != current) {
+            return staleTable(current);
+        }
+        if (from.isEmpty()) {
+            return fail("nothing to " + op, current);
+        }
+        Snapshot target = from.peekLast();
+        Path file = tableFileFor(tableId);
+        String currentText = readFileQuietly(file);
+
+        ProgressionOverlay.Overlay restoredOverlay = ProgressionOverlay.read(overlayRoot);
+        if (target.text() == null) {
+            // the write being undone created this table: dropping the overlay entry lets the pack's copy (if any) show
+            restoredOverlay.tables.remove(tableId);
+        } else {
+            try {
+                JsonObject parsed = JsonParser.parseString(target.text()).getAsJsonObject();
+                List<ProgressValidator.Problem> ignored = new ArrayList<>();
+                ProgressionOverlay.TableOverlay restored = ProgressionOverlay.readTable(tableId, parsed,
+                        tableDisplayPath(file), target.text(), ignored);
+                restored.revision = current + 1;
+                restoredOverlay.tables.put(tableId, restored);
+            } catch (RuntimeException ex) {
+                return fail("the saved undo step cannot be read: " + ex.getMessage(), current);
+            }
+        }
+
+        JsonObject chapters = packChapters.deepCopy();
+        Map<String, ProgressValidator.Source> chapterSources = new LinkedHashMap<>(packSources);
+        overlay.applyTo(chapters, chapterSources);
+        JsonObject beforeTables = packTables.deepCopy();
+        Map<String, ProgressValidator.Source> beforeSources = new LinkedHashMap<>(packSources);
+        overlay.applyTablesTo(beforeTables, beforeSources);
+        JsonObject afterTables = packTables.deepCopy();
+        Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(packSources);
+        restoredOverlay.applyTablesTo(afterTables, afterSources);
+        List<String> refusal = newErrors(chapters, chapterSources, beforeTables, chapters, afterSources, afterTables,
+                unreadable);
+        if (!refusal.isEmpty()) {
+            return fail(refusal, current);
+        }
+
+        long newRevision = current + 1;
+        try {
+            if (target.text() == null) {
+                backup(file);
+                Files.deleteIfExists(file);
+            } else {
+                JsonObject parsed = JsonParser.parseString(target.text()).getAsJsonObject();
+                parsed.addProperty("revision", newRevision);
+                writeRaw(file, parsed);
+            }
+            restoredOverlay.tableRevisions.put(tableId, newRevision);
+            ProgressionOverlay.writeTableRevisions(overlayRoot, restoredOverlay.tableRevisions);
+        } catch (IOException ex) {
+            return fail("could not write the overlay: " + ex.getMessage(), current);
+        }
+        from.pollLast();
+        push(to, new Snapshot(currentText));
+        return new Outcome(true, false, true, "", newRevision, List.of());
+    }
+
+    /**
+     * An undo request names the chapter to roll back, or a table on a table screen. An id that names a chapter keeps
+     * the chapter undo, which is what it did before tables had one; a bare table or a history left by a table whose
+     * overlay entry an undo removed is a table undo.
+     */
+    private boolean undoIsAboutATable(ProgressionOverlay.Overlay overlay, JsonObject packChapters,
+                                      JsonObject packTables, String id) {
+        if (overlay.chapters.containsKey(id) || object(packChapters, id)) {
+            return false;
+        }
+        return overlay.tables.containsKey(id) || object(packTables, id) || tableHistories.containsKey(id);
+    }
+
     // ------------------------------------------------------------------ validation
 
     private List<String> newErrors(JsonObject before, Map<String, ProgressValidator.Source> beforeSources,
                                    JsonObject after, Map<String, ProgressValidator.Source> afterSources,
                                    JsonObject tables, Set<String> unreadable) {
+        return newErrors(before, beforeSources, tables, after, afterSources, tables, unreadable);
+    }
+
+    private List<String> newErrors(JsonObject before, Map<String, ProgressValidator.Source> beforeSources,
+                                   JsonObject beforeTables, JsonObject after,
+                                   Map<String, ProgressValidator.Source> afterSources, JsonObject afterTables,
+                                   Set<String> unreadable) {
         // Compare what the problem is, not which file and line it was read from: after an edit the same unchanged
         // problem in this chapter moves from the pack file to the overlay file. Comparing format() would call every
         // pre-existing error "new" and refuse every edit of a pack that already had one.
-        Set<String> old = errorKeys(run(before, tables, beforeSources, unreadable).problems);
+        Set<String> old = errorKeys(run(before, beforeTables, beforeSources, unreadable).problems);
         List<String> fresh = new ArrayList<>();
-        for (ProgressValidator.Problem p : run(after, tables, afterSources, unreadable).problems) {
+        for (ProgressValidator.Problem p : run(after, afterTables, afterSources, unreadable).problems) {
             if (p.severity() == ProgressValidator.Severity.ERROR && !old.contains(errorKey(p))) {
                 fresh.add(p.format());
             }
@@ -526,25 +847,64 @@ public final class ProgressionEditor {
     private List<String> newWarnings(JsonObject before, Map<String, ProgressValidator.Source> beforeSources,
                                      JsonObject after, Map<String, ProgressValidator.Source> afterSources,
                                      JsonObject tables, String chapterId, Set<String> unreadable) {
-        Set<String> old = warnings(before, beforeSources, tables, chapterId, unreadable);
+        Map<String, String> old = warnings(before, beforeSources, tables, chapterId, unreadable);
         List<String> fresh = new ArrayList<>();
-        for (String w : warnings(after, afterSources, tables, chapterId, unreadable)) {
-            if (!old.contains(w)) {
-                fresh.add(w);
+        for (Map.Entry<String, String> e : warnings(after, afterSources, tables, chapterId, unreadable).entrySet()) {
+            if (!old.containsKey(e.getKey())) {
+                fresh.add(e.getValue());
             }
         }
         return fresh;
     }
 
-    private Set<String> warnings(JsonObject chapters, Map<String, ProgressValidator.Source> sources, JsonObject tables,
-                                 String chapterId, Set<String> unreadable) {
+    /** Warning sentence per identity, so an unchanged warning is not reported again by an edit that only moves it. */
+    private Map<String, String> warnings(JsonObject chapters, Map<String, ProgressValidator.Source> sources,
+                                         JsonObject tables, String chapterId, Set<String> unreadable) {
         ProgressValidator.Result result = ProgressValidator.validateChapter(chapterId,
                 object(chapters, chapterId) ? chapters.getAsJsonObject(chapterId) : null,
                 chapters, tables, sources, registry);
-        Set<String> out = new LinkedHashSet<>();
+        Map<String, String> out = new LinkedHashMap<>();
         for (ProgressValidator.Problem p : result.problems) {
             if (p.severity() == ProgressValidator.Severity.WARNING) {
-                out.add(errorKey(p));
+                out.putIfAbsent(errorKey(p), p.format());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A table is used by chapters, not by one chapter's file: deleting it can add a warning in any of them, so the
+     * comparison covers the whole book. The reply then carries those new sentences (for example a reward whose table
+     * no longer exists) instead of letting the reference break silently.
+     */
+    private List<String> newTableWarnings(JsonObject before, Map<String, ProgressValidator.Source> beforeSources,
+                                          JsonObject beforeTables, JsonObject after,
+                                          Map<String, ProgressValidator.Source> afterSources, JsonObject afterTables,
+                                          Set<String> unreadable) {
+        Map<String, String> old = tableWarnings(before, beforeTables, beforeSources, unreadable);
+        List<String> fresh = new ArrayList<>();
+        for (Map.Entry<String, String> e : tableWarnings(after, afterTables, afterSources, unreadable).entrySet()) {
+            if (!old.containsKey(e.getKey())) {
+                fresh.add(e.getValue());
+            }
+        }
+        return fresh;
+    }
+
+    private Map<String, String> tableWarnings(JsonObject chapters, JsonObject tables,
+                                              Map<String, ProgressValidator.Source> sources, Set<String> unreadable) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (String chapterId : chapters.keySet()) {
+            if (!object(chapters, chapterId)) {
+                continue;
+            }
+            ProgressValidator.Result result = ProgressValidator.validateChapter(chapterId,
+                    chapters.getAsJsonObject(chapterId), chapters, tables, sources, registry);
+            for (ProgressValidator.Problem p : result.problems) {
+                if (p.severity() == ProgressValidator.Severity.WARNING) {
+                    // the chapter is part of the identity: the same path in two chapters is two different warnings
+                    out.putIfAbsent(chapterId + "\u0000" + errorKey(p), p.format());
+                }
             }
         }
         return out;
@@ -607,6 +967,17 @@ public final class ProgressionEditor {
         return file;
     }
 
+    private Path tableFileFor(String id) {
+        int colon = id.indexOf(':');
+        String namespace = id.substring(0, colon);
+        String path = id.substring(colon + 1);
+        Path file = overlayRoot.resolve("tables").resolve(namespace).resolve(path + ".json").normalize();
+        if (!file.startsWith(overlayRoot)) {
+            throw new IllegalArgumentException("table id points outside the overlay: " + id);
+        }
+        return file;
+    }
+
     private String readText(ProgressionOverlay.ChapterOverlay chapter) {
         String text = readTextQuietly(chapter);
         return text;
@@ -619,6 +990,19 @@ public final class ProgressionEditor {
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    private static String readFileQuietly(Path file) {
+        try {
+            return Files.exists(file) ? Files.readString(file, StandardCharsets.UTF_8) : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String tableDisplayPath(Path file) {
+        return "kuronami_quest_tree/progression/" + overlayRoot.relativize(file).toString()
+                .replace(java.io.File.separatorChar, '/');
     }
 
     private void write(ProgressionOverlay.ChapterOverlay chapter) throws IOException {
@@ -663,6 +1047,12 @@ public final class ProgressionEditor {
 
     private void pushChapterHistory(String chapterId, Snapshot snapshot) {
         History history = histories.computeIfAbsent(chapterId, k -> new History());
+        push(history.undo, snapshot);
+        history.redo.clear();
+    }
+
+    private void pushTableHistory(String tableId, Snapshot snapshot) {
+        History history = tableHistories.computeIfAbsent(tableId, k -> new History());
         push(history.undo, snapshot);
         history.redo.clear();
     }

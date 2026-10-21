@@ -8,10 +8,12 @@ import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.team.TeamResolver;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -131,6 +133,11 @@ public final class EditorService {
             return;
         }
 
+        if (payload.op().equals("export") || payload.op().equals("test_chapter")) {
+            control(player, payload, chapterId, args);
+            return;
+        }
+
         ProgressionEditor.Outcome outcome;
         try {
             outcome = editor.apply(ProgressData.packChapters(), ProgressData.packTables(), ProgressData.packSources(),
@@ -147,7 +154,8 @@ public final class EditorService {
             dirty = true;
         }
         String replyChapter = chapterId;
-        if (!outcome.createdId().isEmpty() && payload.op().equals("create_chapter")) {
+        if (!outcome.createdId().isEmpty()
+                && (payload.op().equals("create_chapter") || payload.op().equals("update_table"))) {
             replyChapter = outcome.createdId();
         }
         reply(player, payload, replyChapter, outcome.ok(), outcome.createdId(), outcome.messages(), outcome.revision());
@@ -174,6 +182,60 @@ public final class EditorService {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             ProgressData.sync(player);
         }
+    }
+
+    /**
+     * Export and test drive the commands rather than reimplementing them. Both echo the request's revision: they do
+     * not write a chapter, and a control reply must not move the client's revision for the one it named.
+     */
+    private static void control(ServerPlayer player, EditorOpPayload request, String chapterId, JsonObject args) {
+        long revision = request.chapterRevision();
+        if (request.op().equals("export")) {
+            String namespace = EditorOps.exportNamespace(args, chapterId);
+            String command = EditorOps.exportCommand(namespace == null ? "" : namespace);
+            if (command == null) {
+                reply(player, request, chapterId, false, "", List.of("no namespace to export"), revision);
+                return;
+            }
+            boolean force = EditorOps.forceRequested(args);
+            Path folder = player.server.getWorldPath(LevelResource.DATAPACK_DIR)
+                    .resolve(ProgressExport.packFolder(namespace));
+            String refusal = EditorOps.exportRefusal(namespace, force, Files.exists(folder));
+            if (refusal != null) {
+                reply(player, request, chapterId, false, "", List.of(refusal), revision);
+                return;
+            }
+            command = EditorOps.exportCommand(namespace, force);
+            int result = ServerCommands.run(player, command, 2, false);
+            // the reply carries the pack folder's name, not a path on the server: the author already knows their world
+            EditorOps.ControlOutcome outcome = EditorOps.controlOutcome("export", result,
+                    ProgressExport.packFolder(namespace));
+            reply(player, request, chapterId, outcome.ok(), "", messages(outcome), revision);
+            return;
+        }
+        String command = EditorOps.testCommand(chapterId);
+        JsonObject chapters = ProgressData.mergedBundle().getAsJsonObject("chapters");
+        if (command == null || chapters == null || !chapters.has(chapterId)) {
+            reply(player, request, chapterId, false, "", List.of("this chapter is not in the book"), revision);
+            return;
+        }
+        String partyRefusal = EditorOps.testRefusal(
+                TeamResolver.members(player.server, TeamResolver.teamId(player.server, player.getUUID())));
+        if (partyRefusal != null) {
+            reply(player, request, chapterId, false, "", List.of(partyRefusal), revision);
+            return;
+        }
+        int result = ServerCommands.run(player, command, 2, false);
+        EditorOps.ControlOutcome outcome = EditorOps.controlOutcome("test_chapter", result, "");
+        if (outcome.leaveEditing()) {
+            // the point of the button is to see the chapter as a player: the map must stop offering editing at once
+            setEditing(player, false);
+        }
+        reply(player, request, chapterId, outcome.ok(), "", messages(outcome), revision);
+    }
+
+    private static List<String> messages(EditorOps.ControlOutcome outcome) {
+        return outcome.message().isEmpty() ? List.of() : List.of(outcome.message());
     }
 
     private static void reply(ServerPlayer player, EditorOpPayload request, String chapterId, boolean ok,

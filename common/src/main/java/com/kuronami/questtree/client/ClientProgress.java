@@ -42,6 +42,9 @@ public final class ClientProgress {
     public static Consumer<EditorOpPayload> editorSender = p -> { };
     /** The chapter JSON exactly as the server sent it, for copying nodes without a round trip. */
     private static JsonObject rawChapters;
+    private static JsonObject rawTables = new JsonObject();
+    /** Tombstones for the restore list: deleted chapters and each live chapter's deleted node ids. */
+    private static JsonObject rawDeleted = new JsonObject();
     private static int receivingGeneration = -1;
     private static ByteArrayOutputStream buffer;
     private static int nextPart;
@@ -72,6 +75,10 @@ public final class ClientProgress {
                 rules = new ProgressRules(ProgressModel.of(bundle));
                 rawChapters = bundle.has("chapters") && bundle.get("chapters").isJsonObject()
                         ? bundle.getAsJsonObject("chapters").deepCopy() : new JsonObject();
+                rawTables = bundle.has("reward_tables") && bundle.get("reward_tables").isJsonObject()
+                        ? bundle.getAsJsonObject("reward_tables").deepCopy() : new JsonObject();
+                rawDeleted = bundle.has("deleted") && bundle.get("deleted").isJsonObject()
+                        ? bundle.getAsJsonObject("deleted").deepCopy() : new JsonObject();
                 EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
@@ -127,6 +134,24 @@ public final class ClientProgress {
         }
         com.google.gson.JsonElement node = nodes.getAsJsonObject().get(nodeId);
         return node != null && node.isJsonObject() ? node.getAsJsonObject().deepCopy() : null;
+    }
+
+    /** One chapter's raw JSON, or null; the chapter editor patches this so unknown fields survive. */
+    public static JsonObject rawChapter(String chapterId) {
+        if (rawChapters == null || !rawChapters.has(chapterId) || !rawChapters.get(chapterId).isJsonObject()) {
+            return null;
+        }
+        return rawChapters.getAsJsonObject(chapterId).deepCopy();
+    }
+
+    /** Every reward table as the server last sent it (pack plus the writable table overlay). */
+    public static JsonObject rawTables() {
+        return rawTables.deepCopy();
+    }
+
+    /** The restore list: {@code chapters} (ids) and {@code nodes} (chapter id to node ids). */
+    public static JsonObject rawDeleted() {
+        return rawDeleted.deepCopy();
     }
 
     /** State of a node for this player; nodes the rules do not know (should not happen) count as open. */
@@ -332,6 +357,7 @@ public final class ClientProgress {
         receivingGeneration = -1;
         buffer = null;
         rawChapters = null;
+        rawDeleted = new JsonObject();
         EditorSession.onLogout();
         ClientTeam.onLogout();
         ProgressScreen.clearViews();

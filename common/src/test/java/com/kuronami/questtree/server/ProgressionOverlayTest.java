@@ -1,5 +1,6 @@
 package com.kuronami.questtree.server;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,32 @@ class ProgressionOverlayTest {
         ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(chapters, new LinkedHashMap<>());
 
         assertFalse(chapters.has("t:basics"));
+    }
+
+    @Test
+    void deletedJsonListsChapterAndLiveNodeTombstones() throws Exception {
+        writeOverlay("t:gone", """
+                {"revision": 2, "base": true, "remove": true, "edited": true,
+                 "chapter": {"title": "Gone"}, "nodes": {"x": {"action": "remove", "node": {"x": 1}}}}
+                """);
+        writeOverlay("t:basics", """
+                {"revision": 4, "base": true,
+                 "nodes": {
+                   "a": {"action": "remove", "node": {"x": 1}, "edited": true},
+                   "b": {"action": "add", "node": {"x": 5}}
+                 }}
+                """);
+
+        ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR));
+        JsonObject deleted = overlay.deletedJson();
+
+        JsonArray chapters = deleted.getAsJsonArray("chapters");
+        assertEquals(1, chapters.size());
+        assertEquals("t:gone", chapters.get(0).getAsString());
+        JsonObject nodes = deleted.getAsJsonObject("nodes");
+        assertEquals(1, nodes.size());
+        assertEquals(1, nodes.getAsJsonArray("t:basics").size());
+        assertEquals("a", nodes.getAsJsonArray("t:basics").get(0).getAsString());
     }
 
     @Test
