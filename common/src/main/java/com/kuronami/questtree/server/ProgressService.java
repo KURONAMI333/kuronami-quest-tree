@@ -524,7 +524,7 @@ public final class ProgressService {
                 }
             }
             case "take" -> {
-                if (n != null && !Rewards.blockedForNode(p, n) && r.take(p, n)) {
+                if (n != null && r.take(p, n)) {
                     Rewards.giveSkill(player, p, n, p.taken.getOrDefault(n.key, 1) - 1);
                     event(player, p, "take", n.key);
                 }
@@ -935,16 +935,18 @@ public final class ProgressService {
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
             String key = n.key + "#" + i;
-            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, rw)
-                    || Rewards.blocked(p, rw)) {
+            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
                 continue;
             }
             if (ProgressModel.boolOf(rw, "team") && !actor) {
                 continue;
             }
-            Rewards.give(player, p, n, rw, -1);
-            markReward(p, rw, key);
-            ProgressStore.get(player.server).setDirty();
+            boolean blocked = Rewards.blocked(p, rw);
+            if (com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, i,
+                    com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, blocked,
+                    () -> Rewards.give(player, p, n, rw, -1))) {
+                ProgressStore.get(player.server).setDirty();
+            }
         }
     }
 
@@ -963,12 +965,13 @@ public final class ProgressService {
         }
         for (int i = 0; i < n.rewards.size(); i++) {
             String key = n.key + "#" + i;
-            if (p.rewardClaimed(key) || !conditionsMet(player, p, n.rewards.get(i))
-                    || Rewards.blocked(p, n.rewards.get(i))) {
+            JsonObject rw = n.rewards.get(i);
+            if (p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
                 continue;
             }
-            Rewards.give(player, p, n, n.rewards.get(i), choice);
-            markReward(p, n.rewards.get(i), key);
+            com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, i,
+                    com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, Rewards.blocked(p, rw),
+                    () -> Rewards.give(player, p, n, rw, choice));
         }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
@@ -984,25 +987,17 @@ public final class ProgressService {
             return;
         }
         JsonObject rw = n.rewards.get(index);
-        if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw) || Rewards.blocked(p, rw)) {
+        if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw)) {
             return;
         }
-        Rewards.give(player, p, n, rw, choice);
-        markReward(p, rw, key);
+        boolean paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index,
+                com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, Rewards.blocked(p, rw),
+                () -> Rewards.give(player, p, n, rw, choice));
+        if (!paid) {
+            return;
+        }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
-    }
-
-    /**
-     * Records a reward as taken. A reward with {@code "team": true} (FTBQ's team_reward) settles once for the whole
-     * team; every other reward belongs to the player who claimed it.
-     */
-    private static void markReward(PlayerProgress p, JsonObject rw, String key) {
-        if (ProgressModel.boolOf(rw, "team")) {
-            p.claimTeamReward(key);
-        } else {
-            p.claimedRewards.add(key);
-        }
     }
 
     /** A choice table needs the player to pick a valid option before anything on the node is claimed. */

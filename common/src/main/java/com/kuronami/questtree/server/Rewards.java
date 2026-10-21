@@ -112,19 +112,6 @@ public final class Rewards {
                 && !ProgressModel.boolOf(rw, "ignore_blocking");
     }
 
-    /** Whether blocking keeps this node from being taken at all (any reward without the exemption). */
-    static boolean blockedForNode(PlayerProgress p, ProgressModel.Node n) {
-        if (!p.rewardsBlocked()) {
-            return false;
-        }
-        for (JsonObject rw : n.rewards) {
-            if (!blocked(p, rw)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /**
      * A stage reward. With {@code "team": true} the stage belongs to the team record and is mirrored into Pack Stages
      * for every online member, so content outside the quest tree can keep using its command.
@@ -133,6 +120,11 @@ public final class Rewards {
         String stage = ProgressService.str(rw, "stage");
         boolean add = !ProgressModel.boolOf(rw, "remove");
         if (!ProgressModel.boolOf(rw, "team")) {
+            if (add) {
+                p.stages.add(stage);
+            } else {
+                p.stages.remove(stage);
+            }
             ServerCommands.run(player, "pack_stages " + (add ? "add " : "remove ")
                     + player.getGameProfile().getName() + " " + stage, 2, true);
             return;
@@ -145,12 +137,64 @@ public final class Rewards {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             ServerCommands.run(member, "pack_stages " + (add ? "add " : "remove ")
                     + member.getGameProfile().getName() + " " + stage, 2, true);
+            PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
+            if (add) {
+                mp.teamStagesApplied.add(stage);
+            } else {
+                mp.teamStagesApplied.remove(stage);
+            }
         }
     }
 
-    /** Re-applies shared team stages after a login, for members who were offline when the stage was granted. */
+    /** Pays rewards that were taken while an admin had blocked pay-outs. Called when the block is lifted. */
+    static void payPending(ServerPlayer player, PlayerProgress p) {
+        var model = ProgressService.rules().model();
+        boolean changed = false;
+        for (String key : new ArrayList<>(p.pendingRewards)) {
+            String node = com.kuronami.questtree.progress.RewardLedger.pendingNode(key);
+            int rank = com.kuronami.questtree.progress.RewardLedger.pendingRank(key);
+            int index = com.kuronami.questtree.progress.RewardLedger.pendingIndex(key);
+            ProgressModel.Node n = model.nodes.get(node);
+            if (n == null) {
+                p.pendingRewards.remove(key);
+                changed = true;
+                continue;
+            }
+            List<JsonObject> list = rank >= 0 ? rewardsOfRank(n, rank) : n.rewards;
+            if (index < 0 || index >= list.size()) {
+                p.pendingRewards.remove(key);
+                changed = true;
+                continue;
+            }
+            JsonObject rw = list.get(index);
+            if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, rw)) {
+                continue;
+            }
+            if (give(player, p, n, rw, -1)) {
+                p.pendingRewards.remove(key);
+                changed = true;
+            }
+        }
+        if (changed) {
+            ProgressStore.get(player.server).setDirty();
+        }
+    }
+
+    /**
+     * Re-applies shared team stages after a login, for members who were offline when the stage was granted, and
+     * removes the ones this player was given while the team no longer holds them (2026-10-21 review).
+     */
     static void applyTeamStages(ServerPlayer player, PlayerProgress p) {
-        for (String stage : p.teamStages) {
+        var plan = com.kuronami.questtree.progress.StageSync.plan(p.teamStagesApplied, p.teamStages);
+        for (String stage : plan.remove()) {
+            ServerCommands.run(player, "pack_stages remove " + player.getGameProfile().getName() + " " + stage, 2, true);
+        }
+        for (String stage : plan.add()) {
+            ServerCommands.run(player, "pack_stages add " + player.getGameProfile().getName() + " " + stage, 2, true);
+        }
+        p.teamStagesApplied.clear();
+        p.teamStagesApplied.addAll(p.teamStages);
+        for (String stage : p.stages) {
             ServerCommands.run(player, "pack_stages add " + player.getGameProfile().getName() + " " + stage, 2, true);
         }
     }
@@ -181,7 +225,11 @@ public final class Rewards {
             }
             if (ProgressService.type(rw).equals("attribute")) {
                 attribute(player, n.key, rank * 100 + i, rw);
-            } else if (full || ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag")) {
+            } else if (full) {
+                com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, i, rank, false,
+                        blocked(p, rw), () -> give(player, p, n, rw, -1));
+            } else if ((ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag"))
+                    && !blocked(p, rw)) {
                 give(player, p, n, rw, -1);
             }
             i++;

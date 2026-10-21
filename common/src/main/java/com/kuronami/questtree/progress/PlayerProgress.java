@@ -50,6 +50,12 @@ public final class PlayerProgress {
     public Map<String, Boolean> chapterOpen = new HashMap<>();
     /** Stages granted to the whole team ({@code "team": true} on a stage task or reward). */
     public Set<String> teamStages = new HashSet<>();
+    /** Stages the quest tree granted to this player, as opposed to the shared {@link #teamStages}. */
+    public Set<String> stages = new HashSet<>();
+    /** Team stages this player's Pack Stages were last synced with, so a removal while offline is followed on login. */
+    public Set<String> teamStagesApplied = new HashSet<>();
+    /** Rewards whose pay-out was blocked; paid when the block is lifted (2026-10-21). */
+    public Set<String> pendingRewards = new HashSet<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public Deque<String> recent = new ArrayDeque<>();
     /** The quest book was handed out on first join (server config, 2026-10-20). */
@@ -102,6 +108,9 @@ public final class PlayerProgress {
         p.cooldown = personalNodes.isEmpty() ? shared.cooldown : new RoutedMap<>(shared.cooldown, part.cooldown);
         p.chapterOpen = shared.chapterOpen;
         p.teamStages = shared.teamStages;
+        p.stages = part.stages;
+        p.teamStagesApplied = part.teamStagesApplied;
+        p.pendingRewards = part.pendingRewards;
         p.claimed = part.claimed;
         p.claimedRewards = part.claimedRewards;
         p.teamClaimedRewards = teamClaimedRewards;

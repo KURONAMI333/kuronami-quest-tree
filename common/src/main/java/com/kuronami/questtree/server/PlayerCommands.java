@@ -314,6 +314,9 @@ final class PlayerCommands {
         for (ServerPlayer p : players) {
             PlayerProgress pr = ProgressService.progress(p);
             pr.setRewardsBlocked(blocked);
+            if (!blocked) {
+                Rewards.payPending(p, pr);
+            }
             ProgressStore.get(p.server).setDirty();
             ProgressService.markDirty(p);
             ProgressService.flush(p);

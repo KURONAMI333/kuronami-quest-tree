@@ -25,6 +25,12 @@ public final class PlayerPart {
     public final Map<String, Long> tasks = new HashMap<>();
     public final Map<String, Integer> repeats = new HashMap<>();
     public final Map<String, Long> cooldown = new HashMap<>();
+    /** Stages this player holds, including Pack Stages granted outside the quest tree. */
+    public final Set<String> stages = new HashSet<>();
+    /** Team stages already mirrored into this player's Pack Stages. */
+    public final Set<String> teamStagesApplied = new HashSet<>();
+    /** Rewards blocked by an admin; paid when the block is lifted. */
+    public final Set<String> pendingRewards = new HashSet<>();
     public boolean bookGiven;
     /** An admin stopped this player from taking rewards; tasks still count and completions still happen. */
     public boolean rewardsBlocked;
@@ -45,6 +51,9 @@ public final class PlayerPart {
         tasks.putAll(other.tasks);
         repeats.putAll(other.repeats);
         cooldown.putAll(other.cooldown);
+        stages.addAll(other.stages);
+        teamStagesApplied.addAll(other.teamStagesApplied);
+        pendingRewards.addAll(other.pendingRewards);
         bookGiven |= other.bookGiven;
         rewardsBlocked |= other.rewardsBlocked;
     }
@@ -58,6 +67,9 @@ public final class PlayerPart {
         o.add("tasks", longs(tasks));
         o.add("repeats", ints(repeats));
         o.add("cooldown", longs(cooldown));
+        o.add("stages", strings(stages));
+        o.add("team_stages_applied", strings(teamStagesApplied));
+        o.add("pending_rewards", strings(pendingRewards));
         o.addProperty("book_given", bookGiven);
         o.addProperty("rewards_blocked", rewardsBlocked);
         return o;
@@ -85,6 +97,15 @@ public final class PlayerPart {
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             part.cooldown.put(e.getKey(), e.getValue().getAsLong());
+        }
+        for (JsonElement e : arr(o, "stages")) {
+            part.stages.add(e.getAsString());
+        }
+        for (JsonElement e : arr(o, "team_stages_applied")) {
+            part.teamStagesApplied.add(e.getAsString());
+        }
+        for (JsonElement e : arr(o, "pending_rewards")) {
+            part.pendingRewards.add(e.getAsString());
         }
         part.rewardsBlocked = o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
                 && o.get("rewards_blocked").getAsBoolean();
