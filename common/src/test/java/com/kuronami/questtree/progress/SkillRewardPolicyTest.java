@@ -26,6 +26,23 @@ class SkillRewardPolicyTest {
     }
 
     @Test
+    void aCommandWithALockCommandPaysOnEveryTake() {
+        var plain = JsonParser.parseString("""
+                {"type": "command", "command": "say hi"}
+                """).getAsJsonObject();
+        var paired = JsonParser.parseString("""
+                {"type": "command", "command": "say hi", "lock_command": "say bye"}
+                """).getAsJsonObject();
+        assertFalse(SkillRewardPolicy.pays(plain, false), "a command with no undo stays one-off");
+        assertFalse(SkillRewardPolicy.hasLockCommand(plain));
+        assertTrue(SkillRewardPolicy.hasLockCommand(paired));
+        assertTrue(SkillRewardPolicy.pays(paired, false), "the unlock half must run again after a respec locked it");
+        assertFalse(SkillRewardPolicy.pays(JsonParser.parseString("""
+                {"type": "item", "id": "minecraft:stone"}
+                """).getAsJsonObject(), false), "a lock_command does not loosen other one-off rewards");
+    }
+
+    @Test
     void theMarkIsPerNodeAndRank() {
         ProgressModel model = ProgressModel.of(JsonParser.parseString("""
                 {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [{}, {}]}}}}}

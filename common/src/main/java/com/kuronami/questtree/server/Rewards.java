@@ -98,11 +98,11 @@ public final class Rewards {
             if (type.equals("attribute")) {
                 attribute(player, n.key, rank * 100 + i, rw);
             } else if (full) {
-                if (SkillRewardPolicy.pays(type, firstTake)) {
+                if (SkillRewardPolicy.pays(rw, firstTake)) {
                     give(player, p, n, rw, -1);
                 }
             } else if (type.equals("command")) {
-                if (firstTake) {
+                if (firstTake || SkillRewardPolicy.hasLockCommand(rw)) {
                     give(player, p, n, rw, -1);
                 }
             } else if (type.equals("tag")) {
