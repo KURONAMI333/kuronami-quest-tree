@@ -2,6 +2,8 @@
 
 Everything the progression screen draws comes from files a resource pack can replace. Nothing visual is fixed in code.
 
+Quest text is different: a pack's titles and descriptions live in its data pack under `data/<namespace>/progression/lang/`, not in a resource pack. See `DATA_MODEL.md`, "Translating a quest book".
+
 ## Colours: `assets/kuronami_quest_tree/gui/palette.json`
 
 One JSON object of colour names to `"#RRGGBB"` or `"#AARRGGBB"`. A pack only needs the keys it changes; the rest keep

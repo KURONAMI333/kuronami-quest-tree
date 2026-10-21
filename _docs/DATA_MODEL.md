@@ -6,7 +6,7 @@ updated: 2026-10-22
 
 # データの形（案 v1）
 
-置き場はデータパックの `data/<namespace>/progression/`。サーバーが読み、クライアントへ送る。文言は言語ファイル（`assets/<namespace>/lang/<locale>.json`）に置く。
+置き場はデータパックの `data/<namespace>/progression/`。サーバーが読み、クライアントへ送る。文言は言語ファイル（`data/<namespace>/progression/lang/<locale>.json`）に置く。
 
 決め方: 6本のパック（ATM10・FTB Skies 2・FTB Evolution・Prominence II・DarkRPG・Mystic Horizons）の定義を全部数え、使われている項目はすべて表せるようにした。使用数は `PACK_PORT_REPORT.md`。
 
@@ -39,6 +39,23 @@ data/<ns>/progression/
 ```
 
 `patches` は Mystic Horizons で必要と分かった。別MOD（SimplySkills）が持つスキルツリーの一部を、パック側から書き換えている。
+
+## Translating a quest book
+
+パックの本の文言はデータパック側の言語ファイルに置く。MOD 本体の UI（`assets/kuronami_quest_tree/lang/<locale>.json`）とは別物。
+
+- 置き場は `data/<namespace>/progression/lang/<locale>.json`。1 locale 1ファイルのフラットな JSON オブジェクトで、インポーターもここへ書き出す。
+- locale 名は Minecraft と同じ（`en_us`, `ja_jp`, `de_de`, `fr_fr`, `es_es`, `zh_cn`, `ru_ru`, `pt_br`, `ko_kr`）。プレイヤーには選択中の locale と `en_us` だけが送られ、無いキーは `en_us` に落ちる。
+- キーの形（`<ns>` はデータパックの名前空間、`<chapter>` は `chapters/<chapter>.json` の名前）:
+  - 章: `progression.<ns>.<chapter>.title`
+  - 章の群: `progression.<ns>.group.<group>.title`
+  - ノード: `progression.<ns>.<chapter>.<node>.title` / `.subtitle` / `.desc`
+  - タスク名の上書き: タスクの `text` に書いた値を前置きにした `<text>.title`
+  - `visibility.lock_hint`: キーを書けばその訳、キーでない文字列ならそのまま表示
+- 値は文字列。`\n` で改ページ、FTB の色コード（`&a` など）も使える。翻訳キーではなくそのまま表示されるので `%s` の穴埋めは無い。
+- locale を足すには `en_us.json` をコピーして値を訳し、キーとファイル名以外を変えない。
+- リソースパックの `assets/<namespace>/lang/<locale>.json` もバニラの I18n として読まれるが、効くのは章題・群題・`lock_hint` だけ（`ClientModel.component` のフォールバック）。`subtitle` と `desc` はデータ側の言語ファイルしか見ないので、本文はデータパックに入れる。
+- 翻訳されない文字列: ノードや章に直接書いた `title` / `subtitle` / `description` は言語キーより優先される。装飾の `hover` は配列の文字列をそのまま表示する（言語キーを引かない）。
 
 ## 章
 
