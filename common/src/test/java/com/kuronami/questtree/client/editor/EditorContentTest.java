@@ -332,6 +332,29 @@ class EditorContentTest {
         }
     }
 
+    @Test
+    void aRefusalSnapshotDiffersOnceTheDraftChanges() {
+        JsonObject draft = JsonParser.parseString("""
+                {"title":"Start","tasks":[{"type":"checkmark"}],"position":[1,2]}
+                """).getAsJsonObject();
+        JsonObject refused = draft.deepCopy();
+        assertTrue(EditorDoc.sameContent(refused, draft));
+
+        EditorDoc.setString(draft, "title", "Changed");
+        assertFalse(EditorDoc.sameContent(refused, draft));
+
+        draft.remove("title");
+        EditorDoc.setString(draft, "title", "Start");
+        assertTrue(EditorDoc.sameContent(refused, draft));
+
+        draft.getAsJsonArray("tasks").add(JsonParser.parseString("{\"type\":\"item\"}"));
+        assertFalse(EditorDoc.sameContent(refused, draft));
+
+        draft.getAsJsonArray("tasks").remove(1);
+        draft.getAsJsonArray("position").set(1, new com.google.gson.JsonPrimitive(3));
+        assertFalse(EditorDoc.sameContent(refused, draft));
+    }
+
     private static void writeSample(JsonObject object, FieldSpec field) {
         switch (field.kind()) {
             case TEXT, MULTILINE -> EditorDoc.setString(object, field.path(), "sample");

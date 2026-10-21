@@ -147,6 +147,11 @@ final class TableEditScreen extends EditorScreen {
     }
 
     @Override
+    protected JsonObject content() {
+        return root;
+    }
+
+    @Override
     protected void requestClose() {
         if (sending) {
             return;

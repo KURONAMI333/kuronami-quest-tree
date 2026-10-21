@@ -399,6 +399,15 @@ public final class EditorDoc {
 
     // ------------------------------------------------------------------ patch
 
+    /**
+     * Whether two working copies still hold the same content. A screen keeps the copy a refusal was shown for and
+     * compares it with its live copy when the author presses leave again: equal means the author did not change
+     * anything, so leaving discards the refused form; different means the change is still waiting to be saved.
+     */
+    public static boolean sameContent(JsonObject refused, JsonObject current) {
+        return java.util.Objects.equals(refused, current);
+    }
+
     /** The RFC 7396 patch from {@code original} to {@code edited}; empty when nothing changed. */
     public static JsonObject patch(JsonObject original, JsonObject edited) {
         JsonElement diff = diff(original, edited);

@@ -39,6 +39,8 @@ abstract class EditorScreen extends Screen {
     private int bodyBottom;
     private Component status;
     private boolean statusError;
+    /** The working copy as it stood when a refusal was shown; see {@link #cancel()}. */
+    private JsonObject refusedContent;
     /** One save at a time: the tick, Escape and the server's own tick must not mint two writes for one screen. */
     protected boolean sending;
 
@@ -61,8 +63,14 @@ abstract class EditorScreen extends Screen {
             return;
         }
         if (statusError) {
-            // a refusal is already on screen; pressing leave again throws the form away instead of repeating it
-            closeNow();
+            // a refusal is on screen: press leave again to throw that form away, but a form the author changed since
+            // the refusal is saved instead of being lost with it
+            if (EditorDoc.sameContent(refusedContent, content())) {
+                closeNow();
+            } else {
+                clearStatus();
+                requestClose();
+            }
             return;
         }
         requestClose();
@@ -81,6 +89,12 @@ abstract class EditorScreen extends Screen {
 
     protected final void clearStatus() {
         status = null;
+        statusError = false;
+    }
+
+    /** The working copy this screen writes; a refusal's snapshot is compared with it on the next leave attempt. */
+    protected JsonObject content() {
+        return null;
     }
 
     @Override
@@ -253,6 +267,10 @@ abstract class EditorScreen extends Screen {
             setStatus(Component.literal(first), true);
             closeNow();
             return;
+        }
+        if (!first.isEmpty()) {
+            JsonObject copy = content();
+            refusedContent = copy == null ? null : copy.deepCopy();
         }
         setStatus(first.isEmpty() ? null : Component.literal(first), true);
     }

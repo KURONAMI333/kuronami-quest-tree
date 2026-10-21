@@ -73,6 +73,11 @@ final class ChapterEditScreen extends EditorScreen {
     }
 
     @Override
+    protected JsonObject content() {
+        return root;
+    }
+
+    @Override
     protected void requestClose() {
         if (sending) {
             return;
