@@ -3070,8 +3070,8 @@ public class ProgressScreen extends Screen {
     /** Copy the picked nodes from the raw bundle JSON, keeping their relative positions. */
     private void copySelection(ClientModel.Chapter ch) {
         List<EditorClipboard.Entry> entries = new ArrayList<>();
-        for (String key : editSelection.ids()) {
-            ClientModel.Node n = model() == null ? null : model().nodesByKey.get(key);
+        for (String id : SelectionKeys.idsIn(ch.id, editSelection.ids())) {
+            ClientModel.Node n = model() == null ? null : model().nodesByKey.get(ch.id + "/" + id);
             if (n == null) {
                 continue;
             }
@@ -3108,10 +3108,8 @@ public class ProgressScreen extends Screen {
 
     private void deleteSelection(ClientModel.Chapter ch) {
         JsonArray ids = new JsonArray();
-        for (String key : editSelection.ids()) {
-            if (key.startsWith(ch.id + "/")) {
-                ids.add(key.substring(ch.id.length() + 1));
-            }
+        for (String id : SelectionKeys.idsIn(ch.id, editSelection.ids())) {
+            ids.add(id);
         }
         if (!ids.isEmpty()) {
             JsonObject args = new JsonObject();
