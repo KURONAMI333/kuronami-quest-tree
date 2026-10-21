@@ -100,7 +100,7 @@ public final class EditorDoc {
 
     public static void setNumber(JsonObject root, String path, String value, boolean integer) {
         if (value == null || value.isBlank()) {
-            remove(root, path);
+            clearNumber(root, path);
             return;
         }
         try {
@@ -112,6 +112,37 @@ public final class EditorDoc {
         } catch (NumberFormatException ignored) {
             // the field shows what was typed; the JSON keeps the last number that parsed
         }
+    }
+
+    /**
+     * A blank numeric field. An array element is zeroed in place instead of removed, because removing it would move
+     * every element after it (a position or size has three fixed slots, not a list). Once every slot is zero the whole
+     * array goes, so the pack's value or the default shows again.
+     */
+    private static void clearNumber(JsonObject root, String path) {
+        List<String> tokens = tokens(path);
+        int open = path == null ? -1 : path.lastIndexOf('[');
+        if (tokens.isEmpty() || !isIndex(tokens.get(tokens.size() - 1)) || open < 0) {
+            remove(root, path);
+            return;
+        }
+        String arrayPath = path.substring(0, open);
+        JsonElement parent = get(root, arrayPath);
+        if (parent == null || !parent.isJsonArray()) {
+            return;
+        }
+        JsonArray array = parent.getAsJsonArray();
+        int index = Integer.parseInt(tokens.get(tokens.size() - 1));
+        while (array.size() <= index) {
+            array.add(new JsonPrimitive(0));
+        }
+        array.set(index, new JsonPrimitive(0));
+        for (JsonElement e : array) {
+            if (!e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber() || e.getAsDouble() != 0) {
+                return;
+            }
+        }
+        remove(root, arrayPath);
     }
 
     public static void setBool(JsonObject root, String path, boolean value) {

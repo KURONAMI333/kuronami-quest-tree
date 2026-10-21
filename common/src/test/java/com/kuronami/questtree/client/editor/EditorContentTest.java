@@ -123,6 +123,23 @@ class EditorContentTest {
     }
 
     @Test
+    void clearingAnArrayElementKeepsItsLengthUntilEverySlotIsZero() {
+        JsonObject task = JsonParser.parseString("{\"position\":[1,2,3]}").getAsJsonObject();
+
+        EditorDoc.setNumber(task, "position[1]", " ", true);
+        JsonArray position = task.getAsJsonArray("position");
+        assertEquals(3, position.size());
+        assertEquals(1, position.get(0).getAsInt());
+        assertEquals(0, position.get(1).getAsInt());
+        assertEquals(3, position.get(2).getAsInt());
+
+        EditorDoc.setNumber(task, "position[0]", "", true);
+        assertEquals(3, task.getAsJsonArray("position").size());
+        EditorDoc.setNumber(task, "position[2]", "", true);
+        assertFalse(task.has("position"));
+    }
+
+    @Test
     void aFlagMemberBecomesAnObjectWhenAChildIsWrittenAndStaysOn() {
         JsonObject node = new JsonObject();
         EditorDoc.setFlag(node, "repeat", true);
