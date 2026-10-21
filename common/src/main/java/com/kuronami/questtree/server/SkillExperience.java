@@ -190,7 +190,7 @@ public final class SkillExperience {
                 }
                 JsonObject data = s.has("data") && s.get("data").isJsonObject() ? s.getAsJsonObject("data") : s;
                 // each entry counts on its own, as Pufferfish's Skills keeps one anti-farming state per source
-                total += sourceAmount(c.id, index, source, data, ctx);
+                total += sourceAmount(player.getUUID().toString(), c.id, index, source, data, ctx);
             }
             if (total > 0) {
                 if (p == null) {
@@ -234,7 +234,10 @@ public final class SkillExperience {
      * {@code anti_farming_per_entity} caps the damage counted against one mob in the same window. Books made before
      * the split wrote the same guard as {@code anti_farming} (per chunk for kills, per entity for damage).
      */
-    private static double sourceAmount(String where, int index, String source, JsonObject data, Map<String, Object> ctx) {
+    private static double sourceAmount(String player, String where, int index, String source, JsonObject data,
+                                       Map<String, Object> ctx) {
+        // Pufferfish's Skills keeps anti-farming per player: one player farming a chunk must not eat another's window
+        String window = player + "|" + where + "#" + index;
         if (!source.equals("kill_entity") && !source.equals("deal_damage")) {
             return amount(where, data, ctx);
         }
@@ -256,7 +259,7 @@ public final class SkillExperience {
         if (chunk != null) {
             int limit = intOf(chunk, "limit_per_chunk", -1);
             int reset = intOf(chunk, "reset_after_seconds", -1);
-            if (limit >= 0 && reset >= 0 && !ANTI_FARMING.allowInChunk(where + "#" + index, limit, reset,
+            if (limit >= 0 && reset >= 0 && !ANTI_FARMING.allowInChunk(window, limit, reset,
                     target.level().dimension().location() + "@" + target.chunkPosition().toLong(), System.currentTimeMillis())) {
                 return 0;
             }
@@ -267,7 +270,7 @@ public final class SkillExperience {
             int reset = intOf(entity, "reset_after_seconds", -1);
             if (limit >= 0 && reset >= 0) {
                 float damage = ctx.get("dealt_damage") instanceof Number n ? n.floatValue() : 0f;
-                float allowed = ANTI_FARMING.limitDamage(where + "#" + index, limit, reset,
+                float allowed = ANTI_FARMING.limitDamage(window, limit, reset,
                         target.getUUID().toString(), damage, System.currentTimeMillis());
                 if (allowed <= 1.0E-6f) {
                     return 0;
