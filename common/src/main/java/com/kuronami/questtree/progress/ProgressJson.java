@@ -59,7 +59,7 @@ public final class ProgressJson {
             p.completed.add(e.getAsString());
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
-            if (e.getValue().isJsonPrimitive()) {
+            if (e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isNumber()) {
                 p.completedAt.put(e.getKey(), e.getValue().getAsLong());
             }
         }

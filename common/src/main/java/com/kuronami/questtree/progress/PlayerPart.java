@@ -22,6 +22,7 @@ public final class PlayerPart {
     public final Set<String> claimedRewards = new HashSet<>();
     public final Deque<String> recent = new ArrayDeque<>();
     public final Set<String> completed = new HashSet<>();
+    public final Map<String, Long> completedAt = new HashMap<>();
     public final Map<String, Long> tasks = new HashMap<>();
     public final Map<String, Integer> repeats = new HashMap<>();
     public final Map<String, Long> cooldown = new HashMap<>();
@@ -50,6 +51,7 @@ public final class PlayerPart {
         recent.clear();
         recent.addAll(other.recent);
         completed.addAll(other.completed);
+        completedAt.putAll(other.completedAt);
         tasks.putAll(other.tasks);
         repeats.putAll(other.repeats);
         cooldown.putAll(other.cooldown);
@@ -67,6 +69,7 @@ public final class PlayerPart {
         o.add("claimed_rewards", strings(claimedRewards));
         o.add("recent", strings(recent));
         o.add("completed", strings(completed));
+        o.add("completed_at", longs(completedAt));
         o.add("tasks", longs(tasks));
         o.add("repeats", ints(repeats));
         o.add("cooldown", longs(cooldown));
@@ -92,6 +95,11 @@ public final class PlayerPart {
         }
         for (JsonElement e : arr(o, "completed")) {
             part.completed.add(e.getAsString());
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
+            if (e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isNumber()) {
+                part.completedAt.put(e.getKey(), e.getValue().getAsLong());
+            }
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
             part.tasks.put(e.getKey(), e.getValue().getAsLong());

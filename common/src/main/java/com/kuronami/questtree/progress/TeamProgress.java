@@ -87,9 +87,11 @@ public final class TeamProgress {
                 }
             }
         }
+        moveMapToParts(shared.completedAt, p -> p.completedAt, toPersonal);
         moveMapToParts(shared.tasks, p -> p.tasks, toPersonal);
         moveIntMapToParts(shared.repeats, p -> p.repeats, toPersonal);
         moveMapToParts(shared.cooldown, p -> p.cooldown, toPersonal);
+        moveMapToShared(p -> p.completedAt, shared.completedAt, toShared);
         moveMapToShared(p -> p.tasks, shared.tasks, toShared);
         moveIntMapToShared(p -> p.repeats, shared.repeats, toShared);
         moveMapToShared(p -> p.cooldown, shared.cooldown, toShared);

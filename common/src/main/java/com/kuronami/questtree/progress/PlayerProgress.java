@@ -113,6 +113,8 @@ public final class PlayerProgress {
     public static PlayerProgress view(PlayerProgress shared, PlayerPart part, Set<String> teamClaimedRewards) {
         PlayerProgress p = new PlayerProgress();
         p.completed = personalNodes.isEmpty() ? shared.completed : new RoutedSet(shared.completed, part.completed);
+        p.completedAt = personalNodes.isEmpty() ? shared.completedAt
+                : new RoutedMap<>(shared.completedAt, part.completedAt);
         p.tasks = personalNodes.isEmpty() ? shared.tasks : new RoutedMap<>(shared.tasks, part.tasks);
         p.taken = shared.taken;
         p.xp = shared.xp;
@@ -190,6 +192,7 @@ public final class PlayerProgress {
     public void clearPersonalAll() {
         if (part != null) {
             part.completed.clear();
+            part.completedAt.clear();
             part.tasks.clear();
             part.repeats.clear();
             part.cooldown.clear();
@@ -203,6 +206,7 @@ public final class PlayerProgress {
         }
         String prefix = id + "/";
         part.completed.removeIf(k -> k.equals(id) || k.startsWith(prefix));
+        part.completedAt.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
         part.tasks.keySet().removeIf(k -> k.startsWith(id + "/") || k.startsWith(id + "#"));
         part.repeats.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
         part.cooldown.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
