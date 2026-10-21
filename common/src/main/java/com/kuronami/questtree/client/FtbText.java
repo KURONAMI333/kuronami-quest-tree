@@ -3,6 +3,7 @@ package com.kuronami.questtree.client;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
 
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -90,6 +91,53 @@ final class FtbText {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * Reads each description line that is entirely a JSON text component as a component, and leaves every other line
+     * as written. FTB Quests keeps a description as an array of lines and the importer joins them with {@code \n}, so
+     * a pack may put plain text and JSON components in the same description. {@code resolver} returns null when a line
+     * is not JSON it can read, and the line then stays in the text as written.
+     */
+    static String resolveJsonLines(String raw, Function<String, String> resolver) {
+        StringBuilder out = new StringBuilder(raw.length());
+        boolean first = true;
+        int start = 0;
+        for (int i = 0; i <= raw.length(); i++) {
+            boolean end = i == raw.length();
+            if (!end && raw.charAt(i) != '\n' && raw.charAt(i) != '\r') {
+                continue;
+            }
+            if (!first) {
+                out.append('\n');
+            }
+            first = false;
+            String line = raw.substring(start, i);
+            String resolved = resolveJsonLine(line, resolver);
+            out.append(resolved != null ? resolved : line);
+            if (!end && raw.charAt(i) == '\r' && i + 1 < raw.length() && raw.charAt(i + 1) == '\n') {
+                i++;
+            }
+            start = i + 1;
+        }
+        return out.toString();
+    }
+
+    private static String resolveJsonLine(String line, Function<String, String> resolver) {
+        String trimmed = line.strip();
+        if (trimmed.length() < 2) {
+            return null;
+        }
+        boolean object = trimmed.charAt(0) == '{' && trimmed.endsWith("}");
+        boolean array = trimmed.charAt(0) == '[' && trimmed.endsWith("]");
+        if (!object && !array) {
+            return null;
+        }
+        try {
+            return resolver.apply(trimmed);
+        } catch (RuntimeException notJson) {
+            return null;
+        }
     }
 
     static List<Line> descriptionLines(String raw) {

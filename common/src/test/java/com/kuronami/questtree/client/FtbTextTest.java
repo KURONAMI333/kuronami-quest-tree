@@ -58,4 +58,18 @@ class FtbTextTest {
     void unknownBracesStayProse() {
         assertEquals("use {unknown:thing} here", tokens("use {unknown:thing} here").get(0).text());
     }
+
+    @Test
+    void jsonLinesAreResolvedOneByOne() {
+        String raw = "plain &aone\n{\"text\":\"json\"}\n[{\"text\":\"array\"}]\nlast";
+        String out = FtbText.resolveJsonLines(raw, line ->
+                line.startsWith("{\"text\"") || line.startsWith("[{") ? "<component>" : null);
+        assertEquals("plain &aone\n<component>\n<component>\nlast", out);
+    }
+
+    @Test
+    void aLineThatIsOnlyPartlyJsonStaysAsWritten() {
+        String raw = "before {\"text\":\"json\"} after";
+        assertEquals(raw, FtbText.resolveJsonLines(raw, line -> "<component>"));
+    }
 }

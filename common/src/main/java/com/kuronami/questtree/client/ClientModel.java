@@ -403,20 +403,16 @@ public final class ClientModel {
             this.subtitle = sub == null ? null : parseText(sub);
             String inlineDescription = inlineText(o, "description");
             String d = inlineDescription != null ? inlineDescription : m.lookup(base + ".desc");
-            // Pufferfish descriptions are JSON text components ({"translate": ..., "fallback": ...}): resolve them first,
-            // or the raw JSON shows in the details sheet
-            String dt = d == null ? null : d.trim();
-            if (dt != null && ((dt.startsWith("{") && dt.endsWith("}")) || (dt.startsWith("[") && dt.endsWith("]")))) {
-                // JSON only: a failed parse keeps the text as it was (parseText's fallback would apply colour codes twice)
-                try {
+            // Pufferfish descriptions are JSON text components ({"translate": ..., "fallback": ...}) and FTB Quests
+            // keeps one description as an array of lines: resolve each line that is entirely JSON on its own, so a
+            // plain line next to a component line still reads as written and the component's clicks survive
+            if (d != null) {
+                d = FtbText.resolveJsonLines(d, line -> {
                     var level = Minecraft.getInstance().level;
-                    Component c = Component.Serializer.fromJson(dt, level != null ? level.registryAccess() : net.minecraft.core.RegistryAccess.EMPTY);
-                    if (c != null) {
-                        d = FtbText.componentMarkup(c);
-                    }
-                } catch (RuntimeException ignored) {
-                    // not JSON after all
-                }
+                    Component c = Component.Serializer.fromJson(line,
+                            level != null ? level.registryAccess() : net.minecraft.core.RegistryAccess.EMPTY);
+                    return c == null ? null : FtbText.componentMarkup(c);
+                });
             }
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);
         }
