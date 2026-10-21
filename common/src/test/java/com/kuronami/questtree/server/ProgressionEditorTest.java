@@ -425,4 +425,89 @@ class ProgressionEditorTest {
         assertTrue(out.messages().get(0).contains("a-z"), out.messages().toString());
     }
 
+    // ------------------------------------------------------------------ reward tables (2026-10-21, phase 3)
+
+    private ProgressionEditor.Outcome table(ProgressionEditor editor, JsonObject packTables, String id, long revision,
+                                            String args) {
+        return editor.apply(pack(), packTables, Map.of(), id, revision, "update_table",
+                JsonParser.parseString(args).getAsJsonObject(), Set.of());
+    }
+
+    private JsonObject tablesWithOverlay() {
+        JsonObject tables = new JsonObject();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTablesTo(tables, new java.util.LinkedHashMap<>());
+        return tables;
+    }
+
+    private static final String LOOT = "{\"rolls\":2,\"entries\":[{\"weight\":3,\"reward\":"
+            + "{\"type\":\"item\",\"item\":{\"id\":\"minecraft:diamond\"}}}],\"keep\":{\"x\":1}}";
+
+    @Test
+    void creatingATableWritesItWithRevisionOneAndNoChapterRevisionMoves() {
+        ProgressionEditor.Outcome out = table(editor(), new JsonObject(), "t:loot", 0,
+                "{\"create\":true,\"id\":\"t:loot\",\"table\":" + LOOT + "}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        assertEquals(1, out.revision());
+        JsonObject made = tablesWithOverlay();
+        assertEquals(2, made.getAsJsonObject("t:loot").get("rolls").getAsInt());
+        assertEquals(1, made.getAsJsonObject("t:loot").getAsJsonObject("keep").get("x").getAsInt());
+        assertEquals(0, ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).revision(CHAPTER));
+    }
+
+    @Test
+    void updatingATableByPatchKeepsFieldsThePatchDoesNotName() {
+        ProgressionEditor editor = editor();
+        table(editor, new JsonObject(), "t:loot", 0, "{\"create\":true,\"id\":\"t:loot\",\"table\":" + LOOT + "}");
+        ProgressionEditor.Outcome out = table(editor, tablesWithOverlay(), "t:loot", 1,
+                "{\"patch\":{\"rolls\":5,\"loot_crate\":{}}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        assertEquals(2, out.revision());
+        JsonObject loot = tablesWithOverlay().getAsJsonObject("t:loot");
+        assertEquals(5, loot.get("rolls").getAsInt());
+        assertTrue(loot.has("loot_crate"));
+        assertEquals(1, loot.getAsJsonObject("keep").get("x").getAsInt());
+        assertEquals(1, loot.getAsJsonArray("entries").size());
+    }
+
+    @Test
+    void aStaleTableRevisionIsRefusedAndAnUnchangedTableWritesNothing() {
+        ProgressionEditor editor = editor();
+        table(editor, new JsonObject(), "t:loot", 0, "{\"create\":true,\"id\":\"t:loot\",\"table\":" + LOOT + "}");
+
+        ProgressionEditor.Outcome stale = table(editor, tablesWithOverlay(), "t:loot", 0, "{\"patch\":{\"rolls\":9}}");
+        assertFalse(stale.ok());
+        assertTrue(stale.stale());
+        assertEquals(1, stale.revision());
+
+        ProgressionEditor.Outcome same = table(editor, tablesWithOverlay(), "t:loot", 1, "{\"patch\":{\"rolls\":2}}");
+        assertTrue(same.ok());
+        assertFalse(same.changed());
+        assertEquals(1, same.revision());
+    }
+
+    @Test
+    void creatingATableThatExistsOrEditingOneThatDoesNotIsRefused() {
+        ProgressionEditor editor = editor();
+        JsonObject packTables = JsonParser.parseString("{\"t:loot\":" + LOOT + "}").getAsJsonObject();
+        assertFalse(table(editor, packTables, "t:loot", 0, "{\"create\":true,\"table\":{}}").ok());
+        assertFalse(table(editor, packTables, "t:missing", 0, "{\"patch\":{\"rolls\":1}}").ok());
+        assertFalse(table(editor, packTables, "bad id", 0, "{\"create\":true,\"table\":{}}").ok());
+        assertFalse(table(editor, packTables, "t:loot", 0, "{}").ok());
+    }
+
+    @Test
+    void aPackTableCanBeEditedAndTheOverlayWinsOverThePack() {
+        ProgressionEditor editor = editor();
+        JsonObject packTables = JsonParser.parseString("{\"t:loot\":" + LOOT + "}").getAsJsonObject();
+        ProgressionEditor.Outcome out = table(editor, packTables, "t:loot", 0, "{\"patch\":{\"rolls\":7}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        JsonObject merged = packTables.deepCopy();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTablesTo(merged, new java.util.LinkedHashMap<>());
+        assertEquals(7, merged.getAsJsonObject("t:loot").get("rolls").getAsInt());
+        assertEquals(2, packTables.getAsJsonObject("t:loot").get("rolls").getAsInt());
+    }
+
 }
