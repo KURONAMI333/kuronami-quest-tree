@@ -422,7 +422,8 @@ final class PlayerCommands {
      * after the refund. Returns false when the player may not respec now (locked chapter, nothing taken, too few points).
      */
     static boolean respec(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch, boolean charge) {
-        if (charge && !ProgressService.rules().canRespec(pr, ch)) {
+        if (charge && !ProgressService.rules().canRespec(pr, ch,
+                rw -> ProgressService.conditionsMet(p, pr, rw))) {
             return false;
         }
         // refund before the nodes are removed: the amount is the chapter's taken nodes (2026-10-20 review)

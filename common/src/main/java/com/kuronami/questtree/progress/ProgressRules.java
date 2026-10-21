@@ -575,16 +575,23 @@ public final class ProgressRules {
 
     /**
      * Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into).
-     * Skill rewards are never blocked, so every points reward of a taken rank was paid and comes back out here.
+     * A points reward whose conditions did not hold was never paid, so it is not taken back either; the conditions are
+     * judged again now, at revoke time (2026-10-22 review).
      */
-    public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken) {
+    public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken,
+                             java.util.function.Predicate<JsonObject> conditionsMet) {
         for (int rank = 0; rank < Math.max(0, taken); rank++) {
             for (JsonObject rw : rewardsOfRank(n, rank)) {
-                if (isPoints(rw)) {
+                if (isPoints(rw) && conditionsMet.test(rw)) {
                     p.bonus.merge(pointsTarget(n, rw), -pointsAmount(rw), Integer::sum);
                 }
             }
         }
+    }
+
+    /** The same when no condition can be judged (tests and callers that already filtered the reward). */
+    public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken) {
+        revokePoints(p, n, taken, rw -> true);
     }
 
     private static boolean isPoints(JsonObject rw) {
@@ -666,6 +673,16 @@ public final class ProgressRules {
      * The cost stays spent afterwards (a later respec refunds only the nodes), so the fee is never handed back.
      */
     public RespecPlan respecPlan(PlayerProgress p, ProgressModel.Chapter c) {
+        return respecPlan(p, c, rw -> true);
+    }
+
+    /**
+     * The same with the reward conditions judged as of now. The server calls this with the player's conditions; the
+     * screen cannot judge them, so it uses the no-predicate form and the server's answer is the one that counts
+     * (2026-10-22 review).
+     */
+    public RespecPlan respecPlan(PlayerProgress p, ProgressModel.Chapter c,
+                                 java.util.function.Predicate<JsonObject> conditionsMet) {
         if (c == null || !c.isSkills() || !chapterUnlocked(p, c)) {
             return new RespecPlan(RespecRefusal.LOCKED, "");
         }
@@ -674,7 +691,7 @@ public final class ProgressRules {
             return new RespecPlan(RespecRefusal.NOTHING_TAKEN, "");
         }
         String own = key(c);
-        Map<String, Integer> paidByPool = pointsRewardsByPool(p, c);
+        Map<String, Integer> paidByPool = pointsRewardsByPool(p, c, conditionsMet);
         int ownPaid = paidByPool.getOrDefault(own, 0);
         if (availablePoints(p, c) + refund - ownPaid - respecCost(c) < 0) {
             return new RespecPlan(RespecRefusal.NOT_ENOUGH_POINTS, own);
@@ -696,14 +713,25 @@ public final class ProgressRules {
         return respecPlan(p, c).allowed();
     }
 
-    /** The points the taken ranks paid, grouped by the pool that received them. */
-    private Map<String, Integer> pointsRewardsByPool(PlayerProgress p, ProgressModel.Chapter c) {
+    /** The server's yes/no view: a points reward that was never paid is not counted (2026-10-22 review). */
+    public boolean canRespec(PlayerProgress p, ProgressModel.Chapter c,
+                             java.util.function.Predicate<JsonObject> conditionsMet) {
+        return respecPlan(p, c, conditionsMet).allowed();
+    }
+
+    /**
+     * The points the taken ranks paid, grouped by the pool that received them. A points reward whose conditions did
+     * not hold was never paid, so it is not counted: counting it would refuse a respec that has enough points, and
+     * the respec would then take back points it never paid (2026-10-22 review).
+     */
+    private Map<String, Integer> pointsRewardsByPool(PlayerProgress p, ProgressModel.Chapter c,
+                                                     java.util.function.Predicate<JsonObject> conditionsMet) {
         Map<String, Integer> paid = new LinkedHashMap<>();
         for (ProgressModel.Node n : c.nodes.values()) {
             int taken = p.taken.getOrDefault(n.key, 0);
             for (int rank = 0; rank < taken; rank++) {
                 for (JsonObject rw : rewardsOfRank(n, rank)) {
-                    if (isPoints(rw)) {
+                    if (isPoints(rw) && conditionsMet.test(rw)) {
                         paid.merge(pointsTarget(n, rw), pointsAmount(rw), Integer::sum);
                     }
                 }

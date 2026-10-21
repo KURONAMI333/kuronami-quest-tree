@@ -413,7 +413,7 @@ public final class Rewards {
         // points are shared, and giveSkill paid them only for the taker: take them back once, before the member
         // loop can run the per-player effects (a respec before this point is refused when they were already spent).
         Map<String, Integer> before = new HashMap<>(p.bonus);
-        ProgressService.rules().revokePoints(p, n, taken);
+        ProgressService.rules().revokePoints(p, n, taken, rw -> ProgressService.conditionsMet(player, p, rw));
         // an admin respec/reset does not go through the screen's affordability check, so an overdraft must at least
         // leave a trace instead of quietly showing 0 points (2026-10-22 review)
         for (Map.Entry<String, Integer> e : p.bonus.entrySet()) {
