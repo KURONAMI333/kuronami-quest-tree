@@ -1147,13 +1147,15 @@ public final class ProgressService {
         long now = System.currentTimeMillis();
         Set<UUID> members = new LinkedHashSet<>(TeamResolver.members(server, teamId));
         members.add(player.getUUID());
+        Set<UUID> recipients = com.kuronami.questtree.progress.ProgressEvents.recipients(
+                kind, player.getUUID(), members);
         for (UUID id : members) {
             // reward events drive a toast, not the Recent list: one entry per reward would push out the quests
             if (!kind.equals("reward")) {
                 team.part(id).event(kind, node, now);
             }
             ServerPlayer online = server.getPlayerList().getPlayer(id);
-            if (online != null) {
+            if (online != null && recipients.contains(id)) {
                 String third = detail != null ? detail : player.getUUID().toString();
                 PENDING.computeIfAbsent(id, k -> new ArrayList<>()).add(kind + "|" + node + "|" + third);
                 DIRTY.put(id, true);
