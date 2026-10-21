@@ -18,8 +18,32 @@ public final class SkillRewardPolicy {
     private SkillRewardPolicy() {
     }
 
+    /** The old mark, kept for saves made before each reward was marked on its own (all one-off rewards of the rank). */
     public static String mark(ProgressModel.Node n, int rank) {
         return n.key + "#skill" + rank;
+    }
+
+    /** Mark of one reward of a rank: paid only when that reward itself was handed out or moved to pending. */
+    public static String mark(ProgressModel.Node n, int rank, int index) {
+        return mark(n, rank) + "#" + index;
+    }
+
+    /**
+     * Whether this reward of the rank still owes its one-off pay-out to this player. An old per-rank mark means every
+     * one-off reward of that rank was paid already, so an upgraded save cannot pay it again (2026-10-22 review).
+     */
+    public static boolean owed(PlayerProgress p, ProgressModel.Node n, int rank, int index) {
+        return !p.rewardClaimed(mark(n, rank, index)) && !p.rewardClaimed(mark(n, rank));
+    }
+
+    /**
+     * Records the mark of one reward once it was paid or moved to pending. A failed pay-out leaves no mark, so the
+     * next take can pay it instead of losing it for good (2026-10-22 review).
+     */
+    public static void recordPaid(PlayerProgress p, ProgressModel.Node n, int rank, int index, boolean paid) {
+        if (paid) {
+            p.claimedRewards.add(mark(n, rank, index));
+        }
     }
 
     public static boolean oneOff(String type) {

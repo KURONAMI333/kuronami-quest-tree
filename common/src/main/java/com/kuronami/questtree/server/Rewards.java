@@ -229,21 +229,17 @@ public final class Rewards {
 
     /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
-        // A respec keeps this mark, so the one-off rewards of a rank cannot be farmed by taking it again. The mark
-        // uses the existing per-player reward store so it saves and copies like every other claim.
-        String mark = SkillRewardPolicy.mark(n, rank);
-        boolean firstTake = !p.rewardClaimed(mark);
-        giveSkillOne(player, p, n, rank, true, firstTake);
+        // A respec keeps the marks, so the one-off rewards of a rank cannot be farmed by taking it again. They are
+        // recorded per reward once it was actually paid or moved to pending (2026-10-22 review).
+        giveSkillOne(player, p, n, rank, true);
         // the skill belongs to the team: its per-player effects (attributes, commands, tags) reach every online member.
         // Shared values (points) and one-off pay-outs are applied once, by the player who took it
         for (ServerPlayer member : members(player)) {
             if (!member.getUUID().equals(player.getUUID())) {
-                // a member's own pay-out (a blocked command or tag) is owed to that member, not to the taker
-                giveSkillOne(member, ProgressService.progress(member), n, rank, false, firstTake);
+                // a member's own pay-out (a blocked command or tag) is owed to that member, not to the taker, and
+                // each member's own marks decide whether that member already had it
+                giveSkillOne(member, ProgressService.progress(member), n, rank, false);
             }
-        }
-        if (firstTake) {
-            p.claimedRewards.add(mark);
         }
     }
 
@@ -253,35 +249,36 @@ public final class Rewards {
     }
 
     private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank,
-                                     boolean full, boolean firstTake) {
+                                     boolean full) {
         List<JsonObject> list = rewardsOfRank(n, rank);
-        int i = 0;
-        for (JsonObject rw : list) {
+        for (int index = 0; index < list.size(); index++) {
+            JsonObject rw = list.get(index);
             if (!ProgressService.conditionsMet(player, p, rw)) {
-                i++;
                 continue;
             }
-            int index = i;
+            boolean firstTake = SkillRewardPolicy.owed(p, n, rank, index);
             String rollKey = com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, rank, index);
             String type = ProgressService.type(rw);
             if (type.equals("attribute")) {
                 attribute(player, n.key, rank * 100 + index, rw);
             } else if (full) {
                 if (SkillRewardPolicy.pays(rw, firstTake)) {
-                    com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false,
-                            blocked(p, rw), () -> give(player, p, n, rw, -1, rollKey));
+                    boolean paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank,
+                            false, blocked(p, rw), () -> give(player, p, n, rw, -1, rollKey));
+                    SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
                 }
             } else if ((type.equals("command") && (firstTake || SkillRewardPolicy.hasLockCommand(rw)))
                     || type.equals("tag")) {
+                boolean paid;
                 if (blocked(p, rw)) {
                     // a member's own pay-out is owed to them, not paid and forgotten
-                    com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false, true,
-                            () -> true);
+                    paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false,
+                            true, () -> true);
                 } else {
-                    give(player, p, n, rw, -1, rollKey);
+                    paid = give(player, p, n, rw, -1, rollKey);
                 }
+                SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
             }
-            i++;
         }
     }
 

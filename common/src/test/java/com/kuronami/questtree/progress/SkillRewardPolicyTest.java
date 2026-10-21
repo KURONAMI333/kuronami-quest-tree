@@ -51,5 +51,45 @@ class SkillRewardPolicyTest {
         ProgressModel.Node n = model.nodes.get("s:a/n");
         assertEquals("s:a/n#skill0", SkillRewardPolicy.mark(n, 0));
         assertNotEquals(SkillRewardPolicy.mark(n, 0), SkillRewardPolicy.mark(n, 1));
+        assertEquals("s:a/n#skill0#1", SkillRewardPolicy.mark(n, 0, 1));
+        assertNotEquals(SkillRewardPolicy.mark(n, 0, 0), SkillRewardPolicy.mark(n, 0, 1));
+    }
+
+    /** A reward is marked only when it was paid, so a failed or skipped one can still pay on the next take. */
+    @Test
+    void onlyPaidRewardsAreRecorded() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        PlayerProgress p = new PlayerProgress();
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 0));
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 1));
+
+        SkillRewardPolicy.recordPaid(p, n, 0, 0, false);
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 0), "a failed pay-out must stay owed");
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 1), "another reward is not marked with it");
+
+        SkillRewardPolicy.recordPaid(p, n, 0, 0, true);
+        assertFalse(SkillRewardPolicy.owed(p, n, 0, 0));
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 1));
+    }
+
+    /** Saves from before per-reward marks kept one mark per rank; it means every one-off reward of the rank was paid. */
+    @Test
+    void anOldPerRankMarkCountsEveryRewardOfThatRankAsPaid() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        PlayerProgress p = new PlayerProgress();
+        p.claimedRewards.add("s:a/n#skill0");
+        assertFalse(SkillRewardPolicy.owed(p, n, 0, 0));
+        assertFalse(SkillRewardPolicy.owed(p, n, 0, 1), "the old mark paid the whole rank");
+        assertTrue(SkillRewardPolicy.owed(p, n, 1, 0), "another rank is not covered");
+    }
+
+    private static ProgressModel modelWithRewards() {
+        return ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [
+                  {"rewards": [{"type": "item"}, {"type": "command", "command": "say hi"}]},
+                  {"rewards": [{"type": "item"}]}]}}}}}
+                """).getAsJsonObject());
     }
 }
