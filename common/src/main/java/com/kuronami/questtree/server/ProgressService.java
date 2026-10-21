@@ -655,6 +655,11 @@ public final class ProgressService {
             case "respec" -> {
                 // the skills screen's respec button: give back every point taken in the chapter, for points.respec.cost
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
+                if (c != null && !ProgressRules.respecAllowed(p, c)) {
+                    // the chapter id rides in the node field, so the top-of-method guard never saw it: a client that
+                    // skips the disabled button must still be refused (2026-10-22 release review)
+                    return;
+                }
                 if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
                     refuseSharedAction(player);
                 } else if (c != null && PlayerCommands.respec(player, p, c, true)) {

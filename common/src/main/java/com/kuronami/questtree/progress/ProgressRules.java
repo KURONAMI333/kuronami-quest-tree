@@ -1097,6 +1097,11 @@ public final class ProgressRules {
         return type.equals("item") && (repeatable(n) || (task.has("consume") && task.get("consume").getAsBoolean()));
     }
 
+    /** Respec works only inside an unlocked chapter, however the request reached the server (2026-10-22 review). */
+    public static boolean respecAllowed(PlayerProgress p, ProgressModel.Chapter c) {
+        return chapterUnlocked(p, c);
+    }
+
     /**
      * An item task from FTB Quests' {@code only_from_crafting}: the inventory scan must leave it alone and only a
      * crafting result moves it (2026-10-22 release review).

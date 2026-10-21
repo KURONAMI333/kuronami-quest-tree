@@ -177,6 +177,22 @@ class ProgressRulesTest {
      * target, so a later step can neither be counted nor submitted early.
      */
     @Test
+    void respecIsRefusedWhileTheChapterIsLocked() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {
+                  "t:hidden": {"points": {"per_level": 1, "unlocked_by_default": false},
+                               "nodes": {"n": {"cost": 1}}},
+                  "t:open": {"points": {"per_level": 1, "unlocked_by_default": true},
+                             "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel m = ProgressModel.of(bundle);
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertFalse(rules.respecAllowed(p, m.chapters.get("t:hidden")));
+        assertTrue(rules.respecAllowed(p, m.chapters.get("t:open")));
+    }
+
+    @Test
     void stopWhenMaxedRefusesExperienceAtTheCap() {
         JsonObject bundle = JsonParser.parseString("""
                 {"chapters": {
