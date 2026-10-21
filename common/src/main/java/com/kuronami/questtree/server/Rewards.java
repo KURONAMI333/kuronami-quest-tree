@@ -31,7 +31,8 @@ public final class Rewards {
     }
 
     /** Hands out one reward. False when it could not be paid (a missing provider or a failed payment). */
-    static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+    static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
+                        String rollKey) {
         if (!ProgressService.conditionsMet(player, p, rw) || blocked(p, rw)) {
             return false;
         }
@@ -46,7 +47,7 @@ public final class Rewards {
                 case "xp" -> { player.giveExperiencePoints(intOf(rw, "amount", 0)); yield true; }
                 case "xp_levels" -> { player.giveExperienceLevels(intOf(rw, "amount", 0)); yield true; }
                 case "command" -> { command(player, rw); yield true; }
-                case "table" -> { table(player, p, n, rw, choice); yield true; }
+                case "table" -> table(player, p, n, rw, choice, rollKey);
                 case "advancement" -> { advancement(player, rw); yield true; }
                 case "stage" -> { stage(player, p, rw); yield true; }
                 case "attribute" -> { attribute(player, n.key, slotOf(n, rw), rw); yield true; }
@@ -170,7 +171,7 @@ public final class Rewards {
             if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, rw)) {
                 continue;
             }
-            if (give(player, p, n, rw, -1)) {
+            if (give(player, p, n, rw, -1, key)) {
                 p.pendingRewards.remove(key);
                 changed = true;
             }
@@ -223,14 +224,16 @@ public final class Rewards {
                 i++;
                 continue;
             }
+            int index = i;
+            String rollKey = com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, rank, index);
             if (ProgressService.type(rw).equals("attribute")) {
-                attribute(player, n.key, rank * 100 + i, rw);
+                attribute(player, n.key, rank * 100 + index, rw);
             } else if (full) {
-                com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, i, rank, false,
-                        blocked(p, rw), () -> give(player, p, n, rw, -1));
+                com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false,
+                        blocked(p, rw), () -> give(player, p, n, rw, -1, rollKey));
             } else if ((ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag"))
                     && !blocked(p, rw)) {
-                give(player, p, n, rw, -1);
+                give(player, p, n, rw, -1, rollKey);
             }
             i++;
         }
@@ -507,11 +510,12 @@ public final class Rewards {
      * once, so the roll result is granted here at claim time (2026-10-20). KQT has no crate item to carry and open
      * later, so the contents arrive directly instead of the box.
      */
-    private static void table(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+    private static boolean table(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw,
+                                 int choice, String rollKey) {
         JsonObject table = ProgressService.rules().model().rewardTables.get(ProgressService.str(rw, "table"));
         if (table == null || !table.has("entries")) {
             Constants.LOG.warn("Reward table '{}' of {} does not exist", ProgressService.str(rw, "table"), n.key);
-            return;
+            return true;
         }
         List<JsonObject> entries = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
@@ -520,24 +524,47 @@ public final class Rewards {
             entries.add(o.getAsJsonObject("reward"));
             weights.add(o.has("weight") ? o.get("weight").getAsDouble() : 1.0);
         }
+        String key = rollKey == null || rollKey.isEmpty() ? n.key : rollKey;
         String mode = rw.has("mode") ? rw.get("mode").getAsString() : "random";
         switch (mode) {
-            case "all" -> entries.forEach(e -> give(player, p, n, e, -1));
-            case "choice" -> {
-                if (choice >= 0 && choice < entries.size()) {
-                    give(player, p, n, entries.get(choice), -1);
+            case "all" -> {
+                boolean paid = true;
+                for (int i = 0; i < entries.size(); i++) {
+                    paid &= give(player, p, n, entries.get(i), -1, key + ">all>" + i);
                 }
+                return paid;
+            }
+            case "choice" -> {
+                if (choice < 0 || choice >= entries.size()) {
+                    return false;
+                }
+                return give(player, p, n, entries.get(choice), -1, key + ">choice");
             }
             default -> {
                 // FTB Quests: a random reward never rolls "empty" (only a loot crate's table uses empty_weight), and
                 // entries with weight 0 are always granted outside the rolls (2026-10-20 review)
                 boolean loot = mode.equals("loot");
                 double empty = loot && table.has("empty_weight") ? table.get("empty_weight").getAsDouble() : 0;
-                List<Integer> picks = com.kuronami.questtree.progress.RewardRoll.roll(weights, empty, loot,
-                        intOf(table, "rolls", 1), () -> player.getRandom().nextDouble());
-                for (int index : picks) {
-                    give(player, p, n, entries.get(index), -1);
+                String picksKey = key + ">rolls";
+                List<Integer> picks = com.kuronami.questtree.progress.RewardRoll.decode(p.rewardRolls.get(picksKey));
+                if (picks == null) {
+                    picks = com.kuronami.questtree.progress.RewardRoll.roll(weights, empty, loot,
+                            intOf(table, "rolls", 1), () -> player.getRandom().nextDouble());
+                    // decide and record before paying, so a failed entry does not make the next attempt roll again
+                    p.rewardRolls.put(picksKey, com.kuronami.questtree.progress.RewardRoll.encode(picks));
                 }
+                boolean paid = true;
+                int position = 0;
+                for (int index : picks) {
+                    if (index >= 0 && index < entries.size()) {
+                        paid &= give(player, p, n, entries.get(index), -1, key + ">" + position);
+                    }
+                    position++;
+                }
+                if (paid) {
+                    p.rewardRolls.remove(picksKey);
+                }
+                return paid;
             }
         }
     }

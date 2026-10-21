@@ -36,6 +36,25 @@ class ReviewFixesTest {
     }
 
     @Test
+    void failedTableRewardStaysUnclaimed() {
+        PlayerProgress p = new PlayerProgress();
+        JsonObject reward = reward("table");
+        assertFalse(RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, false, () -> false));
+        assertFalse(p.rewardClaimed("t:q/n#0"), "the table's pay-out failed, so the node stays claimable");
+        assertTrue(RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, false, () -> true));
+        assertTrue(p.rewardClaimed("t:q/n#0"));
+    }
+
+    @Test
+    void aRandomRollIsRecordedSoARetryUsesTheSameEntries() {
+        java.util.List<Integer> picks = java.util.List.of(2, 0, 2);
+        String saved = RewardRoll.encode(picks);
+        assertEquals(picks, RewardRoll.decode(saved));
+        assertEquals(java.util.List.of(), RewardRoll.decode(""));
+        assertEquals(null, RewardRoll.decode("x"));
+    }
+
+    @Test
     void blockedRewardCompletesTheNodeAndWaitsToBePaid() {
         PlayerProgress p = new PlayerProgress();
         JsonObject reward = reward("item");

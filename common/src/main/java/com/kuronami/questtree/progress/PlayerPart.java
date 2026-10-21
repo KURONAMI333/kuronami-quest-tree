@@ -31,6 +31,8 @@ public final class PlayerPart {
     public final Set<String> teamStagesApplied = new HashSet<>();
     /** Rewards blocked by an admin; paid when the block is lifted. */
     public final Set<String> pendingRewards = new HashSet<>();
+    /** Rolls already made for a reward table, so a failed pay-out does not roll again: reward key → picked indexes. */
+    public final Map<String, String> rewardRolls = new HashMap<>();
     public boolean bookGiven;
     /** An admin stopped this player from taking rewards; tasks still count and completions still happen. */
     public boolean rewardsBlocked;
@@ -54,6 +56,7 @@ public final class PlayerPart {
         stages.addAll(other.stages);
         teamStagesApplied.addAll(other.teamStagesApplied);
         pendingRewards.addAll(other.pendingRewards);
+        rewardRolls.putAll(other.rewardRolls);
         bookGiven |= other.bookGiven;
         rewardsBlocked |= other.rewardsBlocked;
     }
@@ -70,6 +73,7 @@ public final class PlayerPart {
         o.add("stages", strings(stages));
         o.add("team_stages_applied", strings(teamStagesApplied));
         o.add("pending_rewards", strings(pendingRewards));
+        o.add("reward_rolls", textMap(rewardRolls));
         o.addProperty("book_given", bookGiven);
         o.addProperty("rewards_blocked", rewardsBlocked);
         return o;
@@ -107,6 +111,9 @@ public final class PlayerPart {
         for (JsonElement e : arr(o, "pending_rewards")) {
             part.pendingRewards.add(e.getAsString());
         }
+        for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
+            part.rewardRolls.put(e.getKey(), e.getValue().getAsString());
+        }
         part.rewardsBlocked = o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
                 && o.get("rewards_blocked").getAsBoolean();
         part.bookGiven = o.has("book_given") && o.get("book_given").isJsonPrimitive()
@@ -135,6 +142,12 @@ public final class PlayerPart {
     }
 
     private static JsonObject ints(Map<String, Integer> m) {
+        JsonObject o = new JsonObject();
+        m.forEach(o::addProperty);
+        return o;
+    }
+
+    private static JsonObject textMap(Map<String, String> m) {
         JsonObject o = new JsonObject();
         m.forEach(o::addProperty);
         return o;

@@ -56,6 +56,8 @@ public final class PlayerProgress {
     public Set<String> teamStagesApplied = new HashSet<>();
     /** Rewards whose pay-out was blocked; paid when the block is lifted (2026-10-21). */
     public Set<String> pendingRewards = new HashSet<>();
+    /** Rolls already made for a reward table, kept until its pay-out succeeds (2026-10-21 review). */
+    public Map<String, String> rewardRolls = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public Deque<String> recent = new ArrayDeque<>();
     /** The quest book was handed out on first join (server config, 2026-10-20). */
@@ -121,6 +123,7 @@ public final class PlayerProgress {
         p.stages = part.stages;
         p.teamStagesApplied = part.teamStagesApplied;
         p.pendingRewards = part.pendingRewards;
+        p.rewardRolls = part.rewardRolls;
         p.claimed = part.claimed;
         p.claimedRewards = part.claimedRewards;
         p.teamClaimedRewards = teamClaimedRewards;

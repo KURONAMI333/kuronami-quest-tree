@@ -951,10 +951,12 @@ public final class ProgressService {
             if (ProgressModel.boolOf(rw, "team") && !actor) {
                 continue;
             }
+            int rewardIndex = i;
             boolean blocked = Rewards.blocked(p, rw);
-            if (com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, i,
+            if (com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, rewardIndex,
                     com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, blocked,
-                    () -> Rewards.give(player, p, n, rw, -1))) {
+                    () -> Rewards.give(player, p, n, rw, -1,
+                            com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, rewardIndex)))) {
                 ProgressStore.get(player.server).setDirty();
             }
         }
@@ -979,9 +981,11 @@ public final class ProgressService {
             if (p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
                 continue;
             }
-            com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, i,
+            int rewardIndex = i;
+            com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, rewardIndex,
                     com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, Rewards.blocked(p, rw),
-                    () -> Rewards.give(player, p, n, rw, choice));
+                    () -> Rewards.give(player, p, n, rw, choice,
+                            com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, rewardIndex)));
         }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
@@ -1002,7 +1006,8 @@ public final class ProgressService {
         }
         boolean paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index,
                 com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, Rewards.blocked(p, rw),
-                () -> Rewards.give(player, p, n, rw, choice));
+                () -> Rewards.give(player, p, n, rw, choice,
+                        com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, index)));
         if (!paid) {
             return;
         }
