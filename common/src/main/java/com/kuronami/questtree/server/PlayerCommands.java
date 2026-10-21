@@ -8,6 +8,7 @@ import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -35,6 +36,7 @@ import java.util.function.BiConsumer;
  * /quest_tree points &lt;players&gt; &lt;chapter&gt; &lt;n&gt;      add (or remove) spendable points
  * /quest_tree experience &lt;players&gt; &lt;chapter&gt; &lt;n&gt;  add experience to a skill chapter
  * /quest_tree lock|unlock &lt;players&gt; &lt;chapter&gt;    hide/show one chapter for those players
+ * /quest_tree team_stage add|remove &lt;players&gt; &lt;stage&gt;  grant/revoke a shared team stage
  * </pre>
  * Ids are {@code <namespace>:<chapter>} and {@code <namespace>:<chapter>/<node>}.
  */
@@ -59,10 +61,16 @@ final class PlayerCommands {
         d.register(Commands.literal(Constants.COMMAND)
                 .then(Commands.literal("reset").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
-                                .executes(c -> each(c, (p, pr) -> resetAll(p, pr), PlayerCommands::clearOwnClaims))
+                                .executes(c -> each(c, (p, pr) -> resetAll(p, pr), (p, pr) -> {
+                                    clearOwnClaims(p, pr);
+                                    pr.clearPersonalAll();
+                                }))
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(ANY)
                                         .executes(c -> each(c, (p, pr) -> reset(p, pr, id(c)),
-                                        (p, pr) -> clearOwnClaims(p, pr, id(c)))))))
+                                        (p, pr) -> {
+                                            clearOwnClaims(p, pr, id(c));
+                                            pr.clearPersonalNode(id(c));
+                                        })))))
                 .then(Commands.literal("complete").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(NODES)
@@ -85,6 +93,17 @@ final class PlayerCommands {
                                         .then(Commands.argument("amount", IntegerArgumentType.integer())
                                                 .executes(c -> each(c, (p, pr) -> pr.bonus.merge(ProgressRules.key(chapter(c)),
                                                         IntegerArgumentType.getInteger(c, "amount"), Integer::sum)))))))
+                .then(Commands.literal("team_stage").requires(s -> s.hasPermission(2))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("stage", StringArgumentType.word())
+                                                .executes(c -> each(c, (p, pr) -> teamStage(p, pr,
+                                                        StringArgumentType.getString(c, "stage"), true))))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("stage", StringArgumentType.word())
+                                                .executes(c -> each(c, (p, pr) -> teamStage(p, pr,
+                                                        StringArgumentType.getString(c, "stage"), false)))))))
                 .then(Commands.literal("experience").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
@@ -239,6 +258,18 @@ final class PlayerCommands {
             }
         }
         ProgressRules.eraseChapterData(pr, ProgressService.rules().model(), ch);
+    }
+
+    private static void teamStage(ServerPlayer p, PlayerProgress pr, String stage, boolean add) {
+        if (add) {
+            pr.teamStages.add(stage);
+        } else {
+            pr.teamStages.remove(stage);
+        }
+        for (ServerPlayer member : TeamResolver.onlineMembers(p.server, p.getUUID())) {
+            ServerCommands.run(member, "pack_stages " + (add ? "add " : "remove ")
+                    + member.getGameProfile().getName() + " " + stage, 2, true);
+        }
     }
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {

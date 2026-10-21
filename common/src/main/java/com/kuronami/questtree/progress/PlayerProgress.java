@@ -48,6 +48,8 @@ public final class PlayerProgress {
      * {@code points.unlocked_by_default}; storing only the override keeps the pack's default in charge.
      */
     public Map<String, Boolean> chapterOpen = new HashMap<>();
+    /** Stages granted to the whole team ({@code "team": true} on a stage task or reward). */
+    public Set<String> teamStages = new HashSet<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public Deque<String> recent = new ArrayDeque<>();
     /** The quest book was handed out on first join (server config, 2026-10-20). */
@@ -56,6 +58,26 @@ public final class PlayerProgress {
     private PlayerPart part;
 
     public static final int RECENT_MAX = 20;
+
+    /** Node keys of {@code shared:false} nodes; their progress lives in each player's part. */
+    private static volatile Set<String> personalNodes = Set.of();
+    private static volatile int personalVersion;
+
+    public static void setPersonalNodes(Set<String> keys) {
+        Set<String> next = Set.copyOf(keys);
+        if (!next.equals(personalNodes)) {
+            personalNodes = next;
+            personalVersion++;
+        }
+    }
+
+    public static int personalVersion() {
+        return personalVersion;
+    }
+
+    static boolean isPersonal(String key) {
+        return personalNodes.contains(key);
+    }
 
     public PlayerProgress() {
     }
@@ -66,17 +88,18 @@ public final class PlayerProgress {
      */
     public static PlayerProgress view(PlayerProgress shared, PlayerPart part, Set<String> teamClaimedRewards) {
         PlayerProgress p = new PlayerProgress();
-        p.completed = shared.completed;
-        p.tasks = shared.tasks;
+        p.completed = personalNodes.isEmpty() ? shared.completed : new RoutedSet(shared.completed, part.completed);
+        p.tasks = personalNodes.isEmpty() ? shared.tasks : new RoutedMap<>(shared.tasks, part.tasks);
         p.taken = shared.taken;
         p.xp = shared.xp;
         p.level = shared.level;
         p.spent = shared.spent;
         p.bonus = shared.bonus;
         p.exchange = shared.exchange;
-        p.repeats = shared.repeats;
-        p.cooldown = shared.cooldown;
+        p.repeats = personalNodes.isEmpty() ? shared.repeats : new RoutedMap<>(shared.repeats, part.repeats);
+        p.cooldown = personalNodes.isEmpty() ? shared.cooldown : new RoutedMap<>(shared.cooldown, part.cooldown);
         p.chapterOpen = shared.chapterOpen;
+        p.teamStages = shared.teamStages;
         p.claimed = part.claimed;
         p.claimedRewards = part.claimedRewards;
         p.teamClaimedRewards = teamClaimedRewards;
@@ -123,6 +146,28 @@ public final class PlayerProgress {
         return true;
     }
 
+    /** Forgets this member's {@code shared:false} progress; a shared reset runs once per team, so each part is cleared. */
+    public void clearPersonalAll() {
+        if (part != null) {
+            part.completed.clear();
+            part.tasks.clear();
+            part.repeats.clear();
+            part.cooldown.clear();
+        }
+    }
+
+    /** Forgets this member's {@code shared:false} progress for one chapter or node. */
+    public void clearPersonalNode(String id) {
+        if (part == null) {
+            return;
+        }
+        String prefix = id + "/";
+        part.completed.removeIf(k -> k.equals(id) || k.startsWith(prefix));
+        part.tasks.keySet().removeIf(k -> k.startsWith(id + "/") || k.startsWith(id + "#"));
+        part.repeats.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
+        part.cooldown.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
+    }
+
     /** Forgets a node's own progress (tasks, completion, claim); used by repeats and resets. */
     public void clearNode(String node) {
         completed.remove(node);
@@ -156,6 +201,8 @@ public final class PlayerProgress {
         cooldown.putAll(other.cooldown);
         chapterOpen.clear();
         chapterOpen.putAll(other.chapterOpen);
+        teamStages.clear();
+        teamStages.addAll(other.teamStages);
     }
 
     public void event(String kind, String node, long time) {

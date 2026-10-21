@@ -6,6 +6,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
+import com.kuronami.questtree.team.TeamResolver;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.core.Holder;
@@ -41,8 +42,7 @@ public final class Rewards {
                 case "command" -> command(player, rw);
                 case "table" -> table(player, p, n, rw, choice);
                 case "advancement" -> advancement(player, rw);
-                case "stage" -> ServerCommands.run(player, "pack_stages " + (ProgressModel.boolOf(rw, "remove") ? "remove " : "add ")
-                        + player.getGameProfile().getName() + " " + ProgressService.str(rw, "stage"), 2, true);
+                case "stage" -> stage(player, p, rw);
                 case "attribute" -> attribute(player, n.key, slotOf(n, rw), rw);
                 case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
@@ -62,6 +62,36 @@ public final class Rewards {
             }
         } catch (RuntimeException ex) {
             Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+        }
+    }
+
+    /**
+     * A stage reward. With {@code "team": true} the stage belongs to the team record and is mirrored into Pack Stages
+     * for every online member, so content outside the quest tree can keep using its command.
+     */
+    private static void stage(ServerPlayer player, PlayerProgress p, JsonObject rw) {
+        String stage = ProgressService.str(rw, "stage");
+        boolean add = !ProgressModel.boolOf(rw, "remove");
+        if (!ProgressModel.boolOf(rw, "team")) {
+            ServerCommands.run(player, "pack_stages " + (add ? "add " : "remove ")
+                    + player.getGameProfile().getName() + " " + stage, 2, true);
+            return;
+        }
+        if (add) {
+            p.teamStages.add(stage);
+        } else {
+            p.teamStages.remove(stage);
+        }
+        for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
+            ServerCommands.run(member, "pack_stages " + (add ? "add " : "remove ")
+                    + member.getGameProfile().getName() + " " + stage, 2, true);
+        }
+    }
+
+    /** Re-applies shared team stages after a login, for members who were offline when the stage was granted. */
+    static void applyTeamStages(ServerPlayer player, PlayerProgress p) {
+        for (String stage : p.teamStages) {
+            ServerCommands.run(player, "pack_stages add " + player.getGameProfile().getName() + " " + stage, 2, true);
         }
     }
 

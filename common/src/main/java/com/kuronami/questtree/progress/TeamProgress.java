@@ -28,6 +28,7 @@ public final class TeamProgress {
     /** FTBQ's team_reward (NIL UUID): claimed once for the team. */
     public final Set<String> teamClaimedRewards = new HashSet<>();
     private final Map<UUID, PlayerProgress> views = new HashMap<>();
+    private int viewsVersion = -1;
 
     public TeamProgress(UUID id) {
         this.id = id;
@@ -38,6 +39,10 @@ public final class TeamProgress {
     }
 
     public PlayerProgress view(UUID player) {
+        if (viewsVersion != PlayerProgress.personalVersion()) {
+            views.clear();
+            viewsVersion = PlayerProgress.personalVersion();
+        }
         return views.computeIfAbsent(player, k -> PlayerProgress.view(shared, part(k), teamClaimedRewards));
     }
 
@@ -102,6 +107,7 @@ public final class TeamProgress {
         other.cooldown.forEach((k, v) -> shared.cooldown.merge(k, v, Math::max));
         // the team's own lock override wins; one set by the joiner is used only where the team has none
         other.chapterOpen.forEach(shared.chapterOpen::putIfAbsent);
+        shared.teamStages.addAll(other.teamStages);
     }
 
     public JsonObject toJson() {

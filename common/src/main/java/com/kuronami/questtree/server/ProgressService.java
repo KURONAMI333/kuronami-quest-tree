@@ -142,6 +142,7 @@ public final class ProgressService {
         // the client starts with no team: never skip the first view because a previous session had the same one
         TeamSync.forget(player.getUUID());
         PlayerProgress p = progress(player);
+        Rewards.applyTeamStages(player, p);
         // drop every modifier first: ones left from a skill the team no longer has must not survive the login
         Rewards.refreshAttributes(player, p);
         recheck(player, p);
@@ -401,13 +402,13 @@ public final class ProgressService {
 
     /** Whether every condition on a task or reward holds for this player now. */
     static boolean conditionsMet(ServerPlayer player, PlayerProgress p, JsonObject holder) {
-        return QuestConditions.allMet(holder, new Conditions(player));
+        return QuestConditions.allMet(holder, new Conditions(player, p));
     }
 
-    private record Conditions(ServerPlayer player) implements QuestConditions.Context {
+    private record Conditions(ServerPlayer player, PlayerProgress progress) implements QuestConditions.Context {
         @Override
         public boolean hasStage(String stage) {
-            return ProgressService.hasStage(player, stage);
+            return progress.teamStages.contains(stage) || ProgressService.hasStage(player, stage);
         }
 
         @Override
@@ -791,7 +792,8 @@ public final class ProgressService {
                     case "location" -> inside(player, t) ? 1 : 0;
                     case "advancement" -> advancementDone(player, str(t, "advancement"), str(t, "criterion")) ? 1 : 0;
                     case "stat" -> stat(player, str(t, "stat"));
-                    case "stage" -> hasStage(player, str(t, "stage")) ? 1 : 0;
+                    case "stage" -> (ProgressModel.boolOf(t, "team") && p.teamStages.contains(str(t, "stage"))
+                            || hasStage(player, str(t, "stage"))) ? 1 : 0;
                     default -> -1;
                 };
                 if (value < 0) {

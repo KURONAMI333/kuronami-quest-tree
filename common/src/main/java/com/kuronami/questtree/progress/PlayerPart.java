@@ -6,19 +6,25 @@ import com.google.gson.JsonObject;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * The part of a team record that belongs to one player: what they claimed, the book flag, and the recent list.
- * Shared values (completed nodes, task counters, skills, experience, repeats) live in the team's
- * {@link PlayerProgress} and are read through {@link TeamProgress#view(java.util.UUID)}.
+ * The part of a team record that belongs to one player: claimed rewards, the book flag, the recent list, and the
+ * progress of {@code shared:false} nodes (completion, task counters, repeats, cooldowns). Shared values live in the
+ * team's {@link PlayerProgress} and are read through {@link TeamProgress#view(java.util.UUID)}.
  */
 public final class PlayerPart {
 
     public final Set<String> claimed = new HashSet<>();
     public final Set<String> claimedRewards = new HashSet<>();
     public final Deque<String> recent = new ArrayDeque<>();
+    public final Set<String> completed = new HashSet<>();
+    public final Map<String, Long> tasks = new HashMap<>();
+    public final Map<String, Integer> repeats = new HashMap<>();
+    public final Map<String, Long> cooldown = new HashMap<>();
     public boolean bookGiven;
 
     public void event(String kind, String node, long time) {
@@ -33,6 +39,10 @@ public final class PlayerPart {
         claimedRewards.addAll(other.claimedRewards);
         recent.clear();
         recent.addAll(other.recent);
+        completed.addAll(other.completed);
+        tasks.putAll(other.tasks);
+        repeats.putAll(other.repeats);
+        cooldown.putAll(other.cooldown);
         bookGiven |= other.bookGiven;
     }
 
@@ -41,6 +51,10 @@ public final class PlayerPart {
         o.add("claimed", strings(claimed));
         o.add("claimed_rewards", strings(claimedRewards));
         o.add("recent", strings(recent));
+        o.add("completed", strings(completed));
+        o.add("tasks", longs(tasks));
+        o.add("repeats", ints(repeats));
+        o.add("cooldown", longs(cooldown));
         o.addProperty("book_given", bookGiven);
         return o;
     }
@@ -56,6 +70,18 @@ public final class PlayerPart {
         for (JsonElement e : arr(o, "recent")) {
             part.recent.addLast(e.getAsString());
         }
+        for (JsonElement e : arr(o, "completed")) {
+            part.completed.add(e.getAsString());
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
+            part.tasks.put(e.getKey(), e.getValue().getAsLong());
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "repeats").entrySet()) {
+            part.repeats.put(e.getKey(), e.getValue().getAsInt());
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
+            part.cooldown.put(e.getKey(), e.getValue().getAsLong());
+        }
         part.bookGiven = o.has("book_given") && o.get("book_given").isJsonPrimitive()
                 && o.get("book_given").getAsBoolean();
         return part;
@@ -69,5 +95,21 @@ public final class PlayerPart {
 
     private static JsonArray arr(JsonObject o, String k) {
         return o.has(k) && o.get(k).isJsonArray() ? o.getAsJsonArray(k) : new JsonArray();
+    }
+
+    private static JsonObject obj(JsonObject o, String k) {
+        return o.has(k) && o.get(k).isJsonObject() ? o.getAsJsonObject(k) : new JsonObject();
+    }
+
+    private static JsonObject longs(Map<String, Long> m) {
+        JsonObject o = new JsonObject();
+        m.forEach(o::addProperty);
+        return o;
+    }
+
+    private static JsonObject ints(Map<String, Integer> m) {
+        JsonObject o = new JsonObject();
+        m.forEach(o::addProperty);
+        return o;
     }
 }

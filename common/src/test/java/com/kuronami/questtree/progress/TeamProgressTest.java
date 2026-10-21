@@ -1,8 +1,10 @@
 package com.kuronami.questtree.progress;
 
 import com.google.gson.JsonObject;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,6 +18,11 @@ class TeamProgressTest {
     private static final UUID A = UUID.fromString("00000000-0000-0000-0000-00000000000a");
     private static final UUID B = UUID.fromString("00000000-0000-0000-0000-00000000000b");
     private static final UUID TEAM = UUID.fromString("00000000-0000-0000-0000-0000000000ff");
+
+    @AfterEach
+    void clearPersonalNodes() {
+        PlayerProgress.setPersonalNodes(Set.of());
+    }
 
     @Test
     void legacyPlayerBecomesSoloTeamWithoutLosingAnything() {
@@ -75,6 +82,52 @@ class TeamProgressTest {
         assertEquals(10.0, team.shared.xp.get("t:mining"));
         assertTrue(team.view(A).claimedRewards.contains("t:q/a#0"));
         assertTrue(team.view(A).rewardClaimed("t:q/team#0"));
+    }
+
+    @Test
+    void personalNodesStayWithTheirPlayer() {
+        PlayerProgress.setPersonalNodes(Set.of("t:q/private"));
+        TeamProgress team = new TeamProgress(TEAM);
+
+        PlayerProgress a = team.view(A);
+        a.completed.add("t:q/private");
+        a.setTask("t:q/private", 0, 4);
+        a.repeats.put("t:q/private", 2);
+        a.cooldown.put("t:q/private", 99L);
+        a.completed.add("t:q/shared");
+
+        PlayerProgress b = team.view(B);
+        assertFalse(b.completed.contains("t:q/private"));
+        assertEquals(0, b.task("t:q/private", 0));
+        assertFalse(b.repeats.containsKey("t:q/private"));
+        assertFalse(team.shared.completed.contains("t:q/private"));
+        assertTrue(team.shared.completed.contains("t:q/shared"));
+        assertTrue(team.part(A).completed.contains("t:q/private"));
+        assertEquals(4, team.part(A).tasks.get("t:q/private#0"));
+
+        // the saved and synced form keeps the personal part, so a login restores it
+        TeamProgress read = TeamProgress.parse(team.toJson().toString());
+        assertTrue(read.view(A).completed.contains("t:q/private"));
+        assertFalse(read.view(B).completed.contains("t:q/private"));
+        assertEquals(4, read.view(A).task("t:q/private", 0));
+        assertEquals(2, read.view(A).repeats.get("t:q/private"));
+        assertEquals(99L, read.view(A).cooldown.get("t:q/private"));
+    }
+
+    @Test
+    void teamStagesAreSharedAndSurviveJoinLeaveAndReload() {
+        TeamProgress team = new TeamProgress(TEAM);
+        team.view(A).teamStages.add("chapter/two");
+
+        assertTrue(team.view(B).teamStages.contains("chapter/two"));
+        TeamProgress solo = team.leaveCopy(A);
+        assertTrue(solo.view(A).teamStages.contains("chapter/two"));
+
+        TeamProgress joiner = new TeamProgress(B);
+        joiner.shared.teamStages.add("chapter/one");
+        team.mergeJoiner(B, joiner);
+        assertTrue(team.shared.teamStages.containsAll(Set.of("chapter/one", "chapter/two")));
+        assertTrue(TeamProgress.parse(team.toJson().toString()).shared.teamStages.contains("chapter/one"));
     }
 
     @Test

@@ -39,6 +39,7 @@ public final class ProgressJson {
         p.chapterOpen.forEach(chapterOpen::addProperty);
         o.add("chapter_open", chapterOpen);
         o.add("recent", strings(p.recent));
+        o.add("team_stages", strings(p.teamStages));
         o.add("repeats", ints(p.repeats));
         JsonObject cd = new JsonObject();
         p.cooldown.forEach(cd::addProperty);
@@ -76,6 +77,9 @@ public final class ProgressJson {
         readInts(obj(o, "exchange"), p.exchange);
         for (Map.Entry<String, JsonElement> e : obj(o, "chapter_open").entrySet()) {
             p.chapterOpen.put(e.getKey(), e.getValue().getAsBoolean());
+        }
+        for (JsonElement e : arr(o, "team_stages")) {
+            p.teamStages.add(e.getAsString());
         }
         readInts(obj(o, "repeats"), p.repeats);
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {

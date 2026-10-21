@@ -25,6 +25,13 @@ public final class ProgressRules {
 
     public ProgressRules(ProgressModel model) {
         this.model = model;
+        java.util.Set<String> personal = new java.util.HashSet<>();
+        for (ProgressModel.Node n : model.nodes.values()) {
+            if (!n.shared) {
+                personal.add(n.key);
+            }
+        }
+        PlayerProgress.setPersonalNodes(personal);
     }
 
     public ProgressModel model() {
