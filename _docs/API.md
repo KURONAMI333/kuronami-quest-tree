@@ -31,8 +31,8 @@ QuestTreeApi.registerConditionType(id, context -> context.player().experienceLev
 
 - **タスク**: サーバーの tick で `QuestTaskType.progress(TaskContext)` を呼び、返した値を進捗として保存する。`count` / `amount` は `maxProgress()` で読める。`currentProgress()` はこのタスクの現在値。
 - **報酬**: 受取が確定した時に `QuestRewardType.give(RewardContext)` を呼ぶ。例外は Quest Tree が捕まえてログする。権限・距離などの検証はハンドラ側の責任。
-- **条件**: `conditions` の全項目が true の時だけ、タスクは進み、報酬は渡される。未登録の条件 type は false（fail closed）。条件はタスクの進捗書き込み・提出・報酬受取の各所で評価される。
-- 登録した type は `ProgressValidator` の未知 type 警告/エラーから除外される。条件は未登録なら警告（ノードは落とさない）。
+- **条件**: `conditions` の全項目が true の時だけ、タスクは進み、報酬は渡される。組み込みの5種類（`stage`・`score`・`item`・`advancement`・`party_size`）と登録した種類は同じ1つの判定器で評価される。登録した種類は名前空間込みの id で照合し、どちらにも無い種類は false（fail closed）。`QuestTreeApi.conditionsMet(player, node, data, task)` はこの同じ判定を呼ぶ公開の入口。
+- 登録した type は `ProgressValidator` の未知 type 警告/エラーから除外される。条件は組み込みと登録済みを既知として扱い、それ以外は警告（ノードは落とさない）。
 
 ## 進行イベント
 
@@ -63,6 +63,8 @@ QuestTreeEvents.taskCompleted(event => console.info(event.quest + ' #' + event.t
 QuestTree.registerTask('example:held_level', context => context.player().experienceLevel)
 QuestTree.registerCondition('example:level_30', context => context.player().experienceLevel >= 30)
 ```
+
+`QuestTree.registerCondition` で登録した種類は、組み込みの5種類（`stage`・`score`・`item`・`advancement`・`party_size`）と同じ `conditions` 配列に名前空間込みの id で書く。組み込みの種類はスクリプトから登録しなくてもそのまま使える。
 
 再読み込みで外れるのは、そのスクリプト種別（startup / server / client）が登録した id だけ。既にある id へのスクリプトの登録は拒否され false を返す。登録はスクリプトのトップレベルで行う。
 

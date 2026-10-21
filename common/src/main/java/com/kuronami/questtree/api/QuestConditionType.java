@@ -8,8 +8,10 @@ import net.minecraft.server.level.ServerPlayer;
  * A condition type supplied by another mod, registered with {@code QuestTreeApi.registerConditionType(id, type)}.
  * A JSON entry {@code {"type": "yourmod:level", ...}} then gates the task or reward that lists it.
  * <p>
- * Every condition in a {@code conditions} array must pass. An unregistered type fails closed, so a pack that names a
- * missing addon does not silently hand out its rewards.
+ * The five built-in kinds ({@code stage}, {@code score}, {@code item}, {@code advancement}, {@code party_size}) are
+ * judged by the same gauge without registration, so one {@code conditions} array may mix them with registered kinds.
+ * A registered id is matched with its namespace. An unregistered type fails closed, so a pack that names a missing
+ * addon does not silently hand out its rewards.
  */
 public interface QuestConditionType {
 

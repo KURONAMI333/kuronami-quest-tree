@@ -26,6 +26,8 @@ import net.minecraft.server.level.ServerPlayer;
  * QuestTree.registerTask('example:held_level', context => context.player().experienceLevel)
  * QuestTree.registerCondition('example:level_30', context => context.player().experienceLevel >= 30)
  * }</pre>
+ * A registered condition joins the five built-in kinds in the same {@code conditions} array; no built-in kind needs
+ * registering.
  * The handler ids are tracked by script type, so reloading one kind of script forgets exactly what that kind registered;
  * a Java addon's own registrations and the other script types' handlers are left alone.
  */

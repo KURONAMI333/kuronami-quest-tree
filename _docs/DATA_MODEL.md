@@ -181,15 +181,20 @@ data/<ns>/progression/
 
 タスクにも報酬にも `"conditions": [...]` を書ける。全部満たしたときだけ、タスクは数えられ、報酬は渡される。条件を満たさない報酬は未受取のまま残り、あとで満たせば受け取れる。
 
+判定は1つの入口だけを通る。組み込みの5種類と、他 MOD・KubeJS が登録した種類を同じ配列に混ぜて書ける。
+
 ```json
 {"type": "stage", "stage": "chapter/one"}
 {"type": "score", "objective": "points", "min": 10}
 {"type": "item", "item": {"id": "minecraft:diamond", "count": 3}}
 {"type": "advancement", "advancement": "minecraft:story/root", "criterion": null}
 {"type": "party_size", "min": 2}
+{"type": "example:enabled"}
 ```
 
-`stage` は Pack Stages の段階（`team_stages` も含む）、`score` はスコアボードの値、`item` は手持ち、`advancement` は進捗、`party_size` はオンラインのパーティ人数。`score` は `scoreboard` でも書ける。知らない種類は条件を満たさない扱い（書いたゲートを開けない側に倒す）。
+`stage` は Pack Stages の段階（`team_stages` も含む）、`score` はスコアボードの値、`item` は手持ち、`advancement` は進捗、`party_size` はオンラインのパーティ人数。`score` は `scoreboard` でも書ける。組み込みの5種類は名前空間を付けてもよい（`kuronami_quest_tree:stage` は `stage` として読む）。
+
+登録した種類は `<namespace>:<id>` で書き、`QuestTreeApi.registerConditionType` か KubeJS の `QuestTree.registerCondition` で登録する（[_docs/API.md](API.md)）。登録した種類は名前空間込みの id で照合し、その項目の判定はハンドラに任せる。どちらにも無い種類は条件を満たさない扱い（書いたゲートを開けない側に倒す）。検証では未登録の種類を `WARNING` にし、ノードは落とさない。
 
 ## ブロック
 
