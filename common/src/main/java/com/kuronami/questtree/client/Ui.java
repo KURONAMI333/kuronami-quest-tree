@@ -453,23 +453,51 @@ final class Ui {
         if (lines.isEmpty()) {
             return;
         }
+        int w = tooltipWidth(font, lines);
+        int lineH = tooltipLineH();
+        int h = lines.size() * lineH + 2 * S1 - 2;
+        // vanilla's DefaultTooltipPositioner (1.21.1): right of and above the pointer, flipped to the left and lifted
+        // off the bottom edge when it would leave the screen
+        int x = mouseX + 12;
+        int y = mouseY - 12;
+        if (x + w > g.guiWidth()) {
+            x = Math.max(x - 24 - w, 4);
+        }
+        if (y + h + 3 > g.guiHeight()) {
+            y = g.guiHeight() - h - 3;
+        }
+        drawTooltip(g, font, lines, x, y, w, h, lineH);
+    }
+
+    /**
+     * A tooltip at an anchor rather than at the pointer, kept inside the screen: the chapter rail's locked hint sits to
+     * the right of the row, so it never covers the chapter name it explains (2026-10-22).
+     */
+    static void tooltipAt(GuiGraphics g, Font font, List<Component> lines, int x, int y) {
+        if (lines.isEmpty()) {
+            return;
+        }
+        int w = tooltipWidth(font, lines);
+        int lineH = tooltipLineH();
+        int h = lines.size() * lineH + 2 * S1 - 2;
+        x = Math.max(4, Math.min(x, g.guiWidth() - w - 4));
+        y = Math.max(4, Math.min(y, g.guiHeight() - h - 4));
+        drawTooltip(g, font, lines, x, y, w, h, lineH);
+    }
+
+    private static int tooltipWidth(Font font, List<Component> lines) {
         int textW = 0;
         for (Component c : lines) {
             textW = Math.max(textW, textWidth(font, c));
         }
-        int w = textW + 2 * S2;
-        int lineH = Math.max(10, (int) Math.ceil(10 * ClientConfig.textScale()));
-        int h = lines.size() * lineH + 2 * S1 - 2;
-        int x = mouseX + 12;
-        // below the pointer: above it, a rail row's hint covered the row's own name (2026-10-22 review)
-        int y = mouseY + 12;
-        if (x + w + 4 > g.guiWidth()) {
-            x = Math.max(4, g.guiWidth() - w - 4);
-        }
-        if (y + h + 4 > g.guiHeight()) {
-            y = g.guiHeight() - h - 4;
-        }
-        y = Math.max(4, y);
+        return textW + 2 * S2;
+    }
+
+    private static int tooltipLineH() {
+        return Math.max(10, (int) Math.ceil(10 * ClientConfig.textScale()));
+    }
+
+    private static void drawTooltip(GuiGraphics g, Font font, List<Component> lines, int x, int y, int w, int h, int lineH) {
         // flat, not glass: a tooltip is mostly text, and it often opens over the glass of the list or the minimap,
         // where glass on glass is what Apple's guidance rules out
         surface(g, x, y, w, h, R3, FLOATING);

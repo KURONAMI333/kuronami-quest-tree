@@ -379,6 +379,10 @@ public class ProgressScreen extends Screen {
     private long lastFrame;
     /** Tooltip lines asked for while drawing (icon buttons), drawn last so nothing covers it. */
     private List<Component> pendingTip;
+    /** The locked-chapter hint: drawn beside the rail row, not at the pointer, so it never covers the name. */
+    private List<Component> railTip;
+    private int railTipX;
+    private int railTipY;
     /** The node under the mouse last frame; lines are drawn before nodes, so they use this one. */
     private String hoveredNode;
     /** Per node, how far its hover growth has run (0..1). */
@@ -681,6 +685,7 @@ public class ProgressScreen extends Screen {
         g.fill(0, 0, width, height, SCRIM);
         buttons.clear();
         pendingTip = null;
+        railTip = null;
         Motion.tick();
         // claim animations of tiles that were never drawn (scrolled away) end here, so their tiles leave the list
         long nowMs = Util.getMillis();
@@ -751,6 +756,12 @@ public class ProgressScreen extends Screen {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 300);
             Ui.tooltip(g, font, pendingTip, mouseX, mouseY);
+            g.pose().popPose();
+        }
+        if (railTip != null && confirmPrompt == null) {
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 300);
+            Ui.tooltipAt(g, font, railTip, railTipX, railTipY);
             g.pose().popPose();
         }
         renderConfirm(g, mouseX, mouseY);
@@ -986,7 +997,10 @@ public class ProgressScreen extends Screen {
                         // the pack's own words for why it is closed; the row itself stays a row
                         Component hint = c.lockHint != null ? c.lockHint
                                 : Component.translatable("screen.kuronami_quest_tree.chapter_locked");
-                        pendingTip = List.of(c.title, hint);
+                        // beside the rail, level with the row: at the pointer it covered the chapter's own name
+                        railTip = List.of(c.title, hint);
+                        railTipX = 4 + w + 4;
+                        railTipY = Math.round(top - shown + ry);
                     }
                     if (searching()) {
                         // while searching, the rail shows where the matches are instead
