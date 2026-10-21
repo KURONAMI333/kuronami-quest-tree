@@ -406,6 +406,7 @@ final class PlayerCommands {
         if (n.tasks.isEmpty() && !n.chapter.isSkills() && !pr.completed.contains(n.key)) {
             // task-less quests: complete with their automatic rewards, like a normal completion
             pr.completed.add(n.key);
+            pr.completedAt.put(n.key, System.currentTimeMillis());
             ProgressService.event(p, pr, "complete", n.key);
             ProgressService.autoRewards(p, pr, n);
         }
