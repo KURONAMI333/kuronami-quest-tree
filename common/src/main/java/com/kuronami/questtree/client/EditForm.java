@@ -58,6 +58,10 @@ final class EditForm {
 
         default void setError(String sentence) {
         }
+
+        /** Re-reads the value from the JSON, for a picker that wrote a field while the row was already built. */
+        default void refresh() {
+        }
     }
 
     abstract static class Base implements Line {
@@ -218,9 +222,34 @@ final class EditForm {
         return focus != null && focus.chars(c, mods);
     }
 
-    /** Applies the validator's sentences to the rows with the matching id; returns the ids that took one. */
+    /** Drops every validator sentence from the rows, before a new reply's are placed. */
     void clearErrors() {
         lines.forEach(l -> l.setError(null));
+    }
+
+    /** Puts one validator sentence under the row with this id. */
+    void setError(String fieldId, String sentence) {
+        for (Line line : lines) {
+            if (fieldId != null && fieldId.equals(line.fieldId())) {
+                line.setError(sentence);
+            }
+        }
+    }
+
+    /** The row ids the validator's paths can be matched against. */
+    List<String> fieldIds() {
+        List<String> out = new ArrayList<>();
+        for (Line line : lines) {
+            if (line.fieldId() != null) {
+                out.add(line.fieldId());
+            }
+        }
+        return out;
+    }
+
+    /** Re-reads every editable value, for a picker that wrote into the JSON behind the form. */
+    void refresh() {
+        lines.forEach(Line::refresh);
     }
 
     // ------------------------------------------------------------------ rows
@@ -288,6 +317,13 @@ final class EditForm {
         @Override
         public void setError(String sentence) {
             error = sentence;
+        }
+
+        @Override
+        public void refresh() {
+            if (box != null && !box.isFocused()) {
+                box.setValue(EditorDoc.show(root, spec));
+            }
         }
 
         @Override
@@ -683,16 +719,34 @@ final class EditForm {
         private final Component title;
         private final Runnable open;
         private final List<Action> actions;
+        private final String fieldId;
+        private String error;
 
         CardLine(Component title, Runnable open, List<Action> actions) {
+            this(title, open, actions, null);
+        }
+
+        /** A card can stand for the object at {@code fieldId}, so the validator's sentence gets a row to sit under. */
+        CardLine(Component title, Runnable open, List<Action> actions, String fieldId) {
             this.title = title;
             this.open = open;
             this.actions = actions;
+            this.fieldId = fieldId;
+        }
+
+        @Override
+        public String fieldId() {
+            return fieldId;
+        }
+
+        @Override
+        public void setError(String sentence) {
+            error = sentence;
         }
 
         @Override
         public int height() {
-            return ROW + 6;
+            return ROW + 6 + (error != null ? 11 : 0);
         }
 
         @Override
@@ -701,7 +755,7 @@ final class EditForm {
             Ui.surface(g, x, y + 6, w, ROW, Ui.R1, Ui.OVERLAY_2);
             boolean over = open != null && inside(mouseX, mouseY, x, y + 6, w - actions.size() * 18, ROW);
             Ui.text(g, font, font.plainSubstrByWidth(title.getString(), w - actions.size() * 18 - 12), x + 6,
-                    y + 6 + (ROW - 8) / 2, over ? Ui.BRIGHT : Ui.TEXT);
+                    y + 6 + (ROW - 8) / 2, error != null ? Ui.TEXT_ERROR : over ? Ui.BRIGHT : Ui.TEXT);
             int bx = x + w - actions.size() * 18;
             for (Action a : actions) {
                 boolean hit = a.enabled() && inside(mouseX, mouseY, bx, y + 6, 18, ROW);
@@ -715,6 +769,9 @@ final class EditForm {
                     Ui.text(g, font, a.glyph(), bx + 9 - font.width(a.glyph()) / 2, y + 6 + (ROW - 8) / 2, tone);
                 }
                 bx += 18;
+            }
+            if (error != null) {
+                Ui.text(g, font, font.plainSubstrByWidth(error, w - 8), x + 6, y + 6 + ROW, Ui.TEXT_ERROR);
             }
         }
 
