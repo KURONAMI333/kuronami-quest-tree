@@ -213,7 +213,9 @@ public final class ClientModel {
             this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
             this.defaultSequentialTasks = ProgressModel.boolOf(defaults, "sequential_tasks");
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString()) : Component.literal(path);
-            this.title = m.component("progression." + namespace + "." + path + ".title", fallbackTitle);
+            String inlineTitle = inlineText(o, "title");
+            this.title = inlineTitle != null ? parseText(inlineTitle)
+                    : m.component("progression." + namespace + "." + path + ".title", fallbackTitle);
             BackgroundLayer.read(o.get("background"), background);
             for (Map.Entry<String, JsonElement> n : obj(o, "nodes").entrySet()) {
                 if (!n.getValue().isJsonObject()) {
