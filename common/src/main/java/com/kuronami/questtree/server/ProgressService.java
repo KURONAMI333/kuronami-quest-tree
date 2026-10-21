@@ -437,11 +437,6 @@ public final class ProgressService {
         }
     }
 
-    /** The API's own entry, kept for the observation scan until it calls the gauge above directly. */
-    private static boolean conditionsMet(ServerPlayer player, ProgressModel.Node n, JsonObject data, boolean task) {
-        return QuestTreeApi.conditionsMet(player, n, data, task);
-    }
-
     private record Conditions(ServerPlayer player, PlayerProgress progress) implements QuestConditions.Context {
         @Override
         public boolean hasStage(String stage) {
@@ -746,7 +741,7 @@ public final class ProgressService {
             seen.put(key, run);
             if (persist || run >= target) {
                 long before = p.task(n.key, i);
-                boolean conditions = conditionsMet(player, n, t, true);
+                boolean conditions = conditionsMet(player, p, n, t, true);
                 if (ObservationWrite.writes(before, run, conditions)) {
                     // quiet write: a look that lasts a while would otherwise send a packet every tick
                     p.setTask(n.key, i, run);
