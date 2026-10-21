@@ -50,7 +50,7 @@ public class QuestBarrierBlockEntity extends BlockEntity {
         if (player instanceof ServerPlayer sp) {
             return com.kuronami.questtree.server.ProgressService.barrierAllows(sp, mode, key);
         }
-        return com.kuronami.questtree.client.ClientProgress.barrierAllows(mode, key);
+        return com.kuronami.questtree.client.ClientBarrier.allows(mode, key);
     }
 
     @Override
