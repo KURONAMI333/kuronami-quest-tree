@@ -176,7 +176,7 @@ Every reward also accepts `team`, `auto`, `exclude_from_claim_all`, `ignore_rewa
 
 ### One-time and revocable rewards
 
-`xp`, `xp_levels`, `item`, `table`, `advancement`, `command`, `currency` and `custom` are paid only once to the same player for the same rank, even after a reset and re-take. `custom` also fires an add-on event only once. The exception is a `command` with `lock_command`: its `command` runs again on every re-take, because a respec runs `lock_command` and the command must be run again to unlock.
+`xp`, `xp_levels`, `item`, `table`, `advancement`, `command`, `currency` and `custom` are paid only once per team for the same rank, even after a reset and re-take. `custom` also fires an add-on event only once. The exception is a `command` with `lock_command`: its `command` runs again on every re-take, because a respec runs `lock_command` and the command must be run again to unlock.
 
 The paid record is per team, keyed `<node>#<rank>#<index>` in `paid_skill_rewards`; any team member's take counts once. A reward is recorded only when it was actually paid: unmet conditions, a failed payment and a declined `choice` table do not record it, so a later take can pay it.
 
