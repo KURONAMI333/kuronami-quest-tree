@@ -130,12 +130,20 @@ public final class PuffishImporter {
                                     conv.remove("points");
                                 }
                                 if (conv.has("category")) {
-                                    String target = conv.get("category").getAsString();
-                                    if (!target.substring(target.indexOf(':') + 1).equals(category)) {
-                                        out.unknown("skill_reward_category", target);
+                                    JsonElement targetElement = conv.get("category");
+                                    if (targetElement.isJsonPrimitive() && targetElement.getAsJsonPrimitive().isString()) {
+                                        String target = targetElement.getAsString();
+                                        if (!target.substring(target.indexOf(':') + 1).equals(category)) {
+                                            // another imported category: name the chapter id the importer writes
+                                            conv.addProperty("chapter", out.namespace + ":" + chapterId(target));
+                                            out.note("points_reward_chapter " + target);
+                                        }
+                                        // the same category is the node's own chapter; the reward falls back to it
+                                        conv.remove("category");
+                                    } else {
+                                        out.unknown("skill_reward_category", "not_a_string");
+                                        conv.remove("category");
                                     }
-                                    // the same category is the node's own chapter; the reward falls back to it
-                                    conv.remove("category");
                                 }
                             }
                             if (KNOWN_REWARDS.contains(shortType)) {
@@ -226,6 +234,15 @@ public final class PuffishImporter {
         JsonArray list = n.has(key) ? n.getAsJsonArray(key) : new JsonArray();
         list.add(value);
         n.add(key, list);
+    }
+
+    /** The chapter id PuffishImporter writes for a {@code namespace:category} pair. */
+    private static String chapterId(String category) {
+        return "skill_" + FtbQuestsImporter.slug(category.replace(':', '_'));
+    }
+
+    private static int intOf(JsonElement v, int def) {
+        return v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() ? v.getAsInt() : def;
     }
 
     private static JsonObject icon(JsonElement v) {

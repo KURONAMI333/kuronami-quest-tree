@@ -24,6 +24,17 @@ class ImporterTest {
         return Path.of(ImporterTest.class.getResource("/fixtures/" + p).toURI());
     }
 
+
+    private static Map<String, JsonElement> puffishFiles() throws Exception {
+        Map<String, JsonElement> files = new LinkedHashMap<>();
+        try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
+            for (Path f : s.toList()) {
+                files.put(f.getFileName().toString(), JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)));
+            }
+        }
+        return files;
+    }
+
     @Test
     void snbtReadsPrettyFormat() {
         JsonObject o = Snbt.parse("{\n\tid: \"A\"\n\tx: 1.5d\n\tn: 5L\n\tlist: [I; 1, 2]\n\tflag: true\n\tnested: { k: \"v\" }\n}").getAsJsonObject();
@@ -286,5 +297,26 @@ class ImporterTest {
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("6996929552069196378L"));
         org.junit.jupiter.api.Assertions.assertEquals("ffffffffffffffff", FtbQuestsImporter.tableId("-1"));
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("611A165B35847A5A"));
+    }
+    /** 3. A points reward for another category names the chapter the importer writes for it. */
+    @Test
+    void puffishPointsRewardToAnotherCategoryNamesItsChapter() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject points = new JsonObject();
+        points.addProperty("type", "puffish_skills:points");
+        JsonObject data = new JsonObject();
+        data.addProperty("category", "puffish:farming");
+        data.addProperty("points", 4);
+        points.add("data", data);
+        rewards.add(points);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject reward = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0")
+                .getAsJsonArray("rewards").get(rewards.size() - 1).getAsJsonObject();
+        assertEquals(4, reward.get("amount").getAsInt());
+        assertEquals("test:skill_puffish_farming", reward.get("chapter").getAsString());
+        assertFalse(reward.has("category"));
+        assertTrue(out.notes.containsKey("points_reward_chapter puffish:farming"), out.notes.toString());
     }
 }
