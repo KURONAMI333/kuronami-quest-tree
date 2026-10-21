@@ -47,6 +47,8 @@ public final class SkillExperience {
     private static final Map<String, Expression> PARSED = new HashMap<>();
     /** Anti-farming windows of every source; runtime state, cleared when the server stops (2026-10-20). */
     private static final AntiFarming ANTI_FARMING = new AntiFarming();
+    /** When the windows were last swept; sweeping every award walks every source of every player (2026-10-22 review). */
+    private static long antiFarmingCleaned;
 
     private SkillExperience() {
     }
@@ -152,7 +154,11 @@ public final class SkillExperience {
         if (!usedSources(rules.model()).contains(source)) {
             return;
         }
-        ANTI_FARMING.removeOutdated(System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        if (now - antiFarmingCleaned >= 1000L) {
+            antiFarmingCleaned = now;
+            ANTI_FARMING.removeOutdated(now);
+        }
         PlayerProgress p = null;
         for (ProgressModel.Chapter c : rules.model().chapters.values()) {
             if (!c.isSkills() || !c.points.has("sources") || !c.points.get("sources").isJsonArray()) {
@@ -276,6 +282,7 @@ public final class SkillExperience {
     /** Server stopping: anti-farming windows do not carry over into the next server run. */
     public static void clearState() {
         ANTI_FARMING.clear();
+        antiFarmingCleaned = 0L;
         // parsed expressions and one-time warnings are caches of the loaded data, not player state
         PARSED.clear();
         WARNED.clear();
