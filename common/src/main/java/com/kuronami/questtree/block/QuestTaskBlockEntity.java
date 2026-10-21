@@ -2,12 +2,15 @@ package com.kuronami.questtree.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.component.CustomData;
 
 /** Remembers which quest a task block shows. The key is sent with the block so the client can open that quest. */
 public class QuestTaskBlockEntity extends BlockEntity {
@@ -31,10 +34,31 @@ public class QuestTaskBlockEntity extends BlockEntity {
         setChanged();
     }
 
+    /** Creative pick and middle-click keep the quest this block shows. */
+    @Override
+    protected void collectImplicitComponents(DataComponentMap.Builder components) {
+        super.collectImplicitComponents(components);
+        if (node.isEmpty()) {
+            return;
+        }
+        CompoundTag tag = new CompoundTag();
+        tag.putString("quest_node", node);
+        components.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
+    @Override
+    protected void applyImplicitComponents(BlockEntity.DataComponentInput input) {
+        super.applyImplicitComponents(input);
+        CustomData data = input.get(DataComponents.CUSTOM_DATA);
+        if (data != null) {
+            setNode(data.copyTag().getString("quest_node"));
+        }
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.putString("node", node);
+        tag.putString("quest_node", node);
     }
 
     @Override

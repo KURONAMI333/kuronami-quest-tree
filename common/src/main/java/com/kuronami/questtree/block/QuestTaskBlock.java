@@ -16,10 +16,10 @@ import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
+
 import java.util.List;
 
 /**
@@ -50,15 +50,6 @@ public class QuestTaskBlock extends BaseEntityBlock {
     }
 
     @Override
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (level.isClientSide) {
-            String node = level.getBlockEntity(pos) instanceof QuestTaskBlockEntity be ? be.node() : "";
-            Services.PLATFORM.openProgressionScreen(node);
-        }
-        return InteractionResult.SUCCESS;
-    }
-
-    @Override
     protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
         List<ItemStack> drops = super.getDrops(state, params);
         if (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) instanceof QuestTaskBlockEntity be) {
@@ -75,6 +66,15 @@ public class QuestTaskBlock extends BaseEntityBlock {
         net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
         tag.putString(name, value);
         return tag;
+    }
+
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        if (level.isClientSide) {
+            String node = level.getBlockEntity(pos) instanceof QuestTaskBlockEntity be ? be.node() : "";
+            Services.PLATFORM.openProgressionScreen(node);
+        }
+        return InteractionResult.SUCCESS;
     }
 
     @Override

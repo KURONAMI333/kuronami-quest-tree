@@ -2,6 +2,8 @@ package com.kuronami.questtree.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
@@ -9,6 +11,7 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -51,6 +54,28 @@ public class QuestBarrierBlockEntity extends BlockEntity {
             return com.kuronami.questtree.server.ProgressService.barrierAllows(sp, mode, key);
         }
         return com.kuronami.questtree.client.ClientBarrier.allows(mode, key);
+    }
+
+    /** Creative pick and middle-click carry the gate's key, not just a plain barrier block. */
+    @Override
+    protected void collectImplicitComponents(DataComponentMap.Builder components) {
+        super.collectImplicitComponents(components);
+        if (key.isEmpty()) {
+            return;
+        }
+        CompoundTag tag = new CompoundTag();
+        tag.putString("quest_key", key);
+        tag.putString("quest_mode", mode);
+        components.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
+    @Override
+    protected void applyImplicitComponents(BlockEntity.DataComponentInput input) {
+        super.applyImplicitComponents(input);
+        CustomData data = input.get(DataComponents.CUSTOM_DATA);
+        if (data != null) {
+            setGate(data.copyTag().getString("quest_mode"), data.copyTag().getString("quest_key"));
+        }
     }
 
     @Override

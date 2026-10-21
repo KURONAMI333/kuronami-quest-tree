@@ -17,10 +17,6 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.EntityCollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import java.util.List;
-
 /**
  * Heracles' barrier: a solid-looking gate that lets a player through once its quest is complete or its stage is held.
  * Other entities stay out. The block entity holds the key; a barrier without one stays closed.
@@ -55,22 +51,6 @@ public class QuestBarrierBlock extends BaseEntityBlock {
             return Shapes.empty();
         }
         return Shapes.block();
-    }
-
-    @Override
-    protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
-        List<ItemStack> drops = super.getDrops(state, params);
-        if (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) instanceof QuestBarrierBlockEntity be) {
-            for (ItemStack drop : drops) {
-                if (drop.is(asItem())) {
-                    net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
-                    tag.putString("quest_key", be.key());
-                    tag.putString("quest_mode", be.mode());
-                    drop.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-                }
-            }
-        }
-        return drops;
     }
 
     @Override
