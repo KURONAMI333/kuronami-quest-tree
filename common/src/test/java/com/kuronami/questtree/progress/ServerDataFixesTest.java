@@ -331,6 +331,32 @@ class ServerDataFixesTest {
         assertEquals(Integer.MAX_VALUE, ProgressRules.exchangeOf(a).limit());
         assertEquals(0, ProgressRules.respecCost(a));
     }
+    /**
+     * A points reward still owed by the pending list was never paid into its pool, so the respec must not count it
+     * (A6). The same check still refuses once it really was paid.
+     */
+    @Test
+    void respecIgnoresPointsThatAreStillPending() {
+        ProgressModel m = model("""
+                {"chapters": {
+                  "s:a": {"points": {"start": 1}, "nodes": {"n": {"cost": 1,
+                          "rewards": [{"type": "points", "amount": 2, "chapter": "s:b"}]}}},
+                  "s:b": {"points": {"start": 2}, "nodes": {}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressModel.Node n = a.nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(a), 1);
+        p.spent.put(ProgressRules.key(m.chapters.get("s:b")), 3);
+        p.pendingRewards.put(RewardLedger.pendingKey(n.key, 0, 0), 1);
+        assertTrue(rules.canRespec(p, a), "the pending points never reached the other pool");
+        p.pendingRewards.clear();
+        p.bonus.put(ProgressRules.key(m.chapters.get("s:b")), 2);
+        assertFalse(rules.canRespec(p, a), "the pool cannot take back points it already paid");
+    }
+
     /** A points amount that is not a number pays and takes back nothing, the same reading on both sides (A5). */
     @Test
     void aPointsAmountThatIsNotANumberIsNotOwedBack() {

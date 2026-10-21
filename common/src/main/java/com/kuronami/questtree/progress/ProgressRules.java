@@ -700,14 +700,20 @@ public final class ProgressRules {
         return respecPlan(p, c).allowed();
     }
 
-    /** The points the taken ranks paid, grouped by the pool that received them. */
+    /**
+     * The points the taken ranks paid, grouped by the pool that received them. A points reward still pending was
+     * never paid, so it is not owed back: counting it would refuse a respec that has enough points, and a respec
+     * would then leave it to be paid again later (2026-10-22 review).
+     */
     private Map<String, Integer> pointsRewardsByPool(PlayerProgress p, ProgressModel.Chapter c) {
         Map<String, Integer> paid = new LinkedHashMap<>();
         for (ProgressModel.Node n : c.nodes.values()) {
             int taken = p.taken.getOrDefault(n.key, 0);
             for (int rank = 0; rank < taken; rank++) {
-                for (JsonObject rw : rewardsOfRank(n, rank)) {
-                    if (isPoints(rw)) {
+                List<JsonObject> list = rewardsOfRank(n, rank);
+                for (int index = 0; index < list.size(); index++) {
+                    JsonObject rw = list.get(index);
+                    if (isPoints(rw) && !p.pendingRewards.containsKey(RewardLedger.pendingKey(n.key, rank, index))) {
                         paid.merge(pointsTarget(n, rw), pointsAmount(rw), Integer::sum);
                     }
                 }
