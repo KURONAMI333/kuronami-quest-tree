@@ -724,15 +724,24 @@ class ProgressionEditorTest {
 
     private ProgressionEditor.Outcome applyAs(ProgressionEditor editor, int level, JsonObject pack, String op,
                                               String args) {
-        return editor.apply(pack, new JsonObject(), Map.of(), CHAPTER, 0, op,
+        return applyAs(editor, level, 0, pack, op, args);
+    }
+
+    private ProgressionEditor.Outcome applyAs(ProgressionEditor editor, int level, long revision, JsonObject pack,
+                                              String op, String args) {
+        return editor.apply(pack, new JsonObject(), Map.of(), CHAPTER, revision, op,
                 JsonParser.parseString(args).getAsJsonObject(), Set.of(), level);
     }
 
     private static JsonObject packWithReward(String rewardJson) {
+        return packWithReward("a", rewardJson);
+    }
+
+    private static JsonObject packWithReward(String nodeId, String rewardJson) {
         JsonObject pack = pack();
         JsonArray rewards = new JsonArray();
         rewards.add(JsonParser.parseString(rewardJson));
-        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").add("rewards", rewards);
+        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject(nodeId).add("rewards", rewards);
         return pack;
     }
 
@@ -828,5 +837,29 @@ class ProgressionEditorTest {
                 "{\"id\":\"a\",\"patch\":{\"rewards\":[{\"type\":\"item\",\"item\":\"minecraft:apple\"}]}}");
 
         assertTrue(out.ok(), out.messages().toString());
+    }
+
+    /** The pack's own command reward is not the writer's: undoing a delete must not read as adding it. */
+    @Test
+    void undoingTheDeleteOfAPackNodeWithACommandRewardIsNotEscalation() {
+        ProgressionEditor editor = editor();
+        JsonObject pack = packWithReward("b", "{\"type\":\"command\",\"command\":\"say hi\"}");
+        assertTrue(applyAs(editor, 2, 0, pack, "delete_node", "{\"id\":\"b\"}").ok());
+
+        ProgressionEditor.Outcome undone = applyAs(editor, 2, 1, pack, "undo", "{}");
+
+        assertTrue(undone.ok(), undone.messages().toString());
+        assertEquals(2, undone.revision());
+    }
+
+    @Test
+    void restoringADeletedPackNodeWithACommandRewardIsNotEscalation() {
+        ProgressionEditor editor = editor();
+        JsonObject pack = packWithReward("b", "{\"type\":\"command\",\"command\":\"say hi\"}");
+        assertTrue(applyAs(editor, 2, 0, pack, "delete_node", "{\"id\":\"b\"}").ok());
+
+        ProgressionEditor.Outcome restored = applyAs(editor, 2, 1, pack, "restore_node", "{\"id\":\"b\"}");
+
+        assertTrue(restored.ok(), restored.messages().toString());
     }
 }
