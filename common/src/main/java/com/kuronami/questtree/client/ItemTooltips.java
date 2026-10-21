@@ -27,6 +27,7 @@ public final class ItemTooltips {
     private static final Map<String, List<Want>> BY_ITEM = new HashMap<>();
     private static final List<Want> BY_TAG = new ArrayList<>();
     private static Object builtFor;
+    private static Object builtRules;
     private static int builtPins = -1;
 
     private ItemTooltips() {
@@ -45,11 +46,7 @@ public final class ItemTooltips {
             return;
         }
         PlayerProgress p = ClientProgress.progress();
-        if (builtFor != p || builtPins != Pins.version()) {
-            build(rules, p);
-            builtFor = p;
-            builtPins = Pins.version();
-        }
+        ensureIndex(rules, p);
         var registries = net.minecraft.client.Minecraft.getInstance().level == null ? null
                 : net.minecraft.client.Minecraft.getInstance().level.registryAccess();
         List<Want> wants = new ArrayList<>();
@@ -70,7 +67,7 @@ public final class ItemTooltips {
                 break;
             }
             ClientModel.Node n = model.nodesByKey.get(w.node);
-            if (n == null) {
+            if (n == null || w.task < 0 || w.task >= n.tasks.size()) {
                 continue;
             }
             long need = n.tasks.get(w.task).count;
@@ -92,11 +89,7 @@ public final class ItemTooltips {
             return null;
         }
         PlayerProgress p = ClientProgress.progress();
-        if (builtFor != p || builtPins != Pins.version()) {
-            build(rules, p);
-            builtFor = p;
-            builtPins = Pins.version();
-        }
+        ensureIndex(rules, p);
         var registries = net.minecraft.client.Minecraft.getInstance().level == null ? null
                 : net.minecraft.client.Minecraft.getInstance().level.registryAccess();
         for (Want w : BY_ITEM.getOrDefault(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), List.of())) {
@@ -110,6 +103,21 @@ public final class ItemTooltips {
             }
         }
         return null;
+    }
+
+    /**
+     * Rebuilds the index only when the progress, the rules or the pins changed. The rules are a new object on every
+     * editor resync, so a replaced model (deleted or renumbered tasks) must not be read through an old index.
+     */
+    private static void ensureIndex(ProgressRules rules, PlayerProgress p) {
+        int pins = Pins.version();
+        if (IndexFreshness.same(builtFor, builtRules, builtPins, p, rules, pins)) {
+            return;
+        }
+        build(rules, p);
+        builtFor = p;
+        builtRules = rules;
+        builtPins = pins;
     }
 
     /** Index of the items that pinned quests and quests open right now still need. */
