@@ -528,13 +528,13 @@ public class ProgressScreen extends Screen {
                 if (c.skills) {
                     continue;
                 }
-                if (!n.optional) {
+                if (!locked && !n.optional) {
                     questTotal++;
                     if (s == State.DONE || s == State.CLAIM) {
                         doneTotal++;
                     }
                 }
-                if (s == State.CLAIM) {
+                if (!locked && s == State.CLAIM) {
                     badge++;
                     var pn = ClientProgress.rules() == null ? null : ClientProgress.rules().model().nodes.get(n.key);
                     if (!n.needsChoice() && (pn == null || !com.kuronami.questtree.data.ProgressModel.excludedFromClaimAll(pn))) {
