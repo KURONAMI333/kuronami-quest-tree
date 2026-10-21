@@ -91,8 +91,12 @@ public final class ProgressService {
     }
 
     public static PlayerProgress progress(ServerPlayer player) {
+        // build the rule index before any view is made, so personal-node keys are current for the first joiner
+        // after a data reload (2026-10-21 review)
+        rules();
         // the store resolves the player's current team (solo = their UUID) and folds a join/leave in on the way
         ProgressStore store = ProgressStore.get(player.server);
+        store.migratePersonalNodes(PlayerProgress.personalNodesSnapshot());
         UUID before = store.teamIdOf(player.getUUID());
         UUID current = TeamResolver.teamId(player.server, player.getUUID());
         PlayerProgress p = store.view(player.server, player.getUUID());
