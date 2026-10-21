@@ -589,6 +589,8 @@ public final class ProgressionEditor {
         if (!refusal.isEmpty()) {
             return fail(refusal, current);
         }
+        List<String> warnings = newTableWarnings(before, beforeSources, beforeTables, before, afterSources, afterTables,
+                unreadable);
         try {
             Path file = tableFileFor(id);
             String previous = readFileQuietly(file);
@@ -603,7 +605,7 @@ public final class ProgressionEditor {
             Constants.LOG.error("Could not write the progression table overlay for {}", id, ex);
             return fail("could not write the overlay: " + ex.getMessage(), current);
         }
-        return new Outcome(true, false, true, "", tomb.revision, List.of());
+        return new Outcome(true, false, true, "", tomb.revision, warnings);
     }
 
     /** {@code restore_table}: bring back the tombstone's content, or the pack's copy when it was never edited. */
@@ -864,6 +866,43 @@ public final class ProgressionEditor {
         for (ProgressValidator.Problem p : result.problems) {
             if (p.severity() == ProgressValidator.Severity.WARNING) {
                 out.add(errorKey(p));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A table is used by chapters, not by one chapter's file: deleting it can add a warning in any of them, so the
+     * comparison covers the whole book. The reply then carries those new sentences (for example a reward whose table
+     * no longer exists) instead of letting the reference break silently.
+     */
+    private List<String> newTableWarnings(JsonObject before, Map<String, ProgressValidator.Source> beforeSources,
+                                          JsonObject beforeTables, JsonObject after,
+                                          Map<String, ProgressValidator.Source> afterSources, JsonObject afterTables,
+                                          Set<String> unreadable) {
+        Set<String> old = tableWarnings(before, beforeTables, beforeSources, unreadable);
+        List<String> fresh = new ArrayList<>();
+        for (String w : tableWarnings(after, afterTables, afterSources, unreadable)) {
+            if (!old.contains(w)) {
+                fresh.add(w);
+            }
+        }
+        return fresh;
+    }
+
+    private Set<String> tableWarnings(JsonObject chapters, JsonObject tables,
+                                      Map<String, ProgressValidator.Source> sources, Set<String> unreadable) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String chapterId : chapters.keySet()) {
+            if (!object(chapters, chapterId)) {
+                continue;
+            }
+            ProgressValidator.Result result = ProgressValidator.validateChapter(chapterId,
+                    chapters.getAsJsonObject(chapterId), chapters, tables, sources, registry);
+            for (ProgressValidator.Problem p : result.problems) {
+                if (p.severity() == ProgressValidator.Severity.WARNING) {
+                    out.add(errorKey(p));
+                }
             }
         }
         return out;

@@ -594,6 +594,25 @@ class ProgressionEditorTest {
     }
 
     @Test
+    void deletingATableThatAChapterUsesAnswersWithTheNewWarnings() {
+        ProgressionEditor editor = editor();
+        JsonObject packTables = JsonParser.parseString("{\"t:loot\":" + LOOT + "}").getAsJsonObject();
+        JsonObject nodes = new JsonObject();
+        JsonObject n = node("{\"type\":\"checkmark\"}");
+        n.add("rewards", JsonParser.parseString("[{\"type\":\"table\",\"table\":\"t:loot\"}]").getAsJsonArray());
+        nodes.add("a", n);
+        JsonObject chapters = new JsonObject();
+        chapters.add(CHAPTER, chapter(nodes));
+
+        ProgressionEditor.Outcome deleted = editor.apply(chapters, packTables, Map.of(), "t:loot", 0,
+                "delete_table", JsonParser.parseString("{\"id\":\"t:loot\"}").getAsJsonObject(), Set.of());
+
+        assertTrue(deleted.ok(), deleted.messages().toString());
+        assertTrue(deleted.messages().stream().anyMatch(m -> m.contains("does not exist")),
+                deleted.messages().toString());
+    }
+
+    @Test
     void restoringADeletedPackTableLetsThePackCopyComeBack() {
         ProgressionEditor editor = editor();
         JsonObject packTables = JsonParser.parseString("{\"t:loot\":" + LOOT + "}").getAsJsonObject();
