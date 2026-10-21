@@ -8,6 +8,7 @@ import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.team.TeamResolver;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
@@ -206,6 +207,12 @@ public final class EditorService {
         JsonObject chapters = ProgressData.mergedBundle().getAsJsonObject("chapters");
         if (command == null || chapters == null || !chapters.has(chapterId)) {
             reply(player, request, chapterId, false, "", List.of("this chapter is not in the book"), revision);
+            return;
+        }
+        String partyRefusal = EditorOps.testRefusal(
+                TeamResolver.members(player.server, TeamResolver.teamId(player.server, player.getUUID())));
+        if (partyRefusal != null) {
+            reply(player, request, chapterId, false, "", List.of(partyRefusal), revision);
             return;
         }
         player.server.getCommands().performPrefixedCommand(

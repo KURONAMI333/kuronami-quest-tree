@@ -3,6 +3,9 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonObject;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -36,5 +39,14 @@ class EditorOpsTest {
         assertNull(EditorOps.testCommand("mypack:group/../basics"));
         assertNull(EditorOps.testCommand("mypack:"));
         assertNull(EditorOps.testCommand(""));
+    }
+
+    @Test
+    void testingAChapterIsRefusedOutsideASoloTeam() {
+        UUID self = UUID.randomUUID();
+        assertNull(EditorOps.testRefusal(List.of(self)));
+        assertEquals("leave your party before testing a chapter",
+                EditorOps.testRefusal(List.of(self, UUID.randomUUID())));
+        assertEquals("leave your party before testing a chapter", EditorOps.testRefusal(List.of()));
     }
 }

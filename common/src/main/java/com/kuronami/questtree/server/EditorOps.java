@@ -34,10 +34,20 @@ final class EditorOps {
         return ProgressionEditor.validChapterId(chapterId) ? "quest_tree reset @s " + chapterId : null;
     }
 
+    /**
+     * Why testing a chapter must be refused, or null when it may run. Progress is shared by the team, so the reset
+     * behind the button would take the chapter away from every party member, not just from the author trying it.
+     */
+    static String testRefusal(java.util.Collection<java.util.UUID> teamMembers) {
+        return teamMembers != null && teamMembers.size() == 1
+                ? null : "leave your party before testing a chapter";
+    }
+
     /** The namespace an export request names: the argument, or the one its chapter belongs to. */
     static String exportNamespace(JsonObject args, String chapterId) {
         String named = args != null && args.has("namespace") && args.get("namespace").isJsonPrimitive()
                 && args.getAsJsonPrimitive("namespace").isString() ? args.get("namespace").getAsString() : "";
         return ProgressExport.validNamespace(named) != null ? ProgressExport.validNamespace(named) : namespaceOf(chapterId);
     }
+
 }
