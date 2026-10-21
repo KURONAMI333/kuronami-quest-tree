@@ -24,14 +24,14 @@ public class QuestTreeReiPlugin implements REIClientPlugin {
     @Override
     public void preStage(PluginManager<REIClientPlugin> manager, ReloadStage stage) {
         if (stage == ReloadStage.START) {
-            RecipeViewer.Holder.set(null);
+            RecipeViewer.Holder.set("rei", null);
         }
     }
 
     @Override
     public void postStage(PluginManager<REIClientPlugin> manager, ReloadStage stage) {
         if (stage == ReloadStage.END) {
-            RecipeViewer.Holder.set(new Viewer());
+            RecipeViewer.Holder.set("rei", new Viewer());
         }
     }
 

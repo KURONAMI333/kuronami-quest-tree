@@ -16,7 +16,7 @@ public class QuestTreeEmiPlugin implements EmiPlugin {
 
     @Override
     public void register(EmiRegistry registry) {
-        RecipeViewer.Holder.set(new Viewer());
+        RecipeViewer.Holder.set("emi", new Viewer());
     }
 
     private static final class Viewer implements RecipeViewer {
