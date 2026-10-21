@@ -559,40 +559,51 @@ public final class ProgressService {
             flush(player);
             return;
         }
+        boolean changed = false;
         switch (a.action()) {
             case "claim" -> {
                 if (n != null) {
+                    int before = claimMarks(p);
                     claim(player, p, n, a.index());
+                    changed = claimMarks(p) != before;
                 }
             }
             case "claim_reward" -> {
                 if (n != null) {
+                    int before = claimMarks(p);
                     claimOne(player, p, n, a.index(), a.choice());
+                    changed = claimMarks(p) != before;
                 }
             }
+            // Emergency items do not touch quest progress, so the book does not need a re-check for them.
             case "emergency" -> emergency(player, p);
             case "claim_all", "claim_chapter" -> {
                 // claim_chapter names a chapter in the node field: the header's button claims that chapter only
                 // (2026-10-20); claim_all takes every chapter
                 String only = a.action().equals("claim_chapter") ? a.node() : null;
+                int before = claimMarks(p);
                 for (ProgressModel.Node m : r.model().nodes.values()) {
                     if (r.state(p, m) == State.CLAIM && !m.chapter.isSkills() && !ProgressModel.excludedFromClaimAll(m)
                             && (only == null || m.chapter.id.equals(only))) {
                         claim(player, p, m, -1);
                     }
                 }
+                changed = claimMarks(p) != before;
             }
             case "take" -> {
                 if (n != null && r.take(p, n)) {
                     Rewards.giveSkill(player, p, n, p.taken.getOrDefault(n.key, 1) - 1);
                     event(player, p, "take", n.key);
+                    changed = true;
                 }
             }
             case "submit" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
                         && conditionsMet(player, p, n, n.tasks.get(a.index()), true)
                         && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
+                    long before = p.task(n.key, a.index());
                     submit(player, p, n, a.index());
+                    changed = p.task(n.key, a.index()) != before;
                 }
             }
             case "check" -> {
@@ -614,6 +625,7 @@ public final class ProgressService {
                     }
                     if (next != current) {
                         bump(player, p, n, a.index(), next);
+                        changed = true;
                     }
                 }
             }
@@ -623,7 +635,9 @@ public final class ProgressService {
                 if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
                     refuseSharedAction(player);
                 } else if (c != null) {
+                    int before = p.exchange.getOrDefault(c.id, 0);
                     exchange(player, p, c);
+                    changed = p.exchange.getOrDefault(c.id, 0) != before;
                 }
             }
             case "respec" -> {
@@ -634,12 +648,22 @@ public final class ProgressService {
                 } else if (c != null && PlayerCommands.respec(player, p, c, true)) {
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
+                    changed = true;
                 }
             }
             default -> Constants.LOG.debug("Unknown progression action {}", a.action());
         }
-        recheck(player, p);
+        // A no-op (nothing claimable, hand-in with no items, exchange without levels) used to re-check the whole book
+        // and resend progress anyway; only a real change needs that (2026-10-22 release review).
+        if (changed) {
+            recheck(player, p);
+        }
         flush(player);
+    }
+
+    /** A cheap count of claim bookkeeping, to tell whether a claim action actually paid something. */
+    private static int claimMarks(PlayerProgress p) {
+        return p.claimed.size() + p.claimedRewards.size() + p.teamClaimedRewards.size();
     }
 
     /**

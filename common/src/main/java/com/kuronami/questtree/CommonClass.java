@@ -7,6 +7,7 @@ import com.kuronami.questtree.server.PartyActions;
 import com.kuronami.questtree.server.ProgressService;
 import com.kuronami.questtree.server.SkillExperience;
 import com.kuronami.questtree.network.ActionPayload;
+import com.kuronami.questtree.progress.ActionRateLimiter;
 import com.kuronami.questtree.network.EditorOpPayload;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -84,7 +85,13 @@ public final class CommonClass {
 
     /** A screen action from the client, on the server thread. */
     public static void onAction(ServerPlayer player, ActionPayload action) {
-        if (action.action().startsWith("party_")) {
+        boolean party = action.action().startsWith("party_");
+        // Both paths re-check state and can re-check the whole book, so a client that keeps sending must not be able
+        // to spend that work every tick; party invites are the one that fills another player's chat (2026-10-22 review).
+        if (!ActionRateLimiter.allow(player.getUUID(), party, System.currentTimeMillis())) {
+            return;
+        }
+        if (party) {
             PartyActions.handle(player, action);
             return;
         }
@@ -114,6 +121,7 @@ public final class CommonClass {
     public static void onLogout(ServerPlayer player) {
         ProgressService.onLogout(player);
         EditorService.onLogout(player);
+        ActionRateLimiter.forget(player.getUUID());
     }
 
     /** The server is stopping: runtime-only state (anti-farming windows) is dropped. */
