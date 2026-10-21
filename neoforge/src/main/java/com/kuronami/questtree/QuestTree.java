@@ -130,7 +130,8 @@ public class QuestTree {
             if (e.getEntity().level().isClientSide() || e.isCanceled()) {
                 return;
             }
-            if (e.getSource().getEntity() instanceof ServerPlayer sp) {
+            if (e.getSource().getEntity() instanceof ServerPlayer sp && e.getEntity() != sp) {
+                // a player's own death is not a kill: do not count suicide as a kill task (2026-10-22 review)
                 CommonClass.onKill(sp, e.getEntity());
             }
         });
