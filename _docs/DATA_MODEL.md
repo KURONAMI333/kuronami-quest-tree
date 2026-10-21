@@ -1,6 +1,6 @@
 ---
 name: progression-data-model
-description: 汎用進行MODのデータの形（データパックの JSON）。FTB Quests と Pufferfish's Skills の両方を1つの型で表し、インポーターの変換先になる。実パック6本の使用実態（PACK_PORT_REPORT.md）から必要な項目を決めた。
+description: 汎用進行MODのデータの形（データパックの JSON）。FTB Quests と Pufferfish's Skills の両方を1つの型で表し、インポーターの変換先になる。実パック6本の使用実態から必要な項目を決めた。
 updated: 2026-10-22
 ---
 
@@ -8,7 +8,7 @@ updated: 2026-10-22
 
 置き場はデータパックの `data/<namespace>/progression/`。サーバーが読み、クライアントへ送る。文言は言語ファイル（`assets/<namespace>/lang/<locale>.json`）に置く。
 
-決め方: 6本のパック（ATM10・FTB Skies 2・FTB Evolution・Prominence II・DarkRPG・Mystic Horizons）の定義を全部数え、使われている項目はすべて表せるようにした。使用数は `PACK_PORT_REPORT.md`。
+決め方: 6本のパック（ATM10・FTB Skies 2・FTB Evolution・Prominence II・DarkRPG・Mystic Horizons）の定義を全部数え、使われている項目はすべて表せるようにした。
 
 ## 1つの型にまとめる
 
@@ -125,8 +125,6 @@ data/<ns>/progression/
 - `visibility.requires` は「見えるようになる条件」で、開く条件 `requires` とは別に持てる。
 - 章にも `requires`（Pack Stages の段階など）を付けられる。条件を満たさない人には章ごと見えない。
 - `shared: false` は、そのノードの完了・タスクの数え上げ・繰り返し・クールダウンをチームではなくプレイヤーごとに持つ。報酬の受け取りは元からプレイヤーごと（`team` を書いた報酬だけチームで1回）。省略すると従来どおりチーム共有。
-
-採った要望の出所は `REQUESTS.md`。
 
 ## タスク（`tasks[].type`）
 
