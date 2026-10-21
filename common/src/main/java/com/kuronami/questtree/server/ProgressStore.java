@@ -73,13 +73,10 @@ public final class ProgressStore extends SavedData {
     }
 
     /** Team rewards ({@code "team": true}) of the nodes this team completed. */
-    private static java.util.Set<String> settledTeamRewards(TeamProgress team) {
+    private static java.util.Set<String> settledTeamRewards(TeamProgress team, UUID player) {
         var nodes = ProgressService.rules().model().nodes;
         java.util.Set<String> out = new java.util.HashSet<>();
-        java.util.Set<String> completed = new java.util.HashSet<>(team.shared.completed);
-        for (PlayerPart part : team.players.values()) {
-            completed.addAll(part.completed);
-        }
+        java.util.Set<String> completed = new java.util.HashSet<>(team.completedFor(player));
         for (String key : completed) {
             var n = nodes.get(key);
             if (n == null) {

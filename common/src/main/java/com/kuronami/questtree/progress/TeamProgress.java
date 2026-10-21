@@ -38,6 +38,121 @@ public final class TeamProgress {
         return players.computeIfAbsent(player, k -> new PlayerPart());
     }
 
+    /**
+     * Nodes completed by the team, or by one member plus the shared record. A leaving member's copy must not carry
+     * another member's personal completion (2026-10-21 review).
+     */
+    public Set<String> completedFor(UUID player) {
+        Set<String> completed = new HashSet<>(shared.completed);
+        if (player != null) {
+            PlayerPart own = players.get(player);
+            if (own != null) {
+                completed.addAll(own.completed);
+            }
+        }
+        return completed;
+    }
+
+    /**
+     * Moves saved values between the shared record and the members' parts after the set of personal nodes changed.
+     * Keys of newly personal nodes move from shared to every part; keys that became shared merge into shared and leave
+     * the parts (2026-10-21 review).
+     */
+    public void migratePersonal(java.util.Set<String> oldNodes, java.util.Set<String> newNodes) {
+        java.util.Set<String> toPersonal = new HashSet<>(newNodes);
+        toPersonal.removeAll(oldNodes);
+        java.util.Set<String> toShared = new HashSet<>(oldNodes);
+        toShared.removeAll(newNodes);
+        if (toPersonal.isEmpty() && toShared.isEmpty()) {
+            return;
+        }
+        for (String key : new HashSet<>(shared.completed)) {
+            if (toPersonal.contains(key)) {
+                for (UUID member : new HashSet<>(players.keySet())) {
+                    part(member).completed.add(key);
+                }
+                shared.completed.remove(key);
+            }
+        }
+        for (UUID member : new HashSet<>(players.keySet())) {
+            PlayerPart part = part(member);
+            for (String key : new HashSet<>(part.completed)) {
+                if (toShared.contains(key)) {
+                    shared.completed.add(key);
+                    part.completed.remove(key);
+                }
+            }
+        }
+        moveMapToParts(shared.tasks, p -> p.tasks, toPersonal);
+        moveIntMapToParts(shared.repeats, p -> p.repeats, toPersonal);
+        moveMapToParts(shared.cooldown, p -> p.cooldown, toPersonal);
+        moveMapToShared(p -> p.tasks, shared.tasks, toShared);
+        moveIntMapToShared(p -> p.repeats, shared.repeats, toShared);
+        moveMapToShared(p -> p.cooldown, shared.cooldown, toShared);
+        views.clear();
+    }
+
+    private static String nodeOf(String key) {
+        int hash = key.lastIndexOf('#');
+        return hash < 0 ? key : key.substring(0, hash);
+    }
+
+    private void moveMapToParts(Map<String, Long> source,
+                                java.util.function.Function<PlayerPart, Map<String, Long>> target,
+                                Set<String> nodes) {
+        for (String key : new HashSet<>(source.keySet())) {
+            if (!nodes.contains(nodeOf(key))) {
+                continue;
+            }
+            long value = source.get(key);
+            for (UUID member : new HashSet<>(players.keySet())) {
+                target.apply(part(member)).merge(key, value, Math::max);
+            }
+            source.remove(key);
+        }
+    }
+
+    private void moveMapToShared(java.util.function.Function<PlayerPart, Map<String, Long>> source,
+                                 Map<String, Long> target, Set<String> nodes) {
+        for (UUID member : new HashSet<>(players.keySet())) {
+            Map<String, Long> map = source.apply(part(member));
+            for (String key : new HashSet<>(map.keySet())) {
+                if (nodes.contains(nodeOf(key))) {
+                    target.merge(key, map.get(key), Math::max);
+                    map.remove(key);
+                }
+            }
+        }
+    }
+
+    private void moveIntMapToParts(Map<String, Integer> source,
+                                   java.util.function.Function<PlayerPart, Map<String, Integer>> target,
+                                   Set<String> nodes) {
+        for (String key : new HashSet<>(source.keySet())) {
+            if (!nodes.contains(nodeOf(key))) {
+                continue;
+            }
+            int value = source.get(key);
+            for (UUID member : new HashSet<>(players.keySet())) {
+                target.apply(part(member)).merge(key, value, Math::max);
+            }
+            source.remove(key);
+        }
+    }
+
+    private void moveIntMapToShared(java.util.function.Function<PlayerPart, Map<String, Integer>> source,
+                                    Map<String, Integer> target, Set<String> nodes) {
+        for (UUID member : new HashSet<>(players.keySet())) {
+            Map<String, Integer> map = source.apply(part(member));
+            for (String key : new HashSet<>(map.keySet())) {
+                if (nodes.contains(nodeOf(key))) {
+                    target.merge(key, map.get(key), Math::max);
+                    map.remove(key);
+                }
+            }
+        }
+    }
+
     public PlayerProgress view(UUID player) {
         if (viewsVersion != PlayerProgress.personalVersion()) {
             views.clear();
