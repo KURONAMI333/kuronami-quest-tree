@@ -123,6 +123,21 @@ public final class PuffishImporter {
                             // Pufferfish's Skills falls back to its dummy reward for an optional type that is missing
                             boolean required = !ro.has("required") || !ro.get("required").isJsonPrimitive()
                                     || ro.get("required").getAsJsonPrimitive().isBoolean() && ro.get("required").getAsBoolean();
+                            if (shortType.equals("points")) {
+                                // PS names the amount "points" and the target "category"; ours are "amount" and "chapter"
+                                if (conv.has("points")) {
+                                    conv.add("amount", conv.get("points"));
+                                    conv.remove("points");
+                                }
+                                if (conv.has("category")) {
+                                    String target = conv.get("category").getAsString();
+                                    if (!target.substring(target.indexOf(':') + 1).equals(category)) {
+                                        out.unknown("skill_reward_category", target);
+                                    }
+                                    // the same category is the node's own chapter; the reward falls back to it
+                                    conv.remove("category");
+                                }
+                            }
                             if (KNOWN_REWARDS.contains(shortType)) {
                                 conv.addProperty("type", shortType);
                             } else if (!required) {

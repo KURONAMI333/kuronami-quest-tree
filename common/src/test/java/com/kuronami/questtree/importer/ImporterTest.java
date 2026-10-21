@@ -151,6 +151,33 @@ class ImporterTest {
         assertFalse(out.unmapped.containsKey("skill_reward_type.puffish_skills:missing_mod:optional"), out.unmapped.toString());
     }
 
+    /** A Pufferfish points reward names its amount and category differently; both are carried over. */
+    @Test
+    void puffishPointsRewardKeepsItsAmount() throws Exception {
+        Map<String, JsonElement> files = new LinkedHashMap<>();
+        try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
+            for (Path f : s.toList()) {
+                files.put(f.getFileName().toString(), JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)));
+            }
+        }
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject points = new JsonObject();
+        points.addProperty("type", "puffish_skills:points");
+        JsonObject data = new JsonObject();
+        data.addProperty("category", "puffish_skills:mining");
+        data.addProperty("points", 3);
+        points.add("data", data);
+        rewards.add(points);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonArray converted = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject reward = converted.get(converted.size() - 1).getAsJsonObject();
+        assertEquals("points", reward.get("type").getAsString());
+        assertEquals(3, reward.get("amount").getAsInt());
+        assertFalse(reward.has("points"), "the PS field name does not leak into our data");
+        assertFalse(reward.has("category"), "the node's own chapter is the default target");
+    }
+
     /** The block, fluid, forge_energy and observation tasks each keep their own counter field after conversion. */
     @Test
     void taskTypesConvertToTheirOwnCounters() throws Exception {
