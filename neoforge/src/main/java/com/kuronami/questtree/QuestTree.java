@@ -117,15 +117,18 @@ public class QuestTree {
                 CommonClass.onPlayerTick(sp);
             }
         });
-        NeoForge.EVENT_BUS.addListener((LivingDeathEvent e) -> {
-            if (e.getEntity().level().isClientSide()) {
-                return;
-            }
-            if (e.isCanceled()) {
+        // the book drop runs last, after every mod that may cancel the death: a cancelled death drops nothing
+        NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, (LivingDeathEvent e) -> {
+            if (e.getEntity().level().isClientSide() || e.isCanceled()) {
                 return;
             }
             if (e.getEntity() instanceof ServerPlayer dead) {
                 CommonClass.onDeath(dead);
+            }
+        });
+        NeoForge.EVENT_BUS.addListener((LivingDeathEvent e) -> {
+            if (e.getEntity().level().isClientSide() || e.isCanceled()) {
+                return;
             }
             if (e.getSource().getEntity() instanceof ServerPlayer sp) {
                 CommonClass.onKill(sp, e.getEntity());
