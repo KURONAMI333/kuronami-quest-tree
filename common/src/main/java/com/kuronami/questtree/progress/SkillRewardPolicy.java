@@ -57,13 +57,19 @@ public final class SkillRewardPolicy {
         clearRevoked(p, n, taken, true);
     }
 
-    /** As above; {@code withPoints} is false when a chapter lock takes the effects back but leaves the points. */
+    /**
+     * As above; {@code withPoints} is false when a chapter lock takes the effects back but leaves the points. Such a
+     * lock also keeps the attribute record: unlocking puts the attribute back from that record, so forgetting it
+     * would lose the bonus for good (2026-10-22 review).
+     */
     public static void clearRevoked(PlayerProgress p, ProgressModel.Node n, int taken, boolean withPoints) {
         for (int rank = 0; rank < Math.max(0, taken); rank++) {
             java.util.List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
             for (int index = 0; index < list.size(); index++) {
                 JsonObject rw = list.get(index);
-                if (revocable(rw) && (withPoints || !typeOf(rw).equals("points"))) {
+                String type = typeOf(rw);
+                boolean undoneByLock = type.equals("tag") || (type.equals("command") && hasLockCommand(rw));
+                if (revocable(rw) && (withPoints || undoneByLock)) {
                     p.paidSkillRewards.remove(paidKey(n, rank, index));
                 }
             }

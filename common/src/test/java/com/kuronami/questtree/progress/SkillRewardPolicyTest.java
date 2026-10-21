@@ -129,6 +129,33 @@ class SkillRewardPolicyTest {
         assertEquals(java.util.Set.of("s:a/n#0#1"), p.paidSkillRewards, "the item stays settled");
     }
 
+    /**
+     * A chapter lock takes the effects back but keeps the points, and it must keep the attribute record too: unlocking
+     * re-applies an attribute only from its record, so clearing it would drop the bonus (2026-10-22 review).
+     */
+    @Test
+    void aChapterLockKeepsTheAttributeRecordForUnlock() {
+        ProgressModel model = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [
+                  {"rewards": [{"type": "attribute", "attribute": "minecraft:generic.max_health", "amount": 2},
+                               {"type": "tag", "tag": "x"},
+                               {"type": "points", "amount": 2},
+                               {"type": "command", "command": "say hi", "lock_command": "say bye"}]}]}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        PlayerProgress p = new PlayerProgress();
+        for (int i = 0; i < 4; i++) {
+            SkillRewardPolicy.recordPaid(p, n, 0, i, true);
+        }
+
+        SkillRewardPolicy.clearRevoked(p, n, 1, false);
+
+        assertTrue(p.paidSkillRewards.contains("s:a/n#0#0"), "the attribute record is what unlocking re-applies from");
+        assertTrue(p.paidSkillRewards.contains("s:a/n#0#2"), "the lock leaves the points");
+        assertEquals(java.util.Set.of("s:a/n#0#0", "s:a/n#0#2"), p.paidSkillRewards,
+                "the tag and the lock_command half were taken back, so they can run again on retake");
+    }
+
     /** A save from before the record has only old marks: they say which rank was paid, and every reward of it. */
     @Test
     void oldMarksBecomePaidRecords() {
