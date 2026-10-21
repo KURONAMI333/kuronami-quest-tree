@@ -157,6 +157,13 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aCraftTaskCanNameItsRecipe() {
+        ProgressValidator.Result ok = validate(chapter(
+                "{\"type\": \"craft\", \"item\": \"minecraft:stick\", \"recipe\": \"minecraft:stick\"}", ""));
+        assertEquals(0, errors(ok), ok.problems.toString());
+    }
+
+    @Test
     void aCurrencyRewardNeedsAPositiveAmount() {
         ProgressValidator.Result ok = validate(chapter("", "{\"type\": \"currency\", \"amount\": 50}"));
         assertEquals(0, errors(ok), ok.problems.toString());

@@ -285,35 +285,40 @@ public final class ProgressService {
 
     /** A crafted result was taken out of a crafting grid. Counts the result's size, so one recipe can finish "4 planks". */
     public static void onCraft(ServerPlayer player, ItemStack stack) {
+        onCraft(player, stack, "");
+    }
+
+    /** A crafted result and the recipe that produced it (empty when the menu did not expose one). */
+    public static void onCraft(ServerPlayer player, ItemStack stack, String recipe) {
         if (stack != null && !stack.isEmpty()) {
-            interaction(player, "craft", stack, null, null, null, stack.getCount());
+            interaction(player, "craft", stack, null, null, null, stack.getCount(), recipe);
         }
     }
 
     /** An item was used (food, potion, bucket, bow, ...). Counts the action once, not the stack size. */
     public static void onUseItem(ServerPlayer player, ItemStack stack) {
         if (stack != null && !stack.isEmpty()) {
-            interaction(player, "use_item", stack, null, null, null, 1);
+            interaction(player, "use_item", stack, null, null, null, 1, "");
         }
     }
 
     /** A block was right-clicked (placed against, opened, or used). */
     public static void onRightClickBlock(ServerPlayer player, BlockState state) {
         if (state != null) {
-            interaction(player, "right_click_block", null, state, null, null, 1);
+            interaction(player, "right_click_block", null, state, null, null, 1, "");
         }
     }
 
     /** A player interacted with an entity (right-click, including feeding and mounting). */
     public static void onInteractEntity(ServerPlayer player, Entity target) {
         if (target != null) {
-            interaction(player, "interact_entity", null, null, target, null, 1);
+            interaction(player, "interact_entity", null, null, target, null, 1, "");
         }
     }
 
     public static void onTame(ServerPlayer player, Entity target) {
         if (target != null) {
-            interaction(player, "tame", null, null, target, null, 1);
+            interaction(player, "tame", null, null, target, null, 1, "");
         }
     }
 
@@ -335,21 +340,21 @@ public final class ProgressService {
         }
         ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
         if (player != null) {
-            interaction(player, "breed", null, null, first, second, 1);
+            interaction(player, "breed", null, null, first, second, 1, "");
         }
     }
 
     /** A player mounted an entity. */
     public static void onRide(ServerPlayer player, Entity vehicle) {
         if (vehicle != null) {
-            interaction(player, "ride", null, null, vehicle, null, 1);
+            interaction(player, "ride", null, null, vehicle, null, 1, "");
         }
     }
 
     /** An item entity was picked up. Counts the picked-up size. */
     public static void onPickup(ServerPlayer player, ItemStack stack) {
         if (stack != null && !stack.isEmpty()) {
-            interaction(player, "pickup", stack, null, null, null, stack.getCount());
+            interaction(player, "pickup", stack, null, null, null, stack.getCount(), "");
         }
     }
 
@@ -359,7 +364,7 @@ public final class ProgressService {
      * block or entity matches any of them, as in the other task types.
      */
     private static void interaction(ServerPlayer player, String kind, ItemStack stack, BlockState state,
-                                    Entity entity, Entity other, int amount) {
+                                    Entity entity, Entity other, int amount, String recipe) {
         if (amount <= 0) {
             return;
         }
@@ -382,7 +387,7 @@ public final class ProgressService {
             if (!kind.equals(wanted)) {
                 continue;
             }
-            if (interactionMatches(player, t, kind, stack, state, entity, other)) {
+            if (interactionMatches(player, t, kind, stack, state, entity, other, recipe)) {
                 hits.add(ref);
             }
         }
@@ -445,9 +450,16 @@ public final class ProgressService {
     }
 
     private static boolean interactionMatches(ServerPlayer player, JsonObject t, String kind, ItemStack stack,
-                                              BlockState state, Entity entity, Entity other) {
+                                              BlockState state, Entity entity, Entity other, String recipe) {
         return switch (kind) {
-            case "craft", "use_item", "pickup" -> !t.has("item") || stack != null && ItemRequirement.of(t).matches(stack, player.registryAccess());
+            case "craft" -> {
+                String wanted = str(t, "recipe");
+                if (!wanted.isEmpty() && !wanted.equals(recipe)) {
+                    yield false;
+                }
+                yield !t.has("item") || stack != null && ItemRequirement.of(t).matches(stack, player.registryAccess());
+            }
+            case "use_item", "pickup" -> !t.has("item") || stack != null && ItemRequirement.of(t).matches(stack, player.registryAccess());
             case "right_click_block" -> state != null && blockMatches(blockSpec(t), state);
             default -> {
                 if (entity == null) {

@@ -600,7 +600,11 @@ public final class ProgressValidator {
                 }
             }
             case "stage" -> required(out, ref, path, t, "stage");
-            case "craft", "use_item", "pickup" -> interactionItem(out, ref, path, t, registry);
+            case "craft" -> {
+                interactionItem(out, ref, path, t, registry);
+                id(out, ref, path + ".recipe", "recipe", str(t, "recipe"), registry);
+            }
+            case "use_item", "pickup" -> interactionItem(out, ref, path, t, registry);
             case "right_click_block" -> interactionBlock(out, ref, path, t, registry);
             case "interact_entity", "tame", "breed", "ride" -> interactionEntity(out, ref, path, t, registry);
             case "interaction" -> {
@@ -615,7 +619,11 @@ public final class ProgressValidator {
                             "unknown interaction action " + quote(action) + ", so the task never counts");
                 } else {
                     switch (action) {
-                        case "craft", "use_item", "pickup" -> interactionItem(out, ref, path, t, registry);
+                        case "craft" -> {
+                interactionItem(out, ref, path, t, registry);
+                id(out, ref, path + ".recipe", "recipe", str(t, "recipe"), registry);
+            }
+            case "use_item", "pickup" -> interactionItem(out, ref, path, t, registry);
                         case "right_click_block" -> interactionBlock(out, ref, path, t, registry);
                         default -> interactionEntity(out, ref, path, t, registry);
                     }
