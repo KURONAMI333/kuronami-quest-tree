@@ -300,7 +300,7 @@ public final class ClientModel {
         public final Component title;
         /** FTB Quests' subtitle: one step under the title in the sheet and on the map's hover tooltip, or null. */
         public final Component subtitle;
-        public final List<String> description;
+        public final List<FtbText.Line> description;
 
         Node(ClientModel m, Chapter ch, String id, JsonObject o) {
             this.id = id;
@@ -412,7 +412,7 @@ public final class ClientModel {
                     var level = Minecraft.getInstance().level;
                     Component c = Component.Serializer.fromJson(dt, level != null ? level.registryAccess() : net.minecraft.core.RegistryAccess.EMPTY);
                     if (c != null) {
-                        d = c.getString();
+                        d = FtbText.componentMarkup(c);
                     }
                 } catch (RuntimeException ignored) {
                     // not JSON after all

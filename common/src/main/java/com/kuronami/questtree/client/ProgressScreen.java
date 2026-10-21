@@ -1823,16 +1823,8 @@ public class ProgressScreen extends Screen {
         // pack authors can keep a quest's details secret until it can be started, and its text until it is done
         boolean details = !(n.hideDetailsUntilStartable && state == State.LOCKED);
         boolean text = details && !(n.hideTextUntilComplete && state != State.DONE && state != State.CLAIM);
-        for (String d : text ? n.description : List.<String>of()) {
-            if (d.isBlank()) {
-                // an empty source line: a paragraph break (font.split("") returns no lines, which dropped it)
-                y += 6;
-                continue;
-            }
-            for (FormattedCharSequence line : font.split(Component.literal(d), w)) {
-                Ui.text(g, font, line, x, y, Ui.TEXT);
-                y += 12;
-            }
+        if (text) {
+            y = description(g, n.description, x, y, w, contentTop, contentBottom);
         }
         if (!n.requires.isEmpty() && state == State.LOCKED) {
             y += 8;
@@ -3212,6 +3204,101 @@ public class ProgressScreen extends Screen {
             }
         }
         return null;
+    }
+
+    /**
+     * Draws a description's lines and returns the y just below the last one. Text wraps at {@code w}; an image takes
+     * the rest of its line and is centred, the way FTB Quests lays it out. Links are drawn in the accent colour and
+     * become buttons only while their line is inside the sheet, so a scrolled-away link cannot be pressed.
+     */
+    private int description(GuiGraphics g, List<FtbText.Line> lines, int x, int y, int w, int contentTop, int contentBottom) {
+        for (FtbText.Line line : lines) {
+            if (line.blank()) {
+                y += 6;
+                continue;
+            }
+            int cx = x;
+            for (FtbText.Token token : line.tokens()) {
+                if (token.kind() == FtbText.Token.Kind.IMAGE) {
+                    if (cx > x) {
+                        y += 12;
+                        cx = x;
+                    }
+                    int iw = token.width() > 0 ? token.width() : token.height() > 0 ? token.height() : 64;
+                    int ih = token.height() > 0 ? token.height() : iw;
+                    iw = Math.max(1, Math.min(iw, w));
+                    ih = Math.max(1, Math.min(ih, 256));
+                    ResourceLocation tex = ResourceLocation.tryParse(token.target());
+                    if (tex != null) {
+                        g.blit(tex, x + (w - iw) / 2, y, iw, ih, 0, 0, iw, ih, iw, ih);
+                    }
+                    y += ih + 4;
+                    cx = x;
+                    continue;
+                }
+                boolean link = token.kind() != FtbText.Token.Kind.TEXT;
+                String text = token.text();
+                int color = link ? Ui.ACCENT : Ui.TEXT;
+                for (String word : text.split("(?<= )")) {
+                    if (word.isEmpty()) {
+                        continue;
+                    }
+                    int ww = font.width(word);
+                    if (cx > x && cx + ww > x + w) {
+                        cx = x;
+                        y += 12;
+                    }
+                    Ui.text(g, font, word, cx, y, color);
+                    if (link) {
+                        String target = token.target();
+                        FtbText.Token.Kind kind = token.kind();
+                        int bx = cx;
+                        int by = y;
+                        int bw = Math.max(1, ww);
+                        if (by + 10 > contentBottom || by < contentTop) {
+                            // the same rule as a requirement row: only a visible line catches a click
+                        } else {
+                            buttons.add(new Button(bx, by - 1, bw, 11, () -> descriptionLink(kind, target)));
+                        }
+                    }
+                    cx += ww;
+                }
+            }
+            y += 12;
+        }
+        return y;
+    }
+
+    private void descriptionLink(FtbText.Token.Kind kind, String target) {
+        switch (kind) {
+            case OPEN_URL -> {
+                if (target.startsWith("https://") || target.startsWith("http://")) {
+                    net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(this, target);
+                }
+            }
+            case QUEST -> {
+                ClientModel m = model();
+                if (m != null && !m.nodesByKey.containsKey(target)) {
+                    ClientModel.Chapter c = selected == null ? null : m.chapterOf.get(selected);
+                    if (c != null) {
+                        target = c.id + "/" + target;
+                    }
+                }
+                goTo(target);
+            }
+            case RECIPE -> {
+                ResourceLocation id = ResourceLocation.tryParse(target);
+                if (id != null) {
+                    var item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(id);
+                    RecipeViewer viewer = RecipeViewer.Holder.get();
+                    if (item.isPresent() && viewer != null) {
+                        viewer.showRecipes(new ItemStack(item.get()));
+                    }
+                }
+            }
+            default -> {
+            }
+        }
     }
 
     /** Opens a node's chapter and selects it, centring the map on it. */
