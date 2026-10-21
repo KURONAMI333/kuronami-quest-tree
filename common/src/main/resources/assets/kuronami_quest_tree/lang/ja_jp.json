@@ -361,6 +361,8 @@
   "screen.kuronami_quest_tree.editor.table.title": "報酬テーブル",
   "screen.kuronami_quest_tree.editor.table.entries": "項目",
   "screen.kuronami_quest_tree.editor.table.open": "テーブル %s",
+  "screen.kuronami_quest_tree.editor.table.undo": "取り消し",
+  "screen.kuronami_quest_tree.editor.table.redo": "やり直し",
   "screen.kuronami_quest_tree.editor.table.delete": "テーブルを削除",
   "screen.kuronami_quest_tree.editor.chapter.title": "章",
   "screen.kuronami_quest_tree.editor.chapter.fields": "章",

@@ -59,6 +59,8 @@ final class TableEditScreen extends EditorScreen {
         lines.add(new EditForm.AddLine(Component.translatable(PREFIX + "add.entry"),
                 () -> addEntry(entriesOrCreate())));
         if (!create) {
+            lines.add(new EditForm.CardLine(Component.translatable(PREFIX + "table.undo"), this::undo, List.of()));
+            lines.add(new EditForm.CardLine(Component.translatable(PREFIX + "table.redo"), this::redo, List.of()));
             lines.add(new EditForm.CardLine(Component.translatable(PREFIX + "table.delete"), null,
                     List.of(new EditForm.Action("cross", null, this::confirmDelete, true))));
         }
@@ -144,6 +146,46 @@ final class TableEditScreen extends EditorScreen {
                 showReply(reply, tableId, null);
             }
         });
+    }
+
+    private void undo() {
+        history("undo");
+    }
+
+    private void redo() {
+        history("redo");
+    }
+
+    /** The table's own history, not the chapter's: the server keeps the two apart. */
+    private void history(String op) {
+        if (create || sending) {
+            return;
+        }
+        sending = true;
+        EditorSession.sendTable(tableId, op, new JsonObject(), reply -> {
+            if (reply.ok()) {
+                closeNow();
+            } else {
+                sending = false;
+                showReply(reply, tableId, null);
+            }
+        });
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int mods) {
+        if ((mods & org.lwjgl.glfw.GLFW.GLFW_MOD_CONTROL) != 0) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_Z
+                    && (mods & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) == 0) {
+                undo();
+                return true;
+            }
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_Z || key == org.lwjgl.glfw.GLFW.GLFW_KEY_Y) {
+                redo();
+                return true;
+            }
+        }
+        return super.keyPressed(key, scan, mods);
     }
 
     @Override
