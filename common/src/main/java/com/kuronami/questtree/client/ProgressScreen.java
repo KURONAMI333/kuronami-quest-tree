@@ -1175,7 +1175,7 @@ public class ProgressScreen extends Screen {
         g.pose().scale(RAIL_ICON / 16f, RAIL_ICON / 16f, 1);
         if (iconTexture != null) {
             g.setColor(1, 1, 1, locked ? 0.45f : 1f);
-            g.blit(iconTexture, 0, 0, 0, 0, 16, 16, 16, 16);
+            Tiles.textureIcon(g, iconTexture, 0, 0, 16);
             g.setColor(1, 1, 1, 1);
         } else {
             if (locked) {
@@ -1378,25 +1378,6 @@ public class ProgressScreen extends Screen {
         return LINE_CLOSED;
     }
 
-    /** Pixel size of each background picture, read once per screen from its file ({0, 0} = missing or unreadable). */
-    private static final Map<ResourceLocation, int[]> TEXTURE_SIZES = new HashMap<>();
-
-    private static int[] textureSize(ResourceLocation id) {
-        return TEXTURE_SIZES.computeIfAbsent(id, k -> {
-            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(k);
-            if (res.isEmpty()) {
-                com.kuronami.questtree.Constants.LOG.warn("Chapter background {} does not exist", k);
-                return new int[]{0, 0};
-            }
-            try (var in = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(in)) {
-                return new int[]{img.getWidth(), img.getHeight()};
-            } catch (java.io.IOException ex) {
-                com.kuronami.questtree.Constants.LOG.warn("Could not read chapter background {}: {}", k, ex.toString());
-                return new int[]{0, 0};
-            }
-        });
-    }
-
     /**
      * The chapter's background pictures, bottom first, under everything on the map. Each moves and zooms with the map
      * by its own share ({@link ClientModel.BackgroundLayer#speed()}), so layers at different speeds read as depth.
@@ -1407,7 +1388,7 @@ public class ProgressScreen extends Screen {
         }
         RenderSystem.enableBlend();
         for (ClientModel.BackgroundLayer l : ch.background) {
-            int[] size = textureSize(l.texture());
+            int[] size = Tiles.textureSize(l.texture());
             if (size == null || size[0] <= 0 || size[1] <= 0) {
                 continue;
             }
@@ -1737,7 +1718,7 @@ public class ProgressScreen extends Screen {
         g.pose().translate(x, ty - 2, -115);
         g.pose().scale(0.75f, 0.75f, 1);
         if (ch.iconTexture != null) {
-            g.blit(ch.iconTexture, 0, 0, 0, 0, 16, 16, 16, 16);
+            Tiles.textureIcon(g, ch.iconTexture, 0, 0, 16);
         } else {
             g.renderItem(ch.displayIcon(), 0, 0);
         }

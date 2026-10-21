@@ -99,7 +99,10 @@ final class ExperienceToast implements Toast, OwnSoundToast {
         shown += (target - shown) * 0.25;
         g.blitSprite(BACKGROUND, 0, 0, width(), height());
         Tiles.tile(g, "square", 6, 6, 20, levelled ? Tiles.Look.AFFORDABLE : Tiles.Look.PROGRESS, shown,
-                chapter.displayIcon(), false);
+                chapter.iconTexture != null ? net.minecraft.world.item.ItemStack.EMPTY : chapter.displayIcon(), false);
+        if (chapter.iconTexture != null) {
+            Tiles.textureIcon(g, chapter.iconTexture, 8, 8, 16);
+        }
         var font = toasts.getMinecraft().font;
         Component top = levelled ? Component.translatable("toast.kuronami_quest_tree.level", level) : chapter.title;
         g.drawString(font, font.plainSubstrByWidth(top.getString(), width() - 38), 32, 7, levelled ? 0xFFFF55 : 0xFFFFFF, false);
