@@ -461,16 +461,19 @@ public final class Rewards {
                         player.getGameProfile().getName(), e.getKey(), e.getValue(), n.key);
             }
         }
+        // a locked chapter already took its command and tag effects back; running them again would duplicate
+        // the lock_command or remove a tag twice (2026-10-22 review)
+        boolean alreadyLocked = !ProgressRules.chapterUnlocked(p, n.chapter);
         for (ServerPlayer member : members(player)) {
             PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
-            revokeSkillOne(member, mp, n, taken, paid);
+            revokeSkillOne(member, mp, n, taken, paid, alreadyLocked);
         }
         // revocable rewards are re-applied by taking the rank again; one-off rewards keep their record
         SkillRewardPolicy.clearRevoked(p, n, taken);
     }
 
     private static void revokeSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken,
-                                       java.util.Set<String> paid) {
+                                       java.util.Set<String> paid, boolean alreadyLocked) {
         removeAttributesOne(player, n);
         int ranks = Math.max(1, Math.min(taken, Math.max(1, n.ranks)));
         for (int rank = 0; rank < ranks; rank++) {
@@ -480,6 +483,10 @@ public final class Rewards {
                 if (!paid.contains(SkillRewardPolicy.paidKey(n, rank, index))
                         || !SkillRewardPolicy.revocable(rw)) {
                     // never paid for this reward, or a one-off gift that stays with the player
+                    continue;
+                }
+                if (!SkillRewardPolicy.undoesEffect(rw, alreadyLocked)) {
+                    // the chapter lock already ran lock_command and removed the tag; only the records are cleaned up
                     continue;
                 }
                 try {
