@@ -138,6 +138,15 @@ public final class ProgressRules {
     }
 
     /**
+     * Whether a lock/unlock command changes the chapter's state. Repeating the state it is already in must not run the
+     * chapter's reward commands again; an unlock command may hand out items, and an admin may press it twice
+     * (2026-10-22 review).
+     */
+    public static boolean chapterStateChanges(PlayerProgress p, ProgressModel.Chapter c, boolean open) {
+        return chapterUnlocked(p, c) != open;
+    }
+
+    /**
      * Whether the requirements are met (not considering exclusivity). Besides the connection graph, Pufferfish's
      * Skills gates a skill on points it must have left ({@code required_points}), points already spent in the tree
      * ({@code required_spent_points}) and mods that must be installed ({@code required_mods}).

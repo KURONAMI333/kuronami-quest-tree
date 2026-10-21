@@ -247,6 +247,10 @@ final class PlayerCommands {
      */
     private static void chapterOpen(CommandContext<CommandSourceStack> c, ServerPlayer p, PlayerProgress pr, boolean open) {
         ProgressModel.Chapter ch = chapter(c);
+        if (!ProgressRules.chapterStateChanges(pr, ch, open)) {
+            // already in the requested state: running its commands again would duplicate their effects (2026-10-22 review)
+            return;
+        }
         pr.chapterOpen.put(ch.id, open);
         if (open) {
             Rewards.reapplyChapter(p, pr, ch);
