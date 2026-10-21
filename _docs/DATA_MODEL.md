@@ -20,6 +20,12 @@ Pack authors who need more should use a `craft` or `consume` task instead.
   rewards are part of the skill effect and are always applied, even while pay-outs are blocked.
 - `ignore_reward_blocking` / `ignore_blocking` still exempt one reward.
 
+## Currency rewards (review item 3)
+
+A `currency` reward is paid through FTB Library's currency hook. Without an economy mod that registers a provider,
+the reward is recorded as taken and pays nothing; the log says so once, and the validator warns pack authors on load.
+Only a provider that is present but fails to pay keeps the reward unclaimed, so the node can be claimed again.
+
 ## Completion with unmet reward conditions (review item 9)
 
 A reward whose `conditions` this player does not meet is skipped. It does not keep `allRewardsClaimed` false and does

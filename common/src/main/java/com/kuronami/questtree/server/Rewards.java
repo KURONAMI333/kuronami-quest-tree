@@ -81,21 +81,29 @@ public final class Rewards {
             new java.util.concurrent.atomic.AtomicBoolean();
 
     /**
-     * Pays through FTB Library's currency hook, which every economy mod of that family registers with. Without FTB
-     * Library or a registered provider the claim still completes and the log says once why nothing was paid.
+     * Pays through FTB Library's currency hook, which every economy mod of that family registers with. Without an
+     * economy mod the reward is taken and pays nothing (the log says why once); only a provider that fails keeps the
+     * reward unclaimed, so the player can try again (2026-10-21 review).
      */
     private static boolean currency(ServerPlayer player, JsonObject rw) {
         int amount = intOf(rw, "amount", 1);
         if (amount <= 0) {
             return true;
         }
-        if (com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")
-                && FtbLibraryCurrencyBridge.available() && FtbLibraryCurrencyBridge.give(player, amount)) {
+        boolean provider = com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")
+                && FtbLibraryCurrencyBridge.available();
+        boolean paid = provider && FtbLibraryCurrencyBridge.give(player, amount);
+        var outcome = com.kuronami.questtree.progress.CurrencyClaim.resolve(provider, paid);
+        if (outcome == com.kuronami.questtree.progress.CurrencyClaim.Outcome.NO_PROVIDER) {
+            if (CURRENCY_WARNED.compareAndSet(false, true)) {
+                Constants.LOG.warn("A currency reward paid nothing: no economy mod registered with FTB Library");
+            }
             return true;
         }
-        if (CURRENCY_WARNED.compareAndSet(false, true)) {
-            Constants.LOG.warn("A currency reward paid nothing: no economy mod registered with FTB Library");
+        if (outcome == com.kuronami.questtree.progress.CurrencyClaim.Outcome.PAID) {
+            return true;
         }
+        Constants.LOG.warn("A currency reward of {} failed to pay", amount);
         // the claim stays open, so the player can try again once the economy mod is back
         player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
                 "message.kuronami_quest_tree.currency_failed",

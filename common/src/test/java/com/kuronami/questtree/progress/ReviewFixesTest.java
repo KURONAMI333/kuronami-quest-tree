@@ -46,6 +46,16 @@ class ReviewFixesTest {
     }
 
     @Test
+    void aCurrencyRewardWithoutAnEconomyModIsTakenAndOneThatFailsIsNot() {
+        assertEquals(CurrencyClaim.Outcome.NO_PROVIDER, CurrencyClaim.resolve(false, false));
+        assertTrue(CurrencyClaim.completes(CurrencyClaim.Outcome.NO_PROVIDER));
+        assertEquals(CurrencyClaim.Outcome.FAILED, CurrencyClaim.resolve(true, false));
+        assertFalse(CurrencyClaim.completes(CurrencyClaim.Outcome.FAILED));
+        assertEquals(CurrencyClaim.Outcome.PAID, CurrencyClaim.resolve(true, true));
+        assertTrue(CurrencyClaim.completes(CurrencyClaim.Outcome.PAID));
+    }
+
+    @Test
     void aRandomRollIsRecordedSoARetryUsesTheSameEntries() {
         java.util.List<Integer> picks = java.util.List.of(2, 0, 2);
         String saved = RewardRoll.encode(picks);

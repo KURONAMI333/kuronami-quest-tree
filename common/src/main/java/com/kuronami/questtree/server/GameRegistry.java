@@ -1,5 +1,6 @@
 package com.kuronami.questtree.server;
 
+import com.kuronami.questtree.platform.Services;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 
@@ -23,6 +24,11 @@ public final class GameRegistry implements ProgressValidator.Registry {
     public static final GameRegistry INSTANCE = new GameRegistry();
 
     private GameRegistry() {
+    }
+
+    @Override
+    public boolean economyAvailable() {
+        return Services.PLATFORM.isModLoaded("ftblibrary") && FtbLibraryCurrencyBridge.available();
     }
 
     @Override

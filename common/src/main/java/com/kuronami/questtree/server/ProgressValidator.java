@@ -62,6 +62,11 @@ public final class ProgressValidator {
     public interface Registry {
         boolean known(String kind, String id);
 
+        /** Whether an economy mod registered with FTB Library; the game side answers this, tests keep the default. */
+        default boolean economyAvailable() {
+            return true;
+        }
+
         Registry NONE = (kind, id) -> true;
     }
 
@@ -887,7 +892,14 @@ public final class ProgressValidator {
                     problem(out, Severity.WARNING, ref, path + ".trophy", "trophy " + quote(trophy) + " has no namespace");
                 }
             }
-            case "xp", "xp_levels", "currency" -> amount(out, ref, path, rw);
+            case "currency" -> {
+                amount(out, ref, path, rw);
+                if (!registry.economyAvailable()) {
+                    problem(out, Severity.WARNING, ref, path,
+                            "currency reward has no economy mod to pay it, so it is taken and pays nothing");
+                }
+            }
+            case "xp", "xp_levels" -> amount(out, ref, path, rw);
             default -> {
             }
         }
