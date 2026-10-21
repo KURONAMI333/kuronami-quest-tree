@@ -57,6 +57,14 @@ abstract class EditorScreen extends Screen {
 
     /** The cross and Escape: the same as a save for a form, a plain leave for one that creates on a button. */
     protected void cancel() {
+        if (sending) {
+            return;
+        }
+        if (statusError) {
+            // a refusal is already on screen; pressing leave again throws the form away instead of repeating it
+            closeNow();
+            return;
+        }
         requestClose();
     }
 
