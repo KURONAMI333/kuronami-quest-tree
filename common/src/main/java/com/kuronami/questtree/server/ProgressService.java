@@ -257,27 +257,30 @@ public final class ProgressService {
     public static void onKill(ServerPlayer player, Entity killed) {
         PlayerProgress p = progress(player);
         ProgressRules r = rules();
+        // Only kill tasks can move. The old loop walked every node before finding that out, and rechecked even for a
+        // kill no task names (2026-10-22 release review).
+        boolean changed = false;
         // which tasks may move is read before anything is bumped: one kill must not finish two sequential steps
         List<TaskRef> hits = new ArrayList<>();
-        for (ProgressModel.Node n : r.model().nodes.values()) {
-            if (!working(r, p, n)) {
-                continue;
-            }
-            for (int i = 0; i < n.tasks.size(); i++) {
-                JsonObject t = n.tasks.get(i);
-                if (r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
-                        && type(t).equals("kill") && entityMatches(player, t, killed)) {
-                    hits.add(new TaskRef(n, i));
-                }
+        for (TaskRef ref : tasksOfType(r, "kill")) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
+            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
+                    && entityMatches(player, t, killed)) {
+                hits.add(ref);
             }
         }
         for (TaskRef hit : hits) {
             ProgressModel.Node n = hit.node();
             int i = hit.index();
             bump(player, p, n, i, p.task(n.key, i) + 1);
+            changed = true;
         }
         SkillExperience.onKill(player, p, killed);
-        recheck(player, p);
+        if (changed) {
+            recheck(player, p);
+        }
     }
 
     /** A block was broken (survival or creative). Counts "break" tasks, capped at the target. */
@@ -307,7 +310,9 @@ public final class ProgressService {
                 bump(player, p, n, i, Math.min(had + 1, target));
             }
         }
-        recheck(player, p);
+        if (!hits.isEmpty()) {
+            recheck(player, p);
+        }
     }
 
     // ------------------------------------------------------------------ interaction tasks (2026-10-21)
