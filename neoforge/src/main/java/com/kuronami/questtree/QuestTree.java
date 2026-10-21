@@ -10,6 +10,7 @@ import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
+import com.kuronami.questtree.network.TeamPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -103,10 +104,12 @@ public class QuestTree {
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {
         // the quest_book item is synced as a registry entry, so the client mod is required (like FTB Quests). The
         // version is bumped when a payload changes shape (2: ActionPayload gained its choice field; 3: the editor
-        // gained its state payload), so an older client fails the handshake instead of silently missing a feature.
-        var r = event.registrar("3");
+        // gained its state payload; 4: the team view), so an older client fails the handshake instead of silently
+        // missing a feature.
+        var r = event.registrar("4");
         r.playToClient(SyncPayload.TYPE, SyncPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onSync(payload));
         r.playToClient(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onProgress(payload));
+        r.playToClient(TeamPayload.TYPE, TeamPayload.STREAM_CODEC, (payload, context) -> com.kuronami.questtree.client.ClientTeam.onTeam(payload));
         r.playToClient(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC,
                 (payload, context) -> EditorSession.onReply(payload));
         r.playToClient(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC,

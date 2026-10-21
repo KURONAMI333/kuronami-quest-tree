@@ -3,6 +3,7 @@ package com.kuronami.questtree;
 import com.kuronami.questtree.server.EditorService;
 import com.kuronami.questtree.server.ProgressCommands;
 import com.kuronami.questtree.server.ProgressData;
+import com.kuronami.questtree.server.PartyActions;
 import com.kuronami.questtree.server.ProgressService;
 import com.kuronami.questtree.server.SkillExperience;
 import com.kuronami.questtree.network.ActionPayload;
@@ -83,6 +84,10 @@ public final class CommonClass {
 
     /** A screen action from the client, on the server thread. */
     public static void onAction(ServerPlayer player, ActionPayload action) {
+        if (action.action().startsWith("party_")) {
+            PartyActions.handle(player, action);
+            return;
+        }
         ProgressService.onAction(player, action);
     }
 

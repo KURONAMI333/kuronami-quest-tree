@@ -133,6 +133,8 @@ public final class ProgressService {
 
     /** Join or data reload: re-check everything and send the full state. */
     public static void onJoin(ServerPlayer player) {
+        // the client starts with no team: never skip the first view because a previous session had the same one
+        TeamSync.forget(player.getUUID());
         PlayerProgress p = progress(player);
         // drop every modifier first: ones left from a skill the team no longer has must not survive the login
         Rewards.refreshAttributes(player, p);
@@ -808,7 +810,7 @@ public final class ProgressService {
             team.part(id).event(kind, node, now);
             ServerPlayer online = server.getPlayerList().getPlayer(id);
             if (online != null) {
-                PENDING.computeIfAbsent(id, k -> new ArrayList<>()).add(kind + "|" + node);
+                PENDING.computeIfAbsent(id, k -> new ArrayList<>()).add(kind + "|" + node + "|" + player.getUUID());
                 DIRTY.put(id, true);
             }
         }
@@ -855,12 +857,16 @@ public final class ProgressService {
             return;
         }
         Services.PLATFORM.sendToPlayer(player, payload);
+        // the party row and the shared-quest labels come from the same update as the progress they describe
+        TeamSync.send(player);
     }
 
     public static void onLogout(ServerPlayer player) {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
+        TeamSync.forget(player.getUUID());
+        TeamSync.broadcast(player.server);
     }
 
     /** Server stopping: the anti-farming windows are runtime state and must not outlive the server (2026-10-20). */
@@ -870,6 +876,7 @@ public final class ProgressService {
         DIRTY.clear();
         OBSERVED.clear();
         MIGRATED.clear();
+        TeamSync.clear();
     }
 
     // ------------------------------------------------------------------ matching helpers

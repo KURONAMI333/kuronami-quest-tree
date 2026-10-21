@@ -95,10 +95,14 @@ class TeamProgressTest {
         TeamProgress team = new TeamProgress(TEAM);
         team.view(A).claimTeamReward("t:q/a#0");
 
-        JsonObject json = ProgressJson.write(team.view(A));
+        // a teammate's synced view: the team settled it, but this player did not
+        JsonObject json = ProgressJson.write(team.view(B));
         PlayerProgress read = ProgressJson.read(json);
 
-        assertTrue(read.claimedRewards.contains("t:q/a#0"));
+        assertTrue(read.rewardClaimed("t:q/a#0"));
+        // the separate lists let the details sheet say the team, not this player, took it
+        assertFalse(read.claimedRewards.contains("t:q/a#0"));
+        assertTrue(read.teamClaimedRewards.contains("t:q/a#0"));
     }
 
     @Test

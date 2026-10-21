@@ -42,4 +42,17 @@ final class FtbTeamsBridge {
             return Set.of(teamId);
         }
     }
+
+    static UUID owner(MinecraftServer server, UUID teamId) {
+        try {
+            FTBTeamsAPI.API api = FTBTeamsAPI.api();
+            if (api == null || !api.isManagerLoaded()) {
+                return null;
+            }
+            return api.getManager().getTeamByID(teamId).map(Team::getOwner).orElse(null);
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("Could not read the owner of team {}", teamId);
+            return null;
+        }
+    }
 }

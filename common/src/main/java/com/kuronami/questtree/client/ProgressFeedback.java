@@ -2,6 +2,7 @@ package com.kuronami.questtree.client;
 
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
+import com.kuronami.questtree.team.TeamView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
@@ -64,21 +65,22 @@ final class ProgressFeedback {
         // claim all sends one event per quest: play each sound once per update, not once per quest
         java.util.Set<String> played = new java.util.HashSet<>();
         for (String ev : events) {
-            int bar = ev.indexOf('|');
-            String kind = bar < 0 ? ev : ev.substring(0, bar);
-            String key = bar < 0 ? "" : ev.substring(bar + 1);
+            Event event = Event.parse(ev);
+            String kind = event.kind();
+            String key = event.key();
             ClientModel.Node n = m.nodesByKey.get(key);
             switch (kind) {
                 case "complete" -> {
                     if (n != null && !m.chapterOf.get(key).skills) {
                         boolean claim = ClientProgress.state(key) == ProgressRules.State.CLAIM;
-                        notifyCompletion(n, claim ? ProgressRules.State.CLAIM : ProgressRules.State.DONE);
+                        notifyCompletion(n, claim ? ProgressRules.State.CLAIM : ProgressRules.State.DONE,
+                                completionTop(event.actor()));
                         chapterCompleted(m, key);
                     }
                 }
                 case "toast" -> {
                     if (n != null) {
-                        notifyCompletion(n, ProgressRules.State.DONE);
+                        notifyCompletion(n, ProgressRules.State.DONE, completionTop(event.actor()));
                     }
                 }
                 case "claim" -> {
@@ -107,18 +109,19 @@ final class ProgressFeedback {
         long t = net.minecraft.Util.getMillis();
         java.util.Set<String> completed = new java.util.HashSet<>();
         for (String ev : events) {
-            if (ev.startsWith("complete|")) {
-                completed.add(ev.substring(9));
+            Event event = Event.parse(ev);
+            if (event.kind().equals("complete")) {
+                completed.add(event.key());
             }
         }
         boolean stamped = false;
         for (String ev : events) {
-            int bar = ev.indexOf('|');
-            if (bar < 0) {
+            Event event = Event.parse(ev);
+            if (event.key().isEmpty()) {
                 continue;
             }
-            String kind = ev.substring(0, bar);
-            String key = ev.substring(bar + 1);
+            String kind = event.kind();
+            String key = event.key();
             var node = rules.model().nodes.get(key);
             if (node == null) {
                 continue;
@@ -187,13 +190,41 @@ final class ProgressFeedback {
      * Announces a completion in the style the player picked (2026-10-20): a vanilla toast, a chat line, the action bar,
      * or nothing. The toast frame keeps its own sound; chat and the action bar stay silent, as FTB Quests' do.
      */
-    private static void notifyCompletion(ClientModel.Node n, ProgressRules.State state) {
-        Component top = Component.translatable("toast.kuronami_quest_tree.complete");
+    private static void notifyCompletion(ClientModel.Node n, ProgressRules.State state, Component top) {
         switch (ClientConfig.notificationStyle()) {
             case TOAST -> QuestToast.show(n, state, top);
             case CHAT -> chat(top, n.title, false);
             case ACTION_BAR -> chat(top, n.title, true);
             case NONE -> { }
+        }
+    }
+
+    /** A teammate's completion names them; the player's own keeps the plain "Quest complete". */
+    private static Component completionTop(String actor) {
+        var player = Minecraft.getInstance().player;
+        TeamView team = ClientTeam.view();
+        if (player != null && team.inTeam() && actor != null && !actor.isBlank()
+                && !actor.equals(player.getUUID().toString())) {
+            TeamView.Member member = team.member(actor);
+            if (member != null && !member.name().isBlank()) {
+                return Component.translatable("toast.kuronami_quest_tree.complete_by", member.name());
+            }
+        }
+        return Component.translatable("toast.kuronami_quest_tree.complete");
+    }
+
+    /** {@code kind|node|actor}; events from before the actor field still parse as kind|node. */
+    private record Event(String kind, String key, String actor) {
+        static Event parse(String raw) {
+            int first = raw.indexOf('|');
+            if (first < 0) {
+                return new Event(raw, "", null);
+            }
+            int second = raw.indexOf('|', first + 1);
+            if (second < 0) {
+                return new Event(raw.substring(0, first), raw.substring(first + 1), null);
+            }
+            return new Event(raw.substring(0, first), raw.substring(first + 1, second), raw.substring(second + 1));
         }
     }
 
