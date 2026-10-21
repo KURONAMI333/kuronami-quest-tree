@@ -1912,7 +1912,8 @@ public class ProgressScreen extends Screen {
         }
         int bx2 = next + Ui.S1;
         if (mc != null) {
-            skillActionButtons(g, ch, mc, p, bx2, y, mouseX, mouseY);
+            // 14px chip centres its text at y+3; lift the chip so it shares the header's text baseline
+            skillActionButtons(g, ch, mc, p, bx2, y - 3, mouseX, mouseY);
         }
     }
 
