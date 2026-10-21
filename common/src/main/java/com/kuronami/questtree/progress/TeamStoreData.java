@@ -155,10 +155,15 @@ public final class TeamStoreData {
         return data;
     }
 
-    /** Routes saved values after the set of personal nodes changed, and remembers the new set. */
-    public boolean migratePersonalNodes(Set<String> current) {
-        if (current.isEmpty() && !personalNodes.isEmpty()) {
-            // an unreadable or empty model must not turn saved personal progress into shared progress
+    /**
+     * Routes saved values after the set of personal nodes changed, and remembers the new set.
+     *
+     * @param modelEmpty the loaded model has no nodes at all. An unreadable or empty pack must not turn saved personal
+     *                   progress into shared progress (2026-10-22 review). An empty {@code current} with a loaded
+     *                   model is a real change: the pack made every node shared, so the values do migrate.
+     */
+    public boolean migratePersonalNodes(Set<String> current, boolean modelEmpty) {
+        if (modelEmpty) {
             return false;
         }
         if (personalNodes.equals(current)) {

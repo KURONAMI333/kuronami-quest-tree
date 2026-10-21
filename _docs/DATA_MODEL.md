@@ -38,9 +38,10 @@ rewarded stage is not taken away with the team's copy.
 
 ## Personal-node routing (review item 5)
 
-The saved record keeps the set of node keys that were routed as personal. When the model cannot be read, or reads as
-empty, that set is left alone: a migration is only applied for the keys the model actually shows, so an unreadable
-pack file cannot move saved personal progress into the shared record.
+The saved record keeps the set of node keys that were routed as personal. The caller checks whether the loaded model
+has any node at all: a model that reads as empty leaves that set alone, so an unreadable pack file cannot move saved
+personal progress into the shared record. An empty set with a loaded model is a real change — the pack made every
+node shared — and its saved personal values are moved to the shared record.
 
 ## Currency rewards (review item 3)
 

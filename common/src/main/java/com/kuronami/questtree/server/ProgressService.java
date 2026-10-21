@@ -99,7 +99,8 @@ public final class ProgressService {
         rules();
         // the store resolves the player's current team (solo = their UUID) and folds a join/leave in on the way
         ProgressStore store = ProgressStore.get(player.server);
-        store.migratePersonalNodes(PlayerProgress.personalNodesSnapshot());
+        // an empty model is an unreadable or empty pack; only a loaded one may move personal progress to shared
+        store.migratePersonalNodes(PlayerProgress.personalNodesSnapshot(), ProgressData.model().nodes.isEmpty());
         UUID before = store.teamIdOf(player.getUUID());
         UUID current = TeamResolver.teamId(player.server, player.getUUID());
         PlayerProgress p = store.view(player.server, player.getUUID());

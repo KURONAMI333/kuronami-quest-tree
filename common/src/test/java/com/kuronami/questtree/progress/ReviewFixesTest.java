@@ -209,9 +209,21 @@ class ReviewFixesTest {
         data.personalNodes.add("t:q/n");
         TeamProgress team = data.team(java.util.UUID.randomUUID());
         team.shared.completed.add("t:q/n");
-        assertFalse(data.migratePersonalNodes(java.util.Set.of()));
+        assertFalse(data.migratePersonalNodes(java.util.Set.of(), true));
         assertFalse(team.shared.completed.isEmpty(), "an empty model must leave the shared record alone");
         assertTrue(data.personalNodes.contains("t:q/n"));
+    }
+
+    @Test
+    void aPackThatMakesEveryNodeSharedStillMigratesPersonalProgress() {
+        TeamStoreData data = new TeamStoreData();
+        data.personalNodes.add("t:q/n");
+        TeamProgress team = data.team(TEAM);
+        team.part(A).completed.add("t:q/n");
+        assertTrue(data.migratePersonalNodes(java.util.Set.of(), false),
+                "an empty personal set with a loaded model is a real change");
+        assertTrue(team.shared.completed.contains("t:q/n"));
+        assertTrue(data.personalNodes.isEmpty());
     }
 
     @Test

@@ -48,8 +48,8 @@ public final class ProgressStore extends SavedData {
     }
 
     /** Routes saved values if the data model changed which nodes are personal. */
-    public boolean migratePersonalNodes(java.util.Set<String> current) {
-        if (data.migratePersonalNodes(current)) {
+    public boolean migratePersonalNodes(java.util.Set<String> current, boolean modelEmpty) {
+        if (data.migratePersonalNodes(current, modelEmpty)) {
             setDirty();
             return true;
         }
