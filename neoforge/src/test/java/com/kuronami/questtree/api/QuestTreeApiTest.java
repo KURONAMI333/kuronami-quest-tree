@@ -44,6 +44,21 @@ class QuestTreeApiTest {
     }
 
     @Test
+    void builtInAndRegisteredConditionsMixInOneList() {
+        QuestTreeApi.registerConditionType(CONDITION, context -> true);
+        var bundle = JsonParser.parseString("""
+                {"chapters": {"t:mix": {"nodes": {"q": {
+                  "tasks": [{"type": "item", "count": 1, "item": "minecraft:stone",
+                             "conditions": [{"type": "stage", "stage": "s"}, {"type": "%s"}]}],
+                  "rewards": [{"type": "xp", "amount": 1,
+                               "conditions": [{"type": "score", "objective": "points", "min": 1}, {"type": "%s"}]}]
+                }}}}}""".formatted(CONDITION, CONDITION)).getAsJsonObject();
+        ProgressValidator.Result result = ProgressValidator.validate(bundle, Map.of());
+        assertEquals(0, result.errors(), result.problems.toString());
+        assertEquals(0, result.warnings(), result.problems.toString());
+    }
+
+    @Test
     void aScriptCannotTakeOverAJavaType() {
         ResourceLocation id = ResourceLocation.fromNamespaceAndPath("questtree_test", "script_dup");
         QuestTaskType javaHandler = context -> 7;
