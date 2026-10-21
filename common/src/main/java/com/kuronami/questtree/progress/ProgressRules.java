@@ -646,8 +646,10 @@ public final class ProgressRules {
         }
         JsonObject exchange = c.points.getAsJsonObject("exchange");
         int cost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
+                && exchange.get("xp_levels").getAsJsonPrimitive().isNumber()
                 ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
         int limit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
+                && exchange.get("level_limit").getAsJsonPrimitive().isNumber()
                 ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
         return new Exchange(cost, limit);
     }

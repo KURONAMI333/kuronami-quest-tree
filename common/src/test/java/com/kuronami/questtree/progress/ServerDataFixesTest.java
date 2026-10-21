@@ -276,6 +276,19 @@ class ServerDataFixesTest {
         assertTrue(p.exchange.isEmpty());
         assertTrue(p.chapterOpen.isEmpty(), "both chapters in the pool forget the override");
     }
+    /** 7. A pack's malformed exchange/respec numbers fall back to the defaults instead of throwing. */
+    @Test
+    void malformedExchangeAndRespecNumbersUseDefaults() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {
+                  "exchange": {"xp_levels": "thirty", "level_limit": {}},
+                  "respec": {"cost": "free"}}, "nodes": {}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        assertEquals(0, ProgressRules.exchangeOf(a).cost());
+        assertEquals(Integer.MAX_VALUE, ProgressRules.exchangeOf(a).limit());
+        assertEquals(0, ProgressRules.respecCost(a));
+    }
     /** 1. A respec takes back the points a skill paid out, and refuses when that would overdraw the pool. */
     @Test
     void respecRevokesPointsRewardsAndRefusesOverdraft() {
