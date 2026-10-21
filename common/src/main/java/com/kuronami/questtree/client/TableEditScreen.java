@@ -21,6 +21,8 @@ final class TableEditScreen extends EditorScreen {
     private final boolean create;
     private final JsonObject before;
     private final JsonObject root;
+    /** The table revision this screen's copy came from; the save is refused if another operator moved it. */
+    private final long revision;
 
     TableEditScreen(Screen parent, String tableId, boolean create) {
         super(parent, Component.translatable(PREFIX + "table.title"));
@@ -31,6 +33,7 @@ final class TableEditScreen extends EditorScreen {
                 ? ClientProgress.rawTables().getAsJsonObject(tableId) : null;
         this.before = raw == null ? ContentSchema.newTable() : raw.deepCopy();
         this.root = this.before.deepCopy();
+        this.revision = create ? 0 : EditorSession.tableRevision(tableId);
     }
 
     @Override
@@ -122,7 +125,7 @@ final class TableEditScreen extends EditorScreen {
         args.addProperty("create", create);
         args.add("table", root.deepCopy());
         sending = true;
-        EditorSession.sendTable(tableId, "update_table", args, reply -> {
+        EditorSession.sendTable(tableId, "update_table", args, revision, reply -> {
             if (reply.ok()) {
                 closeNow();
             } else {

@@ -20,6 +20,8 @@ final class ChapterEditScreen extends EditorScreen {
     private final String chapterId;
     private final JsonObject before;
     private final JsonObject root;
+    /** The chapter revision this screen's copy came from; a save or delete is refused if it moved meanwhile. */
+    private final long revision;
 
     ChapterEditScreen(Screen parent, String chapterId) {
         super(parent, Component.translatable(PREFIX + "chapter.title"));
@@ -27,6 +29,7 @@ final class ChapterEditScreen extends EditorScreen {
         JsonObject raw = ClientProgress.rawChapter(chapterId);
         this.before = raw == null ? new JsonObject() : raw.deepCopy();
         this.root = this.before.deepCopy();
+        this.revision = EditorSession.revision(chapterId);
     }
 
     @Override
@@ -59,7 +62,7 @@ final class ChapterEditScreen extends EditorScreen {
             return;
         }
         sending = true;
-        EditorSession.send(chapterId, "delete_chapter", new JsonObject(), reply -> {
+        EditorSession.send(chapterId, "delete_chapter", new JsonObject(), revision, reply -> {
             if (reply.ok()) {
                 closeNow();
             } else {
@@ -82,7 +85,7 @@ final class ChapterEditScreen extends EditorScreen {
         JsonObject args = new JsonObject();
         args.add("patch", patch);
         sending = true;
-        EditorSession.send(chapterId, "update_chapter", args, reply -> {
+        EditorSession.send(chapterId, "update_chapter", args, revision, reply -> {
             if (reply.ok()) {
                 closeNow();
             } else {

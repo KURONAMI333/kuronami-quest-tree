@@ -119,6 +119,23 @@ class ProgressionEditorTest {
     }
 
     @Test
+    void aSaveFromAScreenOpenedBeforeAnotherEditIsRefused() {
+        ProgressionEditor editor = editor();
+        long opened = 0;
+        assertTrue(apply(editor, CHAPTER, opened, "update_chapter",
+                "{\"patch\":{\"title\":\"First\"}}").ok());
+
+        // the screen still holds the copy and revision it opened with
+        ProgressionEditor.Outcome out = apply(editor, CHAPTER, opened, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"x\":5}}");
+
+        assertFalse(out.ok());
+        assertTrue(out.stale());
+        assertEquals(1, out.revision());
+        assertEquals(0, mergedX());
+    }
+
+    @Test
     void anEditThatBreaksAnotherChapterIsRefusedBeforeTheFileExists() {
         ProgressionEditor.Outcome out = apply(editor(), CHAPTER, 0, "delete_node", "{\"id\":\"a\"}");
 
@@ -485,6 +502,22 @@ class ProgressionEditorTest {
         assertTrue(same.ok());
         assertFalse(same.changed());
         assertEquals(1, same.revision());
+    }
+
+    @Test
+    void aTableSaveFromAScreenOpenedBeforeAnotherEditIsRefused() {
+        ProgressionEditor editor = editor();
+        table(editor, new JsonObject(), "t:loot", 0, "{\"create\":true,\"id\":\"t:loot\",\"table\":" + LOOT + "}");
+        long opened = 1;
+        assertTrue(table(editor, tablesWithOverlay(), "t:loot", opened, "{\"patch\":{\"rolls\":4}}").ok());
+
+        ProgressionEditor.Outcome out = table(editor, tablesWithOverlay(), "t:loot", opened,
+                "{\"patch\":{\"rolls\":6}}");
+
+        assertFalse(out.ok());
+        assertTrue(out.stale());
+        assertEquals(2, out.revision());
+        assertEquals(4, tablesWithOverlay().getAsJsonObject("t:loot").get("rolls").getAsInt());
     }
 
     @Test

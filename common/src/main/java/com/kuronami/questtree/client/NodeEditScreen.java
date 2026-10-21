@@ -23,6 +23,8 @@ final class NodeEditScreen extends EditorScreen {
     private final String nodeId;
     private final JsonObject before;
     private final JsonObject root;
+    /** The chapter revision this screen's copy came from; the save is refused if another operator moved it. */
+    private final long revision;
 
     NodeEditScreen(Screen parent, String chapterId, String nodeId) {
         super(parent, Component.translatable(PREFIX + "node.title"));
@@ -31,6 +33,7 @@ final class NodeEditScreen extends EditorScreen {
         JsonObject raw = ClientProgress.rawNode(chapterId, nodeId);
         this.before = raw == null ? new JsonObject() : raw.deepCopy();
         this.root = this.before.deepCopy();
+        this.revision = EditorSession.revision(chapterId);
     }
 
     @Override
@@ -180,7 +183,7 @@ final class NodeEditScreen extends EditorScreen {
         args.addProperty("id", nodeId);
         args.add("patch", patch);
         sending = true;
-        EditorSession.send(chapterId, "update_node", args, reply -> {
+        EditorSession.send(chapterId, "update_node", args, revision, reply -> {
             if (reply.ok()) {
                 closeNow();
             } else {
