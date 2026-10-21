@@ -640,6 +640,31 @@ class ProgressValidatorTest {
         assertTrue(r.problems.stream().allMatch(p -> p.path().startsWith("chapters.basics")), r.problems.toString());
     }
 
+    /** A cost curve the exchange reader cannot use falls back to the fixed cost, so it only warns (2026-10-22 review). */
+    @Test
+    void aBrokenExchangeCurveIsAWarning() {
+        ProgressValidator.Result missing = validate("""
+                {"chapters": {"t:a": {"points": {"exchange": {
+                  "xp_levels": 5, "cost_per_level": {"type": "expression"}}}, "nodes": {}}}}
+                """);
+        assertEquals(0, errors(missing));
+        assertTrue(says(missing, "has no \"data\" object"));
+
+        ProgressValidator.Result tooLong = validate("""
+                {"chapters": {"t:a": {"points": {"exchange": {
+                  "xp_levels": 5, "cost_per_level": {"type": "expression",
+                    "data": {"expression": "%s"}}}}, "nodes": {}}}}
+                """.formatted("1+".repeat(200) + "1"));
+        assertEquals(0, errors(tooLong));
+        assertTrue(says(tooLong, "longer than 256"));
+
+        ProgressValidator.Result good = validate("""
+                {"chapters": {"t:a": {"points": {"exchange": {
+                  "xp_levels": 5, "cost_per_level": {"type": "values", "data": {"values": [5, 10]}}}}, "nodes": {}}}}
+                """);
+        assertEquals(List.of(), good.problems);
+    }
+
     /** Small helper so the fixture paths read like the other tests. */
     private static final class PathOf {
         static Path resource(String name) {

@@ -334,6 +334,37 @@ class ProgressRulesTest {
         assertFalse(ProgressRules.allRewardsClaimed(p, q));
     }
 
+    /**
+     * A broken exchange curve is pack data, not code: a missing "data" block, a formula longer than the limit or one
+     * nested too deeply falls back to the fixed xp_levels cost instead of throwing (2026-10-22 review).
+     */
+    @Test
+    void brokenExchangeCurvesFallBackToTheFixedCost() {
+        String longFormula = "1+" .repeat(200) + "1";
+        String deepFormula = "(".repeat(40) + "1" + ")".repeat(40);
+        String json = """
+                {"chapters": {"t:a": {"points": {"exchange": {
+                  "xp_levels": 5,
+                  "cost_per_level": {"type": "expression"}}}}}}
+                """;
+        ProgressRules.Exchange missingData = ProgressRules.exchangeOf(
+                ProgressModel.of(JsonParser.parseString(json).getAsJsonObject()).chapters.get("t:a"));
+        assertEquals(5, missingData.costAt(3));
+
+        JsonObject bundle = JsonParser.parseString(json).getAsJsonObject();
+        JsonObject curve = bundle.getAsJsonObject("chapters").getAsJsonObject("t:a")
+                .getAsJsonObject("points").getAsJsonObject("exchange").getAsJsonObject("cost_per_level");
+        curve.addProperty("type", "expression");
+        JsonObject data = new JsonObject();
+        curve.add("data", data);
+        data.addProperty("expression", longFormula);
+        assertEquals(5, ProgressRules.exchangeOf(
+                ProgressModel.of(bundle).chapters.get("t:a")).costAt(3));
+        data.addProperty("expression", deepFormula);
+        assertEquals(5, ProgressRules.exchangeOf(
+                ProgressModel.of(bundle).chapters.get("t:a")).costAt(3));
+    }
+
     /** The new per-reward marks and the first-join flag survive the save file (2026-10-20). */
     @Test
     void perRewardClaimsAndBookFlagRoundTrip() {

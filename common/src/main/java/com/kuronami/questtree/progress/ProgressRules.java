@@ -696,8 +696,9 @@ public final class ProgressRules {
             }
             JsonObject c = curve.getAsJsonObject();
             String type = c.has("type") && c.get("type").isJsonPrimitive() ? c.get("type").getAsString() : "";
+            // a pack may write the curve without its "data" block (or with a non-object one): use the fixed cost
             JsonElement data = c.get("data");
-            if (!data.isJsonObject()) {
+            if (data == null || !data.isJsonObject()) {
                 return cost;
             }
             JsonObject d = data.getAsJsonObject();
@@ -712,11 +713,15 @@ public final class ProgressRules {
             }
             if (type.equals("expression") && d.has("expression") && d.get("expression").isJsonPrimitive()) {
                 String expr = d.get("expression").getAsString();
+                // a pack's formula is data, not code: a huge or deeply nested one is unusable, not worth crashing on
+                if (Expression.tooComplex(expr)) {
+                    return cost;
+                }
                 try {
                     Expression e = EXCHANGE_CURVES.computeIfAbsent(expr, Expression::parse);
                     double value = e.eval(Map.of("level", (double) level));
                     return Double.isFinite(value) ? Math.max(0, (int) Math.round(value)) : cost;
-                } catch (RuntimeException ex) {
+                } catch (RuntimeException | StackOverflowError ex) {
                     return cost;
                 }
             }
