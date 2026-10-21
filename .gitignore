@@ -29,5 +29,6 @@ _handoff/
 
 # dev run folders (worlds, configs, logs)
 neoforge/run/
+neoforge/logs/
 fabric/runs/
 run/
