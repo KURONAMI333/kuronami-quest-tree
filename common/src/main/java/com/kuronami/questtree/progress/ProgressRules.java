@@ -22,6 +22,8 @@ public final class ProgressRules {
 
     private final ProgressModel model;
     private final Map<String, Expression> curves = new HashMap<>();
+    /** Parsed exchange cost expressions, shared because the screen asks for the next cost every frame. */
+    private static final Map<String, Expression> EXCHANGE_CURVES = new HashMap<>();
 
     public ProgressRules(ProgressModel model) {
         this.model = model;
@@ -672,22 +674,79 @@ public final class ProgressRules {
         return count;
     }
 
-    /** A skill chapter's exchange settings ({@code points.exchange}). */
-    public record Exchange(int cost, int limit) {
+    /**
+     * A skill chapter's exchange settings ({@code points.exchange}). {@code cost} is the first purchase's price;
+     * {@code curve} is Pufferfish's {@code cost_per_level} (a {@code values} array or an {@code expression} of
+     * {@code level}), and {@link #costAt(int)} evaluates it at the number of purchases already made.
+     */
+    public record Exchange(int cost, int limit, JsonElement curve) {
+        public Exchange(int cost, int limit) {
+            this(cost, limit, null);
+        }
+
+        public int costAt(int level) {
+            if (curve == null || !curve.isJsonObject()) {
+                return cost;
+            }
+            JsonObject c = curve.getAsJsonObject();
+            String type = c.has("type") && c.get("type").isJsonPrimitive() ? c.get("type").getAsString() : "";
+            JsonElement data = c.get("data");
+            if (!data.isJsonObject()) {
+                return cost;
+            }
+            JsonObject d = data.getAsJsonObject();
+            if (type.equals("values") && d.has("values") && d.get("values").isJsonArray()) {
+                var values = d.getAsJsonArray("values");
+                if (values.isEmpty()) {
+                    return cost;
+                }
+                JsonElement v = values.get(Math.max(0, Math.min(level, values.size() - 1)));
+                return v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber()
+                        ? Math.max(0, v.getAsInt()) : cost;
+            }
+            if (type.equals("expression") && d.has("expression") && d.get("expression").isJsonPrimitive()) {
+                String expr = d.get("expression").getAsString();
+                try {
+                    Expression e = EXCHANGE_CURVES.computeIfAbsent(expr, Expression::parse);
+                    double value = e.eval(Map.of("level", (double) level));
+                    return Double.isFinite(value) ? Math.max(0, (int) Math.round(value)) : cost;
+                } catch (RuntimeException ex) {
+                    return cost;
+                }
+            }
+            return cost;
+        }
     }
 
     public static Exchange exchangeOf(ProgressModel.Chapter c) {
-        if (c == null || c.points == null || !c.points.has("exchange") || !c.points.get("exchange").isJsonObject()) {
+        return exchangeOf(c == null ? null : c.points);
+    }
+
+    /** The same settings from the raw {@code points} block, so the client and server read them once. */
+    public static Exchange exchangeOf(JsonObject points) {
+        if (points == null || !points.has("exchange") || !points.get("exchange").isJsonObject()) {
             return new Exchange(0, Integer.MAX_VALUE);
         }
-        JsonObject exchange = c.points.getAsJsonObject("exchange");
+        JsonObject exchange = points.getAsJsonObject("exchange");
+        JsonElement curve = exchange.get("cost_per_level");
         int cost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
                 && exchange.get("xp_levels").getAsJsonPrimitive().isNumber()
                 ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
         int limit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
                 && exchange.get("level_limit").getAsJsonPrimitive().isNumber()
                 ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
-        return new Exchange(cost, limit);
+        Exchange e = new Exchange(cost, limit, curve);
+        if (curve != null && cost <= 0) {
+            cost = e.costAt(0);
+            e = new Exchange(cost, limit, curve);
+        }
+        return e;
+    }
+
+    /** The price of the next exchange purchase for this player (the curve is evaluated at the purchases already made). */
+    public static int exchangeCost(PlayerProgress p, ProgressModel.Chapter c) {
+        Exchange e = exchangeOf(c);
+        return e.costAt(p.exchange.getOrDefault(key(c), 0));
     }
 
     /** Whether one exchange purchase is allowed now: open chapter, levels to pay, and the limit counted per pool. */
@@ -696,10 +755,18 @@ public final class ProgressRules {
             return false;
         }
         Exchange e = exchangeOf(c);
-        if (e.cost() <= 0 || playerLevel < e.cost()) {
+        int used = p.exchange.getOrDefault(key(c), 0);
+        int cost = e.costAt(used);
+        if (cost <= 0 || playerLevel < cost) {
             return false;
         }
-        return p.exchange.getOrDefault(key(c), 0) < e.limit();
+        return used < e.limit();
+    }
+
+    private static int levelLimit(JsonObject points) {
+        return points != null && points.has("level_limit") && points.get("level_limit").isJsonPrimitive()
+                && points.get("level_limit").getAsJsonPrimitive().isNumber()
+                ? points.get("level_limit").getAsInt() : Integer.MAX_VALUE;
     }
 
     /** Records one exchange purchase: the counter and the extra point both live on the pool key. */
@@ -763,7 +830,7 @@ public final class ProgressRules {
         if (amount <= 0 || nothingLeft(p, c)) {
             return 0;
         }
-        int limit = c.points != null && c.points.has("level_limit") ? c.points.get("level_limit").getAsInt() : Integer.MAX_VALUE;
+        int limit = levelLimit(c.points);
         String key = key(c);
         int lvl = p.level.getOrDefault(key, 0);
         double x = p.xp.getOrDefault(key, 0.0) + amount;

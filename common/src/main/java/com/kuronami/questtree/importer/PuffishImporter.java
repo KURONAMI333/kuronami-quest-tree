@@ -33,6 +33,7 @@ public final class PuffishImporter {
         JsonObject skills = obj(files.get("skills.json"));
         JsonObject cons = obj(files.get("connections.json"));
         JsonObject exp = obj(files.get("experience.json"));
+        JsonObject exch = obj(files.get("exchange.json"));
         boolean patch = !files.containsKey("category.json");
         // keep the source namespace: two mods may both ship a "combat" tree
         String cid = "skill_" + FtbQuestsImporter.slug(source.replace('/', '_'));
@@ -75,6 +76,16 @@ public final class PuffishImporter {
                 case "enabled" -> points.add("experience_enabled", kv.getValue());
                 default -> out.unknown("experience", kv.getKey());
             }
+        }
+        JsonObject exchange = new JsonObject();
+        for (Map.Entry<String, JsonElement> kv : exch.entrySet()) {
+            switch (kv.getKey()) {
+                case "cost_per_level", "level_limit" -> exchange.add(kv.getKey(), kv.getValue());
+                default -> out.unknown("exchange", kv.getKey());
+            }
+        }
+        if (!exchange.isEmpty()) {
+            points.add("exchange", exchange);
         }
         o.add("points", points);
 

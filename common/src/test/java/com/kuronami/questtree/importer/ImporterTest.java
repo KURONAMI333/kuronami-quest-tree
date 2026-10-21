@@ -301,6 +301,22 @@ class ImporterTest {
         org.junit.jupiter.api.Assertions.assertEquals("ffffffffffffffff", FtbQuestsImporter.tableId("-1"));
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("611A165B35847A5A"));
     }
+    /** 11. exchange.json's level_limit and cost_per_level are carried into points.exchange unchanged. */
+    @Test
+    void puffishExchangeConverts() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        files.put("exchange.json", JsonParser.parseString("""
+                {"level_limit": 3,
+                 "cost_per_level": {"type": "values", "data": {"values": [5, 10, 20]}}}
+                """));
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject exchange = out.chapters.get("skill_puffish_mining").getAsJsonObject("points").getAsJsonObject("exchange");
+        assertEquals(3, exchange.get("level_limit").getAsInt());
+        assertEquals(5, exchange.getAsJsonObject("cost_per_level").getAsJsonObject("data")
+                .getAsJsonArray("values").get(0).getAsInt());
+        assertTrue(out.unmapped.isEmpty(), out.unmapped.toString());
+    }
     /** 10. Pufferfish's required_* fields keep their meaning in our requires block; required_skills 0 is a root. */
     @Test
     void puffishReturnRequirementsConvert() throws Exception {

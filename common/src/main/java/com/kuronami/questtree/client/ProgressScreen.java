@@ -1876,7 +1876,11 @@ public class ProgressScreen extends Screen {
         boolean canExchange = owner && ProgressRules.canExchange(p, mc, playerLevel);
         List<Component> exchangeTip = new ArrayList<>();
         exchangeTip.add(exchange);
-        exchangeTip.add(Component.translatable("screen.kuronami_quest_tree.skill.cost_levels", ch.exchangeCost));
+        int nextCost = ProgressRules.exchangeCost(p, mc);
+        exchangeTip.add(Component.translatable(ch.exchangeLimit != Integer.MAX_VALUE
+                && ClientProgress.exchangeUsed(ch) >= ch.exchangeLimit
+                ? "screen.kuronami_quest_tree.skill.cost_levels"
+                : "screen.kuronami_quest_tree.skill.cost_levels_next", nextCost));
         if (!canExchange) {
             int used = ClientProgress.exchangeUsed(ch);
             exchangeTip.add(Component.translatable(!owner

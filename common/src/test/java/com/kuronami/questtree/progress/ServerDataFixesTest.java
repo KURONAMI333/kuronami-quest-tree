@@ -276,6 +276,25 @@ class ServerDataFixesTest {
         assertTrue(p.exchange.isEmpty());
         assertTrue(p.chapterOpen.isEmpty(), "both chapters in the pool forget the override");
     }
+    /** 11. Exchange costs come from level_limit and a values/expression cost_per_level curve at the purchase count. */
+    @Test
+    void exchangeCurvePricesEachPurchase() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 0, "exchange": {
+                  "level_limit": 2, "cost_per_level": {"type": "expression", "data": {"expression": "5 + level * 10"}}}},
+                  "nodes": {}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(5, ProgressRules.exchangeCost(p, a));
+        p.exchange.put(ProgressRules.key(a), 1);
+        assertEquals(15, ProgressRules.exchangeCost(p, a));
+        assertFalse(ProgressRules.canExchange(p, a, 14));
+        assertTrue(ProgressRules.canExchange(p, a, 15));
+        p.exchange.put(ProgressRules.key(a), 2);
+        assertFalse(ProgressRules.canExchange(p, a, 100), "the level limit is two purchases");
+    }
     /** 10. Pufferfish's required points, spent points and exclusive count gate a skill without hiding its data. */
     @Test
     void pufferfishReturnRequirementsGateSkills() {

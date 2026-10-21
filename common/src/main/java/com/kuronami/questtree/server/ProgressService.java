@@ -365,7 +365,7 @@ public final class ProgressService {
         if (!ProgressRules.canExchange(p, c, player.experienceLevel)) {
             return;
         }
-        player.giveExperienceLevels(-ProgressRules.exchangeOf(c).cost());
+        player.giveExperienceLevels(-ProgressRules.exchangeCost(p, c));
         ProgressRules.applyExchange(p, c);
         ProgressStore.get(player.server).setDirty();
         markDirty(player);

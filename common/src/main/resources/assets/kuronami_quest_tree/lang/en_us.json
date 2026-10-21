@@ -63,6 +63,7 @@
   "screen.kuronami_quest_tree.skill.exchange_left": "Exchange (%s left)",
   "screen.kuronami_quest_tree.skill.cost_points": "Cost: %s points",
   "screen.kuronami_quest_tree.skill.cost_levels": "Cost: %s levels",
+  "screen.kuronami_quest_tree.skill.cost_levels_next": "Next: %s levels",
   "screen.kuronami_quest_tree.skill.team_owner_only": "Only the team owner can use this",
   "screen.kuronami_quest_tree.skill.not_enough_points": "Not enough points",
   "screen.kuronami_quest_tree.skill.nothing_spent": "No points spent",
