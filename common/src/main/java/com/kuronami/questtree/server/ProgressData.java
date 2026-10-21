@@ -107,6 +107,8 @@ public final class ProgressData {
     private static Set<String> droppedNodes = Set.of();
     /** The open world's root; null before a server has told us which world it is. */
     private static Path overlayRoot;
+    /** Reward indices that moved in the last rebuild, for the store to move saved claims once (2026-10-22). */
+    private static Map<String, Map<Integer, Integer>> rewardRemap = Map.of();
 
     private ProgressData() {
     }
@@ -267,6 +269,13 @@ public final class ProgressData {
             return;
         }
 
+        JsonObject oldChapters = base.has("chapters") && base.get("chapters").isJsonObject()
+                ? base.getAsJsonObject("chapters") : new JsonObject();
+        Map<String, Map<Integer, Integer>> moved =
+                com.kuronami.questtree.progress.RewardIndexRemap.between(oldChapters, chapters);
+        if (!moved.isEmpty()) {
+            rewardRemap = moved;
+        }
         base = bundle;
         COMPRESSED.clear();
         model = built;
@@ -285,6 +294,13 @@ public final class ProgressData {
     /** The server stopped: the next world must not keep reading this one's overlay. */
     public static void clearOverlayRoot() {
         overlayRoot = null;
+    }
+
+    /** The reward moves of the last rebuild, cleared once the store has applied them. */
+    public static Map<String, Map<Integer, Integer>> takeRewardRemap() {
+        Map<String, Map<Integer, Integer>> out = rewardRemap;
+        rewardRemap = Map.of();
+        return out;
     }
 
     /** Rebuilds after an edit (the editor asks for this at most once per server tick). */

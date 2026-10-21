@@ -51,7 +51,7 @@ public final class EditorService {
 
     /** The server started: point the overlay at this world and drop the previous world's editing state. */
     public static void onServerStarted(MinecraftServer server) {
-        worldRoot = server.getWorldPath(LevelResource.ROOT);
+        worldRoot = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
         editor = new ProgressionEditor(worldRoot, GameRegistry.INSTANCE);
         editing.clear();
         assemblers.clear();
@@ -147,7 +147,8 @@ public final class EditorService {
         ProgressionEditor.Outcome outcome;
         try {
             outcome = editor.apply(ProgressData.packChapters(), ProgressData.packTables(), ProgressData.packSources(),
-                    chapterId, payload.chapterRevision(), payload.op(), args, ProgressData.packUnreadable());
+                    chapterId, payload.chapterRevision(), payload.op(), args, ProgressData.packUnreadable(),
+                    permissionLevel(player));
         } catch (RuntimeException ex) {
             // a bug in one op must not take the tick or the server down; the file is written last, so nothing changed
             Constants.LOG.error("Progression edit {} on {} failed", payload.op(), chapterId, ex);
@@ -176,8 +177,24 @@ public final class EditorService {
         }
     }
 
+    /** The level a writer holds, 0-4; command rewards need level 4 to be written (2026-10-22 release review). */
+    private static int permissionLevel(ServerPlayer player) {
+        for (int level = 4; level > 0; level--) {
+            if (player.hasPermissions(level)) {
+                return level;
+            }
+        }
+        return 0;
+    }
+
     /** End of a server tick: publish one rebuild for every edit made in the last {@link #PUBLISH_INTERVAL_TICKS}. */
     public static void onServerTick(MinecraftServer server) {
+        // A rebuild may have moved reward indices (an editor reorder, insert or delete): move the saved claim records
+        // once, before the new book is sent (2026-10-22 release review).
+        java.util.Map<String, java.util.Map<Integer, Integer>> rewardRemap = ProgressData.takeRewardRemap();
+        if (!rewardRemap.isEmpty()) {
+            ProgressStore.get(server).remapRewardIndices(rewardRemap);
+        }
         if (!dirty) {
             return;
         }

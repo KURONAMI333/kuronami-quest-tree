@@ -996,6 +996,10 @@ public final class ProgressRules {
         int limit = levelLimit(c.points);
         String key = key(c);
         int lvl = p.level.getOrDefault(key, 0);
+        // Pufferfish's Skills' points.stop_when_maxed: at the cap no more experience is taken at all
+        if (lvl >= limit && ProgressModel.boolOf(c.points, "stop_when_maxed")) {
+            return 0;
+        }
         double x = p.xp.getOrDefault(key, 0.0) + amount;
         int gained = 0;
         while (lvl < limit) {
@@ -1008,7 +1012,7 @@ public final class ProgressRules {
             lvl++;
             gained++;
         }
-        if (lvl >= limit) {
+        if (lvl >= limit && ProgressModel.boolOf(c.points, "stop_when_maxed")) {
             x = 0;
         }
         p.level.put(key, lvl);
@@ -1091,6 +1095,19 @@ public final class ProgressRules {
             return true;
         }
         return type.equals("item") && (repeatable(n) || (task.has("consume") && task.get("consume").getAsBoolean()));
+    }
+
+    /** Respec works only inside an unlocked chapter, however the request reached the server (2026-10-22 review). */
+    public static boolean respecAllowed(PlayerProgress p, ProgressModel.Chapter c) {
+        return chapterUnlocked(p, c);
+    }
+
+    /**
+     * An item task from FTB Quests' {@code only_from_crafting}: the inventory scan must leave it alone and only a
+     * crafting result moves it (2026-10-22 release review).
+     */
+    public static boolean craftedOnly(JsonObject task) {
+        return ProgressModel.boolOf(task, "only_from_crafting");
     }
 
     public boolean take(PlayerProgress p, ProgressModel.Node n) {

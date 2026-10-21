@@ -48,6 +48,11 @@ public class FabricItemStorageHelper implements IItemStorageHelper {
     }
 
     @Override
+    public boolean supportsEnergy() {
+        return false;
+    }
+
+    @Override
     public long energyStored(ItemStack stack) {
         // Fabric has no energy API in the base API; energy tasks stay at 0 on this loader
         return 0;

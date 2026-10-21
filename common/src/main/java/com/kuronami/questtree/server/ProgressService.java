@@ -257,27 +257,30 @@ public final class ProgressService {
     public static void onKill(ServerPlayer player, Entity killed) {
         PlayerProgress p = progress(player);
         ProgressRules r = rules();
+        // Only kill tasks can move. The old loop walked every node before finding that out, and rechecked even for a
+        // kill no task names (2026-10-22 release review).
+        boolean changed = false;
         // which tasks may move is read before anything is bumped: one kill must not finish two sequential steps
         List<TaskRef> hits = new ArrayList<>();
-        for (ProgressModel.Node n : r.model().nodes.values()) {
-            if (!working(r, p, n)) {
-                continue;
-            }
-            for (int i = 0; i < n.tasks.size(); i++) {
-                JsonObject t = n.tasks.get(i);
-                if (r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
-                        && type(t).equals("kill") && entityMatches(player, t, killed)) {
-                    hits.add(new TaskRef(n, i));
-                }
+        for (TaskRef ref : tasksOfType(r, "kill")) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
+            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
+                    && entityMatches(player, t, killed)) {
+                hits.add(ref);
             }
         }
         for (TaskRef hit : hits) {
             ProgressModel.Node n = hit.node();
             int i = hit.index();
             bump(player, p, n, i, p.task(n.key, i) + 1);
+            changed = true;
         }
         SkillExperience.onKill(player, p, killed);
-        recheck(player, p);
+        if (changed) {
+            recheck(player, p);
+        }
     }
 
     /** A block was broken (survival or creative). Counts "break" tasks, capped at the target. */
@@ -307,7 +310,9 @@ public final class ProgressService {
                 bump(player, p, n, i, Math.min(had + 1, target));
             }
         }
-        recheck(player, p);
+        if (!hits.isEmpty()) {
+            recheck(player, p);
+        }
     }
 
     // ------------------------------------------------------------------ interaction tasks (2026-10-21)
@@ -391,6 +396,10 @@ public final class ProgressService {
         ProgressRules r = rules();
         List<TaskRef> refs = new ArrayList<>(tasksOfType(r, kind));
         refs.addAll(tasksOfType(r, "interaction"));
+        if (kind.equals("craft")) {
+            // item tasks with only_from_crafting: the inventory scan skips them, so the craft itself counts
+            refs.addAll(tasksOfType(r, "item"));
+        }
         if (refs.isEmpty()) {
             return;
         }
@@ -401,6 +410,14 @@ public final class ProgressService {
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
             if (!working(r, p, n) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
+                continue;
+            }
+            if (type(t).equals("item")) {
+                if (!kind.equals("craft") || !ProgressRules.craftedOnly(t)
+                        || !ItemRequirement.of(t).matches(stack, player.registryAccess())) {
+                    continue;
+                }
+                hits.add(ref);
                 continue;
             }
             String wanted = type(t).equals("interaction") ? interactionKind(t) : type(t);
@@ -554,40 +571,51 @@ public final class ProgressService {
             flush(player);
             return;
         }
+        boolean changed = false;
         switch (a.action()) {
             case "claim" -> {
                 if (n != null) {
+                    int before = claimMarks(p);
                     claim(player, p, n, a.index());
+                    changed = claimMarks(p) != before;
                 }
             }
             case "claim_reward" -> {
                 if (n != null) {
+                    int before = claimMarks(p);
                     claimOne(player, p, n, a.index(), a.choice());
+                    changed = claimMarks(p) != before;
                 }
             }
+            // Emergency items do not touch quest progress, so the book does not need a re-check for them.
             case "emergency" -> emergency(player, p);
             case "claim_all", "claim_chapter" -> {
                 // claim_chapter names a chapter in the node field: the header's button claims that chapter only
                 // (2026-10-20); claim_all takes every chapter
                 String only = a.action().equals("claim_chapter") ? a.node() : null;
+                int before = claimMarks(p);
                 for (ProgressModel.Node m : r.model().nodes.values()) {
                     if (r.state(p, m) == State.CLAIM && !m.chapter.isSkills() && !ProgressModel.excludedFromClaimAll(m)
                             && (only == null || m.chapter.id.equals(only))) {
                         claim(player, p, m, -1);
                     }
                 }
+                changed = claimMarks(p) != before;
             }
             case "take" -> {
                 if (n != null && r.take(p, n)) {
                     Rewards.giveSkill(player, p, n, p.taken.getOrDefault(n.key, 1) - 1);
                     event(player, p, "take", n.key);
+                    changed = true;
                 }
             }
             case "submit" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
                         && conditionsMet(player, p, n, n.tasks.get(a.index()), true)
                         && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
+                    long before = p.task(n.key, a.index());
                     submit(player, p, n, a.index());
+                    changed = p.task(n.key, a.index()) != before;
                 }
             }
             case "check" -> {
@@ -609,6 +637,7 @@ public final class ProgressService {
                     }
                     if (next != current) {
                         bump(player, p, n, a.index(), next);
+                        changed = true;
                     }
                 }
             }
@@ -618,23 +647,40 @@ public final class ProgressService {
                 if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
                     refuseSharedAction(player);
                 } else if (c != null) {
+                    int before = p.exchange.getOrDefault(c.id, 0);
                     exchange(player, p, c);
+                    changed = p.exchange.getOrDefault(c.id, 0) != before;
                 }
             }
             case "respec" -> {
                 // the skills screen's respec button: give back every point taken in the chapter, for points.respec.cost
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
+                if (c != null && !ProgressRules.respecAllowed(p, c)) {
+                    // the chapter id rides in the node field, so the top-of-method guard never saw it: a client that
+                    // skips the disabled button must still be refused (2026-10-22 release review)
+                    return;
+                }
                 if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
                     refuseSharedAction(player);
                 } else if (c != null && PlayerCommands.respec(player, p, c, true)) {
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
+                    changed = true;
                 }
             }
             default -> Constants.LOG.debug("Unknown progression action {}", a.action());
         }
-        recheck(player, p);
+        // A no-op (nothing claimable, hand-in with no items, exchange without levels) used to re-check the whole book
+        // and resend progress anyway; only a real change needs that (2026-10-22 release review).
+        if (changed) {
+            recheck(player, p);
+        }
         flush(player);
+    }
+
+    /** A cheap count of claim bookkeeping, to tell whether a claim action actually paid something. */
+    private static int claimMarks(PlayerProgress p) {
+        return p.claimed.size() + p.claimedRewards.size() + p.teamClaimedRewards.size();
     }
 
     /**
@@ -702,6 +748,10 @@ public final class ProgressService {
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
                 if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
+                    continue;
+                }
+                if (type(t).equals("item") && ProgressRules.craftedOnly(t)) {
+                    // only_from_crafting: a crafting result moves this, not what the bag happens to hold
                     continue;
                 }
                 String ty = type(t);

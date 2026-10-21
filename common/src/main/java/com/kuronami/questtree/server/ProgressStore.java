@@ -1,5 +1,6 @@
 package com.kuronami.questtree.server;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -73,6 +75,68 @@ public final class ProgressStore extends SavedData {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Moves claim records when an editor reorder/insert/delete changed reward indices (2026-10-22 release review).
+     * Keys are {@code <node>#<index>} for claims and {@code <node>#<rank>#<index>} for pending, roll and skill records;
+     * a record whose reward was deleted is dropped.
+     */
+    public void remapRewardIndices(Map<String, Map<Integer, Integer>> remaps) {
+        if (remaps.isEmpty()) {
+            return;
+        }
+        boolean changed = false;
+        for (TeamProgress team : data.teams.values()) {
+            changed |= com.kuronami.questtree.progress.RewardIndexRemap.applyTo(team.shared.claimedRewards, remaps);
+            changed |= remapPending(team.shared, remaps);
+            changed |= com.kuronami.questtree.progress.RewardIndexRemap.applyTo(team.teamClaimedRewards, remaps);
+            changed |= com.kuronami.questtree.progress.RewardIndexRemap.applyTo(team.paidSkillRewards, remaps);
+            for (PlayerPart part : team.players.values()) {
+                changed |= com.kuronami.questtree.progress.RewardIndexRemap.applyTo(part.claimedRewards, remaps);
+                changed |= remapPending(part, remaps);
+            }
+        }
+        if (changed) {
+            setDirty();
+        }
+    }
+
+    private static boolean remapPending(PlayerPart part,
+                                        Map<String, Map<Integer, Integer>> remaps) {
+        boolean changed = remapKeys(part.pendingRewards, remaps);
+        changed |= remapKeys(part.rewardRolls, remaps);
+        return changed;
+    }
+
+    private static <V> boolean remapKeys(Map<String, V> map,
+                                         Map<String, Map<Integer, Integer>> remaps) {
+        if (map.isEmpty()) {
+            return false;
+        }
+        Map<String, V> moved = new java.util.LinkedHashMap<>();
+        boolean changed = false;
+        for (Map.Entry<String, V> e : map.entrySet()) {
+            String key = com.kuronami.questtree.progress.RewardIndexRemap.apply(e.getKey(), remaps);
+            if (key == null) {
+                changed = true;
+                continue;
+            }
+            changed |= !key.equals(e.getKey());
+            moved.put(key, e.getValue());
+        }
+        if (changed) {
+            map.clear();
+            map.putAll(moved);
+        }
+        return changed;
+    }
+
+    private static boolean remapPending(PlayerProgress p,
+                                        Map<String, Map<Integer, Integer>> remaps) {
+        boolean changed = remapKeys(p.pendingRewards, remaps);
+        changed |= remapKeys(p.rewardRolls, remaps);
+        return changed;
     }
 
     /**
@@ -162,7 +226,7 @@ public final class ProgressStore extends SavedData {
         }
     }
 
-    private static ProgressStore load(CompoundTag tag, HolderLookup.Provider registries) {
+    static ProgressStore load(CompoundTag tag, HolderLookup.Provider registries) {
         ProgressStore store = new ProgressStore();
         if (tag.contains("version") && tag.getInt("version") >= TeamStoreData.VERSION && tag.contains("teams")) {
             JsonObject root = new JsonObject();
@@ -171,7 +235,13 @@ public final class ProgressStore extends SavedData {
             CompoundTag saved = tag.getCompound("teams");
             for (String key : saved.getAllKeys()) {
                 try {
-                    teams.add(key, JsonParser.parseString(saved.getString(key)));
+                    // A compound is the current form; a string is the whole record in one writeUTF, which old saves
+                    // (and any save made before this fix) used, so both must load (2026-10-22 release review).
+                    net.minecraft.nbt.Tag record = saved.get(key);
+                    JsonElement parsed = record instanceof CompoundTag compound
+                            ? com.kuronami.questtree.progress.JsonTags.fromTag(compound)
+                            : JsonParser.parseString(saved.getString(key));
+                    teams.add(key, parsed);
                 } catch (RuntimeException ex) {
                     Constants.LOG.error("Could not read team {}: {}", key, ex.toString());
                 }
@@ -189,6 +259,11 @@ public final class ProgressStore extends SavedData {
                 migrations.addProperty(key, savedMigrations.getString(key));
             }
             root.add("migrations", migrations);
+            // personal_nodes was written to the JSON form but not to NBT, so a restart forgot the routing set and
+            // migrated personal/shared values again on every start (2026-10-22 release review).
+            if (tag.contains("personal_nodes")) {
+                root.add("personal_nodes", com.kuronami.questtree.progress.JsonTags.fromTag(tag.get("personal_nodes")));
+            }
             store.data = TeamStoreData.fromJson(root);
             int droppedSkillPending = 0;
             for (TeamProgress team : store.data.teams.values()) {
@@ -222,7 +297,15 @@ public final class ProgressStore extends SavedData {
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("version", TeamStoreData.VERSION);
         CompoundTag teams = new CompoundTag();
-        data.teams.forEach((id, team) -> teams.putString(id.toString(), team.toJson().toString()));
+        data.teams.forEach((id, team) -> {
+            try {
+                // One compound per team, not one writeUTF string: a big book overflows the 65,535-byte string and the
+                // whole save failed, taking every team's progress with it (2026-10-22 release review).
+                teams.put(id.toString(), com.kuronami.questtree.progress.JsonTags.toTag(team.toJson()));
+            } catch (RuntimeException ex) {
+                Constants.LOG.error("Could not write progress of team {}: {}", id, ex.toString());
+            }
+        });
         tag.put("teams", teams);
         CompoundTag owners = new CompoundTag();
         data.owners.forEach((player, team) -> owners.putString(player.toString(), team.toString()));
@@ -230,6 +313,11 @@ public final class ProgressStore extends SavedData {
         CompoundTag migrations = new CompoundTag();
         data.migrations.forEach(migrations::putString);
         tag.put("migrations", migrations);
+        if (!data.personalNodes.isEmpty()) {
+            net.minecraft.nbt.ListTag personal = new net.minecraft.nbt.ListTag();
+            data.personalNodes.forEach(node -> personal.add(net.minecraft.nbt.StringTag.valueOf(node)));
+            tag.put("personal_nodes", personal);
+        }
         return tag;
     }
 }
