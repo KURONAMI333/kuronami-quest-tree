@@ -37,7 +37,16 @@ public final class Rewards {
     /** Hands out one reward. False when it could not be paid (a missing provider or a failed payment). */
     static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
                         String rollKey) {
-        if (!ProgressService.conditionsMet(player, p, rw) || blocked(p, rw)) {
+        return give(player, p, n, rw, choice, rollKey, false);
+    }
+
+    /**
+     * As above. {@code ignoreBlock} is for skill rewards, which are never held back: blocking stops quest rewards
+     * only (2026-10-22 review).
+     */
+    private static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
+                                String rollKey, boolean ignoreBlock) {
+        if (!ProgressService.conditionsMet(player, p, rw) || (!ignoreBlock && blocked(p, rw))) {
             return false;
         }
         try {
@@ -51,7 +60,7 @@ public final class Rewards {
                 case "xp" -> { player.giveExperiencePoints(intOf(rw, "amount", 0)); yield true; }
                 case "xp_levels" -> { player.giveExperienceLevels(intOf(rw, "amount", 0)); yield true; }
                 case "command" -> { command(player, rw); yield true; }
-                case "table" -> table(player, p, n, rw, choice, rollKey);
+                case "table" -> table(player, p, n, rw, choice, rollKey, ignoreBlock);
                 case "advancement" -> { advancement(player, rw); yield true; }
                 case "stage" -> { stage(player, p, rw); yield true; }
                 case "attribute" -> { attribute(player, n.key, slotOf(n, rw), rw); yield true; }
@@ -159,7 +168,10 @@ public final class Rewards {
         }
     }
 
-    /** Pays rewards that were taken while an admin had blocked pay-outs. Called when the block is lifted. */
+    /**
+     * Pays quest rewards that were taken while an admin had blocked pay-outs. Called when the block is lifted. Skill
+     * rewards are never blocked and never enter this list (2026-10-22 review).
+     */
     static void payPending(ServerPlayer player, PlayerProgress p) {
         var model = ProgressService.rules().model();
         if (!com.kuronami.questtree.progress.RewardLedger.canResolve(model)) {
@@ -169,7 +181,6 @@ public final class Rewards {
         boolean changed = false;
         for (String key : new ArrayList<>(p.pendingRewards.keySet())) {
             String node = com.kuronami.questtree.progress.RewardLedger.pendingNode(key);
-            int rank = com.kuronami.questtree.progress.RewardLedger.pendingRank(key);
             int index = com.kuronami.questtree.progress.RewardLedger.pendingIndex(key);
             ProgressModel.Node n = model.nodes.get(node);
             if (n == null) {
@@ -177,7 +188,7 @@ public final class Rewards {
                 changed = true;
                 continue;
             }
-            List<JsonObject> list = rank >= 0 ? rewardsOfRank(n, rank) : n.rewards;
+            List<JsonObject> list = n.rewards;
             if (index < 0 || index >= list.size()) {
                 p.pendingRewards.remove(key);
                 changed = true;
@@ -227,17 +238,18 @@ public final class Rewards {
         }
     }
 
-    /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */
+    /**
+     * Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. Skill
+     * rewards are always paid on the spot, even while an admin blocks quest rewards (2026-10-22 review).
+     */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
         // A respec keeps the marks, so the one-off rewards of a rank cannot be farmed by taking it again. They are
-        // recorded per reward once it was actually paid or moved to pending (2026-10-22 review).
+        // recorded per reward once it was actually paid.
         giveSkillOne(player, p, n, rank, true);
         // the skill belongs to the team: its per-player effects (attributes, commands, tags) reach every online member.
         // Shared values (points) and one-off pay-outs are applied once, by the player who took it
         for (ServerPlayer member : members(player)) {
             if (!member.getUUID().equals(player.getUUID())) {
-                // a member's own pay-out (a blocked command or tag) is owed to that member, not to the taker, and
-                // each member's own marks decide whether that member already had it
                 giveSkillOne(member, ProgressService.progress(member), n, rank, false);
             }
         }
@@ -263,20 +275,12 @@ public final class Rewards {
                 attribute(player, n.key, rank * 100 + index, rw);
             } else if (full) {
                 if (SkillRewardPolicy.pays(rw, firstTake)) {
-                    boolean paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank,
-                            false, blocked(p, rw), () -> give(player, p, n, rw, -1, rollKey));
+                    boolean paid = give(player, p, n, rw, -1, rollKey, true);
                     SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
                 }
             } else if ((type.equals("command") && (firstTake || SkillRewardPolicy.hasLockCommand(rw)))
                     || type.equals("tag")) {
-                boolean paid;
-                if (blocked(p, rw)) {
-                    // a member's own pay-out is owed to them, not paid and forgotten
-                    paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false,
-                            true, () -> true);
-                } else {
-                    paid = give(player, p, n, rw, -1, rollKey);
-                }
+                boolean paid = give(player, p, n, rw, -1, rollKey, true);
                 SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
             }
         }
@@ -406,27 +410,8 @@ public final class Rewards {
     static void revokeSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
         // points are shared, and giveSkill paid them only for the taker: take them back once, before the member
         // loop can run the per-player effects (a respec before this point is refused when they were already spent).
-        // A points reward still pending was never paid, so its debt is cancelled instead (2026-10-22 review).
-        Map<String, PlayerProgress> owners = new HashMap<>();
-        Map<String, Integer> pending = new HashMap<>();
-        for (ServerPlayer member : members(player)) {
-            PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
-            mp.pendingRewards.forEach((key, owed) -> {
-                pending.merge(key, owed, Integer::sum);
-                owners.putIfAbsent(key, mp);
-            });
-        }
         Map<String, Integer> before = new HashMap<>(p.bonus);
-        ProgressService.rules().revokePoints(p, n, taken, pending);
-        // write the cancellations back into the records that owed them
-        for (Map.Entry<String, PlayerProgress> e : owners.entrySet()) {
-            int left = pending.getOrDefault(e.getKey(), 0);
-            if (left > 0) {
-                e.getValue().pendingRewards.put(e.getKey(), left);
-            } else {
-                e.getValue().pendingRewards.remove(e.getKey());
-            }
-        }
+        ProgressService.rules().revokePoints(p, n, taken);
         // an admin respec/reset does not go through the screen's affordability check, so an overdraft must at least
         // leave a trace instead of quietly showing 0 points (2026-10-22 review)
         for (Map.Entry<String, Integer> e : p.bonus.entrySet()) {
@@ -449,11 +434,7 @@ public final class Rewards {
             for (int index = 0; index < list.size(); index++) {
                 JsonObject rw = list.get(index);
                 if (ProgressService.type(rw).equals("points")) {
-                    // revokePoints took the shared points back once for the team and cancelled a pending copy there
-                    continue;
-                }
-                if (SkillRewardPolicy.cancelPending(p, n, rank, index)) {
-                    // the pay-out was still owed, not made: the debt goes with the skill and nothing is undone
+                    // revokePoints took the shared points back once for the team
                     continue;
                 }
                 if (!ProgressService.conditionsMet(player, p, rw)) {
@@ -607,7 +588,7 @@ public final class Rewards {
      * later, so the contents arrive directly instead of the box.
      */
     private static boolean table(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw,
-                                 int choice, String rollKey) {
+                                 int choice, String rollKey, boolean ignoreBlock) {
         JsonObject table = ProgressService.rules().model().rewardTables.get(ProgressService.str(rw, "table"));
         if (table == null || !table.has("entries")) {
             Constants.LOG.warn("Reward table '{}' of {} does not exist", ProgressService.str(rw, "table"), n.key);
@@ -630,13 +611,14 @@ public final class Rewards {
                     all.add(i);
                 }
                 return com.kuronami.questtree.progress.RewardPayout.pay(p, key + ">all", all,
-                        (index, position) -> give(player, p, n, entries.get(index), -1, key + ">all>" + position));
+                        (index, position) -> give(player, p, n, entries.get(index), -1,
+                                key + ">all>" + position, ignoreBlock));
             }
             case "choice" -> {
                 if (choice < 0 || choice >= entries.size()) {
                     return false;
                 }
-                return give(player, p, n, entries.get(choice), -1, key + ">choice");
+                return give(player, p, n, entries.get(choice), -1, key + ">choice", ignoreBlock);
             }
             default -> {
                 // FTB Quests: a random reward never rolls "empty" (only a loot crate's table uses empty_weight), and
@@ -653,7 +635,7 @@ public final class Rewards {
                 }
                 boolean paid = com.kuronami.questtree.progress.RewardPayout.pay(p, key, picks,
                         (index, position) -> index < 0 || index >= entries.size()
-                                || give(player, p, n, entries.get(index), -1, key + ">" + position));
+                                || give(player, p, n, entries.get(index), -1, key + ">" + position, ignoreBlock));
                 if (paid) {
                     p.rewardRolls.remove(picksKey);
                 }

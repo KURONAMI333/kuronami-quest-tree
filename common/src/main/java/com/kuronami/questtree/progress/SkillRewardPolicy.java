@@ -47,19 +47,6 @@ public final class SkillRewardPolicy {
     }
 
     /**
-     * Cancels one owed pay-out of a rank before the skill is taken back. Returns true when it was still pending, so
-     * nothing was handed out and the caller must skip its undo. The mark goes with the debt, so a later take can pay
-     * the reward (2026-10-22 review); otherwise a blocked take followed by a respec would lose it for good.
-     */
-    public static boolean cancelPending(PlayerProgress p, ProgressModel.Node n, int rank, int index) {
-        if (!RewardLedger.takePendingBack(p, n.key, rank, index)) {
-            return false;
-        }
-        p.claimedRewards.remove(mark(n, rank, index));
-        return true;
-    }
-
-    /**
      * The indexes of a rank's rewards that were handed out: the ones whose conditions held. A reward whose conditions
      * did not hold was never paid, so a respec has nothing to undo and a login must not put it back (2026-10-22
      * review). Order follows the reward list.
