@@ -16,7 +16,9 @@ public abstract class ItemEntityPickupMixin {
     @Inject(method = "playerTouch", at = @At("TAIL"))
     private void questTree$pickedUp(Player player, CallbackInfo ci) {
         ItemEntity self = (ItemEntity) (Object) this;
-        if (!self.level().isClientSide && player instanceof ServerPlayer sp && self.isRemoved()) {
+        if (!self.level().isClientSide && player instanceof ServerPlayer sp && self.isRemoved()
+                && com.kuronami.questtree.progress.PickupRule.counts(self.getOwner() == null ? null : self.getOwner().getUUID(),
+                sp.getUUID())) {
             ProgressService.onPickup(sp, self.getItem().copy());
         }
     }
