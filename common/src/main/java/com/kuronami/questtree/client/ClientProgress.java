@@ -48,6 +48,8 @@ public final class ClientProgress {
     private static int receivingGeneration = -1;
     private static ByteArrayOutputStream buffer;
     private static int nextPart;
+    /** Quests "claim all" would take; read every frame, so it is worked out once per progress/rules pair. */
+    private static final ProgressCountCache CLAIMABLE = new ProgressCountCache();
 
     private ClientProgress() {
     }
@@ -330,6 +332,9 @@ public final class ClientProgress {
         if (m == null) {
             return 0;
         }
+        if (CLAIMABLE.valid(progress, r)) {
+            return CLAIMABLE.value();
+        }
         int n = 0;
         for (ClientModel.Node node : m.nodesByKey.values()) {
             ClientModel.Chapter chapter = m.chapterOf.get(node.key);
@@ -341,6 +346,7 @@ public final class ClientProgress {
                 n++;
             }
         }
+        CLAIMABLE.store(progress, r, n);
         return n;
     }
 
@@ -389,6 +395,7 @@ public final class ClientProgress {
         buffer = null;
         rawChapters = null;
         rawDeleted = new JsonObject();
+        CLAIMABLE.clear();
         EditorSession.onLogout();
         ClientTeam.onLogout();
         ProgressScreen.clearViews();
