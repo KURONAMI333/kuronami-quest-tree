@@ -42,7 +42,7 @@ public final class Rewards {
                 case "stage" -> ServerCommands.run(player, "pack_stages " + (ProgressModel.boolOf(rw, "remove") ? "remove " : "add ")
                         + player.getGameProfile().getName() + " " + ProgressService.str(rw, "stage"), 2, true);
                 case "attribute" -> attribute(player, n.key, slotOf(n, rw), rw);
-                case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
+                case "points" -> p.bonus.merge(pointsChapter(n, rw), ProgressRules.pointsAmount(rw), Integer::sum);
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
                 case "toast" -> ProgressService.event(player, p, "toast", n.key);
                 case "scoreboard" -> scoreboard(player, p, n, rw);

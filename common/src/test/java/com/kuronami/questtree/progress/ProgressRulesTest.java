@@ -412,6 +412,24 @@ class ProgressRulesTest {
         assertTrue(rules.unlocked(p, n), "the spent point must not lock the second rank");
     }
 
+    /** Paying and revoking read a points amount the same way: missing is 1, and a non-number or non-positive is 0. */
+    @Test
+    void pointsAmountIsSharedByGrantAndRevoke() {
+        assertEquals(1, ProgressRules.pointsAmount(JsonParser.parseString("{}").getAsJsonObject()));
+        assertEquals(3, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": 3}
+                """).getAsJsonObject()));
+        assertEquals(0, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": "3"}
+                """).getAsJsonObject()));
+        assertEquals(0, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": -2}
+                """).getAsJsonObject()));
+        assertEquals(0, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": 0}
+                """).getAsJsonObject()));
+    }
+
     /** The new per-reward marks and the first-join flag survive the save file (2026-10-20). */
     @Test
     void perRewardClaimsAndBookFlagRoundTrip() {

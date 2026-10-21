@@ -516,10 +516,26 @@ public final class ProgressRules {
         int total = 0;
         for (JsonObject rw : rewardsOfRank(n, rank)) {
             if (isPoints(rw)) {
-                total += intOf(rw, "amount", 1);
+                total += pointsAmount(rw);
             }
         }
         return total;
+    }
+
+    /**
+     * A {@code points} reward's amount, the one reading both paying and revoking use. A missing amount is the
+     * historical default of 1; anything that is not a number, or is zero/negative, pays and takes back nothing
+     * (2026-10-22 review). Negative values used to be silently clamped on revoke but still paid on grant.
+     */
+    public static int pointsAmount(JsonObject reward) {
+        JsonElement amount = reward.get("amount");
+        if (amount == null) {
+            return 1;
+        }
+        if (!amount.isJsonPrimitive() || !amount.getAsJsonPrimitive().isNumber()) {
+            return 0;
+        }
+        return Math.max(0, amount.getAsInt());
     }
 
     /** Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into). */
@@ -527,7 +543,7 @@ public final class ProgressRules {
         for (int rank = 0; rank < Math.max(0, taken); rank++) {
             for (JsonObject rw : rewardsOfRank(n, rank)) {
                 if (isPoints(rw)) {
-                    p.bonus.merge(pointsTarget(n, rw), -Math.max(0, intOf(rw, "amount", 1)), Integer::sum);
+                    p.bonus.merge(pointsTarget(n, rw), -pointsAmount(rw), Integer::sum);
                 }
             }
         }
