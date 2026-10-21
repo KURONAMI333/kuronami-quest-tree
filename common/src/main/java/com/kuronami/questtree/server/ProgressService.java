@@ -77,6 +77,12 @@ public final class ProgressService {
     private static final Map<UUID, Map<String, Integer>> OBSERVED = new HashMap<>();
     /** Player progress already migrated for one loaded data model, so a save is not folded into its pool twice. */
     private static final Map<PlayerProgress, ProgressModel> MIGRATED = new java.util.WeakHashMap<>();
+    /** Barrier answers for a few ticks, so walking against one does not rerun progress and team resolution every collision. */
+    private static final Map<UUID, BarrierVerdict> BARRIERS = new HashMap<>();
+    private static final int BARRIER_TTL = 4;
+
+    private record BarrierVerdict(String mode, String key, int tick, boolean allowed) {
+    }
 
     private ProgressService() {
     }
@@ -1050,6 +1056,7 @@ public final class ProgressService {
     static void markDirty(ServerPlayer player) {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             DIRTY.put(member.getUUID(), true);
+            BARRIERS.remove(member.getUUID());
         }
     }
 
@@ -1094,6 +1101,7 @@ public final class ProgressService {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
+        BARRIERS.remove(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
         TeamSync.broadcast(player.server, player.getUUID());
@@ -1329,13 +1337,27 @@ public final class ProgressService {
         return player.getStats().getValue(Stats.CUSTOM.get(BuiltInRegistries.CUSTOM_STAT.get(rl)));
     }
 
-    /** Pack Stages (mod-100) is driven through its command so neither mod depends on the other. */
-    /** Whether a quest barrier opens for this player: the named node is complete, or the named stage is held. */
+    /**
+     * Whether a quest barrier opens for this player: the named node is complete, or the named stage is held. The
+     * answer is remembered for a few ticks and dropped whenever progress or a stage changes; the lookup itself never
+     * folds a team change, because a collision can happen while the player is moving (2026-10-21 review).
+     */
     public static boolean barrierAllows(ServerPlayer player, String mode, String key) {
-        PlayerProgress p = progress(player);
-        return "stage".equals(mode)
-                ? p.teamStages.contains(key) || hasStage(player, key)
-                : p.completed.contains(key);
+        int tick = player.server.getTickCount();
+        BarrierVerdict cached = BARRIERS.get(player.getUUID());
+        if (cached != null && cached.tick() + BARRIER_TTL >= tick
+                && cached.mode().equals(mode) && cached.key().equals(key)) {
+            return cached.allowed();
+        }
+        PlayerProgress p = ProgressStore.get(player.server).viewReadOnly(player.server, player.getUUID());
+        java.util.Set<String> stages = new java.util.HashSet<>(p.stages);
+        stages.addAll(p.teamStages);
+        if ("stage".equals(mode) && !stages.contains(key) && hasStage(player, key)) {
+            stages.add(key);
+        }
+        boolean allowed = com.kuronami.questtree.progress.BarrierRule.allows(mode, key, p.completed, stages);
+        BARRIERS.put(player.getUUID(), new BarrierVerdict(mode, key, tick, allowed));
+        return allowed;
     }
 
     static boolean hasStage(ServerPlayer player, String stage) {

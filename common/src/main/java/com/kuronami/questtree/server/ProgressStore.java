@@ -69,6 +69,14 @@ public final class ProgressStore extends SavedData {
     }
 
     /**
+     * A read-only view for a path that must not change teams (barrier collision): no fold, no migration. The answer
+     * can be one team change behind for a few seconds until the ordinary {@link #view} runs.
+     */
+    public PlayerProgress viewReadOnly(MinecraftServer server, UUID player) {
+        return data.team(TeamResolver.teamId(server, player)).view(player);
+    }
+
+    /**
      * Takes a player out of their old team now, online or not: the copy is made from the team's progress at this
      * moment, not at their next login. Returns the team they left, or null when nothing changed.
      */

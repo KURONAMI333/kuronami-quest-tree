@@ -165,7 +165,9 @@ public final class ClientProgress {
         if (key == null || key.isEmpty()) {
             return false;
         }
-        return "stage".equals(mode) ? progress.teamStages.contains(key) : state(key) == ProgressRules.State.DONE;
+        java.util.Set<String> stages = new java.util.HashSet<>(progress.stages);
+        stages.addAll(progress.teamStages);
+        return com.kuronami.questtree.progress.BarrierRule.allows(mode, key, progress.completed, stages);
     }
 
     public static ProgressRules.State state(String key) {
