@@ -1848,7 +1848,7 @@ public class ProgressScreen extends Screen {
         if (rules == null) {
             return;
         }
-        boolean owner = ClientTeam.view().isOwner();
+        boolean owner = ClientTeam.view().ownsSharedActions();
         Component respec = respecLabel(ch);
         int rw = font.width(respec) + 2 * Ui.S1;
         boolean canRespec = owner && rules.canRespec(p, mc);

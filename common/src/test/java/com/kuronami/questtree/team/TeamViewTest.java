@@ -45,6 +45,19 @@ class TeamViewTest {
     }
 
     @Test
+    void soloPlayersOwnSharedActionsAndMembersDoNot() {
+        TeamView solo = new TeamView(A, "", A, "Alice", false, false,
+                List.of(new TeamView.Member(A, "Alice", true, true, true)), List.of());
+        TeamView member = new TeamView("team", "", A, "Alice", false, true,
+                List.of(new TeamView.Member(A, "Alice", true, false, true),
+                        new TeamView.Member(B, "Bob", true, true, false)), List.of());
+
+        assertTrue(solo.ownsSharedActions());
+        assertFalse(member.isOwner());
+        assertFalse(member.ownsSharedActions());
+    }
+
+    @Test
     void aPartyWithOnlyItsOwnerIsAlreadyATeam() {
         TeamView party = new TeamView(A, "", A, "Alice", false, true,
                 List.of(new TeamView.Member(A, "Alice", true, true, true)), List.of());

@@ -117,6 +117,11 @@ public final class TeamView {
         return self != null && self.owner();
     }
 
+    /** Solo players own their own pool; in a team, only the recorded owner may respec or exchange. */
+    public boolean ownsSharedActions() {
+        return !inTeam || isOwner();
+    }
+
     /** The name to show for a member, or the id when the server could not resolve one. */
     public String nameOf(String playerId) {
         Member m = member(playerId);
