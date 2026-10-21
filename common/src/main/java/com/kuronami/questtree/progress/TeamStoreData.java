@@ -157,6 +157,10 @@ public final class TeamStoreData {
 
     /** Routes saved values after the set of personal nodes changed, and remembers the new set. */
     public boolean migratePersonalNodes(Set<String> current) {
+        if (current.isEmpty() && !personalNodes.isEmpty()) {
+            // an unreadable or empty model must not turn saved personal progress into shared progress
+            return false;
+        }
         if (personalNodes.equals(current)) {
             return false;
         }

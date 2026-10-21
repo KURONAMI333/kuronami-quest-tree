@@ -59,6 +59,10 @@ public final class TeamProgress {
      * the parts (2026-10-21 review).
      */
     public void migratePersonal(java.util.Set<String> oldNodes, java.util.Set<String> newNodes) {
+        if (players.isEmpty()) {
+            // nothing of a member's own yet, so there is no personal value that a routing change could move
+            return;
+        }
         java.util.Set<String> toPersonal = new HashSet<>(newNodes);
         toPersonal.removeAll(oldNodes);
         java.util.Set<String> toShared = new HashSet<>(oldNodes);

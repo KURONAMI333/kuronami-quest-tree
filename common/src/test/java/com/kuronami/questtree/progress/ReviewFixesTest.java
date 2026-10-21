@@ -114,6 +114,17 @@ class ReviewFixesTest {
     }
 
     @Test
+    void anEmptyModelDoesNotMigratePersonalNodes() {
+        TeamStoreData data = new TeamStoreData();
+        data.personalNodes.add("t:q/n");
+        TeamProgress team = data.team(java.util.UUID.randomUUID());
+        team.shared.completed.add("t:q/n");
+        assertFalse(data.migratePersonalNodes(java.util.Set.of()));
+        assertFalse(team.shared.completed.isEmpty(), "an empty model must leave the shared record alone");
+        assertTrue(data.personalNodes.contains("t:q/n"));
+    }
+
+    @Test
     void conditionUnmetRewardDoesNotHoldTheNodeOpen() {
         ProgressModel.Node n = nodeWithRewards(2);
         PlayerProgress p = new PlayerProgress();

@@ -20,6 +20,12 @@ Pack authors who need more should use a `craft` or `consume` task instead.
   rewards are part of the skill effect and are always applied, even while pay-outs are blocked.
 - `ignore_reward_blocking` / `ignore_blocking` still exempt one reward.
 
+## Personal-node routing (review item 5)
+
+The saved record keeps the set of node keys that were routed as personal. When the model cannot be read, or reads as
+empty, that set is left alone: a migration is only applied for the keys the model actually shows, so an unreadable
+pack file cannot move saved personal progress into the shared record.
+
 ## Currency rewards (review item 3)
 
 A `currency` reward is paid through FTB Library's currency hook. Without an economy mod that registers a provider,
