@@ -59,7 +59,8 @@ public final class TeamResolver {
     public static boolean isOwner(MinecraftServer server, UUID player) {
         UUID teamId = teamId(server, player);
         if (managedByFtbTeams()) {
-            return owns(player, FtbTeamsBridge.owner(server, teamId));
+            UUID owner = FtbTeamsBridge.owner(server, teamId);
+            return ownsTeam(player, owner, FtbTeamsBridge.hasTeam(server, player));
         }
         PartyData.Party party = PartyStore.get(server).data().party(teamId);
         return owns(player, party == null ? null : party.owner);
@@ -68,6 +69,22 @@ public final class TeamResolver {
     /** Solo (no team record) is the player's own; otherwise only the recorded owner may act. */
     static boolean owns(UUID player, UUID owner) {
         return owner == null || owner.equals(player);
+    }
+
+    /**
+     * The owner rule when the provider can answer "does this player have a team?". A missing owner is only solo when
+     * there is no team; an unreadable FTB Teams team (hasTeam is true on failure) is refused instead of opened to all.
+     */
+    static boolean ownsTeam(UUID player, UUID owner, boolean hasTeam) {
+        return owner != null ? owner.equals(player) : !hasTeam;
+    }
+
+    /** Whether FTB Teams (or the built-in party) records a team for this player. */
+    public static boolean hasTeam(MinecraftServer server, UUID player) {
+        if (managedByFtbTeams()) {
+            return FtbTeamsBridge.hasTeam(server, player);
+        }
+        return PartyStore.get(server).data().party(teamId(server, player)) != null;
     }
 
     /** The FTB team's friendly name; empty for the built-in party, which the client names after its owner. */

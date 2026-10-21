@@ -45,10 +45,11 @@ public final class TeamSync {
         boolean ftb = TeamResolver.managedByFtbTeams();
         PartyData.Party party = ftb ? null : PartyStore.get(server).data().party(teamId);
         UUID ownerId = ftb ? TeamResolver.teamOwner(server, teamId) : party == null ? player : party.owner;
-        if (ownerId == null) {
+        // an unreadable FTB owner stays blank so the client knows it cannot act; only a solo player falls back to self
+        if (ownerId == null && (!ftb || !TeamResolver.hasTeam(server, player))) {
             ownerId = player;
         }
-        String ownerName = nameOf(server, ownerId);
+        String ownerName = ownerId == null ? "" : nameOf(server, ownerId);
         String name = ftb ? TeamResolver.teamName(server, teamId) : "";
 
         List<TeamView.Member> members = new ArrayList<>();
@@ -74,7 +75,8 @@ public final class TeamSync {
         }
         // a party with only its owner is still a party (the owner can invite from the screen); a solo player is not
         boolean inTeam = ftb ? !teamId.equals(player) : party != null;
-        return new TeamView(teamId.toString(), name, ownerId.toString(), ownerName, ftb, inTeam, members, invites);
+        return new TeamView(teamId.toString(), name, ownerId == null ? "" : ownerId.toString(), ownerName, ftb,
+                inTeam, members, invites);
     }
 
     /** Sends the view when it differs from the last one this player received. */

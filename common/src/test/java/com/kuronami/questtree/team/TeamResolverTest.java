@@ -26,6 +26,17 @@ class TeamResolverTest {
         assertFalse(TeamResolver.owns(b, a));
     }
 
+    /** An unreadable FTB Teams team is refused; only a player FTB says has no team is solo and owns the actions. */
+    @Test
+    void anUnreadableTeamOwnerIsRefusedButASoloPlayerStillOwns() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        assertTrue(TeamResolver.ownsTeam(a, null, false), "no team: solo");
+        assertFalse(TeamResolver.ownsTeam(a, null, true), "team with an unreadable owner");
+        assertTrue(TeamResolver.ownsTeam(a, a, true));
+        assertFalse(TeamResolver.ownsTeam(a, b, true));
+    }
+
     @Test
     void aPlayerOutsideAnyPartyIsTheirOwnTeam() {
         UUID player = UUID.randomUUID();

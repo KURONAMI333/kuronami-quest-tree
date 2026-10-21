@@ -80,6 +80,26 @@ class TeamViewTest {
         assertFalse(invited.hasActiveInvites(1000));
     }
 
+    /** An FTB team whose owner the server could not read keeps the shared actions off, even for its members. */
+    @Test
+    void anFtbTeamWithoutAReadableOwnerBlocksSharedActions() {
+        TeamView unknown = new TeamView("team", "Miners", "", "", true, true,
+                List.of(new TeamView.Member(A, "Alice", true, true, false),
+                        new TeamView.Member(B, "Bob", true, false, false)), List.of());
+
+        assertFalse(unknown.ownerKnown());
+        assertFalse(unknown.isOwner());
+        assertFalse(unknown.ownsSharedActions());
+        TeamView read = TeamView.parse(unknown.toJson().toString());
+        assertFalse(read.ownerKnown());
+        assertFalse(read.ownsSharedActions());
+
+        TeamView solo = new TeamView(A, "", A, "Alice", true, false,
+                List.of(new TeamView.Member(A, "Alice", true, true, true)), List.of());
+        assertTrue(solo.ownerKnown(), "a solo player always owns their pool");
+        assertTrue(solo.ownsSharedActions());
+    }
+
     @Test
     void malformedJsonFallsBackToAnEmptyView() {
         TeamView read = TeamView.parse("not json");

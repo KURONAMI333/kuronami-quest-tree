@@ -1848,7 +1848,8 @@ public class ProgressScreen extends Screen {
         if (rules == null) {
             return;
         }
-        boolean owner = ClientTeam.view().ownsSharedActions();
+        var team = ClientTeam.view();
+        boolean owner = team.ownsSharedActions();
         Component respec = respecLabel(ch);
         int rw = font.width(respec) + 2 * Ui.S1;
         boolean canRespec = owner && rules.canRespec(p, mc);
@@ -1859,7 +1860,7 @@ public class ProgressScreen extends Screen {
         }
         if (!canRespec) {
             respecTip.add(Component.translatable(!owner
-                    ? "screen.kuronami_quest_tree.skill.team_owner_only"
+                    ? ownerOnlyReason(team)
                     : ProgressRules.chapterRefund(p, mc) > 0
                     ? "screen.kuronami_quest_tree.skill.not_enough_points"
                     : "screen.kuronami_quest_tree.skill.nothing_spent"));
@@ -1884,7 +1885,7 @@ public class ProgressScreen extends Screen {
         if (!canExchange) {
             int used = ClientProgress.exchangeUsed(ch);
             exchangeTip.add(Component.translatable(!owner
-                    ? "screen.kuronami_quest_tree.skill.team_owner_only"
+                    ? ownerOnlyReason(team)
                     : ch.exchangeLimit != Integer.MAX_VALUE && used >= ch.exchangeLimit
                     ? "screen.kuronami_quest_tree.skill.exchange_limit"
                     : "screen.kuronami_quest_tree.skill.not_enough_levels"));
@@ -1920,6 +1921,13 @@ public class ProgressScreen extends Screen {
             ClientProgress.send("respec", ch.id, -1);
             ProgressFeedback.click();
         };
+    }
+
+    /** Why an owner-only button is dim: a team where FTB Teams could not name the owner says so instead of "only the owner". */
+    private static String ownerOnlyReason(TeamView team) {
+        return team.ownerKnown()
+                ? "screen.kuronami_quest_tree.skill.team_owner_only"
+                : "screen.kuronami_quest_tree.skill.owner_unknown";
     }
 
     private static Component pointsLabel(int n) {

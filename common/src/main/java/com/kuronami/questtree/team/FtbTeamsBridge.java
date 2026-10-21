@@ -43,6 +43,23 @@ final class FtbTeamsBridge {
         }
     }
 
+    /**
+     * Whether FTB Teams says this player has a team. Unreadable counts as "has a team", so a failure cannot make a
+     * team member look solo and pass the owner-only check (2026-10-22 review).
+     */
+    static boolean hasTeam(MinecraftServer server, UUID player) {
+        try {
+            FTBTeamsAPI.API api = FTBTeamsAPI.api();
+            if (api == null || !api.isManagerLoaded()) {
+                return true;
+            }
+            return api.getManager().getTeamForPlayerID(player).isPresent();
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("Could not read the FTB Teams team of {}; refusing owner-only actions", player);
+            return true;
+        }
+    }
+
     static UUID owner(MinecraftServer server, UUID teamId) {
         try {
             FTBTeamsAPI.API api = FTBTeamsAPI.api();
