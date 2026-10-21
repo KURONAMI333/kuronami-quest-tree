@@ -239,6 +239,27 @@ class SkillRewardPolicyTest {
     }
 
     /**
+     * A team saved before the migration must not write the new key: an empty one would read as migrated, so the taken
+     * skills would never be filled and a retake could pay them again (2026-10-22 review).
+     */
+    @Test
+    void aTeamWaitingForTheMigrationWritesNoKey() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.needsPaidMigration = true;
+        team.shared.taken.put(n.key, 1);
+
+        JsonObject saved = team.toJson();
+        assertFalse(saved.has("paid_skill_rewards"), "the key is what marks a save as migrated");
+
+        TeamProgress loaded = TeamProgress.fromJson(saved);
+        assertTrue(loaded.needsPaidMigration, "a save made before the migration still needs it");
+        assertTrue(SkillRewardPolicy.migratePaidSkillRewards(loaded, model));
+        assertTrue(loaded.paidSkillRewards.contains("s:a/n#0#0"));
+    }
+
+    /**
      * An old mark can name one reward of a node. The migration must still record every revocable reward of the taken
      * rank, or a respec takes back no points and a retake stacks them (2026-10-22 review).
      */

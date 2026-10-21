@@ -34,7 +34,8 @@ public final class TeamProgress {
     public final Set<String> paidSkillRewards = new HashSet<>();
     /**
      * The saved form has no {@code paid_skill_rewards} key, so this team predates the record and its taken skills are
-     * filled once. Written on every save, so a loaded team is never migrated again (2026-10-22 review).
+     * filled once. A team still waiting for that migration does not write the key, because an empty one would make
+     * the next load look migrated; a record it already holds is used by the migration (2026-10-22 review).
      */
     public boolean needsPaidMigration;
     private final Map<UUID, PlayerProgress> views = new HashMap<>();
@@ -265,9 +266,13 @@ public final class TeamProgress {
         JsonArray team = new JsonArray();
         teamClaimedRewards.forEach(team::add);
         o.add("team_claimed_rewards", team);
-        JsonArray paid = new JsonArray();
-        paidSkillRewards.forEach(paid::add);
-        o.add("paid_skill_rewards", paid);
+        // only a migrated team writes the key: a save made while the data pack was empty or broken (no migration yet)
+        // must not look migrated to the next load, or the old marks it still needs would be ignored (2026-10-22 review)
+        if (!needsPaidMigration) {
+            JsonArray paid = new JsonArray();
+            paidSkillRewards.forEach(paid::add);
+            o.add("paid_skill_rewards", paid);
+        }
         return o;
     }
 
