@@ -12,6 +12,12 @@ You MAY:
   - Include this mod in a modpack and distribute that modpack, on any platform
     and through any launcher, including a modpack that is monetised. No
     permission request and no credit are required.
+  - Build addons or other mods that use this mod's public API and depend on it
+    at runtime, and distribute them. Do not bundle this mod's jar inside an
+    addon.
+  - Make and distribute data packs, resource packs, quest books, translations,
+    configuration files, and KubeJS scripts for this mod, including in a
+    monetised modpack.
   - Read the source, and report bugs or suggest changes.
 
 You MAY NOT, without written permission:
