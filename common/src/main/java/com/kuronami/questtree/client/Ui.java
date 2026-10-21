@@ -369,10 +369,11 @@ final class Ui {
      * {@link #BADGE}. Returns the width it took.
      */
     static int badge(GuiGraphics g, Font font, String count, int right, int y) {
-        int w = Math.max(BADGE_H, font.width(count) + 4);
+        int textW = textWidth(font, count);
+        int w = Math.max(BADGE_H, textW + 4);
         int x = right - w;
         surface(g, x, y, w, BADGE_H, BADGE_H / 2 + 1, BADGE);
-        text(g, font, count, x + (w - font.width(count) + 1) / 2, y + 2, BADGE_TEXT);
+        text(g, font, count, x + (w - textW + 1) / 2, y + 2, BADGE_TEXT);
         return w;
     }
 
@@ -388,6 +389,24 @@ final class Ui {
     /** A 1px separator inside a panel. */
     static void divider(GuiGraphics g, int x, int y, int w) {
         g.fill(x, y, x + w, y + 1, DIVIDER);
+    }
+
+    /** A string's width on screen at the current text scale. */
+    static int textWidth(Font font, String s) {
+        return TextFit.width(font.width(s), ClientConfig.textScale());
+    }
+
+    static int textWidth(Font font, Component c) {
+        return textWidth(font, c.getString());
+    }
+
+    static int textWidth(Font font, FormattedCharSequence s) {
+        return TextFit.width(font.width(s), ClientConfig.textScale());
+    }
+
+    /** The room a fixed-width box has for text in the font's own units. */
+    static int textRoom(int pixels) {
+        return TextFit.room(pixels, ClientConfig.textScale());
     }
 
     /** Text without the vanilla drop shadow; the colour does the work instead. */
@@ -438,10 +457,11 @@ final class Ui {
         }
         int textW = 0;
         for (Component c : lines) {
-            textW = Math.max(textW, font.width(c));
+            textW = Math.max(textW, textWidth(font, c));
         }
         int w = textW + 2 * S2;
-        int h = lines.size() * 10 + 2 * S1 - 2;
+        int lineH = Math.max(10, (int) Math.ceil(10 * ClientConfig.textScale()));
+        int h = lines.size() * lineH + 2 * S1 - 2;
         int x = mouseX + 12;
         int y = mouseY - 12;
         if (x + w + 4 > g.guiWidth()) {
@@ -458,7 +478,7 @@ final class Ui {
         int ty = y + S1 - 1;
         for (int i = 0; i < lines.size(); i++) {
             text(g, font, lines.get(i), x + S2, ty, i == 0 ? TEXT : MUTED);
-            ty += 10;
+            ty += lineH;
         }
     }
 
