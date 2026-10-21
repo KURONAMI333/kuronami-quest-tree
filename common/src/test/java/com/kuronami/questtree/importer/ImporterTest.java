@@ -156,9 +156,12 @@ class ImporterTest {
         ImportOutput out = new ImportOutput("test");
         PuffishImporter.convert("ftb/mining", files, out);
         JsonArray converted = out.chapters.get("skill_ftb_mining").getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonArray("rewards");
-        assertEquals("dummy", converted.get(converted.size() - 2).getAsJsonObject().get("type").getAsString());
+        JsonObject dummy = converted.get(converted.size() - 2).getAsJsonObject();
+        assertEquals("dummy", dummy.get("type").getAsString());
+        assertEquals("puffish_skills:missing_mod:optional", dummy.get("original_type").getAsString());
         assertEquals("puffish_skills:missing_mod:required", converted.get(converted.size() - 1).getAsJsonObject().get("type").getAsString());
         assertTrue(out.unmapped.containsKey("skill_reward_type.puffish_skills:missing_mod:required"), out.unmapped.toString());
+        assertTrue(out.unmapped.containsKey("skill_reward_type_optional.puffish_skills:missing_mod:optional"), out.unmapped.toString());
         assertFalse(out.unmapped.containsKey("skill_reward_type.puffish_skills:missing_mod:optional"), out.unmapped.toString());
     }
 

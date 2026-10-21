@@ -150,6 +150,8 @@ public final class PuffishImporter {
                                 conv.addProperty("type", shortType);
                             } else if (!required) {
                                 conv.addProperty("type", "dummy");
+                                conv.addProperty("original_type", type);
+                                out.unknown("skill_reward_type_optional", type);
                             } else {
                                 conv.addProperty("type", type);
                                 out.unknown("skill_reward_type", type);
