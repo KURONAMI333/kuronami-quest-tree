@@ -461,7 +461,8 @@ final class Ui {
         int lineH = Math.max(10, (int) Math.ceil(10 * ClientConfig.textScale()));
         int h = lines.size() * lineH + 2 * S1 - 2;
         int x = mouseX + 12;
-        int y = mouseY - 12;
+        // below the pointer: above it, a rail row's hint covered the row's own name (2026-10-22 review)
+        int y = mouseY + 12;
         if (x + w + 4 > g.guiWidth()) {
             x = Math.max(4, g.guiWidth() - w - 4);
         }

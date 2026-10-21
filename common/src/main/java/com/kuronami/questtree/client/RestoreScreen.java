@@ -57,7 +57,7 @@ final class RestoreScreen extends EditorScreen {
     protected void build() {
         List<EditForm.Line> lines = new ArrayList<>();
         if (chapters.isEmpty() && tables.isEmpty() && nodes.isEmpty()) {
-            lines.add(new EditForm.HeadLine(Component.translatable(PREFIX + "editor.option.none")));
+            lines.add(new EditForm.HeadLine(Component.translatable(PREFIX + "option.none")));
         }
         if (!chapters.isEmpty()) {
             lines.add(new EditForm.HeadLine(Component.translatable(PREFIX + "deleted.chapters")));

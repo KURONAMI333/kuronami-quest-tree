@@ -337,20 +337,27 @@ final class DevTour {
             Minecraft.getInstance().setScreen(null);
         });
         at(et + 97, () -> {
+            // closing the screen released the toasts it had queued while the tour completed quests: the reward toast
+            // would wait behind them, off the right edge, and the photo showed only the ground (2026-10-22 review)
+            Minecraft.getInstance().getToasts().clear();
             RewardToast.show(
                     List.of(new ItemStack(Items.DIAMOND, 4), new ItemStack(Items.EMERALD, 4)),
                     List.of(Component.literal("Diamond x4"), Component.literal("Emerald x4")));
-            // take the photo a few ticks later, relative to the toast: a death just before this point delays steps,
-            // and a fixed tick would then grab the frame from before the toast was drawn (2026-10-22 review)
-            shot(ticks + 4, "38_reward_toast");
+            // take the photo relative to the toast, after it has slid in (12 ticks): a death just before this point
+            // delays steps, and a fixed tick would then grab the frame from before the toast was drawn
+            at(ticks + 13, () -> {
+                boolean shown = Minecraft.getInstance().getToasts().getToast(RewardToast.class, null) != null;
+                Constants.LOG.info("Dev tour: reward toast {}", shown ? "shown" : "not shown");
+                shot("38_reward_toast");
+            });
         });
         // a description with a picture and both link kinds (the dev pack)
-        at(et + 102, () -> openId("aa_devtour:showcase"));
-        at(et + 104, () -> onScreen("39_description_image_links", s -> s.tourSelect("aa_devtour:showcase/rich")));
-        shot(et + 112, "39_description_image_links");
+        at(et + 114, () -> openId("aa_devtour:showcase"));
+        at(et + 116, () -> onScreen("39_description_image_links", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        shot(et + 124, "39_description_image_links");
         // the emergency row, the chapter list open with the pointer on it, its items in the tooltip
-        at(et + 114, () -> ProgressScreen.tourRailOpen(true));
-        at(et + 116, () -> onScreen("40_emergency_items", s -> {
+        at(et + 126, () -> ProgressScreen.tourRailOpen(true));
+        at(et + 128, () -> onScreen("40_emergency_items", s -> {
             int[] row = s.tourEmergencyRow();
             if (row == null) {
                 Constants.LOG.warn("Dev tour: the pack has no emergency items");
@@ -358,22 +365,22 @@ final class DevTour {
                 ProgressScreen.tourPointer(row[0], row[1]);
             }
         }));
-        shot(et + 122, "40_emergency_items");
+        shot(et + 134, "40_emergency_items");
         // the same sheet at 120% text, then the high-contrast palette
-        at(et + 124, () -> {
+        at(et + 136, () -> {
             ProgressScreen.tourRailOpen(false);
             ProgressScreen.tourPointerClear();
             ClientConfig.textScale = 1.2f;
             openId("aa_devtour:showcase");
         });
-        at(et + 127, () -> onScreen("41_text_120", s -> s.tourSelect("aa_devtour:showcase/rich")));
-        shot(et + 136, "41_text_120");
-        at(et + 138, () -> {
+        at(et + 139, () -> onScreen("41_text_120", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        shot(et + 148, "41_text_120");
+        at(et + 150, () -> {
             ClientConfig.highContrast = true;
             Ui.loadPalette(Minecraft.getInstance().getResourceManager());
         });
-        shot(et + 143, "42_high_contrast");
-        at(et + 145, () -> {
+        shot(et + 155, "42_high_contrast");
+        at(et + 157, () -> {
             // leave the developer's own settings as they were found
             ClientConfig.textScale = textScaleBefore;
             ClientConfig.highContrast = contrastBefore;
