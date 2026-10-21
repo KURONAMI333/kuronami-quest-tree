@@ -52,8 +52,9 @@ public final class PlayerProgress {
     public Map<String, Integer> repeats = new HashMap<>();
     public Map<String, Long> cooldown = new HashMap<>();
     /**
-     * Chapters whose open/locked state a command changed (2026-10-20). No entry means the chapter's
-     * {@code points.unlocked_by_default}; storing only the override keeps the pack's default in charge.
+     * Chapters whose open/locked state a command changed. The state belongs to the whole team: every member's view
+     * reads the same map. No entry means the chapter's {@code points.unlocked_by_default}; storing only the override
+     * keeps the pack's default in charge.
      */
     public Map<String, Boolean> chapterOpen = new HashMap<>();
     /** Stages granted to the whole team ({@code "team": true} on a stage task or reward). */

@@ -255,8 +255,10 @@ public final class TeamProgress {
         other.exchange.forEach((k, v) -> shared.exchange.merge(k, v, Math::max));
         other.repeats.forEach((k, v) -> shared.repeats.merge(k, v, Math::max));
         other.cooldown.forEach((k, v) -> shared.cooldown.merge(k, v, Math::max));
-        // the team's own lock override wins; one set by the joiner is used only where the team has none
-        other.chapterOpen.forEach(shared.chapterOpen::putIfAbsent);
+        // a chapter has one open/locked state for the whole team; when the two sides differ, closed wins so a join
+        // cannot reopen a chapter someone had locked
+        other.chapterOpen.forEach((chapter, open) ->
+                shared.chapterOpen.merge(chapter, open, (teamOpen, joinerOpen) -> teamOpen && joinerOpen));
         shared.teamStages.addAll(other.teamStages);
     }
 
@@ -300,7 +302,19 @@ public final class TeamProgress {
         if (o.has("players") && o.get("players").isJsonObject()) {
             for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("players").entrySet()) {
                 try {
-                    team.players.put(UUID.fromString(e.getKey()), PlayerPart.fromJson(e.getValue().getAsJsonObject()));
+                    JsonObject partJson = e.getValue().getAsJsonObject();
+                    team.players.put(UUID.fromString(e.getKey()), PlayerPart.fromJson(partJson));
+                    // saves made while the chapter state was per member kept a chapter_open in each part: fold it
+                    // into the team, with closed winning so a member's lock is not lost
+                    if (partJson.has("chapter_open") && partJson.get("chapter_open").isJsonObject()) {
+                        for (Map.Entry<String, JsonElement> c : partJson.getAsJsonObject("chapter_open").entrySet()) {
+                            if (c.getValue().isJsonPrimitive() && c.getValue().getAsJsonPrimitive().isBoolean()) {
+                                boolean open = c.getValue().getAsBoolean();
+                                team.shared.chapterOpen.merge(c.getKey(), open,
+                                        (teamOpen, memberOpen) -> teamOpen && memberOpen);
+                            }
+                        }
+                    }
                 } catch (RuntimeException ignored) {
                     // a malformed member entry must not take the whole team down
                 }

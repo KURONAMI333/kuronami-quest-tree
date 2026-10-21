@@ -236,14 +236,15 @@ final class PlayerCommands {
                 resetNode(p, pr, n);
             }
         }
-        // a full reset forgets everything stored about skills, including the per-player chapter lock overrides
+        // a full reset forgets everything stored about skills, including the team's chapter lock overrides
         ProgressRules.clearAll(pr);
     }
 
     /**
-     * Pufferfish's Skills' category lock/unlock: a per-player override of {@code points.unlocked_by_default}.
+     * Pufferfish's Skills' category lock/unlock: a team-wide override of {@code points.unlocked_by_default}.
      * Locking hides the chapter and takes back its rewards (attributes, scoreboard, command/tag unlocks) while keeping
-     * the skills unlocked; unlocking puts back the rewards of every open chapter (2026-10-20 review).
+     * the skills unlocked; unlocking puts back the rewards of every open chapter. Every member of the player's team
+     * sees and gets the same state.
      */
     private static void chapterOpen(CommandContext<CommandSourceStack> c, ServerPlayer p, PlayerProgress pr, boolean open) {
         ProgressModel.Chapter ch = chapter(c);
@@ -281,8 +282,8 @@ final class PlayerCommands {
 
     /**
      * Pufferfish's Skills' {@code erase_on_death}: a chapter without a pool starts over completely; a pooled chapter
-     * erases its whole pool and revokes the skills of every chapter in it, and each erased chapter also forgets its
-     * per-player lock override (2026-10-20 decision; Pufferfish's Skills has no pool equivalent).
+     * erases its whole pool and revokes the skills of every chapter in it, and each erased chapter also forgets the
+     * team's lock override (Pufferfish's Skills has no pool equivalent).
      */
     static void eraseOnDeath(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch) {
         if (!ProgressRules.isPooled(ch)) {

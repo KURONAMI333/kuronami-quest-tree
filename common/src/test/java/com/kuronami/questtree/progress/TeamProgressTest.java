@@ -1,6 +1,8 @@
 package com.kuronami.questtree.progress;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.kuronami.questtree.data.ProgressModel;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -220,5 +222,86 @@ class TeamProgressTest {
         assertTrue(store.changedTeam(A, A, (team, player) -> java.util.Set.of("t:q/a#0")));
         assertTrue(store.team(A).view(A).rewardClaimed("t:q/a#0"));
         assertFalse(store.team(A).view(A).rewardClaimed("t:q/a#1"));
+    }
+
+    private static ProgressModel.Chapter lockableChapter() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:s": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": true},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        return ProgressModel.of(bundle).chapters.get("t:s");
+    }
+
+    @Test
+    void chapterStateIsOneValueForTheWholeTeam() {
+        ProgressModel.Chapter chapter = lockableChapter();
+        TeamProgress team = new TeamProgress(TEAM);
+
+        team.view(A).chapterOpen.put(chapter.id, false);
+
+        assertFalse(ProgressRules.chapterUnlocked(team.view(B), chapter), "a teammate sees the lock");
+        assertTrue(ProgressRules.chapterStateChanges(team.view(B), chapter, true),
+                "a teammate's unlock is a real change, not a repeat");
+        TeamProgress read = TeamProgress.parse(team.toJson().toString());
+        assertFalse(ProgressRules.chapterUnlocked(read.view(B), chapter), "the state survives a reload");
+        PlayerProgress synced = ProgressJson.read(ProgressJson.write(team.view(B)));
+        assertFalse(ProgressRules.chapterUnlocked(synced, chapter), "the screen gets the same team value");
+    }
+
+    @Test
+    void joiningKeepsAChapterClosedWhenEitherSideClosedIt() {
+        TeamProgress team = new TeamProgress(TEAM);
+        team.shared.chapterOpen.put("t:s", true);
+        TeamProgress joiner = new TeamProgress(B);
+        joiner.shared.chapterOpen.put("t:s", false);
+
+        team.mergeJoiner(B, joiner);
+
+        assertEquals(false, team.shared.chapterOpen.get("t:s"), "closed wins over open when two states meet");
+    }
+
+    @Test
+    void legacyPerPlayerChapterStateMovesToTheTeamOnJoin() {
+        JsonObject saved = JsonParser.parseString("""
+                {"00000000-0000-0000-0000-00000000000a": {"chapter_open": {"t:s": false}},
+                 "00000000-0000-0000-0000-00000000000b": {"chapter_open": {"t:s": true}}}
+                """).getAsJsonObject();
+        TeamStoreData store = TeamStoreData.fromLegacy(saved);
+
+        assertTrue(store.changedTeam(B, A));
+
+        assertEquals(false, store.team(A).shared.chapterOpen.get("t:s"),
+                "an old save's per-player lock is carried into the team, and closed wins");
+    }
+
+    @Test
+    void leavingCarriesTheTeamsChapterState() {
+        TeamProgress team = new TeamProgress(TEAM);
+        team.shared.chapterOpen.put("t:s", false);
+
+        TeamProgress solo = team.leaveCopy(A);
+
+        assertEquals(false, solo.view(A).chapterOpen.get("t:s"));
+    }
+
+    @Test
+    void aTeamLockStopsARespecFromRepeatingTheLockEffects() {
+        ProgressModel.Chapter chapter = lockableChapter();
+        TeamProgress team = new TeamProgress(TEAM);
+        team.view(A).chapterOpen.put(chapter.id, false);
+
+        // revokeSkill asks this before it would run lock_command or remove a tag for each member
+        boolean alreadyLocked = !ProgressRules.chapterUnlocked(team.view(B), chapter);
+        JsonObject command = JsonParser.parseString(
+                "{\"type\":\"command\",\"command\":\"say unlock\",\"lock_command\":\"say lock\"}")
+                .getAsJsonObject();
+        JsonObject tag = JsonParser.parseString("{\"type\":\"tag\",\"tag\":\"chapter/locked\"}")
+                .getAsJsonObject();
+
+        assertTrue(alreadyLocked, "one member's lock is the team's lock");
+        assertFalse(SkillRewardPolicy.undoesEffect(command, alreadyLocked),
+                "the chapter lock already ran lock_command");
+        assertFalse(SkillRewardPolicy.undoesEffect(tag, alreadyLocked),
+                "the chapter lock already removed the tag");
     }
 }

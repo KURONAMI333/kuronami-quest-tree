@@ -123,8 +123,8 @@ public final class ProgressRules {
 
     /**
      * Whether the chapter itself is open (Pufferfish's Skills category lock). A pack locks a chapter with
-     * {@code points.unlocked_by_default: false}; commands store an override per player, so unlocking one player does not
-     * open it for the whole server. Locked chapters are left out of the rail, and their XP sources do not count.
+     * {@code points.unlocked_by_default: false}; a command stores one override for the player's whole team, so every
+     * member sees the same state. Locked chapters are left out of the rail, and their XP sources do not count.
      */
     public static boolean chapterUnlocked(PlayerProgress p, ProgressModel.Chapter c) {
         Boolean override = p.chapterOpen.get(c.id);
@@ -758,7 +758,7 @@ public final class ProgressRules {
     }
 
     /**
-     * Forgets every stored skill value and per-player chapter override, for a full reset. Taken nodes are reset by
+     * Forgets every stored skill value and the team's chapter overrides, for a full reset. Taken nodes are reset by
      * the caller first (they also give their attributes back), so they are not touched here (2026-10-20 review).
      */
     public static void clearAll(PlayerProgress p) {
@@ -782,9 +782,9 @@ public final class ProgressRules {
 
     /**
      * Pufferfish's Skills' {@code erase_on_death} for one chapter. A chapter without a pool erases its own values and
-     * its per-player lock override, as {@code removeCategoryData} does. A pooled chapter has no values of its own:
+     * the team's lock override, as {@code removeCategoryData} does. A pooled chapter has no values of its own:
      * its whole pool is erased (experience, level, points, bonus and exchange) and every chapter in it loses its
-     * lock override (2026-10-20 decision; Pufferfish's Skills has no pool equivalent).
+     * lock override (Pufferfish's Skills has no pool equivalent).
      */
     public static void eraseChapterData(PlayerProgress p, ProgressModel model, ProgressModel.Chapter c) {
         String pool = key(c);
