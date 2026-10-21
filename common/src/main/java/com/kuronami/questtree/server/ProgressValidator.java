@@ -106,7 +106,7 @@ public final class ProgressValidator {
             "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
     private static final Set<String> REWARD_TYPES = Set.of(
             "item", "xp", "xp_levels", "command", "table", "advancement", "stage", "attribute", "points",
-            "tag", "toast", "trophy", "scoreboard", "custom", "dummy");
+            "tag", "toast", "trophy", "scoreboard", "custom", "dummy", "currency");
     private static final Set<String> REWARD_UNIMPLEMENTED = Set.of();
 
     /** Conditions accepted on a task or reward (DATA_MODEL.md "条件"). */
@@ -879,7 +879,7 @@ public final class ProgressValidator {
                     problem(out, Severity.WARNING, ref, path + ".trophy", "trophy " + quote(trophy) + " has no namespace");
                 }
             }
-            case "xp", "xp_levels" -> amount(out, ref, path, rw);
+            case "xp", "xp_levels", "currency" -> amount(out, ref, path, rw);
             default -> {
             }
         }

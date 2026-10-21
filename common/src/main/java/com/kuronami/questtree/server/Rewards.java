@@ -36,6 +36,7 @@ public final class Rewards {
         }
         try {
             switch (ProgressService.type(rw)) {
+                case "currency" -> currency(player, rw);
                 case "dummy" -> {
                     // FTBQ's dummy reward: it exists to make a quest show a reward icon and does nothing
                 }
@@ -65,6 +66,27 @@ public final class Rewards {
             }
         } catch (RuntimeException ex) {
             Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+        }
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean CURRENCY_WARNED =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * Pays through FTB Library's currency hook, which every economy mod of that family registers with. Without FTB
+     * Library or a registered provider the claim still completes and the log says once why nothing was paid.
+     */
+    private static void currency(ServerPlayer player, JsonObject rw) {
+        int amount = intOf(rw, "amount", 1);
+        if (amount <= 0) {
+            return;
+        }
+        if (com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")
+                && FtbLibraryCurrencyBridge.available() && FtbLibraryCurrencyBridge.give(player, amount)) {
+            return;
+        }
+        if (CURRENCY_WARNED.compareAndSet(false, true)) {
+            Constants.LOG.warn("A currency reward paid nothing: no economy mod registered with FTB Library");
         }
     }
 

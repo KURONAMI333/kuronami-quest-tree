@@ -157,6 +157,14 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aCurrencyRewardNeedsAPositiveAmount() {
+        ProgressValidator.Result ok = validate(chapter("", "{\"type\": \"currency\", \"amount\": 50}"));
+        assertEquals(0, errors(ok), ok.problems.toString());
+        ProgressValidator.Result bad = validate(chapter("", "{\"type\": \"currency\"}"));
+        assertTrue(says(bad, "amount"));
+    }
+
+    @Test
     void conditionsAreCheckedOnTasksAndRewards() {
         ProgressValidator.Result ok = validate(chapter(
                 "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": ["
