@@ -37,10 +37,13 @@ public final class PartyData {
 
     public static final class Invite {
         public final UUID party;
+        /** Who sent the invitation, so the party screen can name them. */
+        public final UUID from;
         public final long expires;
 
-        Invite(UUID party, long expires) {
+        Invite(UUID party, UUID from, long expires) {
             this.party = party;
+            this.from = from;
             this.expires = expires;
         }
     }
@@ -114,8 +117,13 @@ public final class PartyData {
             return false;
         }
         expire(now);
-        invites.put(target, new Invite(p.id, now + INVITE_EXPIRY_MS));
+        invites.put(target, new Invite(p.id, from, now + INVITE_EXPIRY_MS));
         return true;
+    }
+
+    /** Drops the invitation to {@code player} without joining. Returns true when there was one. */
+    public boolean decline(UUID player) {
+        return invites.remove(player) != null;
     }
 
     /** Accepts the invite that is still valid. Returns the joined party's id, or null. */
@@ -143,6 +151,7 @@ public final class PartyData {
         invites.remove(player);
         if (p.members.isEmpty()) {
             parties.remove(p.id);
+            invites.entrySet().removeIf(e -> e.getValue().party.equals(p.id));
         } else if (p.owner.equals(player)) {
             p.owner = p.members.iterator().next();
         }
@@ -204,6 +213,7 @@ public final class PartyData {
         invites.forEach((player, invite) -> {
             JsonObject one = new JsonObject();
             one.addProperty("party", invite.party.toString());
+            one.addProperty("from", invite.from.toString());
             one.addProperty("expires", invite.expires);
             is.add(player.toString(), one);
         });
@@ -237,8 +247,13 @@ public final class PartyData {
             for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("invites").entrySet()) {
                 try {
                     JsonObject one = e.getValue().getAsJsonObject();
+                    UUID party = UUID.fromString(one.get("party").getAsString());
+                    Party p = data.parties.get(party);
+                    UUID from = one.has("from")
+                            ? UUID.fromString(one.get("from").getAsString())
+                            : p == null ? party : p.owner;
                     data.invites.put(UUID.fromString(e.getKey()), new Invite(
-                            UUID.fromString(one.get("party").getAsString()), one.get("expires").getAsLong()));
+                            party, from, one.get("expires").getAsLong()));
                 } catch (RuntimeException ignored) {
                     // ignore a malformed invite
                 }

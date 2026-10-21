@@ -1,11 +1,13 @@
 package com.kuronami.questtree;
 
 import com.kuronami.questtree.client.ClientProgress;
+import com.kuronami.questtree.client.ClientTeam;
 import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
+import com.kuronami.questtree.network.TeamPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -22,6 +24,7 @@ public class QuestTreeClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(mc -> ClientProgress.onClientTick());
         ClientPlayNetworking.registerGlobalReceiver(SyncPayload.TYPE, (payload, context) -> ClientProgress.onSync(payload));
         ClientPlayNetworking.registerGlobalReceiver(ProgressPayload.TYPE, (payload, context) -> ClientProgress.onProgress(payload));
+        ClientPlayNetworking.registerGlobalReceiver(TeamPayload.TYPE, (payload, context) -> ClientTeam.onTeam(payload));
         ClientPlayNetworking.registerGlobalReceiver(EditorReplyPayload.TYPE,
                 (payload, context) -> EditorSession.onReply(payload));
         ClientPlayNetworking.registerGlobalReceiver(EditorStatePayload.TYPE,

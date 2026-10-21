@@ -8,6 +8,7 @@ import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
+import com.kuronami.questtree.network.TeamPayload;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
@@ -43,6 +44,7 @@ public class QuestTree implements ModInitializer {
         // the quest_book item is synced, so the client mod is required (like FTB Quests)
         PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(TeamPayload.TYPE, TeamPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(ActionPayload.TYPE, ActionPayload.STREAM_CODEC);

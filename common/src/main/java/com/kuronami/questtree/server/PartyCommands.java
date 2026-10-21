@@ -1,6 +1,5 @@
 package com.kuronami.questtree.server;
 
-import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.team.PartyData;
 import com.kuronami.questtree.team.PartyStore;
 import com.kuronami.questtree.team.TeamResolver;
@@ -16,7 +15,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -58,114 +56,42 @@ final class PartyCommands {
                 .then(Commands.literal("info").executes(PartyCommands::info));
     }
 
-    /** True (and answers) when FTB Teams owns parties, so KQT must not create a second membership. */
-    private static boolean managedElsewhere(CommandSourceStack src) {
-        if (!TeamResolver.managedByFtbTeams()) {
-            return false;
-        }
-        src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.ftb",
-                "Parties are managed by FTB Teams. Use /ftbteams party instead."));
-        return true;
-    }
-
     private static PartyData data(CommandSourceStack src) {
         return PartyStore.get(src.getServer()).data();
     }
 
-    private static void dirty(CommandSourceStack src) {
-        PartyStore.get(src.getServer()).setDirty();
+    private static int answer(CommandSourceStack src, PartyActions.Outcome outcome) {
+        if (!outcome.ok()) {
+            src.sendFailure(PartyActions.message(outcome));
+            return 0;
+        }
+        src.sendSuccess(() -> PartyActions.message(outcome), false);
+        return 1;
     }
 
     private static int create(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         CommandSourceStack src = c.getSource();
-        if (managedElsewhere(src)) {
-            return 0;
-        }
         ServerPlayer player = src.getPlayerOrException();
-        PartyData.Party party = data(src).create(player.getUUID(), System.currentTimeMillis());
-        if (party == null) {
-            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.already",
-                    "You are already in a party"));
-            return 0;
-        }
-        dirty(src);
-        // materialise the team record now: the player's solo progress is folded into the new party
-        ProgressService.progress(player);
-        ProgressService.flushTeam(player);
-        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.created",
-                "Party created"), false);
-        return 1;
+        return answer(src, PartyActions.create(src.getServer(), player.getUUID()));
     }
 
     private static int invite(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         CommandSourceStack src = c.getSource();
-        if (managedElsewhere(src)) {
-            return 0;
-        }
         ServerPlayer from = src.getPlayerOrException();
         ServerPlayer target = EntityArgument.getPlayer(c, "player");
-        if (!data(src).invite(from.getUUID(), target.getUUID(), System.currentTimeMillis())) {
-            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.invite_failed",
-                    "Cannot invite %s", target.getGameProfile().getName()));
-            return 0;
-        }
-        dirty(src);
-        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.invited",
-                "Invited %s", target.getGameProfile().getName()), false);
-        target.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.party.invited_you",
-                "%s invited you to a party: /quest_tree party accept", from.getGameProfile().getName()));
-        return 1;
+        return answer(src, PartyActions.invite(src.getServer(), from.getUUID(), target.getUUID()));
     }
 
     private static int accept(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         CommandSourceStack src = c.getSource();
-        if (managedElsewhere(src)) {
-            return 0;
-        }
         ServerPlayer player = src.getPlayerOrException();
-        UUID joined = data(src).accept(player.getUUID(), System.currentTimeMillis());
-        if (joined == null) {
-            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.no_invite",
-                    "No valid invite"));
-            return 0;
-        }
-        dirty(src);
-        ProgressService.progress(player);
-        ProgressService.flushTeam(player);
-        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.joined",
-                "Joined the party"), false);
-        return 1;
+        return answer(src, PartyActions.accept(src.getServer(), player.getUUID()));
     }
 
     private static int leave(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         CommandSourceStack src = c.getSource();
-        if (managedElsewhere(src)) {
-            return 0;
-        }
         ServerPlayer player = src.getPlayerOrException();
-        PartyData partyData = data(src);
-        PartyData.Party old = partyData.partyOf(player.getUUID());
-        Set<UUID> oldMembers = old == null ? Set.of() : Set.copyOf(old.members);
-        UUID oldId = partyData.leave(player.getUUID(), System.currentTimeMillis());
-        if (oldId == null) {
-            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.not_in",
-                    "You are not in a party"));
-            return 0;
-        }
-        dirty(src);
-        detach(src.getServer(), player.getUUID(), oldId, oldMembers);
-        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.left",
-                "Left the party"), false);
-        return 1;
-    }
-
-    /**
-     * The player is no longer in the team {@code oldId}: they take a copy of its progress now (also when offline),
-     * and everyone who shared it is re-sent and gets their attribute modifiers recomputed.
-     */
-    private static void detach(MinecraftServer server, UUID player, UUID oldId, Set<UUID> oldMembers) {
-        ProgressStore.get(server).settleLeave(player);
-        ProgressService.teamChanged(server, player, oldId, player, oldMembers);
+        return answer(src, PartyActions.leave(src.getServer(), player.getUUID()));
     }
 
     private static String nameOf(MinecraftServer server, UUID id) {
@@ -198,57 +124,23 @@ final class PartyCommands {
 
     private static int kick(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         CommandSourceStack src = c.getSource();
-        if (managedElsewhere(src)) {
-            return 0;
-        }
         ServerPlayer actor = src.getPlayerOrException();
         MinecraftServer server = src.getServer();
         PartyData.Party old = data(src).partyOf(actor.getUUID());
         UUID target = old == null ? null : PartyData.findMember(old, StringArgumentType.getString(c, "player"),
                 id -> nameOf(server, id));
-        if (target == null || !data(src).kick(actor.getUUID(), target)) {
-            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.kick_failed",
-                    "Only the owner can kick"));
+        if (target == null) {
+            src.sendFailure(PartyActions.message(new PartyActions.Outcome(
+                    PartyActions.Kind.KICK_FAILED, StringArgumentType.getString(c, "player"))));
             return 0;
         }
-        dirty(src);
-        Set<UUID> oldMembers = Set.copyOf(old.members);
-        Set<UUID> before = new java.util.HashSet<>(oldMembers);
-        before.add(target);
-        detach(server, target, old.id, before);
-        ServerPlayer online = server.getPlayerList().getPlayer(target);
-        if (online != null) {
-            online.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.party.kicked_you",
-                    "You were removed from the party"));
-        }
-        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.kicked",
-                "Removed %s", nameOf(server, target)), false);
-        return 1;
+        return answer(src, PartyActions.kick(server, actor.getUUID(), target));
     }
 
     private static int disband(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         CommandSourceStack src = c.getSource();
-        if (managedElsewhere(src)) {
-            return 0;
-        }
         ServerPlayer actor = src.getPlayerOrException();
-        PartyData.Party old = data(src).partyOf(actor.getUUID());
-        if (old == null || old.owner == null || !old.owner.equals(actor.getUUID())) {
-            src.sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.party.disband_failed",
-                    "Only the owner can disband"));
-            return 0;
-        }
-        MinecraftServer server = src.getServer();
-        Set<UUID> members = Set.copyOf(old.members);
-        UUID oldId = old.id;
-        data(src).disband(actor.getUUID());
-        dirty(src);
-        for (UUID id : members) {
-            detach(server, id, oldId, members);
-        }
-        src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.party.disbanded",
-                "Party disbanded"), false);
-        return 1;
+        return answer(src, PartyActions.disband(src.getServer(), actor.getUUID()));
     }
 
     private static int info(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {

@@ -16,10 +16,14 @@ public final class ProgressJson {
         JsonObject o = new JsonObject();
         o.add("completed", strings(p.completed));
         o.add("claimed", strings(p.claimed));
-        // the client sees a team reward settled once by any member as claimed too
+        // the client sees a team reward settled once by any member as claimed too, and the separate list lets the
+        // details sheet say whether this player or a teammate took it (2026-10-21)
         java.util.Set<String> claimed = new java.util.LinkedHashSet<>(p.claimedRewards);
         claimed.addAll(p.teamClaimedRewards);
         o.add("claimed_rewards", strings(claimed));
+        // the player's own claims stay separate from the team's, so a teammate's team reward is not "you claimed"
+        o.add("own_claimed_rewards", strings(p.claimedRewards));
+        o.add("team_claimed_rewards", strings(p.teamClaimedRewards));
         JsonObject tasks = new JsonObject();
         p.tasks.forEach(tasks::addProperty);
         o.add("tasks", tasks);
@@ -51,8 +55,13 @@ public final class ProgressJson {
         for (JsonElement e : arr(o, "claimed")) {
             p.claimed.add(e.getAsString());
         }
-        for (JsonElement e : arr(o, "claimed_rewards")) {
+        // own_claimed_rewards is the current shape; claimed_rewards is the merged list older saves and clients have
+        String ownKey = o.has("own_claimed_rewards") ? "own_claimed_rewards" : "claimed_rewards";
+        for (JsonElement e : arr(o, ownKey)) {
             p.claimedRewards.add(e.getAsString());
+        }
+        for (JsonElement e : arr(o, "team_claimed_rewards")) {
+            p.teamClaimedRewards.add(e.getAsString());
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
             p.tasks.put(e.getKey(), e.getValue().getAsLong());

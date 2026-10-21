@@ -257,7 +257,8 @@ public final class ClientProgress {
 
     /** Whether one reward of a node was taken (per-reward claim, 2026-10-20). */
     public static boolean rewardClaimed(String node, int index) {
-        return progress.claimedRewards.contains(node + "#" + index);
+        String key = node + "#" + index;
+        return progress.claimedRewards.contains(key) || progress.teamClaimedRewards.contains(key);
     }
 
     /**
@@ -332,6 +333,7 @@ public final class ClientProgress {
         buffer = null;
         rawChapters = null;
         EditorSession.onLogout();
+        ClientTeam.onLogout();
         ProgressScreen.clearViews();
         ProgressHud.clear();
         Motion.clear();

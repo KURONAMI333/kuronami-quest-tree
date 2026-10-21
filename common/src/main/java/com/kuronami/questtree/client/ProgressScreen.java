@@ -8,6 +8,8 @@ import com.kuronami.questtree.client.edit.MoveBatch;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
+import com.kuronami.questtree.team.TeamStatus;
+import com.kuronami.questtree.team.TeamView;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
 import net.minecraft.Util;
@@ -768,12 +770,26 @@ public class ProgressScreen extends Screen {
     /** Height of a group header row in the rail; chapter rows are {@link #RAIL_ROW}. */
     private static final int HEADER_H = 14;
 
-    /** Two rows kept under the list: "collect all" and the gear (2026-10-20). */
+    /** Rows kept under the list: "collect all", the party while it is relevant, and the gear (2026-10-20/21). */
     private static final int RAIL_FOOT_ROW = 18;
-    private static final int RAIL_FOOT_H = 2 * RAIL_FOOT_ROW + 4;
+
+    private int railFootRows() {
+        return partyRow() ? 3 : 2;
+    }
+
+    /** Built-in solo players can open the party screen to create their first party; FTB Teams solo needs no row. */
+    private boolean partyRow() {
+        TeamView team = ClientTeam.view();
+        return team.active() || (!team.ftbManaged() && !team.id().isBlank());
+    }
+
+    private int railFootH() {
+        int rows = railFootRows();
+        return rows * RAIL_FOOT_ROW + (rows - 1) * 4;
+    }
 
     private int railListBottom() {
-        return height - 8 - RAIL_FOOT_H;
+        return height - 8 - railFootH();
     }
 
     private float railMaxScroll() {
@@ -873,14 +889,15 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * The two fixed rows under the chapter list: collect every claimable reward, and the client settings (2026-10-20).
+     * The fixed rows under the chapter list: collect every claimable reward, the party while it is relevant, and the
+     * client settings (2026-10-20/21).
      * Closed, they are icons with the same gold dot the chapters use for waiting rewards.
      */
     private void renderRailFooter(GuiGraphics g, int mouseX, int mouseY) {
         int w = railWidth();
         int left = 4 + Ui.S1;
         int rowW = w - 2 * Ui.S1;
-        int top = height - 8 - RAIL_FOOT_H;
+        int top = height - 8 - railFootH();
         int waiting = ClientProgress.claimableCount();
         boolean open = railT > 0.6f;
 
@@ -915,6 +932,36 @@ public class ProgressScreen extends Screen {
         }
 
         int sy = cy + RAIL_FOOT_ROW + 4;
+        if (partyRow()) {
+            int py = sy;
+            boolean invites = ClientTeam.view().hasActiveInvites(System.currentTimeMillis());
+            boolean partyHover = mouseX >= left && mouseX < left + rowW && mouseY >= py && mouseY < py + RAIL_FOOT_ROW;
+            if (!open) {
+                partyHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= py && mouseY < py + RAIL_FOOT_ROW;
+            }
+            if (partyHover) {
+                Ui.surface(g, left, py, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
+            }
+            Tiles.icon(g, "team", RAIL_ICON_X, py + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
+                    partyHover ? Ui.TEXT : invites ? Tiles.GOLD : Ui.DIM);
+            if (invites) {
+                Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, py, 6, Tiles.GOLD);
+            }
+            if (open) {
+                Ui.text(g, font, trim(Component.translatable("screen.kuronami_quest_tree.party.title").getString(),
+                        rowW - RAIL_TEXT_X), RAIL_TEXT_X, py + (RAIL_FOOT_ROW - 8) / 2,
+                        partyHover ? Ui.TEXT : Ui.DIM);
+            }
+            buttons.add(new Button(left, py, rowW, RAIL_FOOT_ROW, () -> {
+                if (minecraft != null) {
+                    minecraft.setScreen(new PartyScreen(this));
+                }
+            }));
+            if (partyHover) {
+                pendingTip = List.of(ClientTeam.title());
+            }
+            sy = py + RAIL_FOOT_ROW + 4;
+        }
         boolean settingsHover = mouseX >= left && mouseX < left + rowW && mouseY >= sy && mouseY < sy + RAIL_FOOT_ROW;
         if (!open) {
             settingsHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= sy && mouseY < sy + RAIL_FOOT_ROW;
@@ -1653,6 +1700,25 @@ public class ProgressScreen extends Screen {
         return Component.translatable(n == 1 ? "screen.kuronami_quest_tree.points_one" : "screen.kuronami_quest_tree.points", n);
     }
 
+    private static Component teamMarkLabel(TeamStatus.Mark mark) {
+        return switch (mark) {
+            case REWARDS_WAITING -> Component.translatable("screen.kuronami_quest_tree.team.rewards_waiting");
+            case YOU_CLAIMED -> Component.translatable("screen.kuronami_quest_tree.team.you_claimed");
+            case TEAM_CLAIMED -> Component.translatable("screen.kuronami_quest_tree.team.team_claimed");
+            case TEAM_COMPLETED -> Component.translatable("screen.kuronami_quest_tree.team.completed");
+            case NONE -> Component.empty();
+        };
+    }
+
+    private static int teamMarkColor(TeamStatus.Mark mark) {
+        return switch (mark) {
+            case REWARDS_WAITING -> Tiles.GOLD;
+            case YOU_CLAIMED, TEAM_COMPLETED -> Tiles.GREEN_TEXT;
+            case TEAM_CLAIMED -> Ui.DIM;
+            case NONE -> Ui.DIM;
+        };
+    }
+
     /** Right edge of the rail as currently drawn (it opens to railOpenW on hover). */
     private int railRight() {
         return railWidth() + 4;
@@ -1734,6 +1800,14 @@ public class ProgressScreen extends Screen {
                 y += 10;
             }
         }
+        PlayerProgress p = ClientProgress.progress();
+        TeamStatus.Mark mark = TeamStatus.mark(ClientTeam.view().inTeam(), state, p, n.key);
+        if (mark != TeamStatus.Mark.NONE) {
+            // one short line, not a sentence: the shared quest says who holds it (2026-10-21)
+            y += 2;
+            Ui.text(g, font, teamMarkLabel(mark), x, y, teamMarkColor(mark));
+            y += 10;
+        }
         // the content scrolls between the header and the fixed action row; the scissor clips it to the sheet
         int contentTop = Math.max(y + 4, Ui.S1 + Ui.S2);
         int contentBottom = height - BTN - 2 * Ui.S2;
@@ -1761,8 +1835,8 @@ public class ProgressScreen extends Screen {
             Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.needs"), x, y, Ui.DIM);
             y += 12;
             for (String r : n.requireKeys) {
-                ClientModel.Node p = m.nodesByKey.get(r);
-                if (p == null) {
+                ClientModel.Node req = m.nodesByKey.get(r);
+                if (req == null) {
                     continue;
                 }
                 ClientModel.Chapter reqChapter = m.chapterOf.get(r);
@@ -1776,13 +1850,13 @@ public class ProgressScreen extends Screen {
                     y += 20;
                     continue;
                 }
-                Tiles.tile(g, p.shape, x, y, 16, ClientProgress.look(p.key), ClientProgress.fraction(p.key), ClientProgress.iconFor(p), false);
+                Tiles.tile(g, req.shape, x, y, 16, ClientProgress.look(req.key), ClientProgress.fraction(req.key), ClientProgress.iconFor(req), false);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 ClientModel.Chapter other = reqChapter;
                 if (other != ch) {
                     // a requirement in another chapter: its chapter name above, and the row opens it
-                    Ui.text(g, font, trim(p.title.getString(), w - 22), x + 22, y, Ui.TEXT);
+                    Ui.text(g, font, trim(req.title.getString(), w - 22), x + 22, y, Ui.TEXT);
                     Ui.text(g, font, trim(other.title.getString(), w - 22), x + 22, y + 9, Ui.DIM);
                     String key = r;
                     // only a row still inside the sheet may catch a click (a scrolled-away row must not)
@@ -1790,7 +1864,7 @@ public class ProgressScreen extends Screen {
                         buttons.add(new Button(x, y, w, 18, () -> goTo(key)));
                     }
                 } else {
-                    Ui.text(g, font, trim(p.title.getString(), w - 22), x + 22, y + 4, Ui.TEXT);
+                    Ui.text(g, font, trim(req.title.getString(), w - 22), x + 22, y + 4, Ui.TEXT);
                 }
                 g.pose().popPose();
                 y += 20;
@@ -1836,7 +1910,6 @@ public class ProgressScreen extends Screen {
             y += 8;
             Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.tasks"), x, y, Ui.DIM);
             y += 12;
-            PlayerProgress p = ClientProgress.progress();
             for (int i = 0; i < n.tasks.size(); i++) {
                 ClientModel.Task t = n.tasks.get(i);
                 long have = Math.min(p.task(n.key, i), t.count);

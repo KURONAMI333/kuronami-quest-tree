@@ -47,6 +47,16 @@ public final class TeamResolver {
         return PartyStore.get(server).data().members(teamId);
     }
 
+    /** The FTB Teams owner; null for the built-in party, where the party record has it. */
+    public static UUID teamOwner(MinecraftServer server, UUID teamId) {
+        return managedByFtbTeams() ? FtbTeamsBridge.owner(server, teamId) : null;
+    }
+
+    /** The FTB team's friendly name; empty for the built-in party, which the client names after its owner. */
+    public static String teamName(MinecraftServer server, UUID teamId) {
+        return managedByFtbTeams() ? FtbTeamsBridge.name(server, teamId) : "";
+    }
+
     /** Online members of the player's current team (the player themselves when the list cannot be read). */
     public static Set<ServerPlayer> onlineMembers(MinecraftServer server, UUID player) {
         UUID teamId = teamId(server, player);
