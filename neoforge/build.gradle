@@ -82,6 +82,8 @@ neoForge {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 dependencies {
-    // JEI is optional: compiled against its API only, never required at runtime (client/RecipeViewer)
+    // JEI / REI / EMI are optional: compiled against their APIs only, never required at runtime
     compileOnly "mezz.jei:jei-1.21.1-common-api:19.57.0.447"
+    compileOnly "me.shedaniel:RoughlyEnoughItems-neoforge:${rei_version}"
+    compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
 }
