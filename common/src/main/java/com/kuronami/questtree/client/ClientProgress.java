@@ -31,8 +31,7 @@ public final class ClientProgress {
     public static final KeyMapping TRACK_KEY = new KeyMapping("key.kuronami_quest_tree.track", InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_J, "key.categories.kuronami_quest_tree");
 
-    private static ClientModel model;
-    private static ProgressRules rules;
+    private static SyncState<ClientModel, ProgressRules> sync = SyncState.empty();
     private static PlayerProgress progress = new PlayerProgress();
     /** False until the first progress packet after joining, so joining does not replay every change as news. */
     private static boolean haveProgress;
@@ -41,10 +40,9 @@ public final class ClientProgress {
     /** Set by the loader module: sends one editor op to the server. */
     public static Consumer<EditorOpPayload> editorSender = p -> { };
     /** The chapter JSON exactly as the server sent it, for copying nodes without a round trip. */
-    private static JsonObject rawChapters;
-    private static JsonObject rawTables = new JsonObject();
+
     /** Tombstones for the restore list: deleted chapters and each live chapter's deleted node ids. */
-    private static JsonObject rawDeleted = new JsonObject();
+
     private static int receivingGeneration = -1;
     private static ByteArrayOutputStream buffer;
     private static int nextPart;
@@ -71,20 +69,22 @@ public final class ClientProgress {
         if (nextPart == p.total()) {
             try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(buffer.toByteArray()))) {
                 JsonObject bundle = JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+                // build everything first: a throw halfway must not leave a new model next to the old rules
+                ClientModel nextModel = new ClientModel(bundle);
+                ProgressRules nextRules = new ProgressRules(ProgressModel.of(bundle));
+                JsonObject nextChapters = bundle.has("chapters") && bundle.get("chapters").isJsonObject()
+                        ? bundle.getAsJsonObject("chapters").deepCopy() : new JsonObject();
+                JsonObject nextTables = bundle.has("reward_tables") && bundle.get("reward_tables").isJsonObject()
+                        ? bundle.getAsJsonObject("reward_tables").deepCopy() : new JsonObject();
+                JsonObject nextDeleted = bundle.has("deleted") && bundle.get("deleted").isJsonObject()
+                        ? bundle.getAsJsonObject("deleted").deepCopy() : new JsonObject();
                 // a filter's items come from the tags this server sent, so items worked out for another world are dropped
                 com.kuronami.questtree.progress.ItemFilter.clearCache();
-                model = new ClientModel(bundle);
-                rules = new ProgressRules(ProgressModel.of(bundle));
-                rawChapters = bundle.has("chapters") && bundle.get("chapters").isJsonObject()
-                        ? bundle.getAsJsonObject("chapters").deepCopy() : new JsonObject();
-                rawTables = bundle.has("reward_tables") && bundle.get("reward_tables").isJsonObject()
-                        ? bundle.getAsJsonObject("reward_tables").deepCopy() : new JsonObject();
-                rawDeleted = bundle.has("deleted") && bundle.get("deleted").isJsonObject()
-                        ? bundle.getAsJsonObject("deleted").deepCopy() : new JsonObject();
+                sync = new SyncState<>(nextModel, nextRules, nextChapters, nextTables, nextDeleted);
                 EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
-                Constants.LOG.info("Received {} progression chapters", model.chapters.size());
+                Constants.LOG.info("Received {} progression chapters", sync.model().chapters.size());
             } catch (Exception ex) {
                 Constants.LOG.error("Could not read progression data from server", ex);
             }
@@ -114,19 +114,19 @@ public final class ClientProgress {
     }
 
     public static ProgressRules rules() {
-        return rules;
+        return sync.rules();
     }
 
     public static ClientModel model() {
-        return model;
+        return sync.model();
     }
 
     /** One node's raw chapter JSON, or null; editing copies this so a paste keeps fields the display model drops. */
     public static JsonObject rawNode(String chapterId, String nodeId) {
-        if (rawChapters == null || !rawChapters.has(chapterId)) {
+        if (sync.chapters() == null || !sync.chapters().has(chapterId)) {
             return null;
         }
-        com.google.gson.JsonElement chapter = rawChapters.get(chapterId);
+        com.google.gson.JsonElement chapter = sync.chapters().get(chapterId);
         if (!chapter.isJsonObject()) {
             return null;
         }
@@ -140,20 +140,20 @@ public final class ClientProgress {
 
     /** One chapter's raw JSON, or null; the chapter editor patches this so unknown fields survive. */
     public static JsonObject rawChapter(String chapterId) {
-        if (rawChapters == null || !rawChapters.has(chapterId) || !rawChapters.get(chapterId).isJsonObject()) {
+        if (sync.chapters() == null || !sync.chapters().has(chapterId) || !sync.chapters().get(chapterId).isJsonObject()) {
             return null;
         }
-        return rawChapters.getAsJsonObject(chapterId).deepCopy();
+        return sync.chapters().getAsJsonObject(chapterId).deepCopy();
     }
 
     /** Every reward table as the server last sent it (pack plus the writable table overlay). */
     public static JsonObject rawTables() {
-        return rawTables.deepCopy();
+        return sync.tables().deepCopy();
     }
 
     /** The restore list: {@code chapters} (ids) and {@code nodes} (chapter id to node ids). */
     public static JsonObject rawDeleted() {
-        return rawDeleted.deepCopy();
+        return sync.deleted().deepCopy();
     }
 
     /** State of a node for this player; nodes the rules do not know (should not happen) count as open. */
@@ -162,8 +162,8 @@ public final class ClientProgress {
      * nodes and tasks count as open, so a data mismatch never hides a task for good.
      */
     public static boolean taskOpen(String key, int index) {
-        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
-        return n == null || index < 0 || index >= n.tasks.size() || rules.taskOpen(progress, n, index);
+        ProgressModel.Node n = sync.rules() == null ? null : sync.rules().model().nodes.get(key);
+        return n == null || index < 0 || index >= n.tasks.size() || sync.rules().taskOpen(progress, n, index);
     }
 
     /**
@@ -171,7 +171,7 @@ public final class ClientProgress {
      * it started over after a claim, and a finished quest is one more until that claim resets it. 0 for anything else.
      */
     public static int completions(String key) {
-        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        ProgressModel.Node n = sync.rules() == null ? null : sync.rules().model().nodes.get(key);
         if (n == null || !n.json.has("repeat")) {
             return 0;
         }
@@ -183,8 +183,8 @@ public final class ClientProgress {
 
     /** Whether a node's requirements are met; a "flexible" node can be open without it. */
     public static boolean unlocked(String key) {
-        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
-        return n == null || rules.unlocked(progress, n);
+        ProgressModel.Node n = sync.rules() == null ? null : sync.rules().model().nodes.get(key);
+        return n == null || sync.rules().unlocked(progress, n);
     }
 
     /** The client's copy of a quest barrier: the same rule the server uses, from synced progress. */
@@ -202,25 +202,25 @@ public final class ClientProgress {
     }
 
     public static ProgressRules.State state(String key) {
-        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
-        return n == null ? ProgressRules.State.OPEN : rules.state(progress, n);
+        ProgressModel.Node n = sync.rules() == null ? null : sync.rules().model().nodes.get(key);
+        return n == null ? ProgressRules.State.OPEN : sync.rules().state(progress, n);
     }
 
     /** Whether the player may see the node yet (hidden quests); unknown nodes count as visible. */
     public static boolean visible(String key) {
-        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        ProgressModel.Node n = sync.rules() == null ? null : sync.rules().model().nodes.get(key);
         if (n == null) {
             return true;
         }
         // asked several times per node per frame; the answer only changes with new progress
-        if (visibleFor != progress || visibleRules != rules) {
+        if (visibleFor != progress || visibleRules != sync.rules()) {
             VISIBLE.clear();
             visibleFor = progress;
-            visibleRules = rules;
+            visibleRules = sync.rules();
         }
         Boolean v = VISIBLE.get(key);
         // the rules fill the map themselves as they work through a node's requirements (one memo per progress)
-        return v != null ? v : rules.visible(progress, n, VISIBLE);
+        return v != null ? v : sync.rules().visible(progress, n, VISIBLE);
     }
 
     private static final java.util.Map<String, Boolean> VISIBLE = new java.util.HashMap<>();
@@ -229,19 +229,19 @@ public final class ClientProgress {
 
     /** Chapters hidden from the list as a whole. */
     public static boolean chapterHidden(String id) {
-        ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(id);
+        ProgressModel.Chapter c = sync.rules() == null ? null : sync.rules().model().chapters.get(id);
         return c != null && (c.alwaysHidden || !ProgressRules.chapterUnlocked(progress, c));
     }
 
     /** A chapter the pack marks {@code visibility.always_hidden}: not even a locked row is shown for it. */
     public static boolean chapterAlwaysHidden(String id) {
-        ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(id);
+        ProgressModel.Chapter c = sync.rules() == null ? null : sync.rules().model().chapters.get(id);
         return c != null && c.alwaysHidden;
     }
 
     /** A chapter the player has not unlocked yet: shown greyed in the list, not opened. */
     public static boolean chapterLocked(String id) {
-        ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(id);
+        ProgressModel.Chapter c = sync.rules() == null ? null : sync.rules().model().chapters.get(id);
         return c != null && !c.alwaysHidden && !ProgressRules.chapterUnlocked(progress, c);
     }
 
@@ -255,7 +255,7 @@ public final class ClientProgress {
      * (white). Locked nodes carry a lock only when they are the next step (every requirement started or done).
      */
     static Tiles.Look look(String key) {
-        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
+        ProgressModel.Node n = sync.rules() == null ? null : sync.rules().model().nodes.get(key);
         ProgressRules.State s = state(key);
         boolean skill = n != null && n.chapter.isSkills() && n.tasks.isEmpty();
         return switch (s) {
@@ -294,14 +294,14 @@ public final class ClientProgress {
     }
 
     public static double fraction(String key) {
-        ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
-        return n == null ? 0 : rules.fraction(progress, n);
+        ProgressModel.Node n = sync.rules() == null ? null : sync.rules().model().nodes.get(key);
+        return n == null ? 0 : sync.rules().fraction(progress, n);
     }
 
     /** Points that can be spent now in a skill chapter. */
     public static int points(String chapterId) {
-        ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(chapterId);
-        return c == null || !c.isSkills() ? 0 : rules.availablePoints(progress, c);
+        ProgressModel.Chapter c = sync.rules() == null ? null : sync.rules().model().chapters.get(chapterId);
+        return c == null || !c.isSkills() ? 0 : sync.rules().availablePoints(progress, c);
     }
 
     public static void send(String action, String node, int index) {
@@ -324,11 +324,11 @@ public final class ClientProgress {
      * choice left to make. Used by the chapter list's collect row and the buttons outside the screen.
      */
     public static int claimableCount() {
-        ProgressRules r = rules;
+        ProgressRules r = sync.rules();
         if (r == null) {
             return 0;
         }
-        ClientModel m = model;
+        ClientModel m = sync.model();
         if (m == null) {
             return 0;
         }
@@ -356,7 +356,7 @@ public final class ClientProgress {
      * opens the quest that wants that item; with no such quest the key is left alone.
      */
     public static boolean onScreenKey(net.minecraft.client.gui.screens.Screen screen, int key, int scan) {
-        if (screen instanceof ProgressScreen || !OPEN_KEY.matches(key, scan) || model == null) {
+        if (screen instanceof ProgressScreen || !OPEN_KEY.matches(key, scan) || sync.model() == null) {
             return false;
         }
         // a key typed into a text field is a letter, not a shortcut (the creative search, an anvil, the viewer's search)
@@ -387,14 +387,11 @@ public final class ClientProgress {
     }
 
     public static void onLogout() {
-        model = null;
-        rules = null;
+        sync = SyncState.empty();
         progress = new PlayerProgress();
         haveProgress = false;
         receivingGeneration = -1;
         buffer = null;
-        rawChapters = null;
-        rawDeleted = new JsonObject();
         CLAIMABLE.clear();
         EditorSession.onLogout();
         ClientTeam.onLogout();
