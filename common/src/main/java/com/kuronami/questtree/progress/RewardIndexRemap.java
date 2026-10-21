@@ -112,7 +112,11 @@ public final class RewardIndexRemap {
                 ? node.getAsJsonArray("rewards") : new JsonArray();
     }
 
-    /** Pairs equal reward objects in order, so a duplicate at the end does not steal a claim from the front. */
+    /**
+     * Pairs equal reward objects in order, so a duplicate at the end does not steal a claim from the front. Then pairs
+     * a reward that was edited where it stood (same index, same type): changing a count, an item or a command keeps
+     * the claim on that reward, instead of dropping it and letting the player take it again (2026-10-22 review).
+     */
     private static Map<Integer, Integer> pairing(JsonArray before, JsonArray after) {
         Map<Integer, Integer> out = new LinkedHashMap<>();
         boolean[] used = new boolean[before.size()];
@@ -125,6 +129,26 @@ public final class RewardIndexRemap {
                 }
             }
         }
+        for (int to = 0; to < after.size() && to < before.size(); to++) {
+            if (used[to] || out.containsValue(to)) {
+                continue;
+            }
+            String type = type(before.get(to));
+            if (!type.isEmpty() && type.equals(type(after.get(to)))) {
+                used[to] = true;
+                out.put(to, to);
+            }
+        }
         return out;
+    }
+
+    /** A reward's type; empty when it has none, so an object with no type is never paired by position. */
+    private static String type(JsonElement reward) {
+        if (!reward.isJsonObject()) {
+            return "";
+        }
+        JsonElement type = reward.getAsJsonObject().get("type");
+        return type != null && type.isJsonPrimitive() && type.getAsJsonPrimitive().isString()
+                ? type.getAsString() : "";
     }
 }

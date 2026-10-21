@@ -61,7 +61,7 @@ public final class ProgressJson {
             p.completed.add(e.getAsString());
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
-            long at = PackNumbers.longOr(e.getValue(), Long.MIN_VALUE);
+            long at = PackNumbers.savedLong(e.getValue(), Long.MIN_VALUE);
             if (at >= 0) {
                 p.completedAt.put(e.getKey(), at);
             }
@@ -78,18 +78,18 @@ public final class ProgressJson {
             p.teamClaimedRewards.add(e.getAsString());
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
-            p.tasks.put(e.getKey(), e.getValue().getAsLong());
+            p.tasks.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
         readInts(obj(o, "taken"), p.taken);
         for (Map.Entry<String, JsonElement> e : obj(o, "xp").entrySet()) {
-            p.xp.put(e.getKey(), e.getValue().getAsDouble());
+            p.xp.put(e.getKey(), PackNumbers.savedDouble(e.getValue(), 0));
         }
         readInts(obj(o, "level"), p.level);
         readInts(obj(o, "spent"), p.spent);
         readInts(obj(o, "bonus"), p.bonus);
         readInts(obj(o, "exchange"), p.exchange);
         for (Map.Entry<String, JsonElement> e : obj(o, "chapter_open").entrySet()) {
-            p.chapterOpen.put(e.getKey(), e.getValue().getAsBoolean());
+            p.chapterOpen.put(e.getKey(), PackNumbers.booleanOr(e.getValue(), false));
         }
         for (JsonElement e : arr(o, "team_stages")) {
             p.teamStages.add(e.getAsString());
@@ -99,17 +99,15 @@ public final class ProgressJson {
         }
         readInts(obj(o, "repeats"), p.repeats);
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
-            p.cooldown.put(e.getKey(), e.getValue().getAsLong());
+            p.cooldown.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
         for (JsonElement e : arr(o, "recent")) {
             p.recent.addLast(e.getAsString());
         }
-        p.setEmergencyReadyAt(PackNumbers.longOr(o.get("emergency_ready_at"), 0L));
-        p.setEmergencyWaitNotice(o.has("emergency_wait_notice") && o.get("emergency_wait_notice").isJsonPrimitive()
-                && o.get("emergency_wait_notice").getAsBoolean());
-        p.setRewardsBlocked(o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
-                && o.get("rewards_blocked").getAsBoolean());
-        p.setBookGiven(o.has("book_given") && o.get("book_given").isJsonPrimitive() && o.get("book_given").getAsBoolean());
+        p.setEmergencyReadyAt(PackNumbers.savedLong(o.get("emergency_ready_at"), 0L));
+        p.setEmergencyWaitNotice(PackNumbers.booleanOr(o.get("emergency_wait_notice"), false));
+        p.setRewardsBlocked(PackNumbers.booleanOr(o.get("rewards_blocked"), false));
+        p.setBookGiven(PackNumbers.booleanOr(o.get("book_given"), false));
         return p;
     }
 
@@ -127,7 +125,7 @@ public final class ProgressJson {
 
     private static void readInts(JsonObject o, Map<String, Integer> into) {
         for (Map.Entry<String, JsonElement> e : o.entrySet()) {
-            into.put(e.getKey(), e.getValue().getAsInt());
+            into.put(e.getKey(), PackNumbers.savedInt(e.getValue(), 0));
         }
     }
 

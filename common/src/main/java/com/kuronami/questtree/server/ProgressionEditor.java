@@ -525,7 +525,8 @@ public final class ProgressionEditor {
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(packSources);
         overlay.applyTo(after, afterSources);
 
-        List<String> escalation = commandEscalation(before, after, tables, tables, writerPermissionLevel);
+        List<String> escalation = commandEscalation(before, after, tables, tables, packChapters, tables,
+                writerPermissionLevel);
         if (!escalation.isEmpty()) {
             return fail(escalation, current);
         }
@@ -625,7 +626,7 @@ public final class ProgressionEditor {
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
         overlay.applyTablesTo(afterTables, afterSources);
         List<String> escalation = commandEscalation(packChapters, packChapters, beforeTables, afterTables,
-                writerPermissionLevel);
+                packChapters, packTables, writerPermissionLevel);
         if (!escalation.isEmpty()) {
             return fail(escalation, current);
         }
@@ -685,7 +686,7 @@ public final class ProgressionEditor {
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
         overlay.applyTablesTo(afterTables, afterSources);
         List<String> escalation = commandEscalation(packChapters, packChapters, beforeTables, afterTables,
-                writerPermissionLevel);
+                packChapters, packTables, writerPermissionLevel);
         if (!escalation.isEmpty()) {
             return fail(escalation, current);
         }
@@ -746,7 +747,7 @@ public final class ProgressionEditor {
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
         overlay.applyTablesTo(afterTables, afterSources);
         List<String> escalation = commandEscalation(packChapters, packChapters, beforeTables, afterTables,
-                writerPermissionLevel);
+                packChapters, packTables, writerPermissionLevel);
         if (!escalation.isEmpty()) {
             return fail(escalation, current);
         }
@@ -818,7 +819,8 @@ public final class ProgressionEditor {
         JsonObject after = packChapters.deepCopy();
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(packSources);
         restoredOverlay.applyTo(after, afterSources);
-        List<String> escalation = commandEscalation(before, after, tables, tables, writerPermissionLevel);
+        List<String> escalation = commandEscalation(before, after, tables, tables, packChapters, tables,
+                writerPermissionLevel);
         if (!escalation.isEmpty()) {
             return fail(escalation, current);
         }
@@ -895,7 +897,7 @@ public final class ProgressionEditor {
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(packSources);
         restoredOverlay.applyTablesTo(afterTables, afterSources);
         List<String> escalation = commandEscalation(chapters, chapters, beforeTables, afterTables,
-                writerPermissionLevel);
+                packChapters, packTables, writerPermissionLevel);
         if (!escalation.isEmpty()) {
             return fail(escalation, current);
         }
@@ -947,31 +949,62 @@ public final class ProgressionEditor {
      * A level-2 editor may write ordinary rewards, but not grant a command they could not run themselves. Compares the
      * before/after reward of every node and table entry; a new or changed command key on a writer below level 4 is
      * refused (2026-10-22 release review).
+     * <p>
+     * The pack's own rewards are the baseline for a place the edit puts back: undoing the delete of a pack node must
+     * not read as "adding a command reward", because the command was the pack's to begin with (2026-10-22 review).
      */
     private static List<String> commandEscalation(JsonObject beforeChapters, JsonObject afterChapters,
-                                                  JsonObject beforeTables, JsonObject afterTables, int level) {
+                                                  JsonObject beforeTables, JsonObject afterTables,
+                                                  JsonObject packChapters, JsonObject packTables, int level) {
         if (level >= 4) {
             return List.of();
         }
-        Map<String, JsonObject> before = rewards(beforeChapters, beforeTables);
-        Map<String, JsonObject> after = rewards(afterChapters, afterTables);
+        Map<String, Map<String, Integer>> before = commandSignatures(beforeChapters, beforeTables);
+        Map<String, Map<String, Integer>> pack = commandSignatures(packChapters, packTables);
+        Map<String, Map<String, Integer>> after = commandSignatures(afterChapters, afterTables);
         List<String> out = new ArrayList<>();
-        for (Map.Entry<String, JsonObject> e : after.entrySet()) {
-            JsonObject was = before.get(e.getKey());
-            JsonObject now = e.getValue();
-            if (was != null && now.equals(was)) {
-                continue;
+        for (Map.Entry<String, Map<String, Integer>> place : after.entrySet()) {
+            Map<String, Integer> allowed = before.get(place.getKey());
+            if (allowed == null) {
+                // the place had no command before, so the pack's own command is the baseline: a restore is not an add
+                allowed = pack.get(place.getKey());
             }
-            if (was != null && !commandSignature(was).equals(commandSignature(now))) {
-                out.add("changing a command reward needs permission level 4 (you have " + level + "): " + e.getKey());
-            } else if (was == null && !commandSignature(now).isEmpty()) {
-                out.add("adding a command reward needs permission level 4 (you have " + level + "): " + e.getKey());
+            boolean had = allowed != null && !allowed.isEmpty();
+            for (Map.Entry<String, Integer> sig : place.getValue().entrySet()) {
+                int free = allowed == null ? 0 : allowed.getOrDefault(sig.getKey(), 0);
+                if (sig.getValue() <= free) {
+                    continue;
+                }
+                out.add((had ? "changing" : "adding") + " a command reward needs permission level 4 (you have "
+                        + level + "): " + place.getKey());
             }
         }
         return out;
     }
 
-    /** Every reward by a stable place, node rewards and reward-table entries alike. */
+    /**
+     * The command-running part of every reward, counted per place (a node, one of its ranks, or a table) instead of
+     * per index: a reorder or an insert moves the rewards, and comparing by position would call that a new command
+     * (2026-10-22 review). Ordinary rewards have no signature and are not counted.
+     */
+    private static Map<String, Map<String, Integer>> commandSignatures(JsonObject chapters, JsonObject tables) {
+        Map<String, Map<String, Integer>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonObject> e : rewards(chapters, tables).entrySet()) {
+            String signature = commandSignature(e.getValue());
+            if (signature.isEmpty()) {
+                continue;
+            }
+            String place = e.getKey().substring(0, e.getKey().lastIndexOf('#'));
+            out.computeIfAbsent(place, k -> new LinkedHashMap<>()).merge(signature, 1, Integer::sum);
+        }
+        return out;
+    }
+
+    /**
+     * Every reward by a stable place: the node's own rewards, the rewards of each of its skill ranks, and the
+     * reward-table entries alike. A skill node pays one rank at a time and its rewards may run commands too, so a
+     * writer who cannot write a command must not write one there either (2026-10-22 release review).
+     */
     private static Map<String, JsonObject> rewards(JsonObject chapters, JsonObject tables) {
         Map<String, JsonObject> out = new LinkedHashMap<>();
         if (chapters != null) {
@@ -987,14 +1020,15 @@ public final class ProgressionEditor {
                     if (!n.getValue().isJsonObject()) {
                         continue;
                     }
-                    JsonElement list = n.getValue().getAsJsonObject().get("rewards");
-                    if (list == null || !list.isJsonArray()) {
+                    String place = c.getKey() + "/" + n.getKey();
+                    rewardsOf(out, place, n.getValue().getAsJsonObject());
+                    JsonElement ranks = n.getValue().getAsJsonObject().get("ranks");
+                    if (ranks == null || !ranks.isJsonArray()) {
                         continue;
                     }
-                    JsonArray array = list.getAsJsonArray();
-                    for (int i = 0; i < array.size(); i++) {
-                        if (array.get(i).isJsonObject()) {
-                            out.put(c.getKey() + "/" + n.getKey() + "#" + i, array.get(i).getAsJsonObject());
+                    for (int r = 0; r < ranks.getAsJsonArray().size(); r++) {
+                        if (ranks.getAsJsonArray().get(r).isJsonObject()) {
+                            rewardsOf(out, place + "#rank" + r, ranks.getAsJsonArray().get(r).getAsJsonObject());
                         }
                     }
                 }
@@ -1022,6 +1056,20 @@ public final class ProgressionEditor {
             }
         }
         return out;
+    }
+
+    /** Puts one holder\'s rewards under {@code place} (a node, a rank or a table). */
+    private static void rewardsOf(Map<String, JsonObject> out, String place, JsonObject holder) {
+        JsonElement list = holder.get("rewards");
+        if (list == null || !list.isJsonArray()) {
+            return;
+        }
+        JsonArray array = list.getAsJsonArray();
+        for (int i = 0; i < array.size(); i++) {
+            if (array.get(i).isJsonObject()) {
+                out.put(place + "#" + i, array.get(i).getAsJsonObject());
+            }
+        }
     }
 
     /** The command-running part of a reward; empty for a reward that cannot run a command. */

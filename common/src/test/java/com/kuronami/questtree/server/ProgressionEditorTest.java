@@ -724,15 +724,24 @@ class ProgressionEditorTest {
 
     private ProgressionEditor.Outcome applyAs(ProgressionEditor editor, int level, JsonObject pack, String op,
                                               String args) {
-        return editor.apply(pack, new JsonObject(), Map.of(), CHAPTER, 0, op,
+        return applyAs(editor, level, 0, pack, op, args);
+    }
+
+    private ProgressionEditor.Outcome applyAs(ProgressionEditor editor, int level, long revision, JsonObject pack,
+                                              String op, String args) {
+        return editor.apply(pack, new JsonObject(), Map.of(), CHAPTER, revision, op,
                 JsonParser.parseString(args).getAsJsonObject(), Set.of(), level);
     }
 
     private static JsonObject packWithReward(String rewardJson) {
+        return packWithReward("a", rewardJson);
+    }
+
+    private static JsonObject packWithReward(String nodeId, String rewardJson) {
         JsonObject pack = pack();
         JsonArray rewards = new JsonArray();
         rewards.add(JsonParser.parseString(rewardJson));
-        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").add("rewards", rewards);
+        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject(nodeId).add("rewards", rewards);
         return pack;
     }
 
@@ -769,11 +778,135 @@ class ProgressionEditorTest {
         assertFalse(changed.ok(), "rewriting the command is escalation too");
     }
 
+    /** A skill node pays one rank's rewards on each take, so a rank reward can run a command too. */
+    private static JsonObject packWithRankReward(String rewardJson) {
+        JsonArray rankRewards = new JsonArray();
+        rankRewards.add(JsonParser.parseString(rewardJson));
+        JsonObject rank = new JsonObject();
+        rank.add("rewards", rankRewards);
+        JsonArray ranks = new JsonArray();
+        ranks.add(rank);
+        JsonObject pack = pack();
+        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").add("ranks", ranks);
+        return pack;
+    }
+
+    @Test
+    void aLevelTwoEditorCannotAddACommandRewardToASkillRank() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"command\",\"unlock_command\":\"op @s\"}]}]}}");
+
+        assertFalse(out.ok());
+        assertTrue(out.messages().stream().anyMatch(m -> m.contains("permission level 4")), out.messages().toString());
+        assertFalse(Files.exists(overlayFile(CHAPTER)), "nothing was written");
+    }
+
+    @Test
+    void aLevelTwoEditorCannotChangeARankRewardsLockCommand() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, packWithRankReward(
+                        "{\"type\":\"command\",\"unlock_command\":\"say hi\",\"lock_command\":\"say bye\"}"),
+                "update_node", "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"command\",\"unlock_command\":\"say hi\",\"lock_command\":\"say bad\"}]}]}}");
+
+        assertFalse(out.ok(), "rewriting a rank's lock command is escalation too");
+        assertTrue(out.messages().stream().anyMatch(m -> m.contains("permission level 4")), out.messages().toString());
+    }
+
+    @Test
+    void aLevelFourEditorCanAddACommandRewardToASkillRank() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 4, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"command\",\"unlock_command\":\"say hi\"}]}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
+
+    @Test
+    void aLevelTwoEditorCanAddAnOrdinaryRewardToASkillRank() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"item\",\"item\":\"minecraft:apple\"}]}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
+
     @Test
     void aLevelTwoEditorCanStillAddAnOrdinaryReward() {
         ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",
                 "{\"id\":\"a\",\"patch\":{\"rewards\":[{\"type\":\"item\",\"item\":\"minecraft:apple\"}]}}");
 
         assertTrue(out.ok(), out.messages().toString());
+    }
+
+    /** The pack's own command reward is not the writer's: undoing a delete must not read as adding it. */
+    @Test
+    void undoingTheDeleteOfAPackNodeWithACommandRewardIsNotEscalation() {
+        ProgressionEditor editor = editor();
+        JsonObject pack = packWithReward("b", "{\"type\":\"command\",\"command\":\"say hi\"}");
+        assertTrue(applyAs(editor, 2, 0, pack, "delete_node", "{\"id\":\"b\"}").ok());
+
+        ProgressionEditor.Outcome undone = applyAs(editor, 2, 1, pack, "undo", "{}");
+
+        assertTrue(undone.ok(), undone.messages().toString());
+        assertEquals(2, undone.revision());
+    }
+
+    @Test
+    void restoringADeletedPackNodeWithACommandRewardIsNotEscalation() {
+        ProgressionEditor editor = editor();
+        JsonObject pack = packWithReward("b", "{\"type\":\"command\",\"command\":\"say hi\"}");
+        assertTrue(applyAs(editor, 2, 0, pack, "delete_node", "{\"id\":\"b\"}").ok());
+
+        ProgressionEditor.Outcome restored = applyAs(editor, 2, 1, pack, "restore_node", "{\"id\":\"b\"}");
+
+        assertTrue(restored.ok(), restored.messages().toString());
+    }
+
+    /** A reorder and a middle insert move the rewards, not the command: the same command count is not escalation. */
+    @Test
+    void reorderingAroundACommandRewardIsNotEscalation() {
+        JsonObject pack = pack();
+        JsonArray rewards = new JsonArray();
+        rewards.add(JsonParser.parseString("{\"type\":\"command\",\"command\":\"say hi\"}"));
+        rewards.add(JsonParser.parseString("{\"type\":\"item\",\"item\":\"minecraft:apple\"}"));
+        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").add("rewards", rewards);
+
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"rewards\":["
+                        + "{\"type\":\"item\",\"item\":\"minecraft:apple\"},"
+                        + "{\"type\":\"command\",\"command\":\"say hi\"}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
+
+    @Test
+    void insertingAnOrdinaryRewardBeforeACommandRewardIsNotEscalation() {
+        JsonObject pack = pack();
+        JsonArray rewards = new JsonArray();
+        rewards.add(JsonParser.parseString("{\"type\":\"command\",\"command\":\"say hi\"}"));
+        rewards.add(JsonParser.parseString("{\"type\":\"item\",\"item\":\"minecraft:apple\"}"));
+        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").add("rewards", rewards);
+
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"rewards\":["
+                        + "{\"type\":\"item\",\"item\":\"minecraft:stick\"},"
+                        + "{\"type\":\"command\",\"command\":\"say hi\"},"
+                        + "{\"type\":\"item\",\"item\":\"minecraft:apple\"}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
+
+    @Test
+    void addingASecondCopyOfAnExistingCommandRewardIsEscalation() {
+        JsonObject pack = packWithReward("{\"type\":\"command\",\"command\":\"say hi\"}");
+
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"rewards\":["
+                        + "{\"type\":\"command\",\"command\":\"say hi\"},"
+                        + "{\"type\":\"command\",\"command\":\"say hi\"}]}}");
+
+        assertFalse(out.ok(), "a second run of the same command is a new command the writer cannot grant");
+        assertTrue(out.messages().stream().anyMatch(m -> m.contains("permission level 4")), out.messages().toString());
     }
 }

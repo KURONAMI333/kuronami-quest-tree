@@ -189,12 +189,8 @@ public final class EditorService {
 
     /** End of a server tick: publish one rebuild for every edit made in the last {@link #PUBLISH_INTERVAL_TICKS}. */
     public static void onServerTick(MinecraftServer server) {
-        // A rebuild may have moved reward indices (an editor reorder, insert or delete): move the saved claim records
-        // once, before the new book is sent (2026-10-22 release review).
-        java.util.Map<String, java.util.Map<Integer, Integer>> rewardRemap = ProgressData.takeRewardRemap();
-        if (!rewardRemap.isEmpty()) {
-            ProgressStore.get(server).remapRewardIndices(rewardRemap);
-        }
+        // /reload can move a reward index outside an editor publish: apply what moved before anything is sent.
+        applyRewardRemap(ProgressStore.get(server), ProgressData.takeRewardRemap());
         if (!dirty) {
             return;
         }
@@ -209,9 +205,26 @@ public final class EditorService {
             Constants.LOG.error("Could not publish the progression overlay", ex);
             return;
         }
+        // The publish may have moved reward indices (a reorder, insert or delete). Apply that before the new book is
+        // sent, and resend the progress with it: the client reads a claim's reward through the new index, so a client
+        // still holding the old progress could take the same reward twice in the tick between (2026-10-22 review).
+        boolean moved = applyRewardRemap(ProgressStore.get(server), ProgressData.takeRewardRemap());
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             ProgressData.sync(player);
+            if (moved) {
+                ProgressService.markDirty(player);
+                ProgressService.flush(player);
+            }
         }
+    }
+
+    /**
+     * Moves the saved claim records for a reward remap, and tells the caller whether anything moved so that it can
+     * resend the progress the new indices belong to.
+     */
+    static boolean applyRewardRemap(ProgressStore store,
+                                    java.util.Map<String, java.util.Map<Integer, Integer>> remap) {
+        return store.remapRewardIndices(remap);
     }
 
     /**

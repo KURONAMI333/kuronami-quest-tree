@@ -76,4 +76,25 @@ class RewardIndexRemapTest {
         assertEquals("t:c/n#0", RewardIndexRemap.apply("t:c/n#0", remaps));
         assertNull(RewardIndexRemap.apply("t:c/n#1", remaps));
     }
+
+    @Test
+    void anEditInPlaceKeepsTheClaim() {
+        Map<String, Map<Integer, Integer>> remaps = RewardIndexRemap.between(
+                chapters("[{\"type\": \"item\", \"item\": \"a\", \"count\": 1}, {\"type\": \"command\", \"command\": \"say hi\"}]"),
+                chapters("[{\"type\": \"item\", \"item\": \"a\", \"count\": 8}, {\"type\": \"command\", \"command\": \"say hi\"}]"));
+
+        assertEquals("t:c/n#0", RewardIndexRemap.apply("t:c/n#0", remaps),
+                "the reward at index 0 kept its place and its type, so its claim stays");
+        assertEquals("t:c/n#1", RewardIndexRemap.apply("t:c/n#1", remaps));
+    }
+
+    @Test
+    void aRewardReplacedByAnotherTypeDropsTheClaim() {
+        Map<String, Map<Integer, Integer>> remaps = RewardIndexRemap.between(
+                chapters("[{\"type\": \"item\", \"item\": \"a\"}]"),
+                chapters("[{\"type\": \"command\", \"command\": \"say hi\"}]"));
+
+        assertNull(RewardIndexRemap.apply("t:c/n#0", remaps),
+                "a different reward at the same index must not inherit the claim");
+    }
 }
