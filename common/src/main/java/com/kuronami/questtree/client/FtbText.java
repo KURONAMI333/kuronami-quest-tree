@@ -236,6 +236,21 @@ final class FtbText {
     }
 
     /**
+     * Whether a token's first word moves to the next line before wrapping: it does not fit the room left on this line,
+     * but fits a whole line. A word that fits no line (a long link label, Japanese prose with no spaces) stays where
+     * it is and {@link #wrap} breaks it between characters.
+     */
+    static boolean movesFirstWordDown(int used, String text, int width, java.util.function.ToIntFunction<String> measure) {
+        if (used <= 0) {
+            return false;
+        }
+        int space = text.indexOf(' ');
+        String firstWord = space >= 0 ? text.substring(0, space + 1) : text;
+        int wordWidth = measure.applyAsInt(firstWord);
+        return wordWidth > Math.max(1, width - used) && wordWidth <= width;
+    }
+
+    /**
      * Splits one token's text into lines at {@code width}, keeping the legacy colour and style codes that were active
      * when a line starts, so a word carried to the next line keeps the colour it had. {@code firstWidth} is the room
      * left on the current line and later lines get {@code width}. A word wider than the line is broken between

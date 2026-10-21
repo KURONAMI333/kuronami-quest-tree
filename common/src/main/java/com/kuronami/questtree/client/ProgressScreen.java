@@ -3244,12 +3244,7 @@ public class ProgressScreen extends Screen {
                 int color = link ? Ui.ACCENT : Ui.TEXT;
                 // a word that does not fit at all moves to the next line first, so the old word wrap keeps its shape
                 int room = Math.max(1, x + w - cx);
-                String firstWord = text;
-                int space = text.indexOf(' ');
-                if (space >= 0) {
-                    firstWord = text.substring(0, space + 1);
-                }
-                if (cx > x && font.width(firstWord) > room) {
+                if (FtbText.movesFirstWordDown(cx - x, text, w, font::width)) {
                     cx = x;
                     y += 12;
                     room = w;

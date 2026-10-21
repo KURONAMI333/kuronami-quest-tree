@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The description markup the details sheet draws, including the three link tokens and FTB Quests' image token. */
@@ -111,6 +112,18 @@ class FtbTextTest {
                 FtbText.wrap("§aone two three", 5, 5, FtbTextTest::visibleWidth));
         assertEquals(List.of("§labcd", "§lefgh", "§lij"),
                 FtbText.wrap("§labcdefghij", 4, 4, FtbTextTest::visibleWidth));
+    }
+
+    @Test
+    void onlyAWordThatFitsAWholeLineMovesDown() {
+        assertTrue(FtbText.movesFirstWordDown(8, "abcd x", 10, FtbTextTest::visibleWidth),
+                "a short word that does not fit the rest of the line moves down");
+        assertFalse(FtbText.movesFirstWordDown(8, "abcdefghijkl ", 10, FtbTextTest::visibleWidth),
+                "a word wider than a whole line is broken where it stands");
+        assertFalse(FtbText.movesFirstWordDown(0, "abcdefghijkl ", 10, FtbTextTest::visibleWidth),
+                "nothing moves at the start of a line");
+        assertFalse(FtbText.movesFirstWordDown(2, "ab cd", 10, FtbTextTest::visibleWidth),
+                "a word that fits the rest of the line stays");
     }
 
     private static int visibleWidth(String s) {
