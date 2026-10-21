@@ -1,5 +1,6 @@
 package com.kuronami.questtree.server;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
@@ -162,7 +163,7 @@ public final class ProgressStore extends SavedData {
         }
     }
 
-    private static ProgressStore load(CompoundTag tag, HolderLookup.Provider registries) {
+    static ProgressStore load(CompoundTag tag, HolderLookup.Provider registries) {
         ProgressStore store = new ProgressStore();
         if (tag.contains("version") && tag.getInt("version") >= TeamStoreData.VERSION && tag.contains("teams")) {
             JsonObject root = new JsonObject();
@@ -171,7 +172,13 @@ public final class ProgressStore extends SavedData {
             CompoundTag saved = tag.getCompound("teams");
             for (String key : saved.getAllKeys()) {
                 try {
-                    teams.add(key, JsonParser.parseString(saved.getString(key)));
+                    // A compound is the current form; a string is the whole record in one writeUTF, which old saves
+                    // (and any save made before this fix) used, so both must load (2026-10-22 release review).
+                    net.minecraft.nbt.Tag record = saved.get(key);
+                    JsonElement parsed = record instanceof CompoundTag compound
+                            ? com.kuronami.questtree.progress.JsonTags.fromTag(compound)
+                            : JsonParser.parseString(saved.getString(key));
+                    teams.add(key, parsed);
                 } catch (RuntimeException ex) {
                     Constants.LOG.error("Could not read team {}: {}", key, ex.toString());
                 }
@@ -222,7 +229,15 @@ public final class ProgressStore extends SavedData {
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("version", TeamStoreData.VERSION);
         CompoundTag teams = new CompoundTag();
-        data.teams.forEach((id, team) -> teams.putString(id.toString(), team.toJson().toString()));
+        data.teams.forEach((id, team) -> {
+            try {
+                // One compound per team, not one writeUTF string: a big book overflows the 65,535-byte string and the
+                // whole save failed, taking every team's progress with it (2026-10-22 release review).
+                teams.put(id.toString(), com.kuronami.questtree.progress.JsonTags.toTag(team.toJson()));
+            } catch (RuntimeException ex) {
+                Constants.LOG.error("Could not write progress of team {}: {}", id, ex.toString());
+            }
+        });
         tag.put("teams", teams);
         CompoundTag owners = new CompoundTag();
         data.owners.forEach((player, team) -> owners.putString(player.toString(), team.toString()));
