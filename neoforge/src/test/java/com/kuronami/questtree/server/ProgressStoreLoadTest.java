@@ -105,6 +105,17 @@ class ProgressStoreLoadTest {
     }
 
     @Test
+    void anUncompressedSaveIsReadToo() throws IOException {
+        Path file = dir.resolve("progress.dat");
+        storeWith("test:book/plain").save(file.toFile(), null);
+        CompoundTag root = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+        NbtIo.write(root, file);
+
+        assertEquals(Set.of("test:book/plain"), read(file).team(TEAM).shared.completed,
+                "vanilla can read plain NBT as well as gzip, so this reader must too");
+    }
+
+    @Test
     void aCorruptMainFileFallsBackToTheBackupAndIsKept() throws IOException {
         Path file = dir.resolve("progress.dat");
         storeWith("test:book/first").save(file.toFile(), null);

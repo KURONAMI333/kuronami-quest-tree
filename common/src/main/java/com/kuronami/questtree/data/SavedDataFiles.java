@@ -7,13 +7,16 @@ import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.FastBufferedInputStream;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.DimensionDataStorage;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PushbackInputStream;
 import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -136,9 +139,26 @@ public final class SavedDataFiles {
     }
 
     private static CompoundTag readRoot(Path file) throws IOException {
-        try (InputStream in = Files.newInputStream(file)) {
-            return NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap());
+        try (InputStream in = Files.newInputStream(file);
+             PushbackInputStream pushback = new PushbackInputStream(new FastBufferedInputStream(in), 2)) {
+            // Vanilla saves are gzip, but NbtIo also writes plain NBT and an editor or a tool can leave one here;
+            // reading both is what vanilla's own readTagFromDisk does (2026-10-22 release review).
+            if (isGzip(pushback)) {
+                return NbtIo.readCompressed(pushback, NbtAccounter.unlimitedHeap());
+            }
+            try (DataInputStream data = new DataInputStream(pushback)) {
+                return NbtIo.read(data);
+            }
         }
+    }
+
+    private static boolean isGzip(PushbackInputStream pushback) throws IOException {
+        byte[] head = new byte[2];
+        int read = pushback.read(head, 0, 2);
+        if (read > 0) {
+            pushback.unread(head, 0, read);
+        }
+        return read == 2 && (head[0] & 255) == 0x1f && (head[1] & 255) == 0x8b;
     }
 
     private static void quarantine(Path dataFile) {
