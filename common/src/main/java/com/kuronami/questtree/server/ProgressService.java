@@ -396,6 +396,10 @@ public final class ProgressService {
         ProgressRules r = rules();
         List<TaskRef> refs = new ArrayList<>(tasksOfType(r, kind));
         refs.addAll(tasksOfType(r, "interaction"));
+        if (kind.equals("craft")) {
+            // item tasks with only_from_crafting: the inventory scan skips them, so the craft itself counts
+            refs.addAll(tasksOfType(r, "item"));
+        }
         if (refs.isEmpty()) {
             return;
         }
@@ -406,6 +410,14 @@ public final class ProgressService {
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
             if (!working(r, p, n) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
+                continue;
+            }
+            if (type(t).equals("item")) {
+                if (!kind.equals("craft") || !ProgressRules.craftedOnly(t)
+                        || !ItemRequirement.of(t).matches(stack, player.registryAccess())) {
+                    continue;
+                }
+                hits.add(ref);
                 continue;
             }
             String wanted = type(t).equals("interaction") ? interactionKind(t) : type(t);
@@ -731,6 +743,10 @@ public final class ProgressService {
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
                 if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
+                    continue;
+                }
+                if (type(t).equals("item") && ProgressRules.craftedOnly(t)) {
+                    // only_from_crafting: a crafting result moves this, not what the bag happens to hold
                     continue;
                 }
                 String ty = type(t);

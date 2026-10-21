@@ -26,6 +26,15 @@ class FtbqParityTest {
     private static final String TASK = "\"tasks\": [{\"type\": \"checkmark\"}]";
 
     @Test
+    void onlyFromCraftingIsReadFromTheImportedItemTask() {
+        ProgressModel m = model("{\"nodes\": {"
+                + "\"crafted\": {\"tasks\": [{\"type\": \"item\", \"item\": \"minecraft:stick\", \"count\": 4, \"only_from_crafting\": true}]},"
+                + "\"held\": {\"tasks\": [{\"type\": \"item\", \"item\": \"minecraft:stick\", \"count\": 4}]}}}");
+        assertTrue(ProgressRules.craftedOnly(m.nodes.get("t:c/crafted").tasks.get(0)));
+        assertFalse(ProgressRules.craftedOnly(m.nodes.get("t:c/held").tasks.get(0)));
+    }
+
+    @Test
     void flexibleOpensBeforeRequirementsButStaysUnmet() {
         ProgressModel m = model("{\"defaults\": {\"progression_mode\": \"flexible\"}, \"nodes\": {"
                 + "\"a\": {" + TASK + "}, \"b\": {" + TASK + ", \"requires\": {\"nodes\": [\"a\"]}},"

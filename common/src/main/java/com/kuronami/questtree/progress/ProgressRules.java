@@ -1093,6 +1093,14 @@ public final class ProgressRules {
         return type.equals("item") && (repeatable(n) || (task.has("consume") && task.get("consume").getAsBoolean()));
     }
 
+    /**
+     * An item task from FTB Quests' {@code only_from_crafting}: the inventory scan must leave it alone and only a
+     * crafting result moves it (2026-10-22 release review).
+     */
+    public static boolean craftedOnly(JsonObject task) {
+        return ProgressModel.boolOf(task, "only_from_crafting");
+    }
+
     public boolean take(PlayerProgress p, ProgressModel.Node n) {
         // skill nodes with tasks are quests inside a skill chapter: they are claimed, not taken
         if (state(p, n) != State.CLAIM || !n.chapter.isSkills() || !n.tasks.isEmpty()) {
