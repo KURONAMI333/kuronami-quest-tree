@@ -21,4 +21,12 @@ class ObservationWriteTest {
         assertFalse(ObservationWrite.announces(5, 5, 5, true), "a run already at the target is not announced again");
         assertFalse(ObservationWrite.announces(4, 5, 5, false), "a task whose conditions fail announces nothing");
     }
+
+    @Test
+    void aQuietTickDoesNotScanEveryNode() {
+        assertFalse(ObservationWrite.rechecks(3, 3, 5, true), "an unchanged run writes nothing, so nothing rescans");
+        assertFalse(ObservationWrite.rechecks(3, 4, 5, false), "a task whose conditions fail is not rescanned");
+        assertFalse(ObservationWrite.rechecks(3, 4, 5, true), "a write below the target cannot complete the node");
+        assertTrue(ObservationWrite.rechecks(4, 5, 5, true));
+    }
 }

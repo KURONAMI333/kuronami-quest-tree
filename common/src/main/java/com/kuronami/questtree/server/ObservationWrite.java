@@ -19,4 +19,9 @@ final class ObservationWrite {
     static boolean announces(long before, long run, long target, boolean conditionsMet) {
         return conditionsMet && before < target && run >= target;
     }
+
+    /** Whether the node scan runs: only after a write that reached the target, never on a quiet tick. */
+    static boolean rechecks(long before, long run, long target, boolean conditionsMet) {
+        return writes(before, run, conditionsMet) && run >= target;
+    }
 }

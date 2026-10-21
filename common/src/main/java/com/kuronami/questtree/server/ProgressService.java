@@ -480,9 +480,9 @@ public final class ProgressService {
                     if (ObservationWrite.announces(before, run, target, conditions)) {
                         QuestTreeApi.fire(QuestTreeApi.QuestEvent.Kind.TASK, player, n, i);
                     }
-                }
-                if (run >= target) {
-                    recheck(player, p);
+                    if (ObservationWrite.rechecks(before, run, target, conditions)) {
+                        recheck(player, p);
+                    }
                 }
             }
         }
