@@ -40,8 +40,7 @@ public final class ProgressStore extends SavedData {
 
     public static ProgressStore get(MinecraftServer server) {
         SavedDataFiles.recoverOnce(server, NAME);
-        ProgressStore store = server.overworld().getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(ProgressStore::new, ProgressStore::load, null), NAME);
+        ProgressStore store = SavedDataFiles.get(server, NAME, ProgressStore::load, ProgressStore::new);
         if (store.loadedLegacy) {
             store.loadedLegacy = false;
             store.backup(server);

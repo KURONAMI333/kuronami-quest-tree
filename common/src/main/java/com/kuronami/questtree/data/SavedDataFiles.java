@@ -8,10 +8,12 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.DimensionDataStorage;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -19,21 +21,32 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 /**
  * Writes the mod's own {@link SavedData} files without vanilla's truncate-then-stream risk: the new file is written to
  * a temporary file, the previous file is kept as {@code <name>.dat.bak}, and the temporary file is moved over the
  * target atomically. A failed write keeps both the old file and the dirty flag, so the next save tries again.
  * <p>
+ * Loading also stays in this class. Vanilla's {@code DimensionDataStorage} takes the data-fix type from
+ * {@code SavedData.Factory} and calls {@code type.update} without a null check, so a factory with a null type works on
+ * NeoForge (patched) but throws on Fabric and the store silently loads empty. Both loaders therefore read the file
+ * here: the same gzip NBT read, the same {@code SavedData.load}, no data fixer (the format is this mod's own).
+ * <p>
  * The layout matches vanilla {@code SavedData.save(File, HolderLookup.Provider)} exactly: {@code {"data": {...},
- * "DataVersion": <current>}}. On load, a main file that no longer parses is moved to
- * {@code <name>.dat.corrupt-<millis>} and the backup is restored before vanilla reads it.
+ * "DataVersion": <current>}}. A main file that no longer reads is moved to {@code <name>.dat.corrupt-<millis>} and the
+ * backup is read and restored in its place.
  */
 public final class SavedDataFiles {
 
     private static final Map<MinecraftServer, Boolean> RECOVERED = Collections.synchronizedMap(new WeakHashMap<>());
+    /** The instance of a store per data storage, so a second call returns it instead of reading the file again. */
+    private static final Map<DimensionDataStorage, Map<String, SavedData>> INSTANCES =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private SavedDataFiles() {
     }
@@ -44,6 +57,108 @@ public final class SavedDataFiles {
 
     public static Path backupPath(Path dataFile) {
         return dataFile.resolveSibling(dataFile.getFileName() + ".bak");
+    }
+
+    /**
+     * Returns the store of this name, reading it with {@link #read} on the first call. Never goes through
+     * {@code DimensionDataStorage.computeIfAbsent}: that path asks vanilla to read the file, which needs a data-fix
+     * type that does not exist for this mod's data and is fatal to the load on vanilla (Fabric). The loaded store is
+     * put into the storage's cache so vanilla's own save pass still writes it.
+     */
+    @SuppressWarnings("unchecked")
+    public static <T extends SavedData> T get(MinecraftServer server, String name,
+                                              BiFunction<CompoundTag, HolderLookup.Provider, T> deserializer,
+                                              Supplier<T> constructor) {
+        DimensionDataStorage storage = server.overworld().getDataStorage();
+        synchronized (INSTANCES) {
+            Map<String, SavedData> stores = INSTANCES.computeIfAbsent(storage, s -> new HashMap<>());
+            SavedData known = stores.get(name);
+            if (known != null) {
+                return (T) known;
+            }
+            T loaded = read(path(server, name), deserializer, server.registryAccess());
+            T store = loaded != null ? loaded : constructor.get();
+            storage.set(name, store);
+            stores.put(name, store);
+            return store;
+        }
+    }
+
+    /**
+     * Reads {@code data}, falling back to the backup when the main file no longer parses. The broken main file is kept
+     * as {@code .corrupt-<millis>}; when the backup reads, it is also copied back over the main file so a later start
+     * finds it without going through this fallback again. Returns null when neither file reads.
+     */
+    public static <T extends SavedData> T read(Path dataFile,
+                                               BiFunction<CompoundTag, HolderLookup.Provider, T> deserializer,
+                                               HolderLookup.Provider registries) {
+        if (!Files.isRegularFile(dataFile)) {
+            return null;
+        }
+        T store = readFile(dataFile, deserializer, registries);
+        if (store != null) {
+            return store;
+        }
+        Path backup = backupPath(dataFile);
+        T recovered = Files.isRegularFile(backup) ? readFile(backup, deserializer, registries) : null;
+        quarantine(dataFile);
+        if (recovered != null) {
+            if (restore(backup, dataFile)) {
+                Constants.LOG.warn("Could not read {}; restored it from {}", dataFile, backup);
+            }
+        } else {
+            Constants.LOG.warn("Could not read {} and no usable backup was found; starting with an empty store",
+                    dataFile);
+        }
+        return recovered;
+    }
+
+    private static <T extends SavedData> T readFile(Path file,
+                                                    BiFunction<CompoundTag, HolderLookup.Provider, T> deserializer,
+                                                    HolderLookup.Provider registries) {
+        CompoundTag root;
+        try {
+            root = readRoot(file);
+        } catch (IOException | RuntimeException ex) {
+            Constants.LOG.warn("Could not read {}: {}", file, ex.toString());
+            return null;
+        }
+        return deserializer.apply(root.getCompound("data"), registries);
+    }
+
+    private static CompoundTag readRoot(Path file) throws IOException {
+        try (InputStream in = Files.newInputStream(file)) {
+            return NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap());
+        }
+    }
+
+    private static void quarantine(Path dataFile) {
+        Path corrupt = dataFile.resolveSibling(dataFile.getFileName() + ".corrupt-" + System.currentTimeMillis());
+        try {
+            moveReplacing(dataFile, corrupt);
+            forceDirectory(dataFile.getParent());
+            Constants.LOG.warn("Kept the unreadable file as {}", corrupt);
+        } catch (IOException ex) {
+            Constants.LOG.error("Could not move the unreadable {} aside", dataFile, ex);
+        }
+    }
+
+    private static boolean restore(Path backup, Path dataFile) {
+        Path restored = dataFile.resolveSibling(dataFile.getFileName() + ".restore");
+        try {
+            Files.copy(backup, restored, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+            moveReplacing(restored, dataFile);
+            forceDirectory(dataFile.getParent());
+            return true;
+        } catch (IOException io) {
+            Constants.LOG.error("Could not restore {} from {}", dataFile, backup, io);
+            try {
+                Files.deleteIfExists(restored);
+            } catch (IOException ignored) {
+                // the main file stays missing, so the next save writes a fresh one
+            }
+            return false;
+        }
     }
 
     /** Replaces vanilla's {@code SavedData.save(File, HolderLookup.Provider)} body for one store. */

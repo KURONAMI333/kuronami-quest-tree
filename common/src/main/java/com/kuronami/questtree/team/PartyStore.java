@@ -21,8 +21,7 @@ public final class PartyStore extends SavedData {
 
     public static PartyStore get(MinecraftServer server) {
         SavedDataFiles.recoverOnce(server, NAME);
-        return server.overworld().getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(PartyStore::new, PartyStore::load, null), NAME);
+        return SavedDataFiles.get(server, NAME, PartyStore::load, PartyStore::new);
     }
 
     public PartyData data() {
