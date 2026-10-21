@@ -959,21 +959,43 @@ public final class ProgressionEditor {
         if (level >= 4) {
             return List.of();
         }
-        Map<String, JsonObject> before = rewards(beforeChapters, beforeTables);
-        Map<String, JsonObject> pack = rewards(packChapters, packTables);
-        Map<String, JsonObject> after = rewards(afterChapters, afterTables);
+        Map<String, Map<String, Integer>> before = commandSignatures(beforeChapters, beforeTables);
+        Map<String, Map<String, Integer>> pack = commandSignatures(packChapters, packTables);
+        Map<String, Map<String, Integer>> after = commandSignatures(afterChapters, afterTables);
         List<String> out = new ArrayList<>();
-        for (Map.Entry<String, JsonObject> e : after.entrySet()) {
-            JsonObject was = before.containsKey(e.getKey()) ? before.get(e.getKey()) : pack.get(e.getKey());
-            JsonObject now = e.getValue();
-            if (was != null && now.equals(was)) {
+        for (Map.Entry<String, Map<String, Integer>> place : after.entrySet()) {
+            Map<String, Integer> allowed = before.get(place.getKey());
+            if (allowed == null) {
+                // the place had no command before, so the pack's own command is the baseline: a restore is not an add
+                allowed = pack.get(place.getKey());
+            }
+            boolean had = allowed != null && !allowed.isEmpty();
+            for (Map.Entry<String, Integer> sig : place.getValue().entrySet()) {
+                int free = allowed == null ? 0 : allowed.getOrDefault(sig.getKey(), 0);
+                if (sig.getValue() <= free) {
+                    continue;
+                }
+                out.add((had ? "changing" : "adding") + " a command reward needs permission level 4 (you have "
+                        + level + "): " + place.getKey());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The command-running part of every reward, counted per place (a node, one of its ranks, or a table) instead of
+     * per index: a reorder or an insert moves the rewards, and comparing by position would call that a new command
+     * (2026-10-22 review). Ordinary rewards have no signature and are not counted.
+     */
+    private static Map<String, Map<String, Integer>> commandSignatures(JsonObject chapters, JsonObject tables) {
+        Map<String, Map<String, Integer>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonObject> e : rewards(chapters, tables).entrySet()) {
+            String signature = commandSignature(e.getValue());
+            if (signature.isEmpty()) {
                 continue;
             }
-            if (was != null && !commandSignature(was).equals(commandSignature(now))) {
-                out.add("changing a command reward needs permission level 4 (you have " + level + "): " + e.getKey());
-            } else if (was == null && !commandSignature(now).isEmpty()) {
-                out.add("adding a command reward needs permission level 4 (you have " + level + "): " + e.getKey());
-            }
+            String place = e.getKey().substring(0, e.getKey().lastIndexOf('#'));
+            out.computeIfAbsent(place, k -> new LinkedHashMap<>()).merge(signature, 1, Integer::sum);
         }
         return out;
     }
