@@ -117,6 +117,19 @@ public final class TeamView {
         return self != null && self.owner();
     }
 
+    /**
+     * Whether the owner could be read. A built-in party always has one; FTB Teams can fail to name it (exception or
+     * the manager not being loaded), and the server then denies shared actions rather than guessing (2026-10-22 review).
+     */
+    public boolean ownerKnown() {
+        return !ftbManaged || !inTeam || !ownerId.isBlank();
+    }
+
+    /** Solo players own their own pool; in a team, only the recorded owner may respec or exchange. */
+    public boolean ownsSharedActions() {
+        return !inTeam || (ownerKnown() && isOwner());
+    }
+
     /** The name to show for a member, or the id when the server could not resolve one. */
     public String nameOf(String playerId) {
         Member m = member(playerId);

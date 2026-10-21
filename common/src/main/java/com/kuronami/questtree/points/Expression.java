@@ -25,6 +25,33 @@ public final class Expression {
         this.eval = eval;
     }
 
+    /** Longest expression the exchange and experience readers accept (a pack's own formula, never machine output). */
+    public static final int MAX_LENGTH = 256;
+    /** Deepest parenthesis nesting accepted, so a hostile expression cannot exhaust the parser's stack. */
+    public static final int MAX_DEPTH = 32;
+
+    /**
+     * Whether an expression is outside the limits the readers accept. A too-long or too-deep formula is treated as
+     * unusable data (the caller falls back to its fixed value) instead of being parsed.
+     */
+    public static boolean tooComplex(String text) {
+        if (text == null || text.length() > MAX_LENGTH) {
+            return true;
+        }
+        int depth = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '(') {
+                if (++depth > MAX_DEPTH) {
+                    return true;
+                }
+            } else if (c == ')') {
+                depth--;
+            }
+        }
+        return false;
+    }
+
     /** Parses {@code text}; throws IllegalArgumentException with the position on a syntax error. */
     public static Expression parse(String text) {
         Parser p = new Parser(text);

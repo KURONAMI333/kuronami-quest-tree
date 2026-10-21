@@ -173,6 +173,66 @@ class ServerDataFixesTest {
         assertEquals(3, p.exchange.get(pooled));
     }
 
+    /** 11. The screen's respec charges points.respec.cost and only lets it happen when the points cover it. */
+    @Test
+    void respecCostIsChargedOnlyWhenAffordable() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 2, "respec": {"cost": 3}},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(3, ProgressRules.respecCost(a));
+        assertFalse(rules.canRespec(p, a), "nothing taken: no respec");
+        p.taken.put(a.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(a), 1);
+        assertEquals(1, ProgressRules.chapterRefund(p, a), "reading the refund changes nothing");
+        assertEquals(1, p.spent.get(ProgressRules.key(a)));
+        assertFalse(rules.canRespec(p, a), "1 point left + 1 refunded does not cover a cost of 3");
+        p.bonus.put(ProgressRules.key(a), 2);
+        assertTrue(rules.canRespec(p, a));
+        p.spent.merge(ProgressRules.key(a), 3, Integer::sum);
+        assertEquals(0, rules.availablePoints(p, a), "the fee stays spent after the respec");
+    }
+
+    /** 12. A pack without points.respec charges nothing, and a locked chapter cannot be respeced from the screen. */
+    @Test
+    void respecDefaultsToFreeAndWaitsForTheChapterToOpen() {
+        ProgressModel m = model("""
+                {"chapters": {
+                  "s:free": {"points": {"per_level": 1, "start": 1}, "nodes": {"n": {"cost": 1}}},
+                  "s:locked": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": false,
+                                           "respec": {"cost": 1}}, "nodes": {"m": {"cost": 1}}}}}
+                """);
+        ProgressRules rules = new ProgressRules(m);
+        ProgressModel.Chapter free = m.chapters.get("s:free");
+        ProgressModel.Chapter locked = m.chapters.get("s:locked");
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(0, ProgressRules.respecCost(free));
+        p.taken.put(free.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(free), 1);
+        assertTrue(rules.canRespec(p, free));
+        p.taken.put(locked.nodes.get("m").key, 1);
+        p.spent.merge(ProgressRules.key(locked), 1, Integer::sum);
+        assertFalse(rules.canRespec(p, locked));
+        p.chapterOpen.put(locked.id, true);
+        assertTrue(rules.canRespec(p, locked));
+    }
+
+    /** 13. A chapter is locked by points.unlocked_by_default; visibility.lock_hint is only the client's hint. */
+    @Test
+    void chapterUnlockUsesUnlockedByDefault() {
+        ProgressModel m = model("""
+                {"chapters": {
+                  "s:hinted": {"visibility": {"lock_hint": "progression.pack.locked_hint"},
+                               "points": {"unlocked_by_default": false}, "nodes": {}},
+                  "s:plain": {"visibility": {"lock_hint": ""}, "nodes": {}}}}
+                """);
+        assertFalse(ProgressRules.chapterUnlocked(new PlayerProgress(), m.chapters.get("s:hinted")));
+        assertTrue(ProgressRules.chapterUnlocked(new PlayerProgress(), m.chapters.get("s:plain")));
+    }
+
     /** 10. A random reward never rolls empty, and weight-0 entries are granted outside the rolls. */
     @Test
     void randomRewardHonoursEmptyOnlyForLootAndZeroWeights() {
@@ -213,5 +273,86 @@ class ServerDataFixesTest {
         assertTrue(p.bonus.isEmpty());
         assertTrue(p.exchange.isEmpty());
         assertTrue(p.chapterOpen.isEmpty(), "both chapters in the pool forget the override");
+    }
+    /** 11. Exchange costs come from level_limit and a values/expression cost_per_level curve at the purchase count. */
+    @Test
+    void exchangeCurvePricesEachPurchase() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 0, "exchange": {
+                  "level_limit": 2, "cost_per_level": {"type": "expression", "data": {"expression": "5 + level * 10"}}}},
+                  "nodes": {}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(5, ProgressRules.exchangeCost(p, a));
+        p.exchange.put(ProgressRules.key(a), 1);
+        assertEquals(15, ProgressRules.exchangeCost(p, a));
+        assertFalse(ProgressRules.canExchange(p, a, 14));
+        assertTrue(ProgressRules.canExchange(p, a, 15));
+        p.exchange.put(ProgressRules.key(a), 2);
+        assertFalse(ProgressRules.canExchange(p, a, 100), "the level limit is two purchases");
+    }
+    /** 10. Pufferfish's required points, spent points and exclusive count gate a skill without hiding its data. */
+    @Test
+    void pufferfishReturnRequirementsGateSkills() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 2}, "nodes": {
+                  "pts": {"requires": {"points": 3}},
+                  "spent": {"requires": {"spent_points": 4}},
+                  "a": {"exclusive_with": ["b", "c"]},
+                  "b": {"requires": {"exclusions": 2}},
+                  "c": {"exclusive_with": ["a"], "requires": {"exclusions": 1}}
+                }}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertFalse(rules.unlocked(p, a.nodes.get("pts")));
+        p.bonus.put(ProgressRules.key(a), 1);
+        assertTrue(rules.unlocked(p, a.nodes.get("pts")), "three points left should pass a required_points of 3");
+        assertFalse(rules.unlocked(p, a.nodes.get("spent")));
+        p.spent.put(ProgressRules.key(a), 4);
+        assertTrue(rules.unlocked(p, a.nodes.get("spent")));
+        p.taken.put(a.nodes.get("a").key, 1);
+        assertFalse(rules.excluded(p, a.nodes.get("b")), "one unlocked exclusive does not close a skill that wants two");
+        assertTrue(rules.excluded(p, a.nodes.get("c")), "the default/explicit one closes it");
+    }
+    /** 7. A pack's malformed exchange/respec numbers fall back to the defaults instead of throwing. */
+    @Test
+    void malformedExchangeAndRespecNumbersUseDefaults() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {
+                  "exchange": {"xp_levels": "thirty", "level_limit": {}},
+                  "respec": {"cost": "free"}}, "nodes": {}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        assertEquals(0, ProgressRules.exchangeOf(a).cost());
+        assertEquals(Integer.MAX_VALUE, ProgressRules.exchangeOf(a).limit());
+        assertEquals(0, ProgressRules.respecCost(a));
+    }
+    /** 1. A respec takes back the points a skill paid out, and refuses when that would overdraw the pool. */
+    @Test
+    void respecRevokesPointsRewardsAndRefusesOverdraft() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 1},
+                                      "nodes": {"n": {"cost": 1, "rewards": [{"type": "points", "amount": 2}]}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressModel.Node n = a.nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(a), 3);
+        p.bonus.put(ProgressRules.key(a), 2);
+        assertEquals(2, ProgressRules.chapterPointsReward(p, a));
+        assertFalse(rules.canRespec(p, a), "the refund plus what is left does not cover the points the skill paid");
+        p.spent.put(ProgressRules.key(a), 1);
+        assertTrue(rules.canRespec(p, a));
+        rules.revokePoints(p, n, 1);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "the paid points came back out once");
+        assertEquals(0, rules.availablePoints(p, a));
+        assertEquals(1, ProgressRules.refundChapterSpent(p, a));
+        assertEquals(1, rules.availablePoints(p, a), "the cost comes back separately from the points reward");
     }
 }

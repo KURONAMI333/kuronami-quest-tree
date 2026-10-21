@@ -6,6 +6,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
+import com.kuronami.questtree.progress.SkillRewardPolicy;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.core.Holder;
@@ -20,8 +21,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** Hands out rewards (DATA_MODEL.md "報酬"). Every reward is checked again here; nothing trusts the client. */
 public final class Rewards {
@@ -41,10 +44,12 @@ public final class Rewards {
                 case "stage" -> ServerCommands.run(player, "pack_stages " + (ProgressModel.boolOf(rw, "remove") ? "remove " : "add ")
                         + player.getGameProfile().getName() + " " + ProgressService.str(rw, "stage"), 2, true);
                 case "attribute" -> attribute(player, n.key, slotOf(n, rw), rw);
-                case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
+                case "points" -> p.bonus.merge(pointsChapter(n, rw), ProgressRules.pointsAmount(rw), Integer::sum);
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
                 case "toast" -> ProgressService.event(player, p, "toast", n.key);
                 case "scoreboard" -> scoreboard(player, p, n, rw);
+                // a placeholder a pack can keep where a reward type may not be installed (Pufferfish's Skills' dummy)
+                case "dummy" -> { }
                 // FTB Quests' custom reward: its effect is addon Java code; hand the claim to QuestEvents and do nothing else
                 case "custom" -> QuestEvents.fire(player, n, rw, false, -1);
                 // Kuronami's Trophies (mod-108): it gives each trophy once per player and engraves it; no dependency, only its command
@@ -64,27 +69,45 @@ public final class Rewards {
 
     /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
-        giveSkillOne(player, p, n, rank, true);
+        // A respec keeps this mark, so the one-off rewards of a rank cannot be farmed by taking it again. The mark
+        // uses the existing per-player reward store so it saves and copies like every other claim.
+        String mark = SkillRewardPolicy.mark(n, rank);
+        boolean firstTake = !p.rewardClaimed(mark);
+        giveSkillOne(player, p, n, rank, true, firstTake);
         // the skill belongs to the team: its per-player effects (attributes, commands, tags) reach every online member.
         // Shared values (points) and one-off pay-outs are applied once, by the player who took it
         for (ServerPlayer member : members(player)) {
             if (!member.getUUID().equals(player.getUUID())) {
-                giveSkillOne(member, p, n, rank, false);
+                giveSkillOne(member, p, n, rank, false, firstTake);
             }
+        }
+        if (firstTake) {
+            p.claimedRewards.add(mark);
         }
     }
 
+    /** Rewards that must not be paid twice for the same rank, even after a respec (DATA_MODEL "スキルの振り直し"). */
     private static List<ServerPlayer> members(ServerPlayer player) {
         return new ArrayList<>(com.kuronami.questtree.team.TeamResolver.onlineMembers(player.server, player.getUUID()));
     }
 
-    private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank, boolean full) {
+    private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank,
+                                     boolean full, boolean firstTake) {
         List<JsonObject> list = rewardsOfRank(n, rank);
         int i = 0;
         for (JsonObject rw : list) {
-            if (ProgressService.type(rw).equals("attribute")) {
+            String type = ProgressService.type(rw);
+            if (type.equals("attribute")) {
                 attribute(player, n.key, rank * 100 + i, rw);
-            } else if (full || ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag")) {
+            } else if (full) {
+                if (SkillRewardPolicy.pays(rw, firstTake)) {
+                    give(player, p, n, rw, -1);
+                }
+            } else if (type.equals("command")) {
+                if (firstTake || SkillRewardPolicy.hasLockCommand(rw)) {
+                    give(player, p, n, rw, -1);
+                }
+            } else if (type.equals("tag")) {
                 give(player, p, n, rw, -1);
             }
             i++;
@@ -209,6 +232,18 @@ public final class Rewards {
      * {@code lock_command}, and tag rewards are removed, as Pufferfish's Skills does on a respec.
      */
     static void revokeSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
+        // points are shared, and giveSkill paid them only for the taker: take them back once, before the member
+        // loop can run the per-player effects (a respec before this point is refused when they were already spent)
+        Map<String, Integer> before = new HashMap<>(p.bonus);
+        ProgressService.rules().revokePoints(p, n, taken);
+        // an admin respec/reset does not go through the screen's affordability check, so an overdraft must at least
+        // leave a trace instead of quietly showing 0 points (2026-10-22 review)
+        for (Map.Entry<String, Integer> e : p.bonus.entrySet()) {
+            if (e.getValue() < 0 && !e.getValue().equals(before.get(e.getKey()))) {
+                Constants.LOG.warn("Points bonus of {} went negative ({} = {}) after taking back {}",
+                        player.getGameProfile().getName(), e.getKey(), e.getValue(), n.key);
+            }
+        }
         for (ServerPlayer member : members(player)) {
             revokeSkillOne(member, p, n, taken);
         }

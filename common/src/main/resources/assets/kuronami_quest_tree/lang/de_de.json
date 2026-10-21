@@ -79,5 +79,6 @@
   "task.kuronami_quest_tree.dim.minecraft.the_end": "das Ende",
   "screen.kuronami_quest_tree.search": "Suchen",
   "screen.kuronami_quest_tree.unlock_path": "%s freischalten (%s)",
-  "hud.kuronami_quest_tree.held": "Im Besitz %s"
+  "hud.kuronami_quest_tree.held": "Im Besitz %s",
+  "screen.kuronami_quest_tree.skill.owner_unknown": "Der Team-Besitzer konnte nicht gelesen werden"
 }

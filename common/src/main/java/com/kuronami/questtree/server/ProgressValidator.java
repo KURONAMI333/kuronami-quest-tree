@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.points.Expression;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -174,6 +175,13 @@ public final class ProgressValidator {
                 }
                 nodeChapter.put(key, chapter);
                 nodes.put(key, n.getValue().getAsJsonObject());
+            }
+        }
+
+        // chapter-level settings: a broken exchange curve only falls back to a fixed cost, so it never drops a node
+        for (Map.Entry<String, JsonElement> e : chapters.entrySet()) {
+            if (e.getValue().isJsonObject()) {
+                checkChapter(out, refs.get(e.getKey()), e.getKey(), e.getValue().getAsJsonObject());
             }
         }
 
@@ -350,6 +358,91 @@ public final class ProgressValidator {
 
     // ------------------------------------------------------------------ one node
 
+    /**
+     * A chapter's own settings. Only {@code points.exchange.cost_per_level} is checked here: it decides the price of
+     * the next exchange purchase, and a shape {@code ProgressRules.Exchange.costAt} cannot read falls back to the
+     * fixed {@code xp_levels} cost. That is a WARNING (the chapter still works), not an ERROR.
+     */
+    private static void checkChapter(Result out, ChapterRef ref, String chapterId, JsonObject chapter) {
+        JsonElement pointsElement = chapter.get("points");
+        if (pointsElement == null) {
+            return;
+        }
+        String path = "chapters." + local(chapterId) + ".points";
+        if (!pointsElement.isJsonObject()) {
+            problem(out, Severity.WARNING, ref, path, "\"points\" is not an object, so the chapter is not a skill chapter");
+            return;
+        }
+        JsonObject points = pointsElement.getAsJsonObject();
+        JsonElement exchangeElement = points.get("exchange");
+        if (exchangeElement == null) {
+            return;
+        }
+        if (!exchangeElement.isJsonObject()) {
+            problem(out, Severity.WARNING, ref, path + ".exchange", "\"exchange\" is not an object, so it is not read");
+            return;
+        }
+        JsonElement curveElement = exchangeElement.getAsJsonObject().get("cost_per_level");
+        if (curveElement == null) {
+            return;
+        }
+        String curvePath = path + ".exchange.cost_per_level";
+        if (!curveElement.isJsonObject()) {
+            problem(out, Severity.WARNING, ref, curvePath,
+                    "\"cost_per_level\" is not an object, so the fixed cost is used");
+            return;
+        }
+        JsonObject curve = curveElement.getAsJsonObject();
+        String type = str(curve, "type");
+        JsonElement dataElement = curve.get("data");
+        if (dataElement == null || !dataElement.isJsonObject()) {
+            problem(out, Severity.WARNING, ref, curvePath,
+                    "\"cost_per_level\" has no \"data\" object, so the fixed cost is used");
+            return;
+        }
+        JsonObject data = dataElement.getAsJsonObject();
+        switch (type) {
+            case "values" -> {
+                JsonElement values = data.get("values");
+                if (values == null || !values.isJsonArray()) {
+                    problem(out, Severity.WARNING, ref, curvePath + ".data.values",
+                            "\"values\" is not an array, so the fixed cost is used");
+                    return;
+                }
+                for (int i = 0; i < values.getAsJsonArray().size(); i++) {
+                    JsonElement v = values.getAsJsonArray().get(i);
+                    if (!numeric(v)) {
+                        problem(out, Severity.WARNING, ref, curvePath + ".data.values[" + i + "]",
+                                "value is not a number, so the fixed cost is used at that level");
+                    }
+                }
+            }
+            case "expression" -> {
+                JsonElement expression = data.get("expression");
+                if (expression == null || !isText(expression)) {
+                    problem(out, Severity.WARNING, ref, curvePath + ".data.expression",
+                            "\"expression\" is not a string, so the fixed cost is used");
+                    return;
+                }
+                String text = expression.getAsString();
+                if (Expression.tooComplex(text)) {
+                    problem(out, Severity.WARNING, ref, curvePath + ".data.expression",
+                            "expression is longer than " + Expression.MAX_LENGTH + " characters or nests deeper than "
+                                    + Expression.MAX_DEPTH + ", so the fixed cost is used");
+                    return;
+                }
+                try {
+                    Expression.parse(text);
+                } catch (RuntimeException ex) {
+                    problem(out, Severity.WARNING, ref, curvePath + ".data.expression",
+                            "expression cannot be parsed (" + ex.getMessage() + "), so the fixed cost is used");
+                }
+            }
+            default -> problem(out, Severity.WARNING, ref, curvePath + ".type",
+                    "unknown curve type " + quote(type) + ", so the fixed cost is used");
+        }
+    }
+
     private static void checkNode(Result out, ChapterRef ref, String nodePath, JsonObject node,
                                   JsonObject tables, Registry registry) {
         // what the node itself is made of. A wrong shape here throws while ProgressModel reads the chapter, or quietly
@@ -417,6 +510,10 @@ public final class ProgressValidator {
                 namesShape(out, ref, path + ".requires", r, "nodes");
                 textShape(out, ref, path + ".requires", r, "mode", Severity.ERROR);
                 whole(out, ref, path + ".requires", r, "min");
+                whole(out, ref, path + ".requires", r, "points");
+                whole(out, ref, path + ".requires", r, "spent_points");
+                whole(out, ref, path + ".requires", r, "exclusions");
+                stringArrayShape(out, ref, path + ".requires", r, "mods", "mod ids");
             }
         }
         JsonElement ex = node.get("exclusive_with");
@@ -1102,6 +1199,22 @@ public final class ProgressValidator {
     }
 
     /** {@code ProgressModel.intOf} keeps only a number and silently falls back to its default for anything else. */
+    private static void stringArrayShape(Result out, ChapterRef ref, String path, JsonObject o, String field, String what) {
+        JsonElement a = o.get(field);
+        if (a == null) {
+            return;
+        }
+        if (!a.isJsonArray()) {
+            problem(out, Severity.WARNING, ref, path + "." + field, quote(field) + " is not an array of " + what + ", so it is not read");
+            return;
+        }
+        for (int i = 0; i < a.getAsJsonArray().size(); i++) {
+            if (!a.getAsJsonArray().get(i).isJsonPrimitive() || !a.getAsJsonArray().get(i).getAsJsonPrimitive().isString()) {
+                problem(out, Severity.WARNING, ref, path + "." + field + "[" + i + "]", "is not a " + what + " string, so it is skipped");
+            }
+        }
+    }
+
     private static void whole(Result out, ChapterRef ref, String path, JsonObject o, String field) {
         JsonElement e = o.get(field);
         if (e != null && !(e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber())) {

@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Game-independent rules: the state of every node for one player, and the skill point arithmetic.
@@ -22,6 +23,16 @@ public final class ProgressRules {
 
     private final ProgressModel model;
     private final Map<String, Expression> curves = new HashMap<>();
+    /** Parsed exchange cost expressions, shared because the screen asks for the next cost every frame. */
+    private static final Map<String, Expression> EXCHANGE_CURVES = new ConcurrentHashMap<>();
+
+    /**
+     * Drops the parsed exchange formulas. A datapack reload can change an expression under the same text key, so the
+     * cache must not outlive the model that read it (2026-10-22 review).
+     */
+    public static void clearExchangeCurves() {
+        EXCHANGE_CURVES.clear();
+    }
 
     public ProgressRules(ProgressModel model) {
         this.model = model;
@@ -108,23 +119,61 @@ public final class ProgressRules {
                 && c.points.get("unlocked_by_default").getAsBoolean();
     }
 
-    /** Whether the requirements are met (not considering exclusivity). */
+    /**
+     * Whether the requirements are met (not considering exclusivity). Besides the connection graph, Pufferfish's
+     * Skills gates a skill on points it must have left ({@code required_points}), points already spent in the tree
+     * ({@code required_spent_points}) and mods that must be installed ({@code required_mods}).
+     * <p>
+     * Pufferfish's Skills' {@code CategoryData.getSkillState} answers UNLOCKED first for a skill already taken, so the
+     * point gates are not rechecked there. A ranked node follows the same rule: once one rank is taken, its own cost
+     * spending must not lock the next rank (2026-10-22 review).
+     */
     public boolean unlocked(PlayerProgress p, ProgressModel.Node n) {
+        if (!modsLoaded(n.requiredMods)) {
+            return false;
+        }
+        boolean reachable;
         // Pufferfish's Skills roots are available from the start even though connections also point back at them
         if (n.requires.isEmpty() || n.root) {
-            return true;
-        }
-        boolean started = n.requireMode.endsWith("started");
-        int met = 0;
-        for (String r : n.requires) {
-            if (satisfied(p, r, started)) {
-                met++;
+            reachable = true;
+        } else {
+            boolean started = n.requireMode.endsWith("started");
+            int met = 0;
+            for (String r : n.requires) {
+                if (satisfied(p, r, started)) {
+                    met++;
+                }
+            }
+            if (n.requireMin > 0) {
+                reachable = met >= n.requireMin;
+            } else {
+                reachable = n.requireMode.startsWith("any") || n.requireMode.equals("one")
+                        ? met > 0 : met == n.requires.size();
             }
         }
-        if (n.requireMin > 0) {
-            return met >= n.requireMin;
+        if (!reachable || p.taken.getOrDefault(n.key, 0) > 0) {
+            return reachable;
         }
-        return n.requireMode.startsWith("any") || n.requireMode.equals("one") ? met > 0 : met == n.requires.size();
+        return availablePoints(p, n.chapter) >= Math.max(0, n.requiredPoints)
+                && p.spent.getOrDefault(key(n.chapter), 0) >= Math.max(0, n.requiredSpentPoints);
+    }
+
+    /** Pufferfish's Skills drops a skill whose required mods are not all installed. */
+    private static boolean modsLoaded(List<String> mods) {
+        if (mods.isEmpty()) {
+            return true;
+        }
+        try {
+            for (String mod : mods) {
+                if (!com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded(mod)) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (RuntimeException | LinkageError ex) {
+            // no platform service (plain unit test): keep the data readable instead of failing the whole tree
+            return true;
+        }
     }
 
     private boolean satisfied(PlayerProgress p, String key, boolean startedIsEnough) {
@@ -142,10 +191,14 @@ public final class ProgressRules {
         if (doneOnce(p, n.key)) {
             return false;
         }
+        int closed = 0;
         for (String other : n.exclusiveWith) {
             if (doneOnce(p, other)) {
-                return true;
+                closed++;
             }
+        }
+        if (closed >= Math.max(1, n.requiredExclusions)) {
+            return true;
         }
         if (n.exclusiveGroup != null) {
             List<ProgressModel.Node> group = n.chapter.exclusiveGroups.get(n.exclusiveGroup);
@@ -430,6 +483,16 @@ public final class ProgressRules {
      * share leaves the others' points spent (2026-10-20 review).
      */
     public static int refundChapterSpent(PlayerProgress p, ProgressModel.Chapter c) {
+        int refund = chapterRefund(p, c);
+        if (refund > 0) {
+            int refunded = refund;
+            p.spent.computeIfPresent(key(c), (k, v) -> Math.max(0, v - refunded));
+        }
+        return refund;
+    }
+
+    /** The points a respec would give back now, without changing anything. */
+    public static int chapterRefund(PlayerProgress p, ProgressModel.Chapter c) {
         int refund = 0;
         for (ProgressModel.Node n : c.nodes.values()) {
             int taken = p.taken.getOrDefault(n.key, 0);
@@ -437,11 +500,194 @@ public final class ProgressRules {
                 refund += Math.max(0, n.cost) * taken;
             }
         }
-        if (refund > 0) {
-            int refunded = refund;
-            p.spent.computeIfPresent(key(c), (k, v) -> Math.max(0, v - refunded));
-        }
         return refund;
+    }
+
+    /**
+     * The points a respec would take back: points rewards of the taken ranks, which were paid into the pool's
+     * bonus once per taker. Kept separate from {@link #chapterRefund} because this comes out of the bonus while the
+     * node costs come back out of spent.
+     */
+    public static int chapterPointsReward(PlayerProgress p, ProgressModel.Chapter c) {
+        int total = 0;
+        for (ProgressModel.Node n : c.nodes.values()) {
+            int taken = p.taken.getOrDefault(n.key, 0);
+            for (int rank = 0; rank < taken; rank++) {
+                total += pointsReward(n, rank);
+            }
+        }
+        return total;
+    }
+
+    /** The points a node's rank pays, read from the same ranks/rewards shape the rewards code gives out. */
+    public static int pointsReward(ProgressModel.Node n, int rank) {
+        int total = 0;
+        for (JsonObject rw : rewardsOfRank(n, rank)) {
+            if (isPoints(rw)) {
+                total += pointsAmount(rw);
+            }
+        }
+        return total;
+    }
+
+    /**
+     * A {@code points} reward's amount, the one reading both paying and revoking use. A missing amount is the
+     * historical default of 1; anything that is not a number, or is zero/negative, pays and takes back nothing
+     * (2026-10-22 review). Negative values used to be silently clamped on revoke but still paid on grant.
+     */
+    public static int pointsAmount(JsonObject reward) {
+        JsonElement amount = reward.get("amount");
+        if (amount == null) {
+            return 1;
+        }
+        if (!amount.isJsonPrimitive() || !amount.getAsJsonPrimitive().isNumber()) {
+            return 0;
+        }
+        return Math.max(0, amount.getAsInt());
+    }
+
+    /** Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into). */
+    public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken) {
+        for (int rank = 0; rank < Math.max(0, taken); rank++) {
+            for (JsonObject rw : rewardsOfRank(n, rank)) {
+                if (isPoints(rw)) {
+                    p.bonus.merge(pointsTarget(n, rw), -pointsAmount(rw), Integer::sum);
+                }
+            }
+        }
+    }
+
+    private static boolean isPoints(JsonObject rw) {
+        String type = rw.has("type") && rw.get("type").isJsonPrimitive() ? rw.get("type").getAsString() : "";
+        return type.substring(type.indexOf(':') + 1).equals("points");
+    }
+
+    private String pointsTarget(ProgressModel.Node n, JsonObject rw) {
+        String c = rw.has("chapter") && rw.get("chapter").isJsonPrimitive() ? rw.get("chapter").getAsString() : "";
+        if (c.isEmpty()) {
+            return key(n.chapter);
+        }
+        ProgressModel.Chapter target = model.chapters.get(c);
+        return target == null ? c : key(target);
+    }
+
+    private static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
+        if (n.ranks > 0 && n.json.has("ranks") && n.json.get("ranks").isJsonArray()) {
+            var ranks = n.json.getAsJsonArray("ranks");
+            if (!ranks.isEmpty()) {
+                JsonElement r = ranks.get(Math.min(rank, ranks.size() - 1));
+                List<JsonObject> list = new ArrayList<>();
+                if (r.isJsonObject() && r.getAsJsonObject().has("rewards")
+                        && r.getAsJsonObject().get("rewards").isJsonArray()) {
+                    for (JsonElement e : r.getAsJsonObject().getAsJsonArray("rewards")) {
+                        if (e.isJsonObject()) {
+                            list.add(e.getAsJsonObject());
+                        }
+                    }
+                }
+                return list;
+            }
+        }
+        return n.rewards;
+    }
+
+    private static int intOf(JsonObject o, String k, int def) {
+        return o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isNumber()
+                ? o.get(k).getAsInt() : def;
+    }
+
+    /** A respec's cost in points ({@code points.respec.cost}); 0 when the pack does not charge. */
+    public static int respecCost(ProgressModel.Chapter c) {
+        return respecCost(c == null ? null : c.points);
+    }
+
+    /** The same from raw {@code points}; the client and server share this reading. */
+    public static int respecCost(JsonObject points) {
+        if (points == null || !points.has("respec") || !points.get("respec").isJsonObject()) {
+            return 0;
+        }
+        JsonObject respec = points.getAsJsonObject("respec");
+        if (!respec.has("cost") || !respec.get("cost").isJsonPrimitive()
+                || !respec.get("cost").getAsJsonPrimitive().isNumber()) {
+            return 0;
+        }
+        return Math.max(0, respec.get("cost").getAsInt());
+    }
+
+    /** Why a screen respec is refused; {@link #ALLOWED} means it may run. */
+    public enum RespecRefusal { ALLOWED, LOCKED, NOTHING_TAKEN, NOT_ENOUGH_POINTS }
+
+    /**
+     * A screen respec's verdict. {@code pool} is the pool that cannot pay ({@code key(c)} for the chapter itself or a
+     * pool a points reward was paid into); it is empty when allowed.
+     */
+    public record RespecPlan(RespecRefusal refusal, String pool) {
+        public boolean allowed() {
+            return refusal == RespecRefusal.ALLOWED;
+        }
+    }
+
+    /**
+     * Whether a player may respec this chapter from the screen now: the chapter is open, something is taken, and every
+     * pool involved can pay for it. Node refunds go back to this chapter's pool and the points the taken ranks paid are
+     * taken out of the pools that received them, so a reward paid to another chapter has to be checked there: otherwise
+     * that chapter's points could be spent and the respec would leave it overdrawn (a free skill).
+     * The cost stays spent afterwards (a later respec refunds only the nodes), so the fee is never handed back.
+     */
+    public RespecPlan respecPlan(PlayerProgress p, ProgressModel.Chapter c) {
+        if (c == null || !c.isSkills() || !chapterUnlocked(p, c)) {
+            return new RespecPlan(RespecRefusal.LOCKED, "");
+        }
+        int refund = chapterRefund(p, c);
+        if (refund <= 0) {
+            return new RespecPlan(RespecRefusal.NOTHING_TAKEN, "");
+        }
+        String own = key(c);
+        Map<String, Integer> paidByPool = pointsRewardsByPool(p, c);
+        int ownPaid = paidByPool.getOrDefault(own, 0);
+        if (availablePoints(p, c) + refund - ownPaid - respecCost(c) < 0) {
+            return new RespecPlan(RespecRefusal.NOT_ENOUGH_POINTS, own);
+        }
+        for (Map.Entry<String, Integer> e : paidByPool.entrySet()) {
+            if (e.getKey().equals(own)) {
+                continue;
+            }
+            ProgressModel.Chapter target = chapterByKey(e.getKey());
+            if (target != null && availablePoints(p, target) - e.getValue() < 0) {
+                return new RespecPlan(RespecRefusal.NOT_ENOUGH_POINTS, e.getKey());
+            }
+        }
+        return new RespecPlan(RespecRefusal.ALLOWED, "");
+    }
+
+    /** The screen's yes/no view of {@link #respecPlan}. */
+    public boolean canRespec(PlayerProgress p, ProgressModel.Chapter c) {
+        return respecPlan(p, c).allowed();
+    }
+
+    /** The points the taken ranks paid, grouped by the pool that received them. */
+    private Map<String, Integer> pointsRewardsByPool(PlayerProgress p, ProgressModel.Chapter c) {
+        Map<String, Integer> paid = new LinkedHashMap<>();
+        for (ProgressModel.Node n : c.nodes.values()) {
+            int taken = p.taken.getOrDefault(n.key, 0);
+            for (int rank = 0; rank < taken; rank++) {
+                for (JsonObject rw : rewardsOfRank(n, rank)) {
+                    if (isPoints(rw)) {
+                        paid.merge(pointsTarget(n, rw), Math.max(0, intOf(rw, "amount", 1)), Integer::sum);
+                    }
+                }
+            }
+        }
+        return paid;
+    }
+
+    private ProgressModel.Chapter chapterByKey(String pool) {
+        for (ProgressModel.Chapter c : model.chapters.values()) {
+            if (key(c).equals(pool)) {
+                return c;
+            }
+        }
+        return null;
     }
 
     /**
@@ -526,20 +772,84 @@ public final class ProgressRules {
         return count;
     }
 
-    /** A skill chapter's exchange settings ({@code points.exchange}). */
-    public record Exchange(int cost, int limit) {
+    /**
+     * A skill chapter's exchange settings ({@code points.exchange}). {@code cost} is the first purchase's price;
+     * {@code curve} is Pufferfish's {@code cost_per_level} (a {@code values} array or an {@code expression} of
+     * {@code level}), and {@link #costAt(int)} evaluates it at the number of purchases already made.
+     */
+    public record Exchange(int cost, int limit, JsonElement curve) {
+        public Exchange(int cost, int limit) {
+            this(cost, limit, null);
+        }
+
+        public int costAt(int level) {
+            if (curve == null || !curve.isJsonObject()) {
+                return cost;
+            }
+            JsonObject c = curve.getAsJsonObject();
+            String type = c.has("type") && c.get("type").isJsonPrimitive() ? c.get("type").getAsString() : "";
+            // a pack may write the curve without its "data" block (or with a non-object one): use the fixed cost
+            JsonElement data = c.get("data");
+            if (data == null || !data.isJsonObject()) {
+                return cost;
+            }
+            JsonObject d = data.getAsJsonObject();
+            if (type.equals("values") && d.has("values") && d.get("values").isJsonArray()) {
+                var values = d.getAsJsonArray("values");
+                if (values.isEmpty()) {
+                    return cost;
+                }
+                JsonElement v = values.get(Math.max(0, Math.min(level, values.size() - 1)));
+                return v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber()
+                        ? Math.max(0, v.getAsInt()) : cost;
+            }
+            if (type.equals("expression") && d.has("expression") && d.get("expression").isJsonPrimitive()) {
+                String expr = d.get("expression").getAsString();
+                // a pack's formula is data, not code: a huge or deeply nested one is unusable, not worth crashing on
+                if (Expression.tooComplex(expr)) {
+                    return cost;
+                }
+                try {
+                    Expression e = EXCHANGE_CURVES.computeIfAbsent(expr, Expression::parse);
+                    double value = e.eval(Map.of("level", (double) level));
+                    return Double.isFinite(value) ? Math.max(0, (int) Math.round(value)) : cost;
+                } catch (RuntimeException | StackOverflowError ex) {
+                    return cost;
+                }
+            }
+            return cost;
+        }
     }
 
     public static Exchange exchangeOf(ProgressModel.Chapter c) {
-        if (c == null || c.points == null || !c.points.has("exchange") || !c.points.get("exchange").isJsonObject()) {
+        return exchangeOf(c == null ? null : c.points);
+    }
+
+    /** The same settings from the raw {@code points} block, so the client and server read them once. */
+    public static Exchange exchangeOf(JsonObject points) {
+        if (points == null || !points.has("exchange") || !points.get("exchange").isJsonObject()) {
             return new Exchange(0, Integer.MAX_VALUE);
         }
-        JsonObject exchange = c.points.getAsJsonObject("exchange");
+        JsonObject exchange = points.getAsJsonObject("exchange");
+        JsonElement curve = exchange.get("cost_per_level");
         int cost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
+                && exchange.get("xp_levels").getAsJsonPrimitive().isNumber()
                 ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
         int limit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
+                && exchange.get("level_limit").getAsJsonPrimitive().isNumber()
                 ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
-        return new Exchange(cost, limit);
+        Exchange e = new Exchange(cost, limit, curve);
+        if (curve != null && cost <= 0) {
+            cost = e.costAt(0);
+            e = new Exchange(cost, limit, curve);
+        }
+        return e;
+    }
+
+    /** The price of the next exchange purchase for this player (the curve is evaluated at the purchases already made). */
+    public static int exchangeCost(PlayerProgress p, ProgressModel.Chapter c) {
+        Exchange e = exchangeOf(c);
+        return e.costAt(p.exchange.getOrDefault(key(c), 0));
     }
 
     /** Whether one exchange purchase is allowed now: open chapter, levels to pay, and the limit counted per pool. */
@@ -548,10 +858,18 @@ public final class ProgressRules {
             return false;
         }
         Exchange e = exchangeOf(c);
-        if (e.cost() <= 0 || playerLevel < e.cost()) {
+        int used = p.exchange.getOrDefault(key(c), 0);
+        int cost = e.costAt(used);
+        if (cost <= 0 || playerLevel < cost) {
             return false;
         }
-        return p.exchange.getOrDefault(key(c), 0) < e.limit();
+        return used < e.limit();
+    }
+
+    private static int levelLimit(JsonObject points) {
+        return points != null && points.has("level_limit") && points.get("level_limit").isJsonPrimitive()
+                && points.get("level_limit").getAsJsonPrimitive().isNumber()
+                ? points.get("level_limit").getAsInt() : Integer.MAX_VALUE;
     }
 
     /** Records one exchange purchase: the counter and the extra point both live on the pool key. */
@@ -615,7 +933,7 @@ public final class ProgressRules {
         if (amount <= 0 || nothingLeft(p, c)) {
             return 0;
         }
-        int limit = c.points != null && c.points.has("level_limit") ? c.points.get("level_limit").getAsInt() : Integer.MAX_VALUE;
+        int limit = levelLimit(c.points);
         String key = key(c);
         int lvl = p.level.getOrDefault(key, 0);
         double x = p.xp.getOrDefault(key, 0.0) + amount;

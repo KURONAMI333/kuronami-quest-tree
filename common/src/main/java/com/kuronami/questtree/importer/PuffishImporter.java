@@ -20,7 +20,6 @@ import java.util.Set;
 public final class PuffishImporter {
 
     private static final Set<String> KNOWN_REWARDS = Set.of("attribute", "command", "points", "scoreboard", "tag", "dummy");
-    private static final List<String> REQUIRED = List.of("required_skills", "required_points", "required_spent_points", "required_exclusions");
 
     private PuffishImporter() {
     }
@@ -34,6 +33,7 @@ public final class PuffishImporter {
         JsonObject skills = obj(files.get("skills.json"));
         JsonObject cons = obj(files.get("connections.json"));
         JsonObject exp = obj(files.get("experience.json"));
+        JsonObject exch = obj(files.get("exchange.json"));
         boolean patch = !files.containsKey("category.json");
         // keep the source namespace: two mods may both ship a "combat" tree
         String cid = "skill_" + FtbQuestsImporter.slug(source.replace('/', '_'));
@@ -76,6 +76,16 @@ public final class PuffishImporter {
                 case "enabled" -> points.add("experience_enabled", kv.getValue());
                 default -> out.unknown("experience", kv.getKey());
             }
+        }
+        JsonObject exchange = new JsonObject();
+        for (Map.Entry<String, JsonElement> kv : exch.entrySet()) {
+            switch (kv.getKey()) {
+                case "cost_per_level", "level_limit" -> exchange.add(kv.getKey(), kv.getValue());
+                default -> out.unknown("exchange", kv.getKey());
+            }
+        }
+        if (!exchange.isEmpty()) {
+            points.add("exchange", exchange);
         }
         o.add("points", points);
 
@@ -120,8 +130,40 @@ public final class PuffishImporter {
                             String type = ro.has("type") ? ro.get("type").getAsString() : "?";
                             String shortType = type.substring(type.indexOf(':') + 1);
                             JsonObject conv = ro.has("data") && ro.get("data").isJsonObject() ? ro.getAsJsonObject("data").deepCopy() : new JsonObject();
-                            conv.addProperty("type", KNOWN_REWARDS.contains(shortType) ? shortType : type);
-                            if (!KNOWN_REWARDS.contains(shortType)) {
+                            // Pufferfish's Skills falls back to its dummy reward for an optional type that is missing
+                            boolean required = !ro.has("required") || !ro.get("required").isJsonPrimitive()
+                                    || ro.get("required").getAsJsonPrimitive().isBoolean() && ro.get("required").getAsBoolean();
+                            if (shortType.equals("points")) {
+                                // PS names the amount "points" and the target "category"; ours are "amount" and "chapter"
+                                if (conv.has("points")) {
+                                    conv.add("amount", conv.get("points"));
+                                    conv.remove("points");
+                                }
+                                if (conv.has("category")) {
+                                    JsonElement targetElement = conv.get("category");
+                                    if (targetElement.isJsonPrimitive() && targetElement.getAsJsonPrimitive().isString()) {
+                                        String target = targetElement.getAsString();
+                                        if (!sameCategory(target, source)) {
+                                            // another imported category: name the chapter id the importer writes
+                                            conv.addProperty("chapter", out.namespace + ":" + chapterId(target));
+                                            out.note("points_reward_chapter " + target);
+                                        }
+                                        // the same category is the node's own chapter; the reward falls back to it
+                                        conv.remove("category");
+                                    } else {
+                                        out.unknown("skill_reward_category", "not_a_string");
+                                        conv.remove("category");
+                                    }
+                                }
+                            }
+                            if (KNOWN_REWARDS.contains(shortType)) {
+                                conv.addProperty("type", shortType);
+                            } else if (!required) {
+                                conv.addProperty("type", "dummy");
+                                conv.addProperty("original_type", type);
+                                out.unknown("skill_reward_type_optional", type);
+                            } else {
+                                conv.addProperty("type", type);
                                 out.unknown("skill_reward_type", type);
                             }
                             rw.add(conv);
@@ -130,13 +172,23 @@ public final class PuffishImporter {
                         n.add("rewards", rw);
                     }
                     case "metadata", "editor-color" -> { }
-                    default -> {
-                        if (REQUIRED.contains(kv.getKey())) {
-                            FtbQuestsImporter.put(n, "requires." + kv.getKey().substring("required_".length()), v);
+                    case "required_skills" -> {
+                        // Pufferfish counts unlocked normal neighbours; 0 makes the skill a root
+                        if (intOf(v, 1) <= 0) {
+                            n.addProperty("root", true);
                         } else {
-                            out.unknown("definition", kv.getKey());
+                            FtbQuestsImporter.put(n, "requires.min", v);
                         }
                     }
+                    case "required_points" -> FtbQuestsImporter.put(n, "requires.points", v);
+                    case "required_spent_points" -> FtbQuestsImporter.put(n, "requires.spent_points", v);
+                    case "required_exclusions" -> FtbQuestsImporter.put(n, "requires.exclusions", v);
+                    case "required_mods" -> {
+                        if (v.isJsonArray() && !v.getAsJsonArray().isEmpty()) {
+                            FtbQuestsImporter.put(n, "requires.mods", v.deepCopy());
+                        }
+                    }
+                    default -> out.unknown("definition", kv.getKey());
                 }
             }
             if (!n.has("cost")) {
@@ -188,7 +240,10 @@ public final class PuffishImporter {
     }
 
     private static void addRequire(JsonObject nodes, String node, String from) {
-        JsonObject n = nodes.has(node) ? nodes.getAsJsonObject(node) : new JsonObject();
+        if (!nodes.has(node) || !nodes.has(from)) {
+            return;
+        }
+        JsonObject n = nodes.getAsJsonObject(node);
         nodes.add(node, n);
         JsonObject r = n.has("requires") ? n.getAsJsonObject("requires") : new JsonObject();
         n.add("requires", r);
@@ -199,11 +254,39 @@ public final class PuffishImporter {
     }
 
     private static void addTo(JsonObject nodes, String node, String key, String value) {
-        JsonObject n = nodes.has(node) ? nodes.getAsJsonObject(node) : new JsonObject();
+        if (!nodes.has(node)) {
+            return;
+        }
+        JsonObject n = nodes.getAsJsonObject(node);
         nodes.add(node, n);
         JsonArray list = n.has(key) ? n.getAsJsonArray(key) : new JsonArray();
         list.add(value);
         n.add(key, list);
+    }
+
+    /**
+     * Whether a points reward's category is the one being imported. A namespaced target has to match the namespace too,
+     * else {@code other:mining} would be mistaken for this {@code puffish:mining} (2026-10-22 review).
+     */
+    private static boolean sameCategory(String target, String source) {
+        int slash = source.indexOf('/');
+        String sourceNamespace = slash < 0 ? "" : source.substring(0, slash);
+        String sourceCategory = slash < 0 ? source : source.substring(slash + 1);
+        int colon = target.indexOf(':');
+        if (colon >= 0) {
+            return target.substring(0, colon).equals(sourceNamespace)
+                    && target.substring(colon + 1).equals(sourceCategory);
+        }
+        return target.equals(sourceCategory);
+    }
+
+    /** The chapter id PuffishImporter writes for a {@code namespace:category} pair. */
+    private static String chapterId(String category) {
+        return "skill_" + FtbQuestsImporter.slug(category.replace(':', '_'));
+    }
+
+    private static int intOf(JsonElement v, int def) {
+        return v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() ? v.getAsInt() : def;
     }
 
     private static JsonObject icon(JsonElement v) {

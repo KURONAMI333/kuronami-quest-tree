@@ -52,6 +52,41 @@ public final class TeamResolver {
         return managedByFtbTeams() ? FtbTeamsBridge.owner(server, teamId) : null;
     }
 
+    /**
+     * Whether this player owns their current team, or is solo: the FTB Teams owner, the built-in party's owner, or
+     * the player themselves when there is no party. Shared skill actions (respec, exchange) are the owner's.
+     */
+    public static boolean isOwner(MinecraftServer server, UUID player) {
+        UUID teamId = teamId(server, player);
+        if (managedByFtbTeams()) {
+            UUID owner = FtbTeamsBridge.owner(server, teamId);
+            return ownsTeam(player, owner, FtbTeamsBridge.hasTeam(server, player));
+        }
+        PartyData.Party party = PartyStore.get(server).data().party(teamId);
+        return owns(player, party == null ? null : party.owner);
+    }
+
+    /** Solo (no team record) is the player's own; otherwise only the recorded owner may act. */
+    static boolean owns(UUID player, UUID owner) {
+        return owner == null || owner.equals(player);
+    }
+
+    /**
+     * The owner rule when the provider can answer "does this player have a team?". A missing owner is only solo when
+     * there is no team; an unreadable FTB Teams team (hasTeam is true on failure) is refused instead of opened to all.
+     */
+    static boolean ownsTeam(UUID player, UUID owner, boolean hasTeam) {
+        return owner != null ? owner.equals(player) : !hasTeam;
+    }
+
+    /** Whether FTB Teams (or the built-in party) records a team for this player. */
+    public static boolean hasTeam(MinecraftServer server, UUID player) {
+        if (managedByFtbTeams()) {
+            return FtbTeamsBridge.hasTeam(server, player);
+        }
+        return PartyStore.get(server).data().party(teamId(server, player)) != null;
+    }
+
     /** The FTB team's friendly name; empty for the built-in party, which the client names after its owner. */
     public static String teamName(MinecraftServer server, UUID teamId) {
         return managedByFtbTeams() ? FtbTeamsBridge.name(server, teamId) : "";

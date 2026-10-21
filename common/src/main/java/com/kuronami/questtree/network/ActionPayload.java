@@ -16,6 +16,8 @@ import net.minecraft.resources.ResourceLocation;
  *   <li>{@code take} node — spend points on a skill node</li>
  *   <li>{@code submit} node, index — hand in items for an item task that consumes them</li>
  *   <li>{@code check} node, index — tick a checkmark task</li>
+ *   <li>{@code exchange} chapter — buy one point with vanilla levels ({@code points.exchange})</li>
+ *   <li>{@code respec} chapter — give back the chapter's spent points, paying {@code points.respec.cost}</li>
  * </ul>
  */
 public record ActionPayload(String action, String node, int index, int choice) implements CustomPacketPayload {

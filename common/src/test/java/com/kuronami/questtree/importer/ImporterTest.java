@@ -24,6 +24,17 @@ class ImporterTest {
         return Path.of(ImporterTest.class.getResource("/fixtures/" + p).toURI());
     }
 
+
+    private static Map<String, JsonElement> puffishFiles() throws Exception {
+        Map<String, JsonElement> files = new LinkedHashMap<>();
+        try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
+            for (Path f : s.toList()) {
+                files.put(f.getFileName().toString(), JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)));
+            }
+        }
+        return files;
+    }
+
     @Test
     void snbtReadsPrettyFormat() {
         JsonObject o = Snbt.parse("{\n\tid: \"A\"\n\tx: 1.5d\n\tn: 5L\n\tlist: [I; 1, 2]\n\tflag: true\n\tnested: { k: \"v\" }\n}").getAsJsonObject();
@@ -122,6 +133,63 @@ class ImporterTest {
         assertEquals(1, out.counts.get("skill_exclusive_pairs"));
         assertTrue(out.unmapped.isEmpty(), "unmapped: " + out.unmapped);
         assertEquals("any", ch.getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonObject("requires").get("mode").getAsString());
+    }
+
+    /** An optional reward type that is not installed becomes Pufferfish's dummy; a required one stays reported. */
+    @Test
+    void puffishOptionalUnknownRewardBecomesDummy() throws Exception {
+        Map<String, JsonElement> files = new LinkedHashMap<>();
+        try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
+            for (Path f : s.toList()) {
+                files.put(f.getFileName().toString(), JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)));
+            }
+        }
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject optional = new JsonObject();
+        optional.addProperty("type", "puffish_skills:missing_mod:optional");
+        optional.addProperty("required", false);
+        rewards.add(optional);
+        JsonObject required = new JsonObject();
+        required.addProperty("type", "puffish_skills:missing_mod:required");
+        required.addProperty("required", true);
+        rewards.add(required);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("ftb/mining", files, out);
+        JsonArray converted = out.chapters.get("skill_ftb_mining").getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject dummy = converted.get(converted.size() - 2).getAsJsonObject();
+        assertEquals("dummy", dummy.get("type").getAsString());
+        assertEquals("puffish_skills:missing_mod:optional", dummy.get("original_type").getAsString());
+        assertEquals("puffish_skills:missing_mod:required", converted.get(converted.size() - 1).getAsJsonObject().get("type").getAsString());
+        assertTrue(out.unmapped.containsKey("skill_reward_type.puffish_skills:missing_mod:required"), out.unmapped.toString());
+        assertTrue(out.unmapped.containsKey("skill_reward_type_optional.puffish_skills:missing_mod:optional"), out.unmapped.toString());
+        assertFalse(out.unmapped.containsKey("skill_reward_type.puffish_skills:missing_mod:optional"), out.unmapped.toString());
+    }
+
+    /** A Pufferfish points reward names its amount and category differently; both are carried over. */
+    @Test
+    void puffishPointsRewardKeepsItsAmount() throws Exception {
+        Map<String, JsonElement> files = new LinkedHashMap<>();
+        try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
+            for (Path f : s.toList()) {
+                files.put(f.getFileName().toString(), JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)));
+            }
+        }
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject points = new JsonObject();
+        points.addProperty("type", "puffish_skills:points");
+        JsonObject data = new JsonObject();
+        data.addProperty("category", "puffish:mining");
+        data.addProperty("points", 3);
+        points.add("data", data);
+        rewards.add(points);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonArray converted = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject reward = converted.get(converted.size() - 1).getAsJsonObject();
+        assertEquals("points", reward.get("type").getAsString());
+        assertEquals(3, reward.get("amount").getAsInt());
+        assertFalse(reward.has("points"), "the PS field name does not leak into our data");
+        assertFalse(reward.has("category"), "the node's own chapter is the default target");
     }
 
     /** The block, fluid, forge_energy and observation tasks each keep their own counter field after conversion. */
@@ -232,5 +300,85 @@ class ImporterTest {
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("6996929552069196378L"));
         org.junit.jupiter.api.Assertions.assertEquals("ffffffffffffffff", FtbQuestsImporter.tableId("-1"));
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("611A165B35847A5A"));
+    }
+    /** 11. exchange.json's level_limit and cost_per_level are carried into points.exchange unchanged. */
+    @Test
+    void puffishExchangeConverts() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        files.put("exchange.json", JsonParser.parseString("""
+                {"level_limit": 3,
+                 "cost_per_level": {"type": "values", "data": {"values": [5, 10, 20]}}}
+                """));
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject exchange = out.chapters.get("skill_puffish_mining").getAsJsonObject("points").getAsJsonObject("exchange");
+        assertEquals(3, exchange.get("level_limit").getAsInt());
+        assertEquals(5, exchange.getAsJsonObject("cost_per_level").getAsJsonObject("data")
+                .getAsJsonArray("values").get(0).getAsInt());
+        assertTrue(out.unmapped.isEmpty(), out.unmapped.toString());
+    }
+    /** 10. Pufferfish's required_* fields keep their meaning in our requires block; required_skills 0 is a root. */
+    @Test
+    void puffishReturnRequirementsConvert() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        JsonObject def = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0");
+        def.addProperty("required_skills", 0);
+        def.addProperty("required_points", 2);
+        def.addProperty("required_spent_points", 1);
+        def.addProperty("required_exclusions", 2);
+        JsonArray mods = new JsonArray();
+        mods.add("minecraft");
+        def.add("required_mods", mods);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject node = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0");
+        assertTrue(node.get("root").getAsBoolean());
+        JsonObject requires = node.getAsJsonObject("requires");
+        assertEquals(2, requires.get("points").getAsInt());
+        assertEquals(1, requires.get("spent_points").getAsInt());
+        assertEquals(2, requires.get("exclusions").getAsInt());
+        assertEquals("minecraft", requires.getAsJsonArray("mods").get(0).getAsString());
+    }
+    /** 3. A points reward for another category names the chapter the importer writes for it. */
+    @Test
+    void puffishPointsRewardToAnotherCategoryNamesItsChapter() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject points = new JsonObject();
+        points.addProperty("type", "puffish_skills:points");
+        JsonObject data = new JsonObject();
+        data.addProperty("category", "puffish:farming");
+        data.addProperty("points", 4);
+        points.add("data", data);
+        rewards.add(points);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject reward = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0")
+                .getAsJsonArray("rewards").get(rewards.size() - 1).getAsJsonObject();
+        assertEquals(4, reward.get("amount").getAsInt());
+        assertEquals("test:skill_puffish_farming", reward.get("chapter").getAsString());
+        assertFalse(reward.has("category"));
+        assertTrue(out.notes.containsKey("points_reward_chapter puffish:farming"), out.notes.toString());
+    }
+
+    /** A same-named category in another namespace is not this chapter (2026-10-22 review). */
+    @Test
+    void puffishPointsRewardWithTheSameShortNameInAnotherNamespaceIsAnotherChapter() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject points = new JsonObject();
+        points.addProperty("type", "puffish_skills:points");
+        JsonObject data = new JsonObject();
+        data.addProperty("category", "other:mining");
+        data.addProperty("points", 2);
+        points.add("data", data);
+        rewards.add(points);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject reward = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0")
+                .getAsJsonArray("rewards").get(rewards.size() - 1).getAsJsonObject();
+        assertEquals("test:skill_other_mining", reward.get("chapter").getAsString());
+        assertFalse(reward.has("category"));
+        assertTrue(out.notes.containsKey("points_reward_chapter other:mining"), out.notes.toString());
     }
 }

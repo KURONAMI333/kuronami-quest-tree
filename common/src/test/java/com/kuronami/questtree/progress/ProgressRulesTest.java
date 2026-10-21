@@ -334,6 +334,102 @@ class ProgressRulesTest {
         assertFalse(ProgressRules.allRewardsClaimed(p, q));
     }
 
+    /**
+     * A broken exchange curve is pack data, not code: a missing "data" block, a formula longer than the limit or one
+     * nested too deeply falls back to the fixed xp_levels cost instead of throwing (2026-10-22 review).
+     */
+    @Test
+    void brokenExchangeCurvesFallBackToTheFixedCost() {
+        String longFormula = "1+" .repeat(200) + "1";
+        String deepFormula = "(".repeat(40) + "1" + ")".repeat(40);
+        String json = """
+                {"chapters": {"t:a": {"points": {"exchange": {
+                  "xp_levels": 5,
+                  "cost_per_level": {"type": "expression"}}}}}}
+                """;
+        ProgressRules.Exchange missingData = ProgressRules.exchangeOf(
+                ProgressModel.of(JsonParser.parseString(json).getAsJsonObject()).chapters.get("t:a"));
+        assertEquals(5, missingData.costAt(3));
+
+        JsonObject bundle = JsonParser.parseString(json).getAsJsonObject();
+        JsonObject curve = bundle.getAsJsonObject("chapters").getAsJsonObject("t:a")
+                .getAsJsonObject("points").getAsJsonObject("exchange").getAsJsonObject("cost_per_level");
+        curve.addProperty("type", "expression");
+        JsonObject data = new JsonObject();
+        curve.add("data", data);
+        data.addProperty("expression", longFormula);
+        assertEquals(5, ProgressRules.exchangeOf(
+                ProgressModel.of(bundle).chapters.get("t:a")).costAt(3));
+        data.addProperty("expression", deepFormula);
+        assertEquals(5, ProgressRules.exchangeOf(
+                ProgressModel.of(bundle).chapters.get("t:a")).costAt(3));
+    }
+
+    /**
+     * A points reward paid to another chapter is taken out of that pool on respec, so the refusal has to check that
+     * pool too; else its points could be spent first and the respec would leave it overdrawn (2026-10-22 review).
+     */
+    @Test
+    void respecChecksEveryPoolThatReceivedTheSkillsPoints() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {
+                  "s:a": {"points": {"start": 5},
+                          "nodes": {"n": {"cost": 1, "rewards": [
+                            {"type": "points", "amount": 2, "chapter": "s:b"}]}}},
+                  "s:b": {"points": {"start": 2}, "nodes": {"m": {"cost": 2}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(a.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(a), 1);
+        p.bonus.put(ProgressRules.key(m.chapters.get("s:b")), 2);
+        p.spent.put(ProgressRules.key(m.chapters.get("s:b")), 4);
+        ProgressRules.RespecPlan refused = rules.respecPlan(p, a);
+        assertFalse(refused.allowed(), "the target pool cannot give the paid points back");
+        assertEquals(ProgressRules.RespecRefusal.NOT_ENOUGH_POINTS, refused.refusal());
+        assertEquals(ProgressRules.key(m.chapters.get("s:b")), refused.pool());
+        p.spent.put(ProgressRules.key(m.chapters.get("s:b")), 2);
+        assertTrue(rules.respecPlan(p, a).allowed());
+    }
+
+    /**
+     * A ranked node that already has a rank does not lock itself with {@code requires.points}: Pufferfish's Skills
+     * checks UNLOCKED before the point gates, and its own cost must not block the next rank (2026-10-22 review).
+     */
+    @Test
+    void aTakenRankDoesNotLockTheNextRankWithRequiredPoints() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {}, "nodes": {
+                  "n": {"cost": 1, "ranks": 2, "requires": {"points": 1}}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = m.chapters.get("s:a").nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertFalse(rules.unlocked(p, n), "before the first rank the point gate still applies");
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(n.chapter), 1);
+        assertTrue(rules.unlocked(p, n), "the spent point must not lock the second rank");
+    }
+
+    /** Paying and revoking read a points amount the same way: missing is 1, and a non-number or non-positive is 0. */
+    @Test
+    void pointsAmountIsSharedByGrantAndRevoke() {
+        assertEquals(1, ProgressRules.pointsAmount(JsonParser.parseString("{}").getAsJsonObject()));
+        assertEquals(3, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": 3}
+                """).getAsJsonObject()));
+        assertEquals(0, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": "3"}
+                """).getAsJsonObject()));
+        assertEquals(0, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": -2}
+                """).getAsJsonObject()));
+        assertEquals(0, ProgressRules.pointsAmount(JsonParser.parseString("""
+                {"amount": 0}
+                """).getAsJsonObject()));
+    }
+
     /** The new per-reward marks and the first-join flag survive the save file (2026-10-20). */
     @Test
     void perRewardClaimsAndBookFlagRoundTrip() {

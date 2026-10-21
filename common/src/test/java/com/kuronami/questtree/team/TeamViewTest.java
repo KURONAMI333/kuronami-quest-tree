@@ -45,6 +45,19 @@ class TeamViewTest {
     }
 
     @Test
+    void soloPlayersOwnSharedActionsAndMembersDoNot() {
+        TeamView solo = new TeamView(A, "", A, "Alice", false, false,
+                List.of(new TeamView.Member(A, "Alice", true, true, true)), List.of());
+        TeamView member = new TeamView("team", "", A, "Alice", false, true,
+                List.of(new TeamView.Member(A, "Alice", true, false, true),
+                        new TeamView.Member(B, "Bob", true, true, false)), List.of());
+
+        assertTrue(solo.ownsSharedActions());
+        assertFalse(member.isOwner());
+        assertFalse(member.ownsSharedActions());
+    }
+
+    @Test
     void aPartyWithOnlyItsOwnerIsAlreadyATeam() {
         TeamView party = new TeamView(A, "", A, "Alice", false, true,
                 List.of(new TeamView.Member(A, "Alice", true, true, true)), List.of());
@@ -65,6 +78,26 @@ class TeamViewTest {
         assertEquals(0, invited.activeInvites(1000).size());
         assertTrue(invited.hasActiveInvites(999));
         assertFalse(invited.hasActiveInvites(1000));
+    }
+
+    /** An FTB team whose owner the server could not read keeps the shared actions off, even for its members. */
+    @Test
+    void anFtbTeamWithoutAReadableOwnerBlocksSharedActions() {
+        TeamView unknown = new TeamView("team", "Miners", "", "", true, true,
+                List.of(new TeamView.Member(A, "Alice", true, true, false),
+                        new TeamView.Member(B, "Bob", true, false, false)), List.of());
+
+        assertFalse(unknown.ownerKnown());
+        assertFalse(unknown.isOwner());
+        assertFalse(unknown.ownsSharedActions());
+        TeamView read = TeamView.parse(unknown.toJson().toString());
+        assertFalse(read.ownerKnown());
+        assertFalse(read.ownsSharedActions());
+
+        TeamView solo = new TeamView(A, "", A, "Alice", true, false,
+                List.of(new TeamView.Member(A, "Alice", true, true, true)), List.of());
+        assertTrue(solo.ownerKnown(), "a solo player always owns their pool");
+        assertTrue(solo.ownsSharedActions());
     }
 
     @Test
