@@ -50,6 +50,8 @@ public final class EditorSession {
     private static final Deque<Pending> queue = new ArrayDeque<>();
     private static Pending current;
     private static long nextRequestId = 1;
+    /** Screens waiting for a clear queue: see {@link #whenIdle(Runnable)}. */
+    private static final List<Runnable> idleTasks = new ArrayList<>();
 
     private static boolean allowed;
     private static boolean active;
@@ -76,6 +78,7 @@ public final class EditorSession {
         if (!on) {
             active = false;
             queue.clear();
+            idleTasks.clear();
             optimistic.clear();
             settledAt.clear();
         }
@@ -236,6 +239,30 @@ public final class EditorSession {
         return id;
     }
 
+    /**
+     * Runs a task once no op is queued or waiting for its answer. A screen reads its copy and revision when it is
+     * built, so opening one while this client's own save is still in flight would give it the number from before that
+     * save; the next reply updates the numbers first and the screen is built afterwards.
+     */
+    public static void whenIdle(Runnable task) {
+        if (task == null) {
+            return;
+        }
+        idleTasks.add(task);
+        runIdleTasks();
+    }
+
+    private static void runIdleTasks() {
+        while (!idleTasks.isEmpty() && current == null && queue.isEmpty()) {
+            Runnable task = idleTasks.remove(0);
+            try {
+                task.run();
+            } catch (RuntimeException ex) {
+                Constants.LOG.error("An editor task waiting for a clear queue failed", ex);
+            }
+        }
+    }
+
     /** A paste: every node is created in order, then the links inside the copy are sent with the minted ids. */
     public static void paste(String chapterId, EditorClipboard copy, double atX, double atY, boolean snap) {
         if (copy == null || copy.isEmpty()) {
@@ -307,6 +334,7 @@ public final class EditorSession {
             }
             pump();
         }
+        runIdleTasks();
     }
 
     private static void pump() {
@@ -356,6 +384,7 @@ public final class EditorSession {
     /** Leaving a server: no revision, clipboard or notice from it may reach the next one. */
     public static void onLogout() {
         queue.clear();
+        idleTasks.clear();
         current = null;
         allowed = false;
         active = false;

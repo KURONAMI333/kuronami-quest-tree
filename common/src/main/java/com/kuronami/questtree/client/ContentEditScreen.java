@@ -114,6 +114,10 @@ final class ContentEditScreen extends EditorScreen {
             return;
         }
         boolean create = !ClientProgress.rawTables().has(id);
-        minecraft.setScreen(new TableEditScreen(this, id, create));
+        EditorSession.whenIdle(() -> {
+            if (minecraft != null && minecraft.screen == this) {
+                minecraft.setScreen(new TableEditScreen(this, id, create));
+            }
+        });
     }
 }

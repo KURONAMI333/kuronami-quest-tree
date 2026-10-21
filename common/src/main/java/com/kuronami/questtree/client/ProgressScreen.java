@@ -2538,13 +2538,21 @@ public class ProgressScreen extends Screen {
     }
 
     private void openNodeEditor(ClientModel.Chapter ch, ClientModel.Node n) {
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        mc.setScreen(new NodeEditScreen(this, ch.id, n.id));
+        EditorSession.whenIdle(() -> {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.screen == this) {
+                mc.setScreen(new NodeEditScreen(this, ch.id, n.id));
+            }
+        });
     }
 
     private void openChapterEditor(ClientModel.Chapter ch) {
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        mc.setScreen(new ChapterEditScreen(this, ch.id));
+        EditorSession.whenIdle(() -> {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.screen == this) {
+                mc.setScreen(new ChapterEditScreen(this, ch.id));
+            }
+        });
     }
 
     private void openNewChapter(ClientModel.Chapter ch) {
