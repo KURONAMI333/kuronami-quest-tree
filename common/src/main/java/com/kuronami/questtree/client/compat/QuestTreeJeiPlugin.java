@@ -27,7 +27,7 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
-        RecipeViewer.Holder.set(new RecipeViewer() {
+        RecipeViewer.Holder.set("jei", new RecipeViewer() {
             @Override
             public void showRecipes(ItemStack stack) {
                 show(runtime, stack, RecipeIngredientRole.OUTPUT);
@@ -59,7 +59,7 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
 
     @Override
     public void onRuntimeUnavailable() {
-        RecipeViewer.Holder.set(null);
+        RecipeViewer.Holder.set("jei", null);
     }
 
     private static void show(IJeiRuntime runtime, ItemStack stack, RecipeIngredientRole role) {

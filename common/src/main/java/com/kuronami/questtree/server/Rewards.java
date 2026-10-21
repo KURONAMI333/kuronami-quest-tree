@@ -3,6 +3,8 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.api.QuestRewardType;
+import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
@@ -30,6 +32,8 @@ import java.util.Set;
 
 /** Hands out rewards (DATA_MODEL.md "報酬"). Every reward is checked again here; nothing trusts the client. */
 public final class Rewards {
+
+    private static final RewardAttempts FAILED = new RewardAttempts();
 
     private Rewards() {
     }
@@ -71,13 +75,22 @@ public final class Rewards {
                     yield true;
                 }
                 default -> {
-                    Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                    QuestRewardType addon = QuestTreeApi.rewardType(ProgressService.type(rw));
+                    if (addon != null) {
+                        addon.give(new QuestRewardType.RewardContext(player, n, rw, choice));
+                    } else {
+                        Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                    }
                     yield true;
                 }
             };
         } catch (RuntimeException ex) {
-            Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
-            return false;
+            // the claim is kept: retrying a reward that always throws would only fail again, and FTB Quests also
+            // spends the claim. One broken reward must not make the quest look unclaimed forever.
+            if (FAILED.first(rewardKey(n, rw))) {
+                Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+            }
+            return true;
         }
     }
 
@@ -225,6 +238,16 @@ public final class Rewards {
         for (String stage : p.stages) {
             ServerCommands.run(player, "pack_stages add " + player.getGameProfile().getName() + " " + stage, 2, true);
         }
+    }
+
+    /** Identifies one reward entry for the once-only log: its place in the node, or its contents for a rank reward. */
+    private static String rewardKey(ProgressModel.Node n, JsonObject rw) {
+        for (int i = 0; i < n.rewards.size(); i++) {
+            if (n.rewards.get(i) == rw) {
+                return n.key + "#" + i;
+            }
+        }
+        return n.key + "#rank:" + rw;
     }
 
     /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */

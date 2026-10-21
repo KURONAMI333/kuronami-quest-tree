@@ -2,6 +2,9 @@ package com.kuronami.questtree.client;
 
 import net.minecraft.world.item.ItemStack;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * The bridge to a recipe viewer (JEI), set by its plugin when the viewer is installed and left empty otherwise, so the
  * screen never needs the viewer at runtime. Traffic goes both ways (2026-10-18, a gap against Tenet): an item in a task
@@ -20,15 +23,38 @@ public interface RecipeViewer {
     /** The item under the pointer in the viewer's own lists, or empty. */
     ItemStack underMouse();
 
-    /** The installed viewer, or null. */
+    /**
+     * The installed viewers, keyed by plugin. More than one can be present (a pack may ship JEI and a viewer that
+     * embeds it), and the screen still talks to one: EMI first, then REI, then JEI, the order of their features.
+     */
     final class Holder {
-        static RecipeViewer viewer;
+        private static final String[] PRIORITY = {"emi", "rei", "jei"};
+        private static volatile Map<String, RecipeViewer> viewers = Map.of();
+        private static volatile RecipeViewer viewer;
 
         private Holder() {
         }
 
-        public static void set(RecipeViewer v) {
-            viewer = v;
+        /** Registers a viewer under its plugin name, or removes it when {@code v} is null. */
+        public static synchronized void set(String id, RecipeViewer v) {
+            if (id == null) {
+                return;
+            }
+            Map<String, RecipeViewer> next = new HashMap<>(viewers);
+            if (v == null) {
+                next.remove(id);
+            } else {
+                next.put(id, v);
+            }
+            viewers = Map.copyOf(next);
+            RecipeViewer chosen = null;
+            for (String name : PRIORITY) {
+                chosen = next.get(name);
+                if (chosen != null) {
+                    break;
+                }
+            }
+            viewer = chosen;
         }
 
         public static RecipeViewer get() {

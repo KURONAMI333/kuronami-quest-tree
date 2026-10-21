@@ -1,0 +1,2 @@
+# Quest Tree's KubeJS integration. KubeJS reads this file out of every mod's jar and loads the classes it names.
+com.kuronami.questtree.neoforge.QuestTreeKubeJsPlugin
