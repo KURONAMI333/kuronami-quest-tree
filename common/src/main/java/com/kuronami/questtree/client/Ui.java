@@ -92,6 +92,9 @@ final class Ui {
     /** The empty part of the experience toast bar. */
     static int TOAST_TRACK = 0xFF2A2A2A;
 
+    /** Screen text scale, separate from Minecraft's GUI scale (2026-10-22). */
+    static float textScale = 1f;
+
     /** Spacing on a 4/8 grid. */
     static final int S1 = 4;
     static final int S2 = 8;
@@ -192,6 +195,24 @@ final class Ui {
         HUD_TEXT = color(o, "hud_text", HUD_TEXT);
         HUD_MUTED = color(o, "hud_muted", HUD_MUTED);
         TOAST_TRACK = color(o, "toast_track", TOAST_TRACK);
+        if (ClientConfig.highContrast()) {
+            // readability over the pack's palette: white text on a near-black ground, and a warmer selection
+            TEXT = 0xFFFFFFFF;
+            MUTED = 0xFFEAEAEA;
+            DIM = 0xFFCFCFCF;
+            BRIGHT = 0xFFFFFFFF;
+            GROUND = 0xFF0E0F12;
+            PANEL = 0xFF17181C;
+            PANEL_TRANSLUCENT = 0xFA17181C;
+            RAIL_CLOSED = 0xFA0B0C0E;
+            FLOATING = 0xFF000000;
+            HAIRLINE = 0x66FFFFFF;
+            DIVIDER = 0x33FFFFFF;
+            ACCENT = 0xFFFFC400;
+            SELECTION = 0xFFFFFFFF;
+            HUD_TEXT = 0xFFFFFFFF;
+            HUD_MUTED = 0xFFE0E0E0;
+        }
         ProgressScreen.paletteChanged();
     }
 
@@ -371,27 +392,40 @@ final class Ui {
 
     /** Text without the vanilla drop shadow; the colour does the work instead. */
     static void text(GuiGraphics g, Font font, Component c, int x, int y, int argb) {
-        g.drawString(font, c, x, y, argb, false);
+        scaled(g, x, y, () -> g.drawString(font, c, 0, 0, argb, false));
     }
 
     static void text(GuiGraphics g, Font font, String s, int x, int y, int argb) {
-        g.drawString(font, s, x, y, argb, false);
+        scaled(g, x, y, () -> g.drawString(font, s, 0, 0, argb, false));
     }
 
     static void text(GuiGraphics g, Font font, FormattedCharSequence s, int x, int y, int argb) {
-        g.drawString(font, s, x, y, argb, false);
+        scaled(g, x, y, () -> g.drawString(font, s, 0, 0, argb, false));
+    }
+
+    private static void scaled(GuiGraphics g, int x, int y, Runnable draw) {
+        float scale = ClientConfig.textScale();
+        if (scale == 1f) {
+            draw.run();
+            return;
+        }
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1);
+        draw.run();
+        g.pose().popPose();
     }
 
     static void textRight(GuiGraphics g, Font font, Component c, int right, int y, int argb) {
-        g.drawString(font, c, right - font.width(c), y, argb, false);
+        text(g, font, c, (int) Math.round(right - font.width(c) * ClientConfig.textScale()), y, argb);
     }
 
     static void textRight(GuiGraphics g, Font font, String s, int right, int y, int argb) {
-        g.drawString(font, s, right - font.width(s), y, argb, false);
+        text(g, font, s, (int) Math.round(right - font.width(s) * ClientConfig.textScale()), y, argb);
     }
 
     static void textCenter(GuiGraphics g, Font font, Component c, int cx, int y, int argb) {
-        g.drawString(font, c, cx - font.width(c) / 2, y, argb, false);
+        text(g, font, c, (int) Math.round(cx - font.width(c) * ClientConfig.textScale() / 2), y, argb);
     }
 
     /**

@@ -16,6 +16,7 @@ public final class SettingsScreen extends Screen {
     private static final int ROW_H = 26;
     private static final int PANEL_W = 300;
     private static final float[] SCALES = {0.75f, 1f, 1.25f, 1.5f};
+    private static final float[] TEXT_SCALES = {0.85f, 1f, 1.15f};
 
     private final Screen parent;
     private final List<Row> rows = new ArrayList<>();
@@ -107,6 +108,55 @@ public final class SettingsScreen extends Screen {
         rows.add(new Row() {
             @Override
             public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.tracker_mode");
+            }
+
+            @Override
+            public Component value() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.tracker."
+                        + ClientConfig.trackerMode().id);
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.trackerMode = ClientConfig.trackerMode().next();
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.tracker_x");
+            }
+
+            @Override
+            public Component value() {
+                return offset(ClientConfig.trackerOffsetX());
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.trackerOffsetX = nextOffset(ClientConfig.trackerOffsetX());
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.tracker_y");
+            }
+
+            @Override
+            public Component value() {
+                return offset(ClientConfig.trackerOffsetY());
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.trackerOffsetY = nextOffset(ClientConfig.trackerOffsetY());
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
                 return Component.translatable("screen.kuronami_quest_tree.settings.keep_rail");
             }
 
@@ -120,6 +170,124 @@ public final class SettingsScreen extends Screen {
                 ClientConfig.keepRailOpen = !ClientConfig.keepRailOpen;
             }
         });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.text_size");
+            }
+
+            @Override
+            public Component value() {
+                return Component.literal(Math.round(ClientConfig.textScale() * 100) + "%");
+            }
+
+            @Override
+            public void click() {
+                float now = ClientConfig.textScale();
+                for (int i = 0; i < TEXT_SCALES.length; i++) {
+                    if (Math.abs(TEXT_SCALES[i] - now) < 0.01f) {
+                        ClientConfig.textScale = TEXT_SCALES[(i + 1) % TEXT_SCALES.length];
+                        Ui.textScale = ClientConfig.textScale;
+                        return;
+                    }
+                }
+                ClientConfig.textScale = 1f;
+                Ui.textScale = 1f;
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.high_contrast");
+            }
+
+            @Override
+            public Component value() {
+                return onOff(ClientConfig.highContrast());
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.highContrast = !ClientConfig.highContrast;
+                Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.keys");
+            }
+
+            @Override
+            public Component value() {
+                return Component.literal(">");
+            }
+
+            @Override
+            public void click() {
+                if (minecraft != null) {
+                    minecraft.setScreen(new KeyReferenceScreen(SettingsScreen.this));
+                }
+            }
+        });
+        ClientModel model = ClientProgress.model();
+        if (model != null && model.wikiUrl != null) {
+            rows.add(linkRow("wiki", model.wikiUrl));
+        }
+        if (model != null && model.guideUrl != null) {
+            rows.add(linkRow("guide", model.guideUrl));
+        }
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.auto_pin");
+            }
+
+            @Override
+            public Component value() {
+                return onOff(ClientConfig.autoPin());
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.autoPin = !ClientConfig.autoPin;
+            }
+        });
+    }
+
+    /** A pack-defined Wiki / Guide address, opened through the vanilla "are you sure" card. */
+    private Row linkRow(String id, String url) {
+        return new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings." + id);
+            }
+
+            @Override
+            public Component value() {
+                return Component.literal(">");
+            }
+
+            @Override
+            public void click() {
+                net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(SettingsScreen.this, url);
+            }
+        };
+    }
+
+    private static final int[] OFFSETS = {-48, -40, -32, -24, -16, -8, 0, 8, 16, 24, 32, 40, 48};
+
+    private static int nextOffset(int now) {
+        for (int i = 0; i < OFFSETS.length; i++) {
+            if (OFFSETS[i] == now) {
+                return OFFSETS[(i + 1) % OFFSETS.length];
+            }
+        }
+        return 0;
+    }
+
+    private static Component offset(int value) {
+        return Component.translatable("screen.kuronami_quest_tree.settings.px", value);
     }
 
     private static Component onOff(boolean on) {
@@ -133,6 +301,7 @@ public final class SettingsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        Ui.textScale = ClientConfig.textScale();
         renderBackground(g, mouseX, mouseY, partialTick);
         g.fill(0, 0, width, height, Ui.GROUND);
         int x = (width - PANEL_W) / 2;
