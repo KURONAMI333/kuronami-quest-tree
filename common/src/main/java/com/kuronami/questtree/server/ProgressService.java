@@ -938,7 +938,6 @@ public final class ProgressService {
             for (PlayerProgress pm : others) {
                 pm.claimed.remove(n.key);
                 pm.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
-                pm.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
             }
         }
     }

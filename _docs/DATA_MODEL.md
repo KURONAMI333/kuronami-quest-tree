@@ -16,6 +16,8 @@ Pack authors who need more should use a `craft` or `consume` task instead.
 - Tasks, node completion, quest claims and taking a skill continue while rewards are blocked.
 - A blocked reward is recorded as taken for its node and kept in the player's pending list. When the block is lifted,
   the pending rewards are paid in their original order.
+- A repeatable quest starting its next round keeps the pending rewards of the round it just claimed, so a blocked
+  pay-out is still owed afterwards. A reset of the node forgets them, together with the node's saved reward rolls.
 - The block is judged per reward, including the rewards of the rank being taken (`rewardsOfRank`). `attribute`
   rewards are part of the skill effect and are always applied, even while pay-outs are blocked.
 - `ignore_reward_blocking` / `ignore_blocking` still exempt one reward.

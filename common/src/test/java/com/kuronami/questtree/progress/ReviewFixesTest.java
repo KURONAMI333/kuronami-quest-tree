@@ -76,7 +76,7 @@ class ReviewFixesTest {
     }
 
     @Test
-    void aRewardClaimedTwiceWhileBlockedIsOwedTwice() {
+    void aResetForgetsThePendingRewardsOfTheNode() {
         PlayerProgress p = new PlayerProgress();
         JsonObject reward = reward("item");
         RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, true, () -> true);
@@ -85,6 +85,24 @@ class ReviewFixesTest {
         assertEquals(2, p.pendingRewards.get("t:q/n#-1#0"));
         p.clearNode("t:q/n");
         assertTrue(p.pendingRewards.isEmpty(), "a reset node must not pay a reward from the old round");
+    }
+
+    @Test
+    void aRepeatKeepsThePendingRewardsOfTheClaimedRound() {
+        PlayerProgress p = new PlayerProgress();
+        JsonObject reward = reward("item");
+        RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, true, () -> true);
+        p.claimedRewards.clear();
+        RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, true, () -> true);
+        assertEquals(2, p.pendingRewards.get("t:q/n#-1#0"));
+
+        ProgressModel model = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"t:q": {"nodes": {"n": {"repeat": {"cooldown": 60}}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = model.chapters.get("t:q").nodes.get("n");
+        assertTrue(new ProgressRules(model).repeatAfterClaim(p, n, 1_000L));
+        assertEquals(2, p.pendingRewards.get("t:q/n#-1#0"),
+                "the next round must not forget the two pay-outs the last one owes");
     }
 
     @Test

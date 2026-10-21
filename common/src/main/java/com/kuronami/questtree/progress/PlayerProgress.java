@@ -204,13 +204,22 @@ public final class PlayerProgress {
         part.cooldown.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
     }
 
-    /** Forgets a node's own progress (tasks, completion, claim); used by repeats and resets. */
-    public void clearNode(String node) {
+    /**
+     * Forgets a node's own progress for its next round. Rewards already taken while pay-outs were blocked stay in
+     * {@link #pendingRewards}: they are owed from the round that was claimed (2026-10-22 review).
+     */
+    public void clearRound(String node) {
         completed.remove(node);
         claimed.remove(node);
         tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
         claimedRewards.removeIf(k -> k.startsWith(node + "#"));
         teamClaimedRewards.removeIf(k -> k.startsWith(node + "#"));
+        rewardRolls.keySet().removeIf(k -> k.startsWith(node + "#"));
+    }
+
+    /** Forgets a node's own progress and everything it still owes; used by resets (2026-10-22 review). */
+    public void clearNode(String node) {
+        clearRound(node);
         pendingRewards.keySet().removeIf(k -> k.startsWith(node + "#"));
     }
 

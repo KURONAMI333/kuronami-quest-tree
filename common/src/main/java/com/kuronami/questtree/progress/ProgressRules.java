@@ -686,7 +686,7 @@ public final class ProgressRules {
             return false;
         }
         p.repeats.put(n.key, done + 1);
-        p.clearNode(n.key);
+        p.clearRound(n.key);
         if (cooldown > 0) {
             p.cooldown.put(n.key, now + cooldown * 1000);
         }
