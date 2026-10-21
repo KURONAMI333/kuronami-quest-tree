@@ -549,7 +549,8 @@ public final class Rewards {
         for (ProgressModel.Node n : c.nodes.values()) {
             int taken = p.taken.getOrDefault(n.key, 0);
             if (taken > 0) {
-                revokeSkillOne(player, p, n, taken, paid);
+                // this is the lock itself, so it must run every lock_command and remove every tag
+                revokeSkillOne(player, p, n, taken, paid, false);
             } else if (p.claimed.contains(n.key)) {
                 removeAttributesOne(player, n);
             }
