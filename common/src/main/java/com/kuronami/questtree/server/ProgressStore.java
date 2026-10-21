@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.data.SavedDataFiles;
 import com.kuronami.questtree.progress.PlayerPart;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.TeamProgress;
@@ -15,6 +16,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +39,7 @@ public final class ProgressStore extends SavedData {
     private com.kuronami.questtree.data.ProgressModel paidSkillModel;
 
     public static ProgressStore get(MinecraftServer server) {
+        SavedDataFiles.recoverOnce(server, NAME);
         ProgressStore store = server.overworld().getDataStorage().computeIfAbsent(
                 new SavedData.Factory<>(ProgressStore::new, ProgressStore::load, null), NAME);
         if (store.loadedLegacy) {
@@ -293,6 +296,11 @@ public final class ProgressStore extends SavedData {
         store.loadedLegacy = true;
         Constants.LOG.info("Upgraded {} per-player progress records to team records", store.data.teams.size());
         return store;
+    }
+
+    @Override
+    public void save(File file, HolderLookup.Provider registries) {
+        SavedDataFiles.saveAtomically(this, file, registries);
     }
 
     @Override

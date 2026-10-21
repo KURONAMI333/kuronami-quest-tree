@@ -1,11 +1,14 @@
 package com.kuronami.questtree.team;
 
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.data.SavedDataFiles;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
+
+import java.io.File;
 
 /**
  * KQT's built-in party, saved with the world ({@code data/kuronami_quest_tree_party.dat}) as one JSON string. Only
@@ -17,6 +20,7 @@ public final class PartyStore extends SavedData {
     private PartyData data = new PartyData();
 
     public static PartyStore get(MinecraftServer server) {
+        SavedDataFiles.recoverOnce(server, NAME);
         return server.overworld().getDataStorage().computeIfAbsent(
                 new SavedData.Factory<>(PartyStore::new, PartyStore::load, null), NAME);
     }
@@ -40,6 +44,11 @@ public final class PartyStore extends SavedData {
             }
         }
         return store;
+    }
+
+    @Override
+    public void save(File file, HolderLookup.Provider registries) {
+        SavedDataFiles.saveAtomically(this, file, registries);
     }
 
     @Override
