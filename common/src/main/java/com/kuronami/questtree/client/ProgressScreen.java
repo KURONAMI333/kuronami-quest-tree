@@ -3472,6 +3472,9 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (confirmPrompt != null) {
+            return true;
+        }
         ClientModel.Chapter ch = chapter();
         if (editDrag != EditDrag.NONE && ch != null && button == 0) {
             float[] v = view(ch);
@@ -3510,6 +3513,9 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
+        if (confirmPrompt != null) {
+            return true;
+        }
         ClientModel.Chapter ch = chapter();
         if (editDrag != EditDrag.NONE && ch != null) {
             EditDrag was = editDrag;
@@ -3627,6 +3633,9 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+        if (confirmPrompt != null) {
+            return true;
+        }
         ClientModel m = model();
         if (m == null) {
             return super.mouseScrolled(mx, my, scrollX, scrollY);
