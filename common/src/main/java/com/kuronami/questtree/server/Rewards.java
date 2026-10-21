@@ -21,8 +21,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** Hands out rewards (DATA_MODEL.md "報酬"). Every reward is checked again here; nothing trusts the client. */
 public final class Rewards {
@@ -232,7 +234,16 @@ public final class Rewards {
     static void revokeSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
         // points are shared, and giveSkill paid them only for the taker: take them back once, before the member
         // loop can run the per-player effects (a respec before this point is refused when they were already spent)
+        Map<String, Integer> before = new HashMap<>(p.bonus);
         ProgressService.rules().revokePoints(p, n, taken);
+        // an admin respec/reset does not go through the screen's affordability check, so an overdraft must at least
+        // leave a trace instead of quietly showing 0 points (2026-10-22 review)
+        for (Map.Entry<String, Integer> e : p.bonus.entrySet()) {
+            if (e.getValue() < 0 && !e.getValue().equals(before.get(e.getKey()))) {
+                Constants.LOG.warn("Points bonus of {} went negative ({} = {}) after taking back {}",
+                        player.getGameProfile().getName(), e.getKey(), e.getValue(), n.key);
+            }
+        }
         for (ServerPlayer member : members(player)) {
             revokeSkillOne(member, p, n, taken);
         }
