@@ -484,5 +484,7 @@
   "toast.kuronami_quest_tree.reward": "Recompensa",
   "screen.kuronami_quest_tree.emergency": "Objetos de emergencia",
   "message.kuronami_quest_tree.emergency_wait": "Los objetos de emergencia estarán listos en %s min",
-  "message.kuronami_quest_tree.emergency_none": "Este paquete no tiene objetos de emergencia."
+  "message.kuronami_quest_tree.emergency_none": "Este paquete no tiene objetos de emergencia.",
+  "screen.kuronami_quest_tree.editor.notice.reply_failed": "El editor no pudo aplicar la respuesta del servidor: %s",
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "No se pudo enviar la edición"
 }

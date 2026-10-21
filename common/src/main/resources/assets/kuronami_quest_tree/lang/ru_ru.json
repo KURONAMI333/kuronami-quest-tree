@@ -484,5 +484,7 @@
   "toast.kuronami_quest_tree.reward": "Награда",
   "screen.kuronami_quest_tree.emergency": "Аварийные предметы",
   "message.kuronami_quest_tree.emergency_wait": "Аварийные предметы будут доступны через %s мин",
-  "message.kuronami_quest_tree.emergency_none": "В этом наборе нет аварийных предметов."
+  "message.kuronami_quest_tree.emergency_none": "В этом наборе нет аварийных предметов.",
+  "screen.kuronami_quest_tree.editor.notice.reply_failed": "Редактор не смог применить ответ сервера: %s",
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "Не удалось отправить изменение"
 }

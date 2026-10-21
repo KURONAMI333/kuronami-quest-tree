@@ -7,6 +7,7 @@ import com.kuronami.questtree.client.edit.EditorClipboard;
 import com.kuronami.questtree.client.edit.PasteJob;
 import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -329,7 +330,8 @@ public final class EditorSession {
                     done.then().accept(reply);
                 } catch (RuntimeException ex) {
                     Constants.LOG.error("An editor reply handler failed", ex);
-                    showMessages(List.of("the editor could not apply the server's answer: " + ex.getMessage()), true);
+                    showMessages(List.of(Component.translatable("screen.kuronami_quest_tree.editor.notice.reply_failed",
+                            String.valueOf(ex.getMessage())).getString()), true);
                 }
             }
             pump();
@@ -352,7 +354,9 @@ public final class EditorSession {
             }
         } catch (RuntimeException ex) {
             // too large to send, or no connection: answer locally so the queue does not stall behind it
-            String message = ex.getMessage() == null ? "the edit could not be sent" : ex.getMessage();
+            String message = ex.getMessage() == null
+                    ? Component.translatable("screen.kuronami_quest_tree.editor.notice.send_failed").getString()
+                    : ex.getMessage();
             long revision = revisionOf(next);
             onReply(new EditorReplyPayload(next.requestId(), next.chapterId(), false, "", message, revision));
         }
