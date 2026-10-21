@@ -38,6 +38,8 @@ import java.util.function.BiConsumer;
  * /quest_tree lock|unlock &lt;players&gt; &lt;chapter&gt;    hide/show one chapter for those players
  * /quest_tree team_stage add|remove &lt;players&gt; &lt;stage&gt;  grant/revoke a shared team stage
  * /quest_tree rewards block|unblock|status &lt;players&gt;  stop/allow taking rewards (tasks still count)
+ * /quest_tree block task &lt;players&gt; &lt;node&gt;          give a block that opens that quest
+ * /quest_tree block barrier &lt;players&gt; node|stage &lt;key&gt;  give a gate that opens for that quest/stage
  * </pre>
  * Ids are {@code <namespace>:<chapter>} and {@code <namespace>:<chapter>/<node>}.
  */
@@ -94,6 +96,19 @@ final class PlayerCommands {
                                         .then(Commands.argument("amount", IntegerArgumentType.integer())
                                                 .executes(c -> each(c, (p, pr) -> pr.bonus.merge(ProgressRules.key(chapter(c)),
                                                         IntegerArgumentType.getInteger(c, "amount"), Integer::sum)))))))
+                .then(Commands.literal("block").requires(s -> s.hasPermission(2))
+                        .then(Commands.literal("task")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("node", StringArgumentType.word()).suggests(NODES)
+                                                .executes(c -> giveBlock(c, true)))))
+                        .then(Commands.literal("barrier")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.literal("node")
+                                                .then(Commands.argument("node", StringArgumentType.word()).suggests(NODES)
+                                                        .executes(c -> giveBlock(c, false))))
+                                        .then(Commands.literal("stage")
+                                                .then(Commands.argument("stage", StringArgumentType.word())
+                                                        .executes(c -> giveBlock(c, false)))))))
                 .then(Commands.literal("rewards").requires(s -> s.hasPermission(2))
                         .then(Commands.literal("block")
                                 .then(Commands.argument("players", EntityArgument.players())
@@ -269,6 +284,28 @@ final class PlayerCommands {
             }
         }
         ProgressRules.eraseChapterData(pr, ProgressService.rules().model(), ch);
+    }
+
+    private static int giveBlock(CommandContext<CommandSourceStack> c, boolean task) throws CommandSyntaxException {
+        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
+        String key = StringArgumentType.getString(c, task ? "node" : c.getNodes().stream()
+                .anyMatch(n -> "node".equals(n.getNode().getName())) ? "node" : "stage");
+        if (task && !ProgressService.rules().model().nodes.containsKey(key)) {
+            c.getSource().sendFailure(Component.literal("Unknown quest " + key));
+            return 0;
+        }
+        var stack = task ? com.kuronami.questtree.block.ModBlocks.taskItem(key)
+                : com.kuronami.questtree.block.ModBlocks.barrierItem(
+                        c.getNodes().stream().anyMatch(n -> "stage".equals(n.getNode().getName())) ? "stage" : "node", key);
+        for (ServerPlayer p : players) {
+            var copy = stack.copy();
+            if (!p.getInventory().add(copy)) {
+                p.drop(copy, false);
+            }
+        }
+        c.getSource().sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.block_given",
+                "Gave %s block(s) for %s", players.size(), key), true);
+        return players.size();
     }
 
     /** The reward flag belongs to one player, so this does not fold players of one team together like {@link #each}. */

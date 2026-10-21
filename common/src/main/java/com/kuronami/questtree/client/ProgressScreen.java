@@ -173,7 +173,7 @@ public class ProgressScreen extends Screen {
     }
 
     /** Opens the screen on one quest (the open key over an item that a quest wants). */
-    static void openAt(String key) {
+    public static void openAt(String key) {
         ProgressScreen screen = new ProgressScreen();
         screen.pendingGoTo = key;
         query = "";

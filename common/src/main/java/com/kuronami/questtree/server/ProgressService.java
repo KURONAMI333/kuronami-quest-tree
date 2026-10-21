@@ -1330,6 +1330,14 @@ public final class ProgressService {
     }
 
     /** Pack Stages (mod-100) is driven through its command so neither mod depends on the other. */
+    /** Whether a quest barrier opens for this player: the named node is complete, or the named stage is held. */
+    public static boolean barrierAllows(ServerPlayer player, String mode, String key) {
+        PlayerProgress p = progress(player);
+        return "stage".equals(mode)
+                ? p.teamStages.contains(key) || hasStage(player, key)
+                : p.completed.contains(key);
+    }
+
     static boolean hasStage(ServerPlayer player, String stage) {
         if (stage.isEmpty() || !Services.PLATFORM.isModLoaded("pack_stages")) {
             return false;

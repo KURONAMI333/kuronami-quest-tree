@@ -227,5 +227,8 @@
   "commands.kuronami_quest_tree.rewards_unblocked": "Rewards allowed for %s players",
   "commands.kuronami_quest_tree.rewards_status": "%s: rewards %s",
   "commands.kuronami_quest_tree.rewards_state_blocked": "blocked",
-  "commands.kuronami_quest_tree.rewards_state_open": "open"
+  "commands.kuronami_quest_tree.rewards_state_open": "open",
+  "block.kuronami_quest_tree.quest_task_block": "Quest Board",
+  "block.kuronami_quest_tree.quest_barrier": "Quest Gate",
+  "commands.kuronami_quest_tree.block_given": "Gave %s block(s) for %s"
 }

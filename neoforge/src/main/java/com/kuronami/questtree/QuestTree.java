@@ -1,5 +1,11 @@
 package com.kuronami.questtree;
 
+import com.kuronami.questtree.block.ModBlockEntities;
+import com.kuronami.questtree.block.ModBlocks;
+import com.kuronami.questtree.block.QuestBarrierBlock;
+import com.kuronami.questtree.block.QuestBarrierBlockEntity;
+import com.kuronami.questtree.block.QuestTaskBlock;
+import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.item.ModItems;
@@ -13,10 +19,15 @@ import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.network.TeamPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
@@ -31,6 +42,8 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.registries.DeferredBlock;
+import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -38,6 +51,40 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public class QuestTree {
 
     private static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(Constants.MOD_ID);
+    private static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(Constants.MOD_ID);
+    private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
+            DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, Constants.MOD_ID);
+
+    public static final DeferredBlock<QuestTaskBlock> QUEST_TASK_BLOCK = BLOCKS.register("quest_task_block",
+            () -> new QuestTaskBlock(BlockBehaviour.Properties.of().strength(1.5F)));
+    public static final DeferredBlock<QuestBarrierBlock> QUEST_BARRIER_BLOCK = BLOCKS.register("quest_barrier",
+            () -> new QuestBarrierBlock(BlockBehaviour.Properties.of().strength(-1.0F, 3600000.0F).noOcclusion()));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuestTaskBlockEntity>> QUEST_TASK_BE =
+            BLOCK_ENTITIES.register("quest_task_block", () -> {
+                BlockEntityType<QuestTaskBlockEntity> type = BlockEntityType.Builder
+                        .of(QuestTaskBlockEntity::new, QUEST_TASK_BLOCK.get()).build(null);
+                ModBlockEntities.setTask(type);
+                return type;
+            });
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuestBarrierBlockEntity>> QUEST_BARRIER_BE =
+            BLOCK_ENTITIES.register("quest_barrier", () -> {
+                BlockEntityType<QuestBarrierBlockEntity> type = BlockEntityType.Builder
+                        .of(QuestBarrierBlockEntity::new, QUEST_BARRIER_BLOCK.get()).build(null);
+                ModBlockEntities.setBarrier(type);
+                return type;
+            });
+
+    public static final DeferredItem<BlockItem> QUEST_TASK_ITEM = ITEMS.register("quest_task_block", () -> {
+        BlockItem item = new BlockItem(QUEST_TASK_BLOCK.get(), new Item.Properties());
+        ModBlocks.setTask(QUEST_TASK_BLOCK.get(), item);
+        return item;
+    });
+    public static final DeferredItem<BlockItem> QUEST_BARRIER_ITEM = ITEMS.register("quest_barrier", () -> {
+        BlockItem item = new BlockItem(QUEST_BARRIER_BLOCK.get(), new Item.Properties());
+        ModBlocks.setBarrier(QUEST_BARRIER_BLOCK.get(), item);
+        return item;
+    });
 
     /** The quest book. The supplier also fills the common holder, so common code needs no loader reference. */
     public static final DeferredItem<QuestBookItem> QUEST_BOOK = ITEMS.register("quest_book", () -> {
@@ -48,10 +95,14 @@ public class QuestTree {
 
     public QuestTree(IEventBus modBus) {
         CommonClass.init();
+        BLOCKS.register(modBus);
+        BLOCK_ENTITIES.register(modBus);
         ITEMS.register(modBus);
         modBus.addListener((net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent e) -> {
             if (e.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
                 e.accept(QUEST_BOOK);
+                e.accept(QUEST_TASK_ITEM);
+                e.accept(QUEST_BARRIER_ITEM);
             }
         });
         modBus.addListener(QuestTree::registerPayloads);

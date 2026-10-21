@@ -160,6 +160,14 @@ public final class ClientProgress {
         return n == null || rules.unlocked(progress, n);
     }
 
+    /** The client's copy of a quest barrier: the same rule the server uses, from synced progress. */
+    public static boolean barrierAllows(String mode, String key) {
+        if (key == null || key.isEmpty()) {
+            return false;
+        }
+        return "stage".equals(mode) ? progress.teamStages.contains(key) : state(key) == ProgressRules.State.DONE;
+    }
+
     public static ProgressRules.State state(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
         return n == null ? ProgressRules.State.OPEN : rules.state(progress, n);

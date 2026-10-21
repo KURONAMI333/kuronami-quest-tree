@@ -1,5 +1,11 @@
 package com.kuronami.questtree;
 
+import com.kuronami.questtree.block.ModBlockEntities;
+import com.kuronami.questtree.block.ModBlocks;
+import com.kuronami.questtree.block.QuestBarrierBlock;
+import com.kuronami.questtree.block.QuestBarrierBlockEntity;
+import com.kuronami.questtree.block.QuestTaskBlock;
+import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
@@ -27,8 +33,12 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 
 public class QuestTree implements ModInitializer {
 
@@ -36,11 +46,39 @@ public class QuestTree implements ModInitializer {
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_book"),
             new QuestBookItem(new Item.Properties().stacksTo(1)));
 
+    public static final Block QUEST_TASK_BLOCK = Registry.register(BuiltInRegistries.BLOCK,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_task_block"),
+            new QuestTaskBlock(BlockBehaviour.Properties.of().strength(1.5F)));
+    public static final Block QUEST_BARRIER_BLOCK = Registry.register(BuiltInRegistries.BLOCK,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_barrier"),
+            new QuestBarrierBlock(BlockBehaviour.Properties.of().strength(-1.0F, 3600000.0F).noOcclusion()));
+
+    public static final Item QUEST_TASK_ITEM = Registry.register(BuiltInRegistries.ITEM,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_task_block"),
+            new BlockItem(QUEST_TASK_BLOCK, new Item.Properties()));
+    public static final Item QUEST_BARRIER_ITEM = Registry.register(BuiltInRegistries.ITEM,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_barrier"),
+            new BlockItem(QUEST_BARRIER_BLOCK, new Item.Properties()));
+
     @Override
     public void onInitialize() {
         CommonClass.init();
         ModItems.setQuestBook(QUEST_BOOK);
-        ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(e -> e.accept(QUEST_BOOK));
+        ModBlocks.setTask(QUEST_TASK_BLOCK, QUEST_TASK_ITEM);
+        ModBlocks.setBarrier(QUEST_BARRIER_BLOCK, QUEST_BARRIER_ITEM);
+        BlockEntityType<QuestTaskBlockEntity> taskBe = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_task_block"),
+                BlockEntityType.Builder.of(QuestTaskBlockEntity::new, QUEST_TASK_BLOCK).build(null));
+        ModBlockEntities.setTask(taskBe);
+        BlockEntityType<QuestBarrierBlockEntity> barrierBe = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_barrier"),
+                BlockEntityType.Builder.of(QuestBarrierBlockEntity::new, QUEST_BARRIER_BLOCK).build(null));
+        ModBlockEntities.setBarrier(barrierBe);
+        ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(e -> {
+            e.accept(QUEST_BOOK);
+            e.accept(QUEST_TASK_ITEM);
+            e.accept(QUEST_BARRIER_ITEM);
+        });
         // the quest_book item is synced, so the client mod is required (like FTB Quests)
         PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC);

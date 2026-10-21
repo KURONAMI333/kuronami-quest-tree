@@ -95,5 +95,8 @@
   "commands.kuronami_quest_tree.rewards_unblocked": "Belohnungen für %s Spieler freigegeben",
   "commands.kuronami_quest_tree.rewards_status": "%s: Belohnungen %s",
   "commands.kuronami_quest_tree.rewards_state_blocked": "gesperrt",
-  "commands.kuronami_quest_tree.rewards_state_open": "offen"
+  "commands.kuronami_quest_tree.rewards_state_open": "offen",
+  "block.kuronami_quest_tree.quest_task_block": "Questtafel",
+  "block.kuronami_quest_tree.quest_barrier": "Questschranke",
+  "commands.kuronami_quest_tree.block_given": "%s Block/Blöcke für %s gegeben"
 }

@@ -41,14 +41,25 @@ public class FabricPlatformHelper implements IPlatformHelper {
     @Override
     public void openProgressionScreen() {
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
-            ClientOnly.open();
+            ClientOnly.open("");
+        }
+    }
+
+    @Override
+    public void openProgressionScreen(String node) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            ClientOnly.open(node);
         }
     }
 
     /** Kept in its own class so a dedicated server never loads a client screen. */
     private static final class ClientOnly {
-        static void open() {
-            net.minecraft.client.Minecraft.getInstance().setScreen(new com.kuronami.questtree.client.ProgressScreen());
+        static void open(String node) {
+            if (node == null || node.isEmpty()) {
+                net.minecraft.client.Minecraft.getInstance().setScreen(new com.kuronami.questtree.client.ProgressScreen());
+            } else {
+                com.kuronami.questtree.client.ProgressScreen.openAt(node);
+            }
         }
     }
 }

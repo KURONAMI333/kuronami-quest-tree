@@ -227,5 +227,8 @@
   "commands.kuronami_quest_tree.rewards_unblocked": "%s 人の報酬受け取りを再開しました",
   "commands.kuronami_quest_tree.rewards_status": "%s: 報酬は %s",
   "commands.kuronami_quest_tree.rewards_state_blocked": "停止中",
-  "commands.kuronami_quest_tree.rewards_state_open": "受け取り可"
+  "commands.kuronami_quest_tree.rewards_state_open": "受け取り可",
+  "block.kuronami_quest_tree.quest_task_block": "クエストボード",
+  "block.kuronami_quest_tree.quest_barrier": "クエストの関所",
+  "commands.kuronami_quest_tree.block_given": "%s 人に %s のブロックを渡しました"
 }
