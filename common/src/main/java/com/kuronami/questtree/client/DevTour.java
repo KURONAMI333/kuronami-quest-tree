@@ -12,6 +12,7 @@ import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Development only: a scripted walk through the screens that saves a screenshot of each, so the UI can be checked
@@ -122,7 +123,7 @@ final class DevTour {
             at(t + 120, () -> open(m.chapters.indexOf(big)));
             shot(t + 140, "05_big_chapter");
             // a node under the pointer in the big chapter: its lines in cyan and yellow, the rest stepped back
-            at(t + 142, () -> screen.tourHoverBusiest());
+            at(t + 142, () -> onScreen("22_big_hover", ProgressScreen::tourHoverBusiest));
             shot(t + 146, "22_big_hover");
             at(t + 148, () -> ProgressScreen.tourHover(null));
         }
@@ -161,9 +162,9 @@ final class DevTour {
             // the zoom buttons and the minimap (it shows while the map moves), then the search over the whole book,
             // with everything it does not match sunk into the ground
             at(pt + 10, () -> open(m.chapters.indexOf(big)));
-            at(pt + 14, () -> screen.tourZoom());
+            at(pt + 14, () -> onScreen("14_minimap_zoom", ProgressScreen::tourZoom));
             shot(pt + 18, "14_minimap_zoom");
-            at(pt + 24, () -> screen.tourSearch("qqqzzz"));
+            at(pt + 24, () -> onScreen("15_search_none", s -> s.tourSearch("qqqzzz")));
             shot(pt + 30, "15_search_none");
         }
         // the recipe viewer both ways: an item a quest wants opens that quest; the quest's item opens its recipes
@@ -203,7 +204,7 @@ final class DevTour {
         boolean glassBefore = ClientConfig.glass();
         List<String> foldsBefore = new ArrayList<>(ClientConfig.railFolded);
         at(pt + 64, () -> {
-            screen.tourPin(2);
+            onScreen("18_rail_pins", s -> s.tourPin(2));
             // and the first titled group folded shut, so the fold mark is in the same photo both ways
             for (ClientModel.Chapter c : m.chapters) {
                 if (c.group != null && m.groupTitle(c) != null) {
@@ -222,8 +223,10 @@ final class DevTour {
             // two can be put side by side
             if (big != null) {
                 open(m.chapters.indexOf(big));
-                screen.tourZoom();
-                screen.tourZoom();
+                onScreen("20_glass_on", s -> {
+                    s.tourZoom();
+                    s.tourZoom();
+                });
             }
         });
         at(pt + 76, () -> ClientConfig.glass = false);
@@ -253,15 +256,15 @@ final class DevTour {
                 shot(base + 4, c[1]);
             }
         }
-        at(pt + 110, () -> {
-            ClientModel.Chapter ch = screen == null ? null : m.chapters.stream().filter(x -> x.id.endsWith(":chapter_2_the_star")).findFirst().orElse(null);
+        at(pt + 110, () -> onScreen("25_star_pentagon_hover", s -> {
+            ClientModel.Chapter ch = m.chapters.stream().filter(x -> x.id.endsWith(":chapter_2_the_star")).findFirst().orElse(null);
             if (ch != null) {
                 ch.nodes.values().stream().filter(n -> "pentagon".equals(n.shape)).findFirst().ifPresent(n -> {
                     ProgressScreen.tourHover(n.key);
-                    screen.tourZoomTo(n, 2.5f);
+                    s.tourZoomTo(n, 2.5f);
                 });
             }
-        });
+        }));
         shot(pt + 116, "25_star_pentagon_hover");
         at(pt + 118, () -> ProgressScreen.tourHover(null));
         float textScaleBefore = ClientConfig.textScale();
@@ -294,23 +297,23 @@ final class DevTour {
             openId("aa_devtour:showcase");
         });
         at(et + 19, () -> EditorSession.setActive(true));
-        at(et + 21, () -> screen.tourEditSelectFirst());
+        at(et + 21, () -> onScreen("29_editor_map", ProgressScreen::tourEditSelectFirst));
         shot(et + 25, "29_editor_map");
-        at(et + 27, () -> screen.tourOpenNodeEditor("aa_devtour:showcase", "rich"));
+        at(et + 27, () -> onScreen("30_node_edit", s -> s.tourOpenNodeEditor("aa_devtour:showcase", "rich")));
         shot(et + 33, "30_node_edit");
-        at(et + 35, () -> screen.tourOpenChapterEditor("aa_devtour:showcase"));
+        at(et + 35, () -> onScreen("31_chapter_settings", s -> s.tourOpenChapterEditor("aa_devtour:showcase")));
         shot(et + 41, "31_chapter_settings");
-        at(et + 43, () -> screen.tourOpenTableEditor());
+        at(et + 43, () -> onScreen("32_reward_table", ProgressScreen::tourOpenTableEditor));
         shot(et + 49, "32_reward_table");
-        at(et + 51, () -> screen.tourOpenRestore());
+        at(et + 51, () -> onScreen("33_restore", ProgressScreen::tourOpenRestore));
         shot(et + 57, "33_restore");
-        at(et + 59, () -> screen.tourOpenParty());
+        at(et + 59, () -> onScreen("34_party", ProgressScreen::tourOpenParty));
         shot(et + 65, "34_party");
         // a skill chapter: the respec card, then the exchange chip the same header shows
         at(et + 67, () -> openId("aa_devtour:skills"));
-        at(et + 71, () -> screen.tourAskRespec("aa_devtour:skills"));
+        at(et + 71, () -> onScreen("35_respec_confirm", s -> s.tourAskRespec("aa_devtour:skills")));
         shot(et + 75, "35_respec_confirm");
-        at(et + 77, () -> screen.tourClearConfirm());
+        at(et + 77, () -> onScreen("36_exchange", ProgressScreen::tourClearConfirm));
         shot(et + 81, "36_exchange");
         // a locked chapter in the rail, with the pack's own hint under the pointer
         at(et + 83, () -> {
@@ -318,14 +321,14 @@ final class DevTour {
             openId("aa_devtour:showcase");
         });
         at(et + 85, () -> ProgressScreen.tourRailOpen(true));
-        at(et + 87, () -> {
-            int[] row = screen.tourRailRow("aa_devtour:locked");
+        at(et + 87, () -> onScreen("37_locked_chapter_hint", s -> {
+            int[] row = s.tourRailRow("aa_devtour:locked");
             if (row == null) {
                 Constants.LOG.warn("Dev tour: the locked chapter has no rail row");
             } else {
                 ProgressScreen.tourPointer(row[0], row[1]);
             }
-        });
+        }));
         shot(et + 93, "37_locked_chapter_hint");
         // the reward toast is a HUD toast, so the screen is closed for it
         at(et + 95, () -> {
@@ -343,18 +346,18 @@ final class DevTour {
         });
         // a description with a picture and both link kinds (the dev pack)
         at(et + 102, () -> openId("aa_devtour:showcase"));
-        at(et + 104, () -> screen.tourSelect("aa_devtour:showcase/rich"));
+        at(et + 104, () -> onScreen("39_description_image_links", s -> s.tourSelect("aa_devtour:showcase/rich")));
         shot(et + 112, "39_description_image_links");
         // the emergency row, the chapter list open with the pointer on it, its items in the tooltip
         at(et + 114, () -> ProgressScreen.tourRailOpen(true));
-        at(et + 116, () -> {
-            int[] row = screen.tourEmergencyRow();
+        at(et + 116, () -> onScreen("40_emergency_items", s -> {
+            int[] row = s.tourEmergencyRow();
             if (row == null) {
                 Constants.LOG.warn("Dev tour: the pack has no emergency items");
             } else {
                 ProgressScreen.tourPointer(row[0], row[1]);
             }
-        });
+        }));
         shot(et + 122, "40_emergency_items");
         // the same sheet at 120% text, then the high-contrast palette
         at(et + 124, () -> {
@@ -363,7 +366,7 @@ final class DevTour {
             ClientConfig.textScale = 1.2f;
             openId("aa_devtour:showcase");
         });
-        at(et + 127, () -> screen.tourSelect("aa_devtour:showcase/rich"));
+        at(et + 127, () -> onScreen("41_text_120", s -> s.tourSelect("aa_devtour:showcase/rich")));
         shot(et + 136, "41_text_120");
         at(et + 138, () -> {
             ClientConfig.highContrast = true;
@@ -472,12 +475,25 @@ final class DevTour {
             }
         }
         Constants.LOG.warn("Dev tour: no chapter {}", id);
+        // the step that asked for the chapter has no screen to drive from here: null it so later steps skip too
+        screen = null;
+    }
+
+    /**
+     * Runs a step against the screen the tour opened. A step that arrives without one (the world's pack does not have
+     * the chapter it asks for, or another step closed the screen) is skipped with one line instead of throwing from
+     * the tick loop and losing every later photo.
+     */
+    private static void onScreen(String what, Consumer<ProgressScreen> step) {
+        if (screen == null) {
+            Constants.LOG.warn("Dev tour: {} skipped, no progress screen", what);
+            return;
+        }
+        step.accept(screen);
     }
 
     private static void selectFirst(State state) {
-        if (screen != null) {
-            screen.tourSelectFirst(state);
-        }
+        onScreen("select " + state, s -> s.tourSelectFirst(state));
     }
 
     private static void shot(int tick, String name) {
