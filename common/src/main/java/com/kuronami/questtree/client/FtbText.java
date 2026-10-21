@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -19,6 +20,9 @@ import net.minecraft.network.chat.Component;
  * nothing (2026-10-21).
  */
 final class FtbText {
+
+    /** A texture path and nothing else: no scheme, no backslash, no leading slash, no upper case. */
+    private static final Pattern IMAGE_TARGET = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_.-][a-z0-9/._-]*");
 
     /** One run of a description line. TEXT carries markup colour codes; links carry their target. */
     record Token(Kind kind, String text, String target, int width, int height) {
@@ -292,7 +296,8 @@ final class FtbText {
     private static Token token(String body) {
         if (body.startsWith("image:")) {
             String[] parts = body.substring("image:".length()).strip().split("\\s+");
-            if (parts.length == 0 || parts[0].isEmpty()) {
+            if (parts.length == 0 || !IMAGE_TARGET.matcher(parts[0]).matches()) {
+                // a URL, a file path or a missing namespace would draw nothing; keep the braces as prose instead
                 return null;
             }
             int width = 0;

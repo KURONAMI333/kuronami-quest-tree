@@ -34,6 +34,21 @@ class FtbTextTest {
     }
 
     @Test
+    void anImageTargetMustBeANamespacedTexturePath() {
+        assertTrue(tokens("before {image:test:textures/gui/pic.png width:20} after").stream()
+                .anyMatch(t -> t.kind() == FtbText.Token.Kind.IMAGE));
+        for (String bad : List.of(
+                "{image:https://example.com/pic.png}",
+                "{image:test:\\pic.png}",
+                "{image:/test:pic.png}",
+                "{image:Test:pic.png}",
+                "{image:test:}")) {
+            assertTrue(tokens("x " + bad + " y").stream().noneMatch(t -> t.kind() == FtbText.Token.Kind.IMAGE),
+                    "not an image: " + bad);
+        }
+    }
+
+    @Test
     void linksCarryTargetAndLabel() {
         List<FtbText.Token> t = tokens("{open_url:https://example.com docs}{quest:two/iron The Iron Age}{recipe:minecraft:iron_ingot Iron}");
         assertEquals(FtbText.Token.Kind.OPEN_URL, t.get(0).kind());
