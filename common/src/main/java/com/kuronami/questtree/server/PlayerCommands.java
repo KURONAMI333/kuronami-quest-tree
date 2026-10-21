@@ -247,6 +247,10 @@ final class PlayerCommands {
      */
     private static void chapterOpen(CommandContext<CommandSourceStack> c, ServerPlayer p, PlayerProgress pr, boolean open) {
         ProgressModel.Chapter ch = chapter(c);
+        if (!ProgressRules.chapterStateChanges(pr, ch, open)) {
+            // already in the requested state: running its commands again would duplicate their effects (2026-10-22 review)
+            return;
+        }
         pr.chapterOpen.put(ch.id, open);
         if (open) {
             Rewards.reapplyChapter(p, pr, ch);
@@ -402,6 +406,7 @@ final class PlayerCommands {
         if (n.tasks.isEmpty() && !n.chapter.isSkills() && !pr.completed.contains(n.key)) {
             // task-less quests: complete with their automatic rewards, like a normal completion
             pr.completed.add(n.key);
+            pr.completedAt.put(n.key, System.currentTimeMillis());
             ProgressService.event(p, pr, "complete", n.key);
             ProgressService.autoRewards(p, pr, n);
         }

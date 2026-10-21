@@ -1,76 +1,73 @@
 ---
 name: progression-data-model
-description: 汎用進行MODのデータの形（データパックの JSON）。FTB Quests と Pufferfish's Skills の両方を1つの型で表し、インポーターの変換先になる。実パック6本の使用実態から必要な項目を決めた。
+description: The JSON shape of a progression data pack. One model for quests and skills, and the target of the importers. Every field was chosen from how six real packs use their data.
 updated: 2026-10-22
 ---
 
-# データの形（案 v1）
+# Progression data model
 
-置き場はデータパックの `data/<namespace>/progression/`。サーバーが読み、クライアントへ送る。文言は言語ファイル（`data/<namespace>/progression/lang/<locale>.json`）に置く。
+A pack lives in `data/<namespace>/progression/` of a data pack. The server reads it and sends the result to clients. Display text lives in the pack's own language files (`data/<namespace>/progression/lang/<locale>.json`), not in the JSON below.
 
-決め方: 6本のパック（ATM10・FTB Skies 2・FTB Evolution・Prominence II・DarkRPG・Mystic Horizons）の定義を全部数え、使われている項目はすべて表せるようにした。
+The shape was designed by counting every definition in six packs (ATM10, FTB Skies 2, FTB Evolution, Prominence II, DarkRPG and Mystic Horizons), so that every field those packs use has a place in one model.
 
-## 1つの型にまとめる
+## One shape for quests and skills
 
-| このMOD | FTB Quests | Pufferfish's Skills |
+| This mod | FTB Quests | Pufferfish's Skills |
 |---|---|---|
-| 章 `chapter` | chapter | category |
-| 章の群 `group` | chapter group | （無い） |
-| ノード `node` | quest | skill（配置）＋ definition（中身） |
-| 開く条件 `requires` | dependencies ＋ dependency_requirement ＋ min_required_dependencies | 接続（normal）・root |
-| 排他 `exclusive` | max_completable_dependents | 接続（exclusive）・exclusive_root |
-| やること `tasks` | tasks | （無い） |
-| 費用 `cost` | （無い） | cost・required_points・required_spent_points |
-| 報酬 `rewards` | rewards ＋ reward table | rewards |
-| ポイント `points`（章ごと） | （無い） | experience・level・exchange・spent_points_limit |
-| 装飾 `decorations` | chapter images | background |
+| chapter `chapter` | chapter | category |
+| chapter group `group` | chapter group | — |
+| node `node` | quest | skill (placement) + definition (contents) |
+| requirements `requires` | dependencies + dependency_requirement + min_required_dependencies | connections (normal) + root |
+| exclusivity `exclusive` | max_completable_dependents | connections (exclusive) + exclusive_root |
+| tasks `tasks` | tasks | — |
+| cost `cost` | — | cost, required_points, required_spent_points |
+| rewards `rewards` | rewards + reward tables | rewards |
+| points `points` (per chapter) | — | experience, level, exchange, spent_points_limit |
+| decoration `decorations` | chapter images | background |
 
-ノードは「やることを全部済ませる」「ポイントを払う」の片方か両方で開く。クエストとスキルを同じ章に混ぜることもできる。
+A node opens by finishing all of its tasks, by paying points, or by both. Quests and skills can also share one chapter.
 
-## ファイル
+## Files
 
 ```
 data/<ns>/progression/
-  settings.json                 全体の既定値（自動受取・チーム報酬・ロック時の文言・緊急アイテムなど）
-  groups.json                   章の群（並び順・アイコン）
-  chapters/<chapter>.json       章1つ（ノード・装飾・ポイントの設定）
-  reward_tables/<table>.json    報酬テーブル（ランダム・1つ選ぶ・全部・ルートクレート）
-  patches/<anything>.json       他のデータパックの章・ノードの一部だけを上書きする
+  settings.json                 pack-wide defaults (automatic rewards, team rewards, lock hint, emergency items and more)
+  groups.json                   chapter groups (order and icon)
+  chapters/<chapter>.json       one chapter (nodes, decoration, points)
+  reward_tables/<table>.json    reward tables (random, choice, all, loot crate)
+  patches/<anything>.json       replace only part of another data pack's chapter or node
 ```
 
-`settings.json` はパック全体の設定で、次のキーを読む（無いキーは既定値）。最初に `settings.json` を持つ名前空間が勝つ。
+`settings.json` holds pack-wide settings and is read from the first namespace that provides one. A missing key takes its default.
 
-| キー | 型 | 既定 | 何 |
+| Key | Type | Default | Meaning |
 |---|---|---|---|
-| `emergency.items` | 配列 | 空 | 進行画面の緊急ボタンが渡すアイテム。`"minecraft:bread"` か `{"item":"minecraft:bread","count":3}` |
-| `emergency.cooldown_seconds` | 整数 | 3600 | 緊急ボタンの間隔（秒）。0 で間隔なし。待ち時間はプレイヤーごとに保存し、チームの出入りでも消えない |
+| `emergency.items` | array | empty | Items given by the emergency button on the progression screen. Either `"minecraft:bread"` or `{"item":"minecraft:bread","count":3}`. |
+| `emergency.cooldown_seconds` | integer | 3600 | Seconds between emergency uses. `0` means no cooldown. The wait is saved per player and survives leaving and rejoining a team. |
+| `wiki_url` / `guide_url` | string | none | External links shown in the settings screen. Only `http` and `https` are accepted. |
 
-旧版のチーム共有の待ち時間は、保存を読む時にメンバー全員へ移す。保存時点でメンバーが居ないチームでは、その待ち時間（最大1時間）が消えることがある（許容）。
-| `wiki_url` / `guide_url` | 文字列 | 無し | 設定画面に出す外部リンク。`http` / `https` だけを受け付ける |
+The older layout with `items` and `cooldown_seconds` directly under the root is still read (for old packs). Whether the quest book drops on death is not a pack setting; it is `drop_book_on_death` in `config/kuronami_quest_tree-server.json`.
 
-`emergency` を書かずに `items` / `cooldown_seconds` を直下へ置いても読む（旧いパック向け）。
-死亡時に本を落とすかはパックではなく `config/kuronami_quest_tree-server.json` の `drop_book_on_death`。
+`patches` exists because Mystic Horizons needs it: another mod (SimplySkills) owns a skill tree, and the pack rewrites part of that tree from the outside.
 
-`patches` は Mystic Horizons で必要と分かった。別MOD（SimplySkills）が持つスキルツリーの一部を、パック側から書き換えている。
+## Translations
 
-## Translating a quest book
+Pack text is stored in the data pack's own language files, separate from the mod's UI language files (`assets/kuronami_quest_tree/lang/<locale>.json`).
 
-パックの本の文言はデータパック側の言語ファイルに置く。MOD 本体の UI（`assets/kuronami_quest_tree/lang/<locale>.json`）とは別物。
+- Location: `data/<namespace>/progression/lang/<locale>.json`. One flat JSON object per locale; the importers write here too.
+- Locale names match Minecraft: `en_us`, `ja_jp`, `de_de`, `fr_fr`, `es_es`, `zh_cn`, `ru_ru`, `pt_br`, `ko_kr`. A player receives the selected locale plus `en_us`; a missing key falls back to `en_us`.
+- Key shapes (`<ns>` is the data pack namespace, `<chapter>` is the file name under `chapters/`):
+  - chapter: `progression.<ns>.<chapter>.title`
+  - chapter group: `progression.<ns>.group.<group>.title`
+  - node: `progression.<ns>.<chapter>.<node>.title`, `.subtitle`, `.desc`
+  - task title override: `<text>.title`, where `<text>` is the task's `text` value
+  - `visibility.lock_hint`: a key shows its translation; any other string is shown as written
+- Values are strings. `\n` starts a new page. FTB colour codes such as `&a` work. Values are displayed directly, not passed through translation, so there are no `%s` placeholders.
+- To add a locale, copy `en_us.json`, translate the values, and change nothing else except the file name.
+- A resource pack's `assets/<namespace>/lang/<locale>.json` is also read through vanilla's language lookup, but only chapter titles, group titles and `lock_hint` use it as a fallback. Subtitles and descriptions only read the data pack's language file, so put body text in the data pack.
+- Untranslated strings: a `title`, `subtitle` or `description` written directly on a chapter or node wins over a language key. Decoration `hover` is a list of strings shown as written; it does not look up language keys.
 
-- 置き場は `data/<namespace>/progression/lang/<locale>.json`。1 locale 1ファイルのフラットな JSON オブジェクトで、インポーターもここへ書き出す。
-- locale 名は Minecraft と同じ（`en_us`, `ja_jp`, `de_de`, `fr_fr`, `es_es`, `zh_cn`, `ru_ru`, `pt_br`, `ko_kr`）。プレイヤーには選択中の locale と `en_us` だけが送られ、無いキーは `en_us` に落ちる。
-- キーの形（`<ns>` はデータパックの名前空間、`<chapter>` は `chapters/<chapter>.json` の名前）:
-  - 章: `progression.<ns>.<chapter>.title`
-  - 章の群: `progression.<ns>.group.<group>.title`
-  - ノード: `progression.<ns>.<chapter>.<node>.title` / `.subtitle` / `.desc`
-  - タスク名の上書き: タスクの `text` に書いた値を前置きにした `<text>.title`
-  - `visibility.lock_hint`: キーを書けばその訳、キーでない文字列ならそのまま表示
-- 値は文字列。`\n` で改ページ、FTB の色コード（`&a` など）も使える。翻訳キーではなくそのまま表示されるので `%s` の穴埋めは無い。
-- locale を足すには `en_us.json` をコピーして値を訳し、キーとファイル名以外を変えない。
-- リソースパックの `assets/<namespace>/lang/<locale>.json` もバニラの I18n として読まれるが、効くのは章題・群題・`lock_hint` だけ（`ClientModel.component` のフォールバック）。`subtitle` と `desc` はデータ側の言語ファイルしか見ないので、本文はデータパックに入れる。
-- 翻訳されない文字列: ノードや章に直接書いた `title` / `subtitle` / `description` は言語キーより優先される。装飾の `hover` は配列の文字列をそのまま表示する（言語キーを引かない）。
-
-## 章
+## Chapters
 
 ```json
 {
@@ -89,35 +86,12 @@ data/<ns>/progression/
 }
 ```
 
-- 題名・副題は言語ファイルのキー `progression.<ns>.<chapter>.title` から自動で引く。データに直接書いた文字列も受け付ける（その時は翻訳されない）。
-- `points` がある章はスキルの章になる。
-- `visibility.lock_hint` は、`points.unlocked_by_default: false` などで閉じている章を章一覧に灰色で出した時に、マウスを乗せると出る文言。言語キーか直接の文字列。省略時は「ロック中」。`visibility.always_hidden` の章は今までどおり一覧に出さない。
-- `points.exchange.xp_levels` は交換1回に払うバニラのレベル、`level_limit` は交換できる回数（省略で無制限）。`cost_per_level` を書くと、その回までに買った数（最初は 0）で値を引く。`{"type": "values", "data": {"values": [5, 10, 20]}}` は買った数番目（最後を超えたら最後の値）、`{"type": "expression", "data": {"expression": "5 + level * 10"}}` は `level` に買った数を入れて評価する。両方ある時は `cost_per_level` が勝つ。Pufferfish's Skills の `exchange.json` からそのまま移す。
-  - `cost_per_level` が読めない時（`data` が無い・オブジェクトでない、`values` が配列でない、値が数値でない、式が壊れている）は、その時点の `xp_levels` の固定費用に戻る。式は 256 文字・入れ子 32 段まで。超えた式も固定費用に戻す（パックのデータでサーバーを落とさない）。`ProgressValidator` はこれらを `WARNING` にする（章は動く）。
-- `points.respec.cost` は画面の「振り直し」で章のポイントを返してもらう時に残して払うポイント（省略・null で無料）。管理者コマンドの respec は費用を取らない。
-- 画面の「振り直し」「交換」はチームの持ち主だけが押せる（サーバーも同じ判定をする）。振り直しは、取った段の `points` 報酬を払い先の章のプールから引くので、払い先のプールが引けるだけ残っているかも見る。1つでも足りなければ、そのプール名を理由にして拒否する（別章のポイントを使い切ってから振り直して、その章をマイナスにする経路を塞ぐ）。振り直しの費用は返らない。FTB Teams の持ち主が読めない時は、そのチームでは誰も押せない。
+- The title and subtitle come from `progression.<ns>.<chapter>.title` and `.subtitle`. A string written directly in the data is also accepted, but is then not translated.
+- A chapter with `points` is a skill chapter.
+- `visibility.lock_hint` is the text shown when a chapter closed by, for example, `points.unlocked_by_default: false` appears greyed out in the chapter list. It is either a language key or a literal string; when omitted it says "locked". `visibility.always_hidden` keeps a chapter out of the list entirely.
+- `defaults` supplies node defaults. `hide_lines`, `consume_items` and `repeatable` are the chapter-wide forms of the matching node fields.
 
-```json
-"points": {
-  "per_level": "level^1.5 * 100",
-  "level_limit": 24,
-  "start": 0,
-  "spent_limit": null,
-  "unlocked_by_default": true,
-  "sources": [{"type": "mine_block", "...": "Pufferfish's Skills と同じ計算式の書き方"}],
-  "exchange": {"xp_levels": 30, "level_limit": 5},
-  "pool": null,
-  "stop_when_maxed": true,
-  "reset_on_death": false,
-  "respec": {"cost": null}
-}
-```
-
-  `pool` に同じ名前を書いた章どうしは、経験値とポイントを共有する。
-
-  経験値の式と経験値源の条件は、Pufferfish's Skills の書き方（expression・variables・operations）をそのまま受け付ける。FTB の公式パックが条件付きの式を多用しているため、別の書き方に置き換えると移行で必ず崩れる。
-
-## ノード
+## Nodes
 
 ```json
 {
@@ -143,58 +117,89 @@ data/<ns>/progression/
 }
 ```
 
-- 題名を書かないノードは、最初のタスクの表示名を題名にする（FTB Quests と同じ。DarkRPG は1,892個中1,777個がこれに頼っている）。
-- 題名・副題・説明は言語ファイルの `progression.<ns>.<chapter>.<node>.title / .subtitle / .desc`。説明はページの配列で、`&a` の色コード・画像 `{image:...}`・改ページ・クリックで開くリンクを使える（ATM10 で色コード1,552行、改ページ63件）。
-- `shape` は FTB Quests の11種類（square・rsquare・circle・diamond・hexagon・octagon・pentagon・gear・heart・none・既定）を受け付ける。このMODではタイルの外形として描き、満ちる表示はその形の内側で行う。hexagon は 2026-10-15 に描画から外し、四角で描く（本人「どう調整してもかっこわるい」）。
-- `shape` をノードにも章の `defaults` にも書かないと、ノードの役割で形が決まる。`milestone: true` は五角形、`exclusive`（または `exclusive_with`）のあるノードはひし形、`repeat` のあるクエストは円、それ以外は四角。複数当てはまる時は節目、選択、繰り返しの順に優先する。節目は `size` を書かなければ 1.5 倍で描く。FTB Quests から取り込んだ章には `defaults.shape` を必ず書き出し、元のパックの形を保つ（2026-10-16）。
-- `mode` は `all`・`any`・`all_started`・`any_started`。
-- `exclusive` は、同じ `group` のノードのうち `max` 個までしか済ませられない。
-- `tasks_required` は「タスクのうち何個済ませれば開くか」。null なら全部。
-- `repeat` があるクエストは、受け取るたびにやり直しになる。`cooldown` は再開までの秒数、`max` は合計で何回できるか（省略で無制限）。やり直す行動（討伐・チェック・納品）が無いクエストは `cooldown` が無いと繰り返さない。繰り返すクエストの品のタスクは、持っているだけでは済まず納品になる。一度でも済んだ繰り返しクエストは、後続の条件と排他では「済み」として扱う。
-- `ranks` は同じノードを段階的に取る（`[{"cost": 1, "rewards": [...]}, ...]`）。
-- `visibility.requires` は「見えるようになる条件」で、開く条件 `requires` とは別に持てる。
-- 章にも `requires`（Pack Stages の段階など）を付けられる。条件を満たさない人には章ごと見えない。
-- `shared: false` は、そのノードの完了・タスクの数え上げ・繰り返し・クールダウンをチームではなくプレイヤーごとに持つ。報酬の受け取りは元からプレイヤーごと（`team` を書いた報酬だけチームで1回）。省略すると従来どおりチーム共有。
+- A node without a title uses the display name of its first task. This matches FTB Quests, and DarkRPG depends on it for 1,777 of its 1,892 quests.
+- Title, subtitle and description are read from `progression.<ns>.<chapter>.<node>.title` / `.subtitle` / `.desc`. The description is a list of pages and may use `&a` colour codes, images (`{image:...}`), page breaks and links. ATM10 uses 1,552 lines of colour codes and 63 page breaks.
+- `shape` accepts the eleven FTB Quests shapes: `square`, `rsquare`, `circle`, `diamond`, `hexagon`, `octagon`, `pentagon`, `gear`, `heart`, `none`, and the default. It is the tile outline; the fill stays inside that outline. `hexagon` was removed from rendering on 2026-10-15 and is drawn as a square (the author said no adjustment looked good).
+- When neither the node nor the chapter `defaults` sets `shape`, the node's role chooses it: `milestone: true` is a pentagon, a node with `exclusive` (or `exclusive_with`) is a diamond, a repeatable quest is a circle, and everything else is a square. If several apply, milestone wins, then exclusivity, then repetition. A milestone is drawn 1.5 times larger unless `size` is set. Chapters imported from FTB Quests always write `defaults.shape` so the original shape is preserved (2026-10-16).
+- `mode` is `all`, `any`, `all_started` or `any_started`.
+- `exclusive` allows at most `max` completed nodes from the same `group`.
+- `tasks_required` asks how many tasks are enough to open the node. `null` means all of them.
+- A node with `repeat` starts over after each claim. `cooldown` is the wait in seconds before it can be repeated, and `max` is the total number of times it may be completed (omitted means unlimited). A repeatable quest whose action cannot be repeated (kill, checkmark, delivery) does not repeat without a `cooldown`. Item tasks in a repeatable quest are delivered rather than merely held. Once a repeatable quest has been completed at least once, requirements and exclusivity treat it as completed.
+- `ranks` takes the same node in stages: `[{"cost": 1, "rewards": [...]}, ...]`.
+- `visibility.requires` is a separate "becomes visible when" condition; it is not the same as the opening requirement `requires`.
+- A chapter can also have `requires` (for example a Pack Stages stage). Players who do not meet it do not see the chapter at all.
+- `shared: false` keeps this node's completion, task counters, repeat count and cooldown per player instead of per team. Rewards are per player anyway, except a reward with `team`, which is paid once per team. When omitted, everything is team-shared as before.
 
-## タスク（`tasks[].type`）
+## Tasks
 
-`item`（count・consume・match_components・only_from_crafting）、`checkmark`、`kill`、`advancement`、`structure`、`biome`、`dimension`、`location`、`observation`、`stat`、`xp`、`fluid`、`energy`、`break`、`stage`、`custom`、`craft`、`use_item`、`right_click_block`、`interact_entity`、`tame`、`breed`、`ride`、`pickup`、`interaction`。どれも `optional`・`icon`・`title`・`conditions` を持てる。
+`tasks[].type` can be:
 
-操作系は FTB Quests の Task Screen の代わりに、プレイヤーの行動そのものを数える。`craft` は取り出した完成品の数（`item` で結果、`recipe` でレシピを絞る）、`use_item` は使った回数、`right_click_block` はブロックを右クリックした回数、`interact_entity` はモブを右クリックした回数、`tame`・`breed`・`ride`・`pickup` はそれぞれ手なずけ・繁殖・騎乗・拾得の回数。`interaction` は `action`（`craft`・`use_item`・`right_click_block`・`interact_entity`・`tame`・`breed`・`ride`・`pickup`）を1つ書く汎用形で、FTB Quests の取り込みが使う。`use_item`・`right_click_block`・`interact_entity` は `item`、`right_click_block` は `block`、`interact_entity` は `entity` でも絞れる。
+`item` (`count`, `consume`, `match_components`, `only_from_crafting`), `checkmark`, `kill`, `advancement`, `structure`, `biome`, `dimension`, `location`, `observation`, `stat`, `xp`, `fluid`, `energy`, `break`, `stage`, `custom`, `craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`, `interaction`.
 
-`kill` は `entity` に加えて `entity_tag`、`name`（表示名の完全一致）、`nbt`（SNBT の部分一致）で対象を絞れる。
+Every task also accepts `optional`, `icon`, `title` and `conditions`.
 
-`fluid` は `fluid`（id または `#tag`）と `amount`（mB、既定1000＝バケツ1杯）。手持ちのうち一致する液体の合計を数え、バケツは1000として数える。`energy` は `amount`（FE）で、手持ちのうち最も多く蓄えた1つの値で数える（合計ではない）。Fabric には基盤のエネルギーAPIが無いため、`energy` は Fabric では 0 のまま（NeoForge のみ対応）。
+Action tasks replace FTB Quests' Task Screen by counting the player's own actions. `craft` counts completed items taken out (use `item` for the result and `recipe` to narrow the recipe); `use_item` counts uses; `right_click_block` counts right-clicks on blocks; `interact_entity` counts right-clicks on mobs; `tame`, `breed`, `ride` and `pickup` count taming, breeding, riding and picking up. `interaction` is the generic form and takes one `action` (`craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`); the FTB Quests importer uses it. `use_item`, `right_click_block` and `interact_entity` can also narrow by `item`; `right_click_block` can narrow by `block`, and `interact_entity` by `entity`.
 
-`energy` の数え方は FTB Quests と違う（2026-10-19 に FTB Quests 2101.1.36 の現物で確認）。FTB Quests の `forge_energy` は、専用のブロック（Task Screen）へ流し込んだ量を足していく。Quest Tree にはそのブロックが無いので、手持ちのうち最も多く蓄えた1つの量で数える（Tenet も同じ代わり方）。何百万 FE を求めるクエストは、それだけ蓄えられる電池を持てば済む。
+`kill` can narrow by `entity`, `entity_tag`, `name` (exact display name) and `nbt` (partial SNBT match).
 
-`observation` は `observe_type`（`block`・`block_tag`・`block_state`・`entity_type`・`entity_type_tag`）と `target`、`ticks`（既定0＝即時）。十字線を target に合わせ続けた連続tickを数え、外すと0に戻る。`break` は `block`（id または `#tag`、空ならどのブロックでも）と `count`（既定1）で、サバイバルとクリエイティブの両方で壊した数を数える（`count` で頭打ち）。
+`fluid` takes `fluid` (an id or `#tag`) and `amount` (mB, default 1000, one bucket). It counts the total matching liquid in the inventory, with a bucket counting as 1000. `energy` takes `amount` (FE) and counts the single inventory stack holding the most energy, not the total. Fabric has no common energy API, so `energy` remains 0 on Fabric; only NeoForge supports it.
 
-`requires` は Pufferfish's Skills の `required_*` も受ける。`points` は解放時に残っていなければならない章のポイント（既定 0）、`spent_points` はその章で既に使っていなければならないポイント（既定 0）、`exclusions` は排他の相手を何個取られたら閉じるか（既定 1）、`mods` は全て入っていなければならない MOD ID（既定は空）。`nodes` は `mode`（`all`・`any`・`all_started`・`any_started`、既定 `all`）と `min`（既定 0）で読み、`required_skills` は `nodes`／`min` に対応し、0 は `root` になる。満たしていない間もデータは消さず、ノードを `LOCKED` にする。既に1段以上取ったノードには `points`・`spent_points` を再適用しない（Pufferfish's Skills の `getSkillState` が取得済みを先に UNLOCKED として返すのと同じ。自分の取得で次の段がロックしない）。
+The energy rule differs from FTB Quests, confirmed against FTB Quests 2101.1.36 on 2026-10-19. FTB Quests' `forge_energy` accumulates energy poured into a special Task Screen block. Quest Tree has no such block, so it reads the fullest stack the player carries (Tenet makes the same substitution). A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
 
-`item` の数え方（2026-10-16）: `consume` が無ければ、今の手持ちの数をそのまま出す（減れば下がる）。`count` に一度届いたらそのタスクは済みで戻らない（FTB Quests と同じ）。「一番多く持った数」で止める FTB Quests の表示はやめた（本人が、止まった 8/16 を「拾った分の合計」と読んだ）。「新しく手に入れた数」や「手持ち＋クラフトで使った数」で数える案は採らない: 捨てて拾う・チェスト・機械・行き来できるレシピなど、想定しきれない抜け道で数を増やせる（本人「こっちが想定できない抜け道ができてしまう仕組みはまずい」）。何度かに分けて集めさせたい時は `consume`（納品）を使う。
+`observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`.
 
-## 報酬（`rewards[].type`）
+### Requirements and the item counter
 
-`item`（random_bonus）、`xp`、`xp_levels`、`table`（mode: `random`・`choice`・`all`・`loot`）、`command`（permission_level・silent・elevate）、`advancement`、`stage`、`toast`、`attribute`、`points`、`tag`、`scoreboard`、`custom`、`dummy`、`currency`。共通の項目は `team`・`auto`・`exclude_from_claim_all`・`ignore_reward_blocking`（別名 `ignore_blocking`）・`conditions`・`icon`・`title`。
+`requires` also accepts Pufferfish's Skills' `required_*` fields. `points` is the chapter points that must remain at unlock (default 0); `spent_points` is the points that must already have been spent in that chapter (default 0); `exclusions` is how many exclusive competitors may be taken before this node closes (default 1); `mods` lists mod ids that must all be present (default empty). `nodes` is read with `mode` (`all`, `any`, `all_started`, `any_started`; default `all`) and `min` (default 0). `required_skills` maps to `nodes` / `min`, and 0 becomes `root`. While a requirement is unmet the node is `LOCKED`, but its data is not erased. `points` and `spent_points` are not re-applied to a node that already has at least one rank; this matches Pufferfish's Skills, whose state check returns an already-taken skill as unlocked first, so taking a rank does not lock the next rank.
 
-`stage` は Pack Stages（mod-100）へ段階を渡す。`"team": true` を付けると段階はチームの記録に残り、オンラインの全員へ Pack Stages のコマンドでも渡す（`"remove": true` で取り消す）。`/quest_tree team_stage add|remove <players> <stage>` でも操作できる。
+Item counting (2026-10-16):
 
-`dummy` は何も渡さない。報酬欄にアイコンだけを出したいとき（FTB Quests の dummy 報酬）に使う。取り込み時に未知の任意報酬だった場合は、元の種類を `original_type` に残す。
+- Without `consume`, the task shows the number currently held; the count falls when items are spent.
+- Once `count` is reached, the task stays complete (as in FTB Quests). The FTB Quests "highest number ever held" display was dropped because the author read a stuck 8/16 as "total picked up".
+- Counting newly obtained items, or held plus crafted, was rejected: dropping and re-picking, chests, machines and recipes that can be run in both directions create loopholes that cannot be fully anticipated (the author: "a system where I cannot predict the loopholes is bad").
+- Use `consume` (delivery) when a quest should require collecting in several batches.
 
-`points` の `amount` は章のポイントに足す（省略時 1）。数値でない・0 以下なら、付与でも取り消しでも 0 として扱う（片方だけ負をクランプしない）。`chapter` を書かなければそのノードの章、書けばその章の ID（`<ns>:<chapter>`）に入る。画面とコマンドの振り直しは、取った段の `points` 報酬のうち、払った記録にあるものだけを払い先の章のボーナスから一度だけ引く。取得時に条件を満たさず払わなかった `points` は記録が無いので、振り直しの判定にも取り消しにも数えない。`xp`・`xp_levels`・`item`・`table`・`advancement`・`command`・`currency`・`custom` は、同じ人には同じ段を一度しか渡さない（振り直して取り直しても二重にならない。`custom` はアドオンのイベントも一度だけ）。ただし `lock_command` を持つ `command` は例外で、取り直すたびに `command` を実行する（振り直しで `lock_command` が走った後、もう一度解錠する必要があるため）。払った記録はチームに1つ、報酬ごとのキー `<node>#<rank>#<index>`（`paid_skill_rewards`）で持ち、チームのだれが取っても1つ。払えた時だけ記録し、条件未達・支払い失敗・受け取りを断った選択式テーブルでは記録しないので、次の取得で払える。振り直しで取り消せる報酬（`points`・`tag`・`attribute`・`lock_command` 付き `command`）は、この記録にあるものだけを1回ずつ取り消して記録を消す。一回限りの報酬は取り消さず記録も残す。旧セーブ（`paid_skill_rewards` キーが無いチーム）は初回の読み込みで一度だけ移行し、移行後は空でもキーを書くので、新しい版のセーブを再び「全部払った」扱いにしない。移行では旧形式の印（`<node>#skill<rank>`・`<node>#skill<rank>#<index>`）を記録に変えたうえで、取得済みのスキルノードのその段までの取り消せる報酬（`points`・`tag`・`attribute`・`lock_command` 付き `command`）を全部記録する（印が1つだけでもノード全体を対象にする）。記録が1つも無いノードは、その段までの報酬を全部「払った」として記録する（この版より前は条件が無く、当時は全部払われていた）。旧セーブの移行は印を「払った」と読むので、印はあるが実際には払われていなかった一回限りの報酬（当時の失敗や受け取り停止など）は、取り直しでもう一度払われ得る（既知の差、2026-10-22）。章ロック（`chapterOpen` を false）は効果だけを取り消し、`points`・`attribute`・`tag`・`lock_command` 付き `command` の記録は残す。アンロックは、その記録にある `attribute`・`tag`・`lock_command` 付き `command` を全メンバーへ戻す（記録の無い報酬は戻さない）。
+## Rewards
 
-`currency` は `amount` を取り、FTB Library の通貨フックに登録された経済 MOD から支払う。FTB Library か経済 MOD が無ければログに1度だけ出して何も渡さない（クエストは完了する）。
+`rewards[].type` can be:
 
-`trophy`（`{"type": "trophy", "trophy": "<ns>:<id>"}`）は Kuronami's Trophies（mod-108）のトロフィーを渡す（`trophy award @s <id>` を実行。同じ人には1回だけ・刻印は受け取った時）。画面では受け取る前から実物のトロフィーを報酬欄に出す。Kuronami's Trophies が入っていなければ何もしない。どの報酬も `icon` を書けば報酬欄にそのアイコンを出す（`command` 報酬など、他に出すものが無い報酬向け）。2026-10-15 追加。
+`item` (`random_bonus`), `xp`, `xp_levels`, `table` (`mode`: `random`, `choice`, `all`, `loot`), `command` (`permission_level`, `silent`, `elevate`), `advancement`, `stage`, `toast`, `attribute`, `points`, `tag`, `scoreboard`, `custom`, `dummy`, `currency`.
 
-## 条件（`conditions`）
+Every reward also accepts `team`, `auto`, `exclude_from_claim_all`, `ignore_reward_blocking` (alias `ignore_blocking`), `conditions`, `icon` and `title`.
 
-タスクにも報酬にも `"conditions": [...]` を書ける。全部満たしたときだけ、タスクは数えられ、報酬は渡される。条件を満たさない報酬は未受取のまま残り、あとで満たせば受け取れる。
+- `stage` grants a Pack Stages stage (mod-100). With `"team": true` the stage is recorded on the team and also given to every online member through Pack Stages; `"remove": true` takes it back. `/quest_tree team_stage add|remove <players> <stage>` does the same from a command.
+- `dummy` grants nothing and exists to show only an icon in the reward list (FTB Quests' dummy reward). An unknown arbitrary reward from an importer keeps its original kind in `original_type`.
+- `currency` takes `amount` and pays through FTB Library's currency hook. With no economy mod registered, it logs once and pays nothing; the quest still completes.
+- `trophy` (`{"type": "trophy", "trophy": "<ns>:<id>"}`) grants a Kuronami's Trophies trophy (mod-108) by running `trophy award @s <id>`. It is paid once per player, and the imprint is set when received. The screen shows the real trophy in the reward slot before it is claimed. If Kuronami's Trophies is absent, nothing happens.
+- `icon` on any reward shows that icon in the reward list, including for rewards such as `command` that have nothing else to display (added 2026-10-15).
+- `points` adds to the chapter's points (`amount`, default 1). A non-number or a value of 0 or less is treated as 0 both when granting and when revoking; neither side is allowed to go negative alone. Without `chapter` the points go to the node's chapter; with it, to the chapter id (`<ns>:<chapter>`).
 
-判定は1つの入口だけを通る。組み込みの5種類と、他 MOD・KubeJS が登録した種類を同じ配列に混ぜて書ける。
+### One-time and revocable rewards
 
-条件は取得時に1回だけ評価する。報酬の取り消し（振り直し・リセット）とログイン時の再付与は、その時に払った記録（`paid_skill_rewards`）に従い、条件を評価し直さない。取得時に満たさず渡していない報酬は記録が無いので、取り消しでも再付与でも触らない。スキルの `points` 報酬も、記録にある分だけを振り直しの判定と取り消しに数える（2026-10-22）。スキル報酬の条件は取った人で判定し、効果（`attribute`・`tag` など）はチームの全員に付く。記録はチーム共有（2026-10-22）。
+`xp`, `xp_levels`, `item`, `table`, `advancement`, `command`, `currency` and `custom` are paid only once to the same player for the same rank, even after a reset and re-take. `custom` also fires an add-on event only once. The exception is a `command` with `lock_command`: its `command` runs again on every re-take, because a respec runs `lock_command` and the command must be run again to unlock.
+
+The paid record is per team, keyed `<node>#<rank>#<index>` in `paid_skill_rewards`; any team member's take counts once. A reward is recorded only when it was actually paid: unmet conditions, a failed payment and a declined `choice` table do not record it, so a later take can pay it.
+
+A respec revokes only the rewards that are both revocable (`points`, `tag`, `attribute`, a `command` with `lock_command`) and present in the record, once each, then clears them from the record. One-off rewards are neither revoked nor removed from the record.
+
+### Locking a chapter
+
+Locking a chapter (`chapterOpen` false) removes the effects but keeps the `points`, `attribute`, `tag` and `lock_command` records. Unlocking restores `attribute`, `tag` and `lock_command` rewards that are in the record to every member; rewards without a record are not restored. A locked chapter has already run every `lock_command` and removed every tag, so a reset or respec while it is locked only cleans the records and never repeats those effects (2026-10-22).
+
+## Reward tables
+
+```json
+{"rolls": 1, "empty_weight": 0, "entries": [{"weight": 10, "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}}],
+ "loot_crate": null}
+```
+
+A table pays its entries in order. An entry that was paid is marked in the player's saved `rewardRolls`, so a retry after a later entry failed hands out only the entries still missing. When the whole table is through, the marks and the recorded roll are removed together. A `choice` table pays one entry and has nothing to mark.
+
+## Conditions
+
+Tasks and rewards accept `"conditions": [...]`. A task is counted, and a reward is paid, only when every condition is met. A reward whose conditions are unmet is skipped: it does not keep `allRewardsClaimed` false and does not hold the node in `CLAIM`. The node finishes and can repeat; the old note that such a reward stays unclaimed forever is withdrawn.
+
+The five built-in conditions and kinds registered by other mods or KubeJS may be mixed in the same list:
 
 ```json
 {"type": "stage", "stage": "chapter/one"}
@@ -205,13 +210,99 @@ data/<ns>/progression/
 {"type": "example:enabled"}
 ```
 
-`stage` は Pack Stages の段階（`team_stages` も含む）、`score` はスコアボードの値、`item` は手持ち、`advancement` は進捗、`party_size` はオンラインのパーティ人数。`score` は `scoreboard` でも書ける。組み込みの5種類は名前空間なし（`item`）かこの MOD の名前空間（`kuronami_quest_tree:item`）で書け、どちらも組み込みとして読む。他の名前空間（`example:item`）は id が組み込みと同じでも組み込みにはせず、必ず登録表を引く。
+`stage` checks a Pack Stages stage (including `team_stages`); `score` checks a scoreboard value (also spelled `scoreboard`); `item` checks the inventory; `advancement` checks an advancement; `party_size` checks the number of online party members.
 
-登録した種類は `<namespace>:<id>` で書き、`QuestTreeApi.registerConditionType` か KubeJS の `QuestTree.registerCondition` で登録する（[_docs/API.md](API.md)）。登録した種類は名前空間込みの id で照合し、その項目の判定はハンドラに任せる。どちらにも無い種類は条件を満たさない扱い（書いたゲートを開けない側に倒す）。検証では未登録の種類を `WARNING` にし、ノードは落とさない。
+The five built-in kinds may be written without a namespace (`item`) or with this mod's namespace (`kuronami_quest_tree:item`); both are read as built in. Any other namespace is always looked up in the registration table, even when the id matches a built-in.
 
-## ブロック
+A registered kind is written as `<namespace>:<id>` and registered through the public API or KubeJS. Registered kinds are matched by the namespaced id, and their check is delegated to the handler. A kind that is in neither table counts as unmet, so a written gate fails closed. Validation reports an unregistered kind as `WARNING` and keeps the node.
 
-`quest_task_block`（クエストボード）は右クリックで、ブロックに記録したクエストを開く。`quest_barrier`（クエストの関所）は、記録したクエストが完了しているか段階を持っているプレイヤーだけ通す（他のエンティティは通さない）。どちらもキーは設置したアイテムのカスタムデータからブロックエンティティへ移る。管理者は次で配れる。
+Conditions are evaluated once, when the reward is granted. Revocation (respec, reset) and login re-granting follow the `paid_skill_rewards` record and do not re-evaluate conditions. A reward that was not paid because its conditions were unmet has no record and is never touched by revocation or re-granting. Skill `points` rewards count toward respec checks and revocation only when they are in the record (2026-10-22). A skill reward's conditions are checked against the player who took it, while its effects (`attribute`, `tag` and so on) apply to every team member. The record is team-shared (2026-10-22).
+
+## Skills
+
+A chapter with a `points` object is a skill chapter.
+
+```json
+"points": {
+  "per_level": "level^1.5 * 100",
+  "level_limit": 24,
+  "start": 0,
+  "spent_limit": null,
+  "unlocked_by_default": true,
+  "sources": [{"type": "mine_block", "...": "same expression shape as Pufferfish's Skills"}],
+  "exchange": {"xp_levels": 30, "level_limit": 5},
+  "pool": null,
+  "stop_when_maxed": true,
+  "reset_on_death": false,
+  "respec": {"cost": null}
+}
+```
+
+Experience and source conditions use Pufferfish's Skills' expression, variables and operations unchanged. The FTB official packs rely heavily on conditional expressions, and translating them into another shape would break during import.
+
+Chapters that write the same `pool` name share experience and points.
+
+### Exchange
+
+`points.exchange.xp_levels` is the number of vanilla levels paid per exchange, and `level_limit` is how many exchanges are allowed (omitted means unlimited). `cost_per_level` makes the cost depend on how many were bought before (starting at 0):
+
+- `{"type": "values", "data": {"values": [5, 10, 20]}}` uses the Nth value; past the end it repeats the last value.
+- `{"type": "expression", "data": {"expression": "5 + level * 10"}}` evaluates with `level` set to the number bought.
+- When both are present, `cost_per_level` wins.
+
+This maps directly from Pufferfish's Skills' `exchange.json`. If `cost_per_level` cannot be read (missing or non-object `data`, `values` not an array, a non-number value, a broken expression), the fixed `xp_levels` cost is used. Expressions are limited to 256 characters and 32 levels of nesting; a longer one also falls back to the fixed cost, so pack data cannot crash the server. Validation reports these as `WARNING` and the chapter still works.
+
+### Respec
+
+`points.respec.cost` is the points kept back and paid when the screen's "respec" button returns the chapter's points (omitted or `null` means free). An admin `respec` command charges nothing.
+
+Only the team owner can press "respec" and "exchange" on the screen, and the server enforces the same rule. A respec takes the `points` rewards of the taken ranks out of the destination chapter's pool, so it also checks that the destination pool has enough left. If even one is short, the respec is refused and names the pool; this closes the path where spending another chapter's points and then respecing drives that chapter negative. The respec cost is not refunded. When FTB Teams cannot read the owner, nobody on that team can press it.
+
+### Taking a skill back
+
+Taking a skill back through respec or reset removes its attribute bonuses (all ranks and quest rewards), runs each `lock_command` and removes each tag, as Pufferfish's Skills does. Points are shared, so they are taken back once for the taker before the per-player effects run; a respec is refused earlier if those points were already spent.
+
+A locked chapter already ran its `lock_command` and removed its tags, so a reset or respec while locked must not repeat those command or tag effects. The points and the paid records are still cleaned up (2026-10-22).
+
+## Teams and stages
+
+Completion, task counters, repeat counts and cooldowns are team-shared unless a node sets `shared: false`. Rewards are per player; a reward with `team: true` is paid once per team, and a team stage is recorded once for the team.
+
+When a team member takes a skill, the reward's conditions are checked against that member, but its effects (attributes, tags and so on) apply to every member.
+
+`teamStagesApplied` records the team stages this player currently holds; the team's `teamStages` is the wanted set. On login the difference is removed or added, and then every stage in the player's own `stages` list is added again. The re-add is deliberate: `p.stages` records stages granted directly to this player, and the stage mod may not report them back after a relog. Removing a team stage therefore skips keys still in `p.stages`, so a directly rewarded stage is not taken away with the team copy.
+
+`stages` is the player's copy of the stages the tree granted to them. A stage barrier opens when the key is in `stages` or in the shared `teamStages`. If it is in neither, both sides ask Pack Stages: the server checks the player's saved stages and the client reads the copy Pack Stages syncs to it. A stage granted by another mod therefore opens the gate on both sides. A team stage this player was given is tracked in `teamStagesApplied`; on login only stages the team no longer holds are removed, so an offline removal is followed without stripping a stage another mod granted.
+
+### Personal nodes and the saved routing set
+
+The saved record keeps the set of node keys that were routed as personal. The caller checks whether the loaded model has any node at all: a model that reads as empty leaves that set alone, so an unreadable pack file cannot move saved personal progress into the shared record. An empty set with a loaded model is a real change, because the pack made every node shared, and its saved personal values are moved to the shared record.
+
+## Reward blocking
+
+`/quest_tree rewards block` stops the pay-out of quest rewards, not the quest or the skill.
+
+- Tasks, node completion, quest claims and taking a skill continue while rewards are blocked.
+- Only quest rewards are affected. Skill node rewards (the take, a respec, a rank, and a member's own command or tag) are never blocked and never enter the pending list; taking a skill is never stopped (2026-10-22).
+- A blocked quest reward is recorded as taken for its node and kept in the player's pending list. When the block is lifted, pending rewards are paid in their original order.
+- A repeatable quest starting its next round keeps the pending rewards of the round it just claimed, so a blocked pay-out is still owed afterward. Resetting the node forgets them together with the node's saved reward rolls.
+- The block is judged per quest reward. `attribute` rewards are part of the skill effect and are always applied, even while quest pay-outs are blocked.
+- `ignore_reward_blocking` / `ignore_blocking` still exempts one quest reward.
+- Old saves may still hold skill pending keys (a rank of 0 or more). Loading drops them and logs the count instead of paying them: a skill taken while blocked already had its effect, and login re-applies its attributes.
+
+`/quest_tree rewards block|unblock` accepts an offline player (a name from the server's profile cache). The flag and pending quest rewards live in that player's own record. Lifting the block pays immediately for an online player; for an offline player the pending rewards are paid at the next login, where a still-blocked flag keeps them waiting.
+
+## Emergency items
+
+The emergency button on the progression screen gives the items in `emergency.items`. Its cooldown is `emergency.cooldown_seconds` (default 3600; 0 disables it) and is saved per player, surviving team changes.
+
+Old versions stored the cooldown on the team. When a save is read, that cooldown is moved to every current member. If a team has no members at save time, its cooldown (up to one hour) can be lost; this is accepted behavior.
+
+Whether the quest book drops on death is the server config `drop_book_on_death`.
+
+## Blocks
+
+`quest_task_block` (quest board) opens the quest recorded on it when right-clicked. `quest_barrier` (quest barrier) lets through only a player who has completed the recorded quest or holds the recorded stage; other entities never pass. Both move their key from the placed item's custom data to the block entity. Operators can hand them out with:
 
 ```
 /quest_tree block task <players> <node>
@@ -219,50 +310,136 @@ data/<ns>/progression/
 /quest_tree block barrier <players> stage <stage>
 ```
 
-## 報酬テーブル
+## Overlay and editor
 
-```json
-{"rolls": 1, "empty_weight": 0, "entries": [{"weight": 10, "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}}],
- "loot_crate": null}
+Edits made in game are stored in an overlay; the data pack itself is never rewritten.
+
+```
+<world>/kuronami_quest_tree/progression/
+  chapters/<namespace>/<chapter path>.json
+  revisions.json
 ```
 
-## 他MODからの拡張
+Reading applies, lowest precedence first: pack chapters, reward tables and groups; pack `patches/*.json`; the overlay. The overlay is per chapter and can also delete a pack chapter. No `/reload` is needed: every save applies the layers, validates, increments a generation and resends the result to everyone (at most once per tick).
 
-タスク・報酬・経験値源の種類は、他MODが登録できる（Pufferfish's Skills の `passive_skill` のように、追加MODが種類を足している実例がある）。
+A chapter file:
 
-## 未決
+```json
+{
+  "revision": 3,
+  "base": true,
+  "replace": false,
+  "remove": false,
+  "edited": false,
+  "chapter": { "title": "..." },
+  "removed": ["subtitle"],
+  "nodes": {
+    "a": { "action": "replace", "node": { "x": 1, "y": 2 } },
+    "b": { "action": "remove", "node": { "...": "contents at deletion" }, "edited": true },
+    "c": { "action": "add", "node": { "...": "new node" } }
+  }
+}
+```
 
-- エディタ（ゲーム内でノードを置く画面）の保存先。データパックに書き戻すか、`config/` に書くか。
-- `custom` タスク・報酬の API（KubeJS などから進み具合を動かす入口）。
+- `revision`: version of this chapter. A client sends the last version it saw; an older one is refused.
+- `base`: whether the pack had this chapter when it was first edited.
+- `replace`: use `chapter` as the whole chapter instead of merging it into the pack's chapter. `create_chapter` sets this.
+- `remove`: tombstone for the chapter, with the contents at deletion kept in `chapter`.
+- `edited`: whether the overlay had already changed the chapter before it was tombstoned. Restoring uses this to offer either the pack's original chapter or the author's version.
+- `chapter`: only the top-level keys changed by the edit, each holding its **new** value. With `replace: false` it is merged key by key into the pack chapter, and only the node entries below apply. Changing one nested value does not remove its siblings (changing `display.title` keeps the pack's `display.icon`).
+- `removed`: top-level keys that an RFC 7396 `null` deleted from the pack. With `replace: false`, these are removed from the pack chapter before merging. A `replace: true` chapter such as `create_chapter` does not use it.
+- `nodes`: `action` is `add`, `replace` or `remove`. `remove` keeps the contents so it can be restored. `edited` says whether it was changed before deletion.
+- `revisions.json`: a small record (`{"<chapter id>": version}`) so deleting a chapter file does not roll the version back. The larger of the file's `revision` and this record is used. Clients learn the current version from the sync bundle's `revisions` map.
 
-## 検査
+When writing by hand, an omitted `action` is read as `add`. An unreadable file is reported as `ERROR` and writes to that chapter are refused.
 
-データパックの読み込み時（`ProgressData.reload`）に、全ファイルを一度検査する。検査はゲームに依存しない（レジストリ照会だけを差し替え可能な入口にしてあり、JUnit で実行できる）。見つかった問題は `ERROR` か `WARNING` のどちらかで、`file:line path - message` の形でログに出る。件数の要約は 1 行、`/quest_tree validate` で先頭 20 件を op（permission level 2）が見られる。op が参加した時は、エラーがあればその場で 1 行だけ知らせる。エラーがあってもパック全体は止めない。検査そのものが例外で落ちた場合も、その 1 件を `ERROR` として記録し、読み込みは続ける。検査の後に `ProgressModel.of` が例外を投げた場合（検査が見落とした形）は、その 1 件を `ERROR` として記録し、前回の内容をそのまま使う: サーバーがモデルにできないものを公開すると、クライアントにサーバーが持たない進行を渡すことになるため。
+Editor operations (`chapterId` is `<namespace>:<chapter path>`; only `create_chapter` sends an empty chapter id and names the namespace in `args.namespace`; the server assigns the new id and returns it as `createdId`):
 
-- `ERROR` は「書かれた通りに動かない」もの。読み手が例外を投げる（サーバーの tick が止まる）、読み手がタスクを捨てる（そのノードが読まれた瞬間に完了扱いになる）、または解放条件が変わって書いたゲートが消える。そのノードだけをモデルから外し、他は動かし続ける。
-- `WARNING` は「動くが書かれた通りではない」もの。報酬が黙って飛ばされる（`Rewards.give` が読み手の例外を捕まえる）、既定値に落ちる、開く条件が書いたより緩い、など。ノードは残す。
-- 報酬側の問題は原則 `WARNING`（`Rewards.give` が全体を捕まえるため）。唯一の例外は報酬テーブルが自分自身を含む場合で、渡すと再帰が止まらず `StackOverflowError`（`Error` なので捕まらない）になるため `ERROR`。テーブルは外せないので、それを渡すノードを外す。
-- 参照の重大度は、書いたゲートがどうなるかで決める。`ProgressModel` は解決できない名前を落として読むので、`requires` の名前が解決しないとノードは書いたより早く開き得る。`mode` が `all`（既定）で `min` が無い（または 0 以下）なら、ゲートごと消えるので `ERROR`。`any`・`one`・`min` がある場合は同じ数を要求し続けるので `WARNING`。`exclusive_with` の名前が解決しないのは、競合の表示が消えるだけでノードは書いた通りに開いて完了するため（`ProgressRules.excluded` しか見ない）常に `WARNING`。
-- 存在しない `requires` と、外したノードを指す `requires` は同じ規則・同じ重大度にする。実行時はどちらも「名前が解決しない」同じ状態になるため。前者では `ERROR` のノードを外し、後者の `ERROR` は外さない（無関係なタイポ1つのために、書いたノードまで消さない）。`unreachable` で外れたノードを指す場合も同じ。
-- 到達性: `ProgressRules.unlocked` と同じ規則を不動点反復で調べる（最初に開くノードから始めて、条件の満たされたノードを開き続け、それ以上変わらなくなった時点で閉じたままのノード）。プレイヤーがどうプレイしても開かないノードは `ERROR` で外す。`root` は何を書いていても開く（`ProgressRules.unlocked` と同じ）。ループ探索だけでは誤検知する: Puffish 取り込みは双方向リンクの両側を `mode: "any"` の条件にするので、`A → B → A` の片側が `any` のループは正常（もう片方の枝から開く）。
-- 型: タスク・報酬の `type` が既知か。未知は、タスクは `ERROR`（そのタスクは永遠に数えられない）、報酬は `WARNING`（何も渡らずに飛ばされる）。`observation` の `observe_type` が未知なのは `ERROR`。
-- 必須の項目（`item` の `item`、`fluid` の `fluid`、`location` の `position` 3 要素、`observation` の `target` など）。タスク側の欠落は `ERROR`、報酬側の欠落は `WARNING`。
-- 数の型。`count`・`amount`・`ticks`・`item.count` と `location` の `position`・`size` はサーバーの tick で `getAsLong`・`getAsInt` に渡る。`count`・`ticks` は `ProgressRules.target` が `isJsonPrimitive` で囲んでいて読めない形を読み飛ばすので `WARNING`（既定の 1 になる）、それ以外（`amount`・`item.count`）と、読める形の非整数（`"many"` や `1.5`）は捕まえる場所が無いので `ERROR`（Gson は数値を表す文字列 `"16"` を通すので、それは `ERROR` にしない）。
-- tick で `getAsBoolean` に渡る `optional`・`consume` は、オブジェクト・配列・null だと例外になるので `ERROR`、数値や語は false として読まれるので `WARNING`。
-- `rolls`・`weight`・`empty_weight`・`min`・`max`・`cost`・`tasks_required`・attribute の `value`・xp の `amount` は既定値に落ちるか `Rewards.give` に捕まるので `WARNING`。
-- 0 以下: `count`・`amount` は `WARNING`（`ProgressRules.target` が `Math.max(1, …)` で 1 にする）。`weight` が 0 以下なのは `WARNING`（その `entries` は抽選で決して選ばれない）。`break` の `block` が空なのは「どのブロックでも」という意味なので警告しない。
-- `repeat`: `repeatAfterClaim` は `done + 1 >= max` で判定するので `max` が 1 以下だと一度も繰り返さない（`WARNING`）。`cooldown` は claim の確定時に `getAsLong` に渡るので非整数は `ERROR`、0 以下は「クールダウン無し」として読まれる（`WARNING`）。`max` に数値でない形を書くと上限無しとして読まれる（`WARNING`）。
-- 報酬テーブル: `entries` の要素がオブジェクトでない場合と、`weight` が読めない場合は、どちらも `Rewards.table` が渡す物を組む途中で落ちるので、そのテーブルは何も渡さない（`WARNING` の本文にそう書く）。
-- 形: 章がオブジェクトか、章の `nodes` がオブジェクトか（違えば `ERROR`。読み手は `obj(...)` で空のオブジェクトとして読むので、その章は空になる）、`nodes` の各値がオブジェクトか（違えば `ERROR`、読み手は読み飛ばす）。`tasks` が配列か、`rewards`・`ranks`・報酬テーブルの `entries` が配列か。`requires` がオブジェクトか、`repeat` が真偽値かオブジェクトか。`requires.nodes`・`exclusive_with` が配列か、その要素が名前として読めるか（数値・真偽値は読み手が `getAsString` で文字列に直すので名前として解決し、オブジェクト・配列・null は例外になるので `ERROR`）。`root`・`optional`・`hidden` が真偽値か、`mode`・`group` が文字列か、`shape`・`milestone` が文字列か。報酬テーブルの `mode` も `Rewards.give` が `getAsString` で読むので文字列か（違えばその報酬が飛ばされる `WARNING`）。既定値に落ちるものは `WARNING`、例外になるものは `ERROR`。
-- 同じ名前を二度宣言していないか（`WARNING`。Gson は後勝ちで黙って読むので、テキストを見て検出する）。
-- JSON の構文。読めなかったファイルは `ERROR`。その章への参照は存在を確かめられないので `WARNING` に留める。
-- id の照会は、実在するアイテム・ブロック・流体・エンティティ・attribute だけを見る（`GameRegistry`）。無ければ `WARNING`、名前空間が無ければ `WARNING`。タグ（`#`）と動的レジストリ（biome・structure・dimension・stat）は読み込み中に内容を確かめられないので照会しない。タグの内容は `TagManager.updateRegistryTags` が全 reload listener の完了後に初めて確定するため、listener の実行中に引くと初回起動では空・`/reload` では前回の内容になり、どちらも偽の警告になる。
-- 知っているがまだ動かない種類（報酬テーブルの `loot_crate`）は `WARNING`。
-- 章をまたいだノード ID の重複は検査しない: ノードのキーは章の ID で修飾されるので衝突せず、同じ ID を別の章に置くのは正常（GameTest のパックが実際にそうしている）。
+| Operation | Arguments |
+|---|---|
+| `create_node` | `{"node": {...}}` |
+| `update_node` | `{"id": "...", "patch": {...}}` (RFC 7386; `null` deletes a key) |
+| `move_node` | `{"id": "...", "x": 0, "y": 0}` |
+| `delete_node` / `restore_node` | `{"id": "..."}` |
+| `create_chapter` | `{"namespace": "...", "chapter": {...}}` (the server reassigns initial node ids and rewrites `requires` / `exclusive_with` between them) |
+| `update_chapter` | `{"patch": {...}}` (`nodes` not allowed; RFC 7396 against the whole chapter; `null` also deletes pack keys) |
+| `delete_chapter` / `restore_chapter` | `{}` |
+| `update_table` | `{"id": "...", "create": true?, "table": {...}}` (whole table; `patch` also accepted) |
+| `delete_table` / `restore_table` | `{"id": "..."}` |
+| `link` / `unlink` | `{"from": "...", "to": "..."}` (`to` is a node name in the same chapter, or `chapter/node` across chapters) |
+| `undo` / `redo` | `{}` |
 
-## 章の背景（`background`、2026-10-19）
+Node ids may contain only `[a-z0-9_]`; other ids are refused. Ids are never renamed, because a rename would break references, exclusivity, translation keys and player progress at once.
 
-章の地図の後ろに絵を何枚でも重ねる。下から順に描く。1枚なら止まった背景、2枚以上を違う速さにすると、地図を動かした時に奥行きが出る（Thaumaturge の研究画面の型）。絵はリソースなので、リソースパックで差し替えられる。
+Validation and undo:
+
+- Before writing, the candidate chapter goes through the same validation as a pack. The set of book-wide `ERROR`s is compared before and after; one new `ERROR` refuses the write, including a deletion that breaks another chapter's assumptions. Existing `ERROR`s do not block editing.
+- A refusal returns the validation message and leaves the file unchanged.
+- Undo is a snapshot per chapter and per table, 50 steps deep, stacked and unwound from the same end. Table history is separate from chapter history, so the same id does not mix. It is lost on server restart. What remains on disk is the tombstone, a `.bak` of the version just before a write, and `revisions.json` / `table_revisions.json`.
+- Writes go to a temporary file in the same folder and then replace the target (`ATOMIC_MOVE`, or `REPLACE_EXISTING` where that is unavailable), so a crash cannot leave a half-written chapter file.
+
+Commands:
+
+- `/quest_tree edit on|off` (no argument toggles): editor operations are accepted only at permission level 2 with edit mode on. Logging out or stopping the server turns it off.
+- `/quest_tree export <namespace> [force]`: writes the validated book as an ordinary data pack in `datapacks/quest_tree_export_<namespace>`, without enabling it or running `/reload`. The namespace keeps `[a-z0-9_.-]` for chapter matching; only the folder name is made safe (a namespace containing `-` or `.` still exports every chapter). Translations for that namespace (keys beginning `progression.<ns>.`) go into `lang/`. The number of nodes dropped by validation is printed in chat. An existing folder is refused unless `force` is given; `force` may replace it.
+
+In-game editing:
+
+- The server sends whether editing is allowed (permission 2 and `/quest_tree edit on`) on join and on every change. When allowed, a gear appears next to the pin on the title row, and `E` also toggles edit mode.
+- Selection: click, Ctrl+click, Shift+drag rectangle, Ctrl+A. Dragging moves on half-grid steps and Alt disables it. Arrow keys move (Shift moves 5). Right-click opens a menu. Ctrl+C / V / D, holding `L` while dragging or "link from here" in the menu, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y. Keys are not captured while an EditBox has focus.
+- Operations are sent one at a time and the next one uses the previous reply's revision. Moves are drawn at the provisional position before the reply and are put back if refused. A refusal shows the validation message, shortened. An old revision makes the server resend the bundle.
+- Paste assigns new ids on the server. The creation reply maps old ids to new ones, and links inside the copy are made afterward.
+- Right-click "edit", double-clicking a node, or Enter with a single selection opens the node editor. Title, description, shape, size, icon, visibility and requirements, and repetition are on one page; tasks and rewards are cards that can be added, reordered and deleted. Opening a card shows the fields for its type.
+- One schema defines each task and reward type; the fields shown and the round-trip tests read the same table. Changing the type deletes the keys that belong only to the old type and keeps shared and unknown keys.
+- Items, entities, advancements, tables and similar values are chosen in a searchable picker. An id not in the list can still be typed (for tags and for ids from mods the client does not have).
+- A screen holds a working copy of the JSON and sends one `update_node` / `update_chapter` RFC 7396 patch when it closes. Save and delete use the revision from when the screen opened; if anything else changed in the meantime, the write is refused. There is no write on every keypress. A refusal shows the validation message under the offending field and keeps the screen open; pressing Esc or × again discards and closes. An old revision makes the server resend the bundle, and the screen closes with a short map notice.
+- Chapter settings are edited on one screen (title, icon, defaults, visibility, skill points, delete chapter); a new chapter asks for a namespace and an optional title, and the server assigns the id.
+- A reward table is edited as a whole (`update_table`, with a table-specific revision). Opening a reward whose `table` id does not exist creates it with `create: true` on save. Deleting writes a tombstone (`remove: true` and the last contents), and the restore screen brings it back with `restore_table` (if the pack copy is unchanged, the overlay entry is removed and the pack is used again). Undo restores the previous table file.
+- Deleted chapters, tables and nodes appear in the sync bundle's `deleted` list. The restore screen sends `restore_chapter`, `restore_table` or `restore_node` from that list.
+- Editor screens use only the existing surfaces, rows and palette; colours are never written directly. Text is limited to labels, values, state and failure reasons, with no explanatory paragraphs.
+- The map's right-click menu also offers "chapters", "new chapter", "deleted", "export" and "try as player". Each goes through the same one-at-a-time operation queue.
+- Export from the menu runs `/quest_tree export <namespace>` (the chapter's namespace if none is supplied) and returns only the output folder name; it never prints a server path. A failure returns the reason, not success.
+- "Try as player" runs `/quest_tree reset @s <chapter>` and turns edit mode off only when the command succeeded. It refuses if the chapter is not in the book, if the player is in a party (progress is shared, so it would erase other members' chapter progress), or if the command fails. It echoes the request's revision because it writes no chapter.
+
+Not implemented:
+
+- Confirmation on a real client.
+- A UI for links across chapters.
+- Editing the translation files themselves (only overriding displayed text is possible).
+- Automatic merge across chapter revisions (an old revision is refused and refetched).
+
+## Validation
+
+Every pack file is checked once at load. The check does not depend on the game (registry lookup is the only injected entry point, so it runs in JUnit). Problems are logged as `ERROR` or `WARNING` in the form `file:line path - message`. A one-line summary is printed, and `/quest_tree validate` shows the first 20 to an operator (permission level 2). When an operator joins, one line reports whether errors exist. An error never stops the whole pack.
+
+If validation itself throws, that one failure is recorded as `ERROR` and loading continues. If building the model throws after validation (a shape validation missed), that one failure is recorded as `ERROR` and the previous contents stay in use: publishing something the server cannot model would give clients progress the server does not have.
+
+`ERROR` means "does not work as written": the reader throws (the server tick stops), the reader drops a task (the node completes the moment it is read), or the unlock condition changes so a written gate disappears. Only that node is removed from the model; everything else keeps running.
+
+`WARNING` means "works, but not as written": a reward is silently skipped (the reward giver catches the reader's exception), a value falls back to a default, or an unlock condition is looser than written. The node stays.
+
+- Reward problems are `WARNING` by default, because the reward giver catches everything. The one exception is a reward table that contains itself: paying it would recurse until an uncatchable stack overflow. A table cannot be removed, so the node that pays it is removed as `ERROR`.
+- Reference severity depends on what happens to the written gate. The model drops names it cannot resolve, so an unresolved `requires` name can open a node earlier than written. With `mode: "all"` (the default) and no `min` (or `min` 0 or less), the gate disappears entirely: `ERROR`. With `any`, `one` or a `min`, the same number is still required: `WARNING`. An unresolved `exclusive_with` name only removes the conflict display and the node still opens and completes as written, so it is always `WARNING`.
+- A `requires` naming a nonexistent node and one naming a removed node follow the same rules and severity, because at runtime both are the same "name does not resolve" state. For the former, the `ERROR` node is removed; for the latter, the `ERROR` is not removed, so one unrelated typo does not delete a written node. The same applies when pointing at a node removed as unreachable.
+- Reachability: check by fixed-point iteration using the same rules as opening. Start from the nodes that open first, keep opening nodes whose conditions are met, and stop when nothing changes; nodes still closed are unreachable by any play. Remove them as `ERROR`. A `root` opens regardless of what it writes. Loop detection alone gives false positives: the Pufferfish importer makes both sides of a two-way link `mode: "any"`, so an `A → B → A` loop with one `any` side is normal (the other branch opens it).
+- Types: a task or reward `type` must be known. An unknown task is `ERROR` (it can never be counted); an unknown reward is `WARNING` (it is skipped and pays nothing). An unknown `observation.observe_type` is `ERROR`.
+- Required fields (an `item` task's `item`, a `fluid` task's `fluid`, a `location`'s three `position` values, an `observation`'s `target`, and so on). A missing task field is `ERROR`; a missing reward field is `WARNING`.
+- Number types. `count`, `amount`, `ticks`, `item.count`, and a `location`'s `position` / `size` are read as integers during the server tick. `count` and `ticks` are read through a type guard and an unreadable shape is skipped, so they are `WARNING` (and fall back to 1). The others (`amount`, `item.count`) and readable but non-integer values (`"many"`, `1.5`) have no guard, so they are `ERROR`. The JSON reader accepts a numeric string such as `"16"`, so that is not an `ERROR`.
+- `optional` and `consume` are read as booleans during the tick; an object, array or null throws (`ERROR`), while a number or word is read as false (`WARNING`).
+- `rolls`, `weight`, `empty_weight`, `min`, `max`, `cost`, `tasks_required`, an attribute's `value` and xp's `amount` either fall back to a default or are caught by the reward giver: `WARNING`.
+- Zero or less: `count` and `amount` are `WARNING` (the target is raised to 1). `weight` of 0 or less is `WARNING` (that entry can never be chosen). An empty `break.block` means "any block", so it is not warned about.
+- `repeat`: a repeat checks `done + 1 >= max`, so a `max` of 1 or less never repeats (`WARNING`). `cooldown` is read as a number when a claim is confirmed, so a non-integer is `ERROR`; 0 or less is read as "no cooldown" (`WARNING`). A non-numeric `max` is read as unlimited (`WARNING`).
+- Reward tables: when an `entries` element is not an object, or `weight` cannot be read, the table fails while being assembled and pays nothing (the `WARNING` text says so).
+- Shape: a chapter must be an object and its `nodes` an object (otherwise `ERROR`; the reader turns it into an empty object, so the chapter becomes empty). Each `nodes` value must be an object (otherwise `ERROR`; the reader skips it). `tasks` must be an array; `rewards`, `ranks` and a reward table's `entries` must be arrays. `requires` must be an object; `repeat` must be a boolean or object. `requires.nodes` and `exclusive_with` must be arrays whose elements can be read as names (numbers and booleans are converted to strings and resolve as names; objects, arrays and null throw, so `ERROR`). `root`, `optional` and `hidden` must be booleans; `mode` and `group` must be strings; `shape` and `milestone` must be strings. A reward table's `mode` is also read as a string, so it must be a string (otherwise that reward is skipped, `WARNING`). Values that fall back to a default are `WARNING`; values that throw are `ERROR`.
+- Duplicate keys in one object are `WARNING`: The JSON reader silently keeps the last one, so the check looks at the text.
+- JSON syntax. A file that cannot be read is `ERROR`. References to that chapter remain `WARNING`, because their existence cannot be confirmed.
+- Id lookup checks only real items, blocks, fluids, entities and attributes. A missing id is `WARNING`; a missing namespace is `WARNING`. Tags (`#`) and dynamic registries (biome, structure, dimension, stat) are not checked at load, because their contents cannot be known then. Tag contents are final only after all reload listeners have run, so reading them inside a listener gives an empty result on first start and the previous contents on `/reload`; both are false warnings.
+- Known but not yet working kinds (a reward table's `loot_crate`) are `WARNING`.
+- Duplicate node ids across chapters are not checked: node keys are qualified by the chapter id, so they cannot collide, and using the same id in two chapters is normal (the test pack does it).
+
+## Chapter backgrounds
+
+A chapter map can have any number of images behind it, drawn bottom to top. One image is a still background; two or more moving at different speeds give depth when the map moves (the Thaumaturge research screen's approach). Images are resources, so a resource pack can replace them.
 
 ```json
 "background": {"layers": [
@@ -271,86 +448,31 @@ data/<ns>/progression/
 ]}
 ```
 
-- `texture`（必須）: 絵のフルパス。
-- `speed`: 地図と一緒に動く割合。1 = 地図と同じ、0 = 動かない（既定 0.5）。拡大縮小も同じ割合で追う。
-- `tile`: 敷き詰める（既定 true）。false なら1枚を画面いっぱいに引き伸ばす。
-- `size`: 拡大1倍の時の絵の幅（GUI ピクセル、既定は絵のピクセル幅）。
-- `alpha`: 0〜1（既定 1）。
-- 短縮形: `"background": "mypack:textures/..."` は、動かない1枚。
-- Quest Tree 自体は背景の絵を持たない。無ければ、パレットの `ground` の色のまま。
+- `texture` (required): full path to the image.
+- `speed`: how much it moves with the map. 1 = same as the map, 0 = still (default 0.5). Zoom follows the same ratio.
+- `tile`: repeat the image (default true). With false, one image is stretched to the screen.
+- `size`: image width at 1× zoom in GUI pixels (default: the image's pixel width).
+- `alpha`: 0 to 1 (default 1).
+- Short form: `"background": "mypack:textures/..."` is one still image.
 
-## Task and reward decisions (2026-10-21 review)
+Quest Tree itself ships no background images. Without one, the palette's `ground` colour is used.
 
-Decisions taken in the 2026-10-21 task/reward review. They override older notes where the two differ.
+## Migration notes
 
-### Pickup tasks (review item 4)
+Old saves and old packs:
 
-`pickup` counts an item entity taken by a player. An item whose `owner` is the picking player does not count, so a
-player cannot finish a pickup task by dropping and re-taking the same stack. This is the only anti-farming rule:
-crafting an item and uncrafting it in a loop still counts, because the tree does not keep a per-player item history.
-Pack authors who need more should use a `craft` or `consume` task instead.
+- A team whose `paid_skill_rewards` key is absent is migrated once on first load, and the key is written even when empty so a newer save is not treated as "everything paid" again.
+- The migration changes old markers (`<node>#skill<rank>` and `<node>#skill<rank>#<index>`) into records. For every taken skill node it records all revocable rewards (`points`, `tag`, `attribute`, a `command` with `lock_command`) up to that rank. A marker on one rank covers the whole node. A node with no record at all has all of its rewards up to that rank marked as paid, because before this version there were no conditions and everything was paid.
+- The old migration reads a marker as "paid". A one-off reward that was marked but not actually paid (a failure or a declined choice at the time) can therefore be paid again on a re-take. This is a known difference (2026-10-22).
+- A team cooldown for the emergency button is moved to its current members on read; a team with no members at save time may lose up to one hour of cooldown.
+- Old saves may hold skill pending keys from reward blocking; they are dropped with a count in the log, not paid. A skill taken while blocked already had its effect, and login re-applies its attributes.
+- Importing existing FTB Quests or Pufferfish's Skills progress is a separate command workflow; see [MIGRATION.md](MIGRATION.md). It merges only, never removes, takes the larger counter, and refuses a second `apply` of the same source unless `force` is given. Completion times and claim times are not carried because there is no field for them.
+- An unreadable chapter file must not move saved personal progress into the shared record; the saved personal routing set is left alone when the loaded model has no nodes at all.
 
-### Reward blocking (review item 6)
+## Extending tasks, rewards and conditions
 
-`/quest_tree rewards block` stops the **pay-out of quest rewards**, not the quest or skill itself.
+Other mods can register task and reward kinds (Pufferfish's Skills has add-ons that add kinds, for example) and experience sources. Conditions are registered through the public API or KubeJS. See [API.md](API.md).
 
-- Tasks, node completion, quest claims and taking a skill continue while rewards are blocked.
-- Only quest rewards are affected. Skill node rewards (the take, a respec, a rank, and a member's own command or tag)
-  are never blocked and never enter the pending list; taking a skill is never stopped (2026-10-22).
-- A blocked quest reward is recorded as taken for its node and kept in the player's pending list. When the block is
-  lifted, the pending rewards are paid in their original order.
-- A repeatable quest starting its next round keeps the pending rewards of the round it just claimed, so a blocked
-  pay-out is still owed afterwards. A reset of the node forgets them, together with the node's saved reward rolls.
-- The block is judged per quest reward. `attribute` rewards are part of the skill effect and are always applied, even
-  while quest pay-outs are blocked.
-- `ignore_reward_blocking` / `ignore_blocking` still exempt one quest reward.
-- Old saves may still hold skill pending keys (a rank of 0 or more). Loading drops them and logs the count instead of
-  paying them: a skill taken while blocked already had its effect, and login re-applies its attributes.
+## Open questions
 
-### Blocking rewards (review item 8)
-
-`/quest_tree rewards block|unblock` accepts a player who is offline (a name from the server's profile cache). The flag
-and the pending quest rewards live in that player's own record. Lifting the block pays immediately for an online
-player; for an offline player the pending quest rewards are paid at the next login, where a still-blocked flag keeps
-them waiting.
-
-### Stages (review item 6)
-
-`teamStagesApplied` is the record of the team stages this player currently holds; the team's `teamStages` is the
-wanted set. On login the difference is removed or added, and then every stage in the player's own `stages` list is
-added again. That re-add is deliberate: `p.stages` records rewards this player was granted directly, and the stage mod
-may not report them back after a relog. Removing a team stage therefore skips keys that are still in `p.stages`, so a
-rewarded stage is not taken away with the team's copy.
-
-### Personal-node routing (review item 5)
-
-The saved record keeps the set of node keys that were routed as personal. The caller checks whether the loaded model
-has any node at all: a model that reads as empty leaves that set alone, so an unreadable pack file cannot move saved
-personal progress into the shared record. An empty set with a loaded model is a real change — the pack made every
-node shared — and its saved personal values are moved to the shared record.
-
-### Currency rewards (review item 3)
-
-A `currency` reward is paid through FTB Library's currency hook. Without an economy mod that registers a provider,
-the reward is recorded as taken and pays nothing; the log says so once, and the validator warns pack authors on load.
-Only a provider that is present but fails to pay keeps the reward unclaimed, so the node can be claimed again.
-
-### Completion with unmet reward conditions (review item 9)
-
-A reward whose `conditions` this player does not meet is skipped. It does not keep `allRewardsClaimed` false and does
-not hold the node in `CLAIM`: the node finishes and, if repeatable, can repeat. The old note that such a reward stays
-unclaimed forever is withdrawn; the reward is simply not offered to that player for that completion.
-
-### Personal stages and team stages (review items 3 and 10)
-
-`stages` is the player's copy of the stages the quest tree granted to them. Stage barriers open when the key is in
-`stages` or in the shared `teamStages`. If it is in neither, both sides ask Pack Stages: the server checks the player's
-saved stages, and the client reads the copy Pack Stages syncs to it. A stage granted by another mod therefore opens the
-gate on both sides. A team stage this player was given is tracked in `teamStagesApplied`; on login only the stages the
-team no longer holds are removed, so an offline removal is followed without stripping stages another mod granted.
-
-### Reward tables with a failing entry (2026-10-22 review)
-
-A table pays its entries in order. An entry that was paid is marked in the player's saved `rewardRolls`, so a retry
-after a later entry failed hands out only the entries still missing. When the whole table is through, the marks and
-the recorded roll are removed together. A `choice` table pays one entry, so it has nothing to mark.
+- The public API for `custom` tasks and rewards (letting KubeJS and add-ons advance progress).

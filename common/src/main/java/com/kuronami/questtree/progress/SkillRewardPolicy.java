@@ -124,6 +124,16 @@ public final class SkillRewardPolicy {
     }
 
     /**
+     * Whether taking a reward back must undo its stored effect now. A locked chapter already ran every
+     * {@code lock_command} and removed every tag when it was locked, so a reset or respec must not repeat that; the
+     * points and the paid record are cleaned up either way (2026-10-22 review).
+     */
+    public static boolean undoesEffect(JsonObject reward, boolean chapterLocked) {
+        return !chapterLocked && (typeOf(reward).equals("tag")
+                || (typeOf(reward).equals("command") && hasLockCommand(reward)));
+    }
+
+    /**
      * Fills {@code team.paidSkillRewards} for a save made before the record existed, once: only a team whose saved form
      * had no {@code paid_skill_rewards} key needs it, and the flag is cleared here so a later load leaves a new save
      * alone. Old per-reward and per-rank skill marks under {@code claimedRewards} are converted first, so a reward that

@@ -235,6 +235,21 @@ class ServerDataFixesTest {
         assertTrue(ProgressRules.chapterUnlocked(new PlayerProgress(), m.chapters.get("s:plain")));
     }
 
+    /** 14. Repeating a lock or unlock in the same state is a no-op, so its reward commands do not run twice. */
+    @Test
+    void repeatingAChapterStateChangesNothing() {
+        ProgressModel m = model("""
+                {"chapters": {"s:hinted": {"points": {"unlocked_by_default": false}, "nodes": {}}}}
+                """);
+        ProgressModel.Chapter hinted = m.chapters.get("s:hinted");
+        PlayerProgress p = new PlayerProgress();
+        assertFalse(ProgressRules.chapterStateChanges(p, hinted, false), "it is locked already");
+        assertTrue(ProgressRules.chapterStateChanges(p, hinted, true));
+        p.chapterOpen.put(hinted.id, true);
+        assertFalse(ProgressRules.chapterStateChanges(p, hinted, true), "unlocking an open chapter is a no-op");
+        assertTrue(ProgressRules.chapterStateChanges(p, hinted, false));
+    }
+
     /** 10. A random reward never rolls empty, and weight-0 entries are granted outside the rolls. */
     @Test
     void randomRewardHonoursEmptyOnlyForLootAndZeroWeights() {

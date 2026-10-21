@@ -378,6 +378,25 @@ class SkillRewardPolicyTest {
         assertFalse(SkillRewardPolicy.owed(back.view(B), n, 0, 0));
     }
 
+    /** A locked chapter already undid these effects, so a reset or respec must not run them a second time. */
+    @Test
+    void aLockedChapterDoesNotUndoItsEffectsTwice() {
+        var tag = JsonParser.parseString("""
+                {"type": "tag", "tag": "x"}
+                """).getAsJsonObject();
+        var command = JsonParser.parseString("""
+                {"type": "command", "command": "say hi", "lock_command": "say bye"}
+                """).getAsJsonObject();
+        var points = JsonParser.parseString("""
+                {"type": "points", "amount": 2}
+                """).getAsJsonObject();
+        assertTrue(SkillRewardPolicy.undoesEffect(tag, false));
+        assertTrue(SkillRewardPolicy.undoesEffect(command, false));
+        assertFalse(SkillRewardPolicy.undoesEffect(tag, true), "the lock already removed the tag");
+        assertFalse(SkillRewardPolicy.undoesEffect(command, true), "the lock already ran lock_command");
+        assertFalse(SkillRewardPolicy.undoesEffect(points, false));
+    }
+
     private static ProgressModel modelWithRewards() {
         return ProgressModel.of(JsonParser.parseString("""
                 {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [

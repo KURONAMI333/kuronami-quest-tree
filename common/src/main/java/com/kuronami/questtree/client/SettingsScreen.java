@@ -302,8 +302,22 @@ public final class SettingsScreen extends Screen {
         return false;
     }
 
+    /**
+     * A row grows with the text so a larger setting does not squeeze the label into the row above. Enlarged text also
+     * gets a little more padding, which keeps the 120% view tall enough to scroll (2026-10-22 review).
+     */
+    private static int rowHeight() {
+        float scale = ClientConfig.textScale();
+        int padding = scale > 1f ? Math.round(40 * (scale - 1f)) : 0;
+        return Math.max(ROW_H, Math.round(ROW_H * scale) + padding);
+    }
+
+    private static int textHeight() {
+        return Math.max(8, Math.round(8 * ClientConfig.textScale()));
+    }
+
     private int contentHeight() {
-        return rows.size() * ROW_H + 8;
+        return rows.size() * rowHeight() + 8;
     }
 
     /** The title stays at its usual place while the list fits; a short screen moves it up to leave room to scroll. */
@@ -318,7 +332,7 @@ public final class SettingsScreen extends Screen {
     }
 
     private int panelHeight() {
-        return Math.min(contentHeight(), Math.max(ROW_H + 8, height - panelTop() - 8));
+        return Math.min(contentHeight(), Math.max(rowHeight() + 8, height - panelTop() - 8));
     }
 
     private float maxScroll() {
@@ -343,21 +357,23 @@ public final class SettingsScreen extends Screen {
         Ui.outline(g, x, top, PANEL_W, h, Ui.R4, Ui.HAIRLINE);
         int listTop = top + 4;
         int listBottom = top + h - 4;
+        int rowH = rowHeight();
+        int textY = Math.max(0, (rowH - textHeight()) / 2);
         g.enableScissor(x, listTop, x + PANEL_W, listBottom);
         boolean inPanel = mouseX >= x && mouseX < x + PANEL_W && mouseY >= listTop && mouseY < listBottom;
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
-            int ry = listTop + i * ROW_H - off;
-            if (ry + ROW_H <= listTop || ry >= listBottom) {
+            int ry = listTop + i * rowH - off;
+            if (ry + rowH <= listTop || ry >= listBottom) {
                 continue;
             }
             boolean hover = inPanel && mouseX >= x + 4 && mouseX < x + PANEL_W - 4
-                    && mouseY >= ry && mouseY < ry + ROW_H;
+                    && mouseY >= ry && mouseY < ry + rowH;
             if (hover) {
-                Ui.surface(g, x + 4, ry, PANEL_W - 8, ROW_H, Ui.R2, Ui.OVERLAY_1);
+                Ui.surface(g, x + 4, ry, PANEL_W - 8, rowH, Ui.R2, Ui.OVERLAY_1);
             }
-            Ui.text(g, font, row.label(), x + 12, ry + (ROW_H - 8) / 2, hover ? Ui.TEXT : Ui.MUTED);
-            Ui.textRight(g, font, row.value(), x + PANEL_W - 12, ry + (ROW_H - 8) / 2, Ui.TEXT);
+            Ui.text(g, font, row.label(), x + 12, ry + textY, hover ? Ui.TEXT : Ui.MUTED);
+            Ui.textRight(g, font, row.value(), x + PANEL_W - 12, ry + textY, Ui.TEXT);
         }
         g.disableScissor();
         if (maxScroll() > 0) {
@@ -382,9 +398,10 @@ public final class SettingsScreen extends Screen {
             return super.mouseClicked(mx, my, button);
         }
         int off = Math.round(scroll);
+        int rowH = rowHeight();
         for (int i = 0; i < rows.size(); i++) {
-            int ry = listTop + i * ROW_H - off;
-            if (mx >= x + 4 && mx < x + PANEL_W - 4 && my >= ry && my < ry + ROW_H) {
+            int ry = listTop + i * rowH - off;
+            if (mx >= x + 4 && mx < x + PANEL_W - 4 && my >= ry && my < ry + rowH) {
                 rows.get(i).click();
                 ClientConfig.save();
                 ProgressFeedback.click();
@@ -399,7 +416,7 @@ public final class SettingsScreen extends Screen {
         int x = (width - PANEL_W) / 2;
         int top = panelTop();
         if (maxScroll() > 0 && mx >= x && mx < x + PANEL_W && my >= top && my < top + panelHeight()) {
-            scrollTarget = Mth.clamp(scrollTarget - (float) scrollY * ROW_H * 2, 0, maxScroll());
+            scrollTarget = Mth.clamp(scrollTarget - (float) scrollY * rowHeight() * 2, 0, maxScroll());
             return true;
         }
         return super.mouseScrolled(mx, my, scrollX, scrollY);
