@@ -101,6 +101,17 @@ public final class ProgressionEditor {
      */
     public Outcome apply(JsonObject packChapters, JsonObject tables, Map<String, ProgressValidator.Source> packSources,
                          String chapterId, long revision, String op, JsonObject args, Set<String> unreadable) {
+        return apply(packChapters, tables, packSources, chapterId, revision, op, args, unreadable, 2);
+    }
+
+    /**
+     * One op, from a writer with {@code writerPermissionLevel}. Adding or changing a command reward (and its
+     * permission level) is a capability the writer must already hold themselves: an editor with level 2 must not be
+     * able to write a level-4 command for someone else to trigger (2026-10-22 release review).
+     */
+    public Outcome apply(JsonObject packChapters, JsonObject tables, Map<String, ProgressValidator.Source> packSources,
+                         String chapterId, long revision, String op, JsonObject args, Set<String> unreadable,
+                         int writerPermissionLevel) {
         // A chapter does not exist yet when it is being created, so it has no id to carry: the request sends an empty
         // chapterId and the namespace in the args, and the server mints the id. Every other op needs a real one.
         boolean creatingChapter = op.equals("create_chapter");
@@ -116,7 +127,8 @@ public final class ProgressionEditor {
         }
         args = args == null ? new JsonObject() : args;
         if (tableOp) {
-            return applyTable(overlay, packChapters, tables, packSources, chapterId, revision, op, args, unreadable);
+            return applyTable(overlay, packChapters, tables, packSources, chapterId, revision, op, args, unreadable,
+                    writerPermissionLevel);
         }
         JsonObject before = packChapters.deepCopy();
         Map<String, ProgressValidator.Source> beforeSources = new LinkedHashMap<>(packSources);
@@ -125,17 +137,19 @@ public final class ProgressionEditor {
         // a table undo names the table's revision, not a chapter's, so it is checked by tableHistory itself
         if ((op.equals("undo") || op.equals("redo"))
                 && undoIsAboutATable(overlay, packChapters, tables, chapterId)) {
-            return tableHistory(overlay, packChapters, tables, packSources, chapterId, revision, op, unreadable);
+            return tableHistory(overlay, packChapters, tables, packSources, chapterId, revision, op, unreadable,
+                    writerPermissionLevel);
         }
         if (!creatingChapter && revision != current) {
             return new Outcome(false, true, false, "", current,
                     List.of("chapter changed while you were editing it; reload it and try again"));
         }
         if (op.equals("undo") || op.equals("redo")) {
-            return history(overlay, packChapters, tables, packSources, chapterId, current, op, unreadable);
+            return history(overlay, packChapters, tables, packSources, chapterId, current, op, unreadable,
+                    writerPermissionLevel);
         }
         return applyOp(overlay, packChapters, tables, packSources, before, beforeSources, chapterId, current,
-                op, args, unreadable);
+                op, args, unreadable, writerPermissionLevel);
     }
 
     // ------------------------------------------------------------------ operations
@@ -143,7 +157,7 @@ public final class ProgressionEditor {
     private Outcome applyOp(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject tables,
                             Map<String, ProgressValidator.Source> packSources, JsonObject before,
                             Map<String, ProgressValidator.Source> beforeSources, String chapterId, long current,
-                            String op, JsonObject args, Set<String> unreadable) {
+                            String op, JsonObject args, Set<String> unreadable, int writerPermissionLevel) {
         boolean packHasChapter = object(packChapters, chapterId);
         ProgressionOverlay.ChapterOverlay overlayChapter = overlay.chapter(chapterId);
         String createdId = "";
@@ -436,6 +450,10 @@ public final class ProgressionEditor {
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(packSources);
         overlay.applyTo(after, afterSources);
 
+        List<String> escalation = commandEscalation(before, after, tables, tables, writerPermissionLevel);
+        if (!escalation.isEmpty()) {
+            return fail(escalation, current);
+        }
         List<String> refusal = newErrors(before, beforeSources, after, afterSources, tables, unreadable);
         if (!refusal.isEmpty()) {
             return fail(refusal, current);
@@ -467,25 +485,25 @@ public final class ProgressionEditor {
      */
     private Outcome applyTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
                                Map<String, ProgressValidator.Source> packSources, String chapterId, long revision,
-                               String op, JsonObject args, Set<String> unreadable) {
+                               String op, JsonObject args, Set<String> unreadable, int writerPermissionLevel) {
         String id = text(args, "id", chapterId);
         if (!validChapterId(id)) {
             return fail("table id is not <namespace>:<table>", 0);
         }
         return switch (op) {
             case "update_table" -> updateTable(overlay, packChapters, packTables, packSources, chapterId, id,
-                    revision, args, unreadable);
+                    revision, args, unreadable, writerPermissionLevel);
             case "delete_table" -> deleteTable(overlay, packChapters, packTables, packSources, id, revision,
-                    unreadable);
+                    unreadable, writerPermissionLevel);
             case "restore_table" -> restoreTable(overlay, packChapters, packTables, packSources, id, revision,
-                    unreadable);
+                    unreadable, writerPermissionLevel);
             default -> fail("unknown operation " + op, overlay.tableRevision(id));
         };
     }
 
     private Outcome updateTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
                                 Map<String, ProgressValidator.Source> packSources, String chapterId, String id,
-                                long revision, JsonObject args, Set<String> unreadable) {
+                                long revision, JsonObject args, Set<String> unreadable, int writerPermissionLevel) {
         boolean create = args.has("create") && args.get("create").isJsonPrimitive()
                 && args.get("create").getAsJsonPrimitive().isBoolean() && args.get("create").getAsBoolean();
         long current = overlay.tableRevision(id);
@@ -531,6 +549,11 @@ public final class ProgressionEditor {
         JsonObject afterTables = packTables.deepCopy();
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
         overlay.applyTablesTo(afterTables, afterSources);
+        List<String> escalation = commandEscalation(packChapters, packChapters, beforeTables, afterTables,
+                writerPermissionLevel);
+        if (!escalation.isEmpty()) {
+            return fail(escalation, current);
+        }
         List<String> refusal = newErrors(before, beforeSources, beforeTables, before, afterSources, afterTables,
                 unreadable);
         if (!refusal.isEmpty()) {
@@ -557,7 +580,7 @@ public final class ProgressionEditor {
     /** {@code delete_table}: hide the table and keep its content, so {@code restore_table} can put it back. */
     private Outcome deleteTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
                                 Map<String, ProgressValidator.Source> packSources, String id, long revision,
-                                Set<String> unreadable) {
+                                Set<String> unreadable, int writerPermissionLevel) {
         long current = overlay.tableRevision(id);
         if (revision != current) {
             return staleTable(current);
@@ -586,6 +609,11 @@ public final class ProgressionEditor {
         JsonObject afterTables = packTables.deepCopy();
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
         overlay.applyTablesTo(afterTables, afterSources);
+        List<String> escalation = commandEscalation(packChapters, packChapters, beforeTables, afterTables,
+                writerPermissionLevel);
+        if (!escalation.isEmpty()) {
+            return fail(escalation, current);
+        }
         List<String> refusal = newErrors(before, beforeSources, beforeTables, before, afterSources, afterTables,
                 unreadable);
         if (!refusal.isEmpty()) {
@@ -613,7 +641,7 @@ public final class ProgressionEditor {
     /** {@code restore_table}: bring back the tombstone's content, or the pack's copy when it was never edited. */
     private Outcome restoreTable(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
                                  Map<String, ProgressValidator.Source> packSources, String id, long revision,
-                                 Set<String> unreadable) {
+                                 Set<String> unreadable, int writerPermissionLevel) {
         long current = overlay.tableRevision(id);
         if (revision != current) {
             return staleTable(current);
@@ -642,6 +670,11 @@ public final class ProgressionEditor {
         JsonObject afterTables = packTables.deepCopy();
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(beforeSources);
         overlay.applyTablesTo(afterTables, afterSources);
+        List<String> escalation = commandEscalation(packChapters, packChapters, beforeTables, afterTables,
+                writerPermissionLevel);
+        if (!escalation.isEmpty()) {
+            return fail(escalation, current);
+        }
         List<String> refusal = newErrors(before, beforeSources, beforeTables, before, afterSources, afterTables,
                 unreadable);
         if (!refusal.isEmpty()) {
@@ -678,7 +711,7 @@ public final class ProgressionEditor {
 
     private Outcome history(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject tables,
                             Map<String, ProgressValidator.Source> packSources, String chapterId, long current,
-                            String op, Set<String> unreadable) {
+                            String op, Set<String> unreadable, int writerPermissionLevel) {
         History history = histories.computeIfAbsent(chapterId, k -> new History());
         Deque<Snapshot> from = op.equals("undo") ? history.undo : history.redo;
         Deque<Snapshot> to = op.equals("undo") ? history.redo : history.undo;
@@ -710,6 +743,10 @@ public final class ProgressionEditor {
         JsonObject after = packChapters.deepCopy();
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(packSources);
         restoredOverlay.applyTo(after, afterSources);
+        List<String> escalation = commandEscalation(before, after, tables, tables, writerPermissionLevel);
+        if (!escalation.isEmpty()) {
+            return fail(escalation, current);
+        }
         List<String> refusal = newErrors(before, beforeSources, after, afterSources, tables, unreadable);
         if (!refusal.isEmpty()) {
             return fail(refusal, current);
@@ -741,7 +778,7 @@ public final class ProgressionEditor {
      */
     private Outcome tableHistory(ProgressionOverlay.Overlay overlay, JsonObject packChapters, JsonObject packTables,
                                  Map<String, ProgressValidator.Source> packSources, String tableId, long revision,
-                                 String op, Set<String> unreadable) {
+                                 String op, Set<String> unreadable, int writerPermissionLevel) {
         long current = overlay.tableRevision(tableId);
         History history = tableHistories.computeIfAbsent(tableId, k -> new History());
         Deque<Snapshot> from = op.equals("undo") ? history.undo : history.redo;
@@ -782,6 +819,11 @@ public final class ProgressionEditor {
         JsonObject afterTables = packTables.deepCopy();
         Map<String, ProgressValidator.Source> afterSources = new LinkedHashMap<>(packSources);
         restoredOverlay.applyTablesTo(afterTables, afterSources);
+        List<String> escalation = commandEscalation(chapters, chapters, beforeTables, afterTables,
+                writerPermissionLevel);
+        if (!escalation.isEmpty()) {
+            return fail(escalation, current);
+        }
         List<String> refusal = newErrors(chapters, chapterSources, beforeTables, chapters, afterSources, afterTables,
                 unreadable);
         if (!refusal.isEmpty()) {
@@ -819,6 +861,110 @@ public final class ProgressionEditor {
             return false;
         }
         return overlay.tables.containsKey(id) || object(packTables, id) || tableHistories.containsKey(id);
+    }
+
+    // ------------------------------------------------------------------ command reward escalation
+
+    private static final List<String> COMMAND_KEYS = List.of("command", "unlock_command", "lock_command",
+            "permission_level");
+
+    /**
+     * A level-2 editor may write ordinary rewards, but not grant a command they could not run themselves. Compares the
+     * before/after reward of every node and table entry; a new or changed command key on a writer below level 4 is
+     * refused (2026-10-22 release review).
+     */
+    private static List<String> commandEscalation(JsonObject beforeChapters, JsonObject afterChapters,
+                                                  JsonObject beforeTables, JsonObject afterTables, int level) {
+        if (level >= 4) {
+            return List.of();
+        }
+        Map<String, JsonObject> before = rewards(beforeChapters, beforeTables);
+        Map<String, JsonObject> after = rewards(afterChapters, afterTables);
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, JsonObject> e : after.entrySet()) {
+            JsonObject was = before.get(e.getKey());
+            JsonObject now = e.getValue();
+            if (was != null && now.equals(was)) {
+                continue;
+            }
+            if (was != null && !commandSignature(was).equals(commandSignature(now))) {
+                out.add("changing a command reward needs permission level 4 (you have " + level + "): " + e.getKey());
+            } else if (was == null && !commandSignature(now).isEmpty()) {
+                out.add("adding a command reward needs permission level 4 (you have " + level + "): " + e.getKey());
+            }
+        }
+        return out;
+    }
+
+    /** Every reward by a stable place, node rewards and reward-table entries alike. */
+    private static Map<String, JsonObject> rewards(JsonObject chapters, JsonObject tables) {
+        Map<String, JsonObject> out = new LinkedHashMap<>();
+        if (chapters != null) {
+            for (Map.Entry<String, JsonElement> c : chapters.entrySet()) {
+                if (!c.getValue().isJsonObject()) {
+                    continue;
+                }
+                JsonElement nodes = c.getValue().getAsJsonObject().get("nodes");
+                if (nodes == null || !nodes.isJsonObject()) {
+                    continue;
+                }
+                for (Map.Entry<String, JsonElement> n : nodes.getAsJsonObject().entrySet()) {
+                    if (!n.getValue().isJsonObject()) {
+                        continue;
+                    }
+                    JsonElement list = n.getValue().getAsJsonObject().get("rewards");
+                    if (list == null || !list.isJsonArray()) {
+                        continue;
+                    }
+                    JsonArray array = list.getAsJsonArray();
+                    for (int i = 0; i < array.size(); i++) {
+                        if (array.get(i).isJsonObject()) {
+                            out.put(c.getKey() + "/" + n.getKey() + "#" + i, array.get(i).getAsJsonObject());
+                        }
+                    }
+                }
+            }
+        }
+        if (tables != null) {
+            for (Map.Entry<String, JsonElement> t : tables.entrySet()) {
+                if (!t.getValue().isJsonObject()) {
+                    continue;
+                }
+                JsonElement entries = t.getValue().getAsJsonObject().get("entries");
+                if (entries == null || !entries.isJsonArray()) {
+                    continue;
+                }
+                JsonArray array = entries.getAsJsonArray();
+                for (int i = 0; i < array.size(); i++) {
+                    if (!array.get(i).isJsonObject()) {
+                        continue;
+                    }
+                    JsonElement reward = array.get(i).getAsJsonObject().get("reward");
+                    if (reward != null && reward.isJsonObject()) {
+                        out.put("table:" + t.getKey() + "#" + i, reward.getAsJsonObject());
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** The command-running part of a reward; empty for a reward that cannot run a command. */
+    private static String commandSignature(JsonObject reward) {
+        boolean command = "command".equals(text(reward, "type", ""));
+        for (String key : COMMAND_KEYS) {
+            if (reward.has(key)) {
+                command = true;
+            }
+        }
+        if (!command) {
+            return "";
+        }
+        StringBuilder b = new StringBuilder();
+        for (String key : COMMAND_KEYS) {
+            b.append(key).append('=').append(reward.has(key) ? reward.get(key).toString() : "").append('\n');
+        }
+        return b.toString();
     }
 
     // ------------------------------------------------------------------ validation

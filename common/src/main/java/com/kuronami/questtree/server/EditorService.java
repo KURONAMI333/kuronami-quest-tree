@@ -141,7 +141,8 @@ public final class EditorService {
         ProgressionEditor.Outcome outcome;
         try {
             outcome = editor.apply(ProgressData.packChapters(), ProgressData.packTables(), ProgressData.packSources(),
-                    chapterId, payload.chapterRevision(), payload.op(), args, ProgressData.packUnreadable());
+                    chapterId, payload.chapterRevision(), payload.op(), args, ProgressData.packUnreadable(),
+                    permissionLevel(player));
         } catch (RuntimeException ex) {
             // a bug in one op must not take the tick or the server down; the file is written last, so nothing changed
             Constants.LOG.error("Progression edit {} on {} failed", payload.op(), chapterId, ex);
@@ -165,6 +166,16 @@ public final class EditorService {
             // fresh bundle, and this one would be the outdated cached copy
             ProgressData.sync(player);
         }
+    }
+
+    /** The level a writer holds, 0-4; command rewards need level 4 to be written (2026-10-22 release review). */
+    private static int permissionLevel(ServerPlayer player) {
+        for (int level = 4; level > 0; level--) {
+            if (player.hasPermissions(level)) {
+                return level;
+            }
+        }
+        return 0;
     }
 
     /** End of a server tick: publish one rebuild for every edit made since the last tick. */

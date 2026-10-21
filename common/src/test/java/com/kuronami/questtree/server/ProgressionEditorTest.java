@@ -648,4 +648,61 @@ class ProgressionEditorTest {
         assertFalse(ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).tables.containsKey("t:loot"));
     }
 
+
+    // ---------------------------------------------------------------- command reward escalation (2026-10-22)
+
+    private ProgressionEditor.Outcome applyAs(ProgressionEditor editor, int level, JsonObject pack, String op,
+                                              String args) {
+        return editor.apply(pack, new JsonObject(), Map.of(), CHAPTER, 0, op,
+                JsonParser.parseString(args).getAsJsonObject(), Set.of(), level);
+    }
+
+    private static JsonObject packWithReward(String rewardJson) {
+        JsonObject pack = pack();
+        JsonArray rewards = new JsonArray();
+        rewards.add(JsonParser.parseString(rewardJson));
+        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").add("rewards", rewards);
+        return pack;
+    }
+
+    @Test
+    void aLevelTwoEditorCannotAddACommandReward() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"rewards\":[{\"type\":\"command\",\"command\":\"op @s\"}]}}");
+
+        assertFalse(out.ok());
+        assertTrue(out.messages().stream().anyMatch(m -> m.contains("permission level 4")), out.messages().toString());
+        assertFalse(Files.exists(overlayFile(CHAPTER)), "nothing was written");
+    }
+
+    @Test
+    void aLevelFourEditorCanAddACommandReward() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 4, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"rewards\":[{\"type\":\"command\",\"command\":\"say hi\"}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
+
+    @Test
+    void aLevelTwoEditorCannotRaiseAPermissionLevelOrChangeTheCommand() {
+        ProgressionEditor editor = editor();
+        assertFalse(applyAs(editor, 2, packWithReward(
+                        "{\"type\":\"command\",\"command\":\"say hi\",\"permission_level\":2}"),
+                "update_node", "{\"id\":\"a\",\"patch\":{\"rewards\":["
+                        + "{\"type\":\"command\",\"command\":\"say hi\",\"permission_level\":4}]}}").ok(),
+                "raising the level is escalation");
+        ProgressionEditor.Outcome changed = applyAs(editor, 2, packWithReward(
+                        "{\"type\":\"command\",\"command\":\"say hi\"}"),
+                "update_node", "{\"id\":\"a\",\"patch\":{\"rewards\":["
+                        + "{\"type\":\"command\",\"command\":\"op @s\"}]}}");
+        assertFalse(changed.ok(), "rewriting the command is escalation too");
+    }
+
+    @Test
+    void aLevelTwoEditorCanStillAddAnOrdinaryReward() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"rewards\":[{\"type\":\"item\",\"item\":\"minecraft:apple\"}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
 }

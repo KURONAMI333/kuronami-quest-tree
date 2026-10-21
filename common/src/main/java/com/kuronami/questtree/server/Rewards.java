@@ -661,8 +661,11 @@ public final class Rewards {
         }
         // FTB Quests writes the player as {p}; Pufferfish's Skills commands run as the player (@s)
         cmd = cmd.replace("{p}", player.getGameProfile().getName());
-        // the data pack author decides what runs, as with FTB Quests and Pufferfish's Skills; level 2 unless the data says otherwise
-        int level = intOf(rw, "permission_level", 2);
+        // The data pack author decides what runs, as with FTB Quests and Pufferfish's Skills, but the server setting
+        // caps the level: an edited-in level-4 command must not run at 4 unless the owner allows it (2026-10-22 review).
+        int level = com.kuronami.questtree.progress.RewardPermission.cap(
+                intOf(rw, "permission_level", com.kuronami.questtree.progress.RewardPermission.DEFAULT),
+                com.kuronami.questtree.config.ServerConfig.rewardCommandPermission());
         ServerCommands.run(player, cmd, level, !rw.has("silent") || ProgressModel.boolOf(rw, "silent"));
     }
 
