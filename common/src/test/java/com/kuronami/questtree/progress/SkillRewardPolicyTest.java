@@ -85,6 +85,23 @@ class SkillRewardPolicyTest {
         assertTrue(SkillRewardPolicy.owed(p, n, 1, 0), "another rank is not covered");
     }
 
+    /**
+     * A reward whose conditions did not hold was never handed out, so a respec must not undo it and a login must not
+     * re-apply it (2026-10-22 review).
+     */
+    @Test
+    void onlyRewardsWhoseConditionsHeldAreUndoneOrReapplied() {
+        ProgressModel model = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [
+                  {"rewards": [{"type": "attribute"}, {"type": "command"}, {"type": "attribute"}]}]}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        assertEquals(java.util.List.of(0, 2), SkillRewardPolicy.grantedIndexes(n, 0,
+                rw -> !"command".equals(rw.get("type").getAsString())));
+        assertEquals(java.util.List.of(0, 1, 2), SkillRewardPolicy.grantedIndexes(n, 0, rw -> true));
+        assertEquals(java.util.List.of(), SkillRewardPolicy.grantedIndexes(n, 0, rw -> false));
+    }
+
     private static ProgressModel modelWithRewards() {
         return ProgressModel.of(JsonParser.parseString("""
                 {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [

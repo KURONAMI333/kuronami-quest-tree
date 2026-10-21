@@ -340,7 +340,9 @@ public final class Rewards {
             if (n != null && ProgressRules.chapterUnlocked(p, n.chapter)) {
                 for (int rank = 0; rank < e.getValue(); rank++) {
                     List<JsonObject> list = rewardsOfRank(n, rank);
-                    for (int i = 0; i < list.size(); i++) {
+                    // a reward whose conditions did not hold was never handed out, so do not put it back either
+                    for (int i : SkillRewardPolicy.grantedIndexes(n, rank,
+                            rw -> ProgressService.conditionsMet(player, p, rw))) {
                         if (ProgressService.type(list.get(i)).equals("attribute")) {
                             attribute(player, n.key, rank * 100 + i, list.get(i));
                         }
@@ -361,7 +363,8 @@ public final class Rewards {
             ProgressModel.Node n = model.nodes.get(key);
             if (n != null && ProgressRules.chapterUnlocked(p, n.chapter)) {
                 for (JsonObject rw : n.rewards) {
-                    if (ProgressService.type(rw).equals("attribute")) {
+                    if (ProgressService.type(rw).equals("attribute")
+                            && ProgressService.conditionsMet(player, p, rw)) {
                         attribute(player, n.key, slotOf(n, rw), rw);
                     }
                 }
@@ -387,7 +390,8 @@ public final class Rewards {
             }
             if (n != null && index >= 0 && index < n.rewards.size()) {
                 JsonObject rw = n.rewards.get(index);
-                if (ProgressService.type(rw).equals("attribute")) {
+                if (ProgressService.type(rw).equals("attribute")
+                        && ProgressService.conditionsMet(player, p, rw)) {
                     attribute(player, n.key, slotOf(n, rw), rw);
                 }
             }
@@ -450,6 +454,10 @@ public final class Rewards {
                 }
                 if (SkillRewardPolicy.cancelPending(p, n, rank, index)) {
                     // the pay-out was still owed, not made: the debt goes with the skill and nothing is undone
+                    continue;
+                }
+                if (!ProgressService.conditionsMet(player, p, rw)) {
+                    // the conditions did not hold when it was taken, so it was never handed out: nothing to undo
                     continue;
                 }
                 try {

@@ -59,6 +59,23 @@ public final class SkillRewardPolicy {
         return true;
     }
 
+    /**
+     * The indexes of a rank's rewards that were handed out: the ones whose conditions held. A reward whose conditions
+     * did not hold was never paid, so a respec has nothing to undo and a login must not put it back (2026-10-22
+     * review). Order follows the reward list.
+     */
+    public static java.util.List<Integer> grantedIndexes(ProgressModel.Node n, int rank,
+                                                         java.util.function.Predicate<JsonObject> conditionsMet) {
+        java.util.List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        for (int i = 0; i < list.size(); i++) {
+            if (conditionsMet.test(list.get(i))) {
+                out.add(i);
+            }
+        }
+        return out;
+    }
+
     public static boolean oneOff(String type) {
         return ONE_OFF.contains(type);
     }
