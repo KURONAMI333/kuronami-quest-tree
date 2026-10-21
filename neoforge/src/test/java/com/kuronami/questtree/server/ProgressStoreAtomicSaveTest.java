@@ -15,16 +15,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Vanilla {@code SavedData.save(File, Provider)} truncates the file before streaming, so a failure leaves a broken
- * save. These checks hold the mod's atomic write, its one-generation backup and the load fallback.
+ * save. These checks hold the mod's atomic write and its one-generation backup.
  */
 class ProgressStoreAtomicSaveTest {
 
@@ -97,41 +95,5 @@ class ProgressStoreAtomicSaveTest {
         assertTrue(second.isDirty(), "a failed save must be retried");
         assertEquals(Set.of("test:book/first"), load(file).team(TEAM).shared.completed,
                 "the old file is untouched");
-    }
-
-    @Test
-    void aCorruptMainFileFallsBackToTheBackup() throws IOException {
-        Path file = dir.resolve("progress.dat");
-        storeWith("test:book/first").save(file.toFile(), null);
-        storeWith("test:book/second").save(file.toFile(), null);
-        Files.write(file, new byte[] {1, 2, 3, 4});
-
-        assertTrue(SavedDataFiles.recover(file));
-
-        assertEquals(Set.of("test:book/first"), load(file).team(TEAM).shared.completed,
-                "the backup of the previous save is restored");
-        try (Stream<Path> files = Files.list(dir)) {
-            assertTrue(files.anyMatch(p -> p.getFileName().toString().startsWith("progress.dat.corrupt-")),
-                    "the broken file is kept for inspection");
-        }
-    }
-
-    @Test
-    void aCorruptFileWithoutABackupIsLeftAlone() throws IOException {
-        Path file = dir.resolve("progress.dat");
-        Files.write(file, new byte[] {1, 2, 3, 4});
-
-        assertFalse(SavedDataFiles.recover(file));
-        assertEquals(4L, Files.size(file));
-    }
-
-    @Test
-    void aBrokenBackupDoesNotReplaceTheMainFile() throws IOException {
-        Path file = dir.resolve("progress.dat");
-        Files.write(file, new byte[] {1, 2, 3, 4});
-        Files.write(SavedDataFiles.backupPath(file), new byte[] {5, 6, 7, 8});
-
-        assertFalse(SavedDataFiles.recover(file));
-        assertArrayEquals(new byte[] {1, 2, 3, 4}, Files.readAllBytes(file));
     }
 }

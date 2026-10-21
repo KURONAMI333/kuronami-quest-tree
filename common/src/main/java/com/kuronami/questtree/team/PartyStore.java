@@ -20,7 +20,6 @@ public final class PartyStore extends SavedData {
     private PartyData data = new PartyData();
 
     public static PartyStore get(MinecraftServer server) {
-        SavedDataFiles.recoverOnce(server, NAME);
         return SavedDataFiles.get(server, NAME, PartyStore::load, PartyStore::new);
     }
 

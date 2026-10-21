@@ -39,7 +39,6 @@ public final class ProgressStore extends SavedData {
     private com.kuronami.questtree.data.ProgressModel paidSkillModel;
 
     public static ProgressStore get(MinecraftServer server) {
-        SavedDataFiles.recoverOnce(server, NAME);
         ProgressStore store = SavedDataFiles.get(server, NAME, ProgressStore::load, ProgressStore::new);
         if (store.loadedLegacy) {
             store.loadedLegacy = false;

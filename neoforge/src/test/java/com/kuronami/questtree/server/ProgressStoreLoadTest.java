@@ -96,6 +96,18 @@ class ProgressStoreLoadTest {
     }
 
     @Test
+    void aBrokenBackupDoesNotReplaceTheBrokenMainFile() throws IOException {
+        Path file = dir.resolve("progress.dat");
+        Files.write(file, new byte[] {1, 2, 3, 4});
+        Files.write(SavedDataFiles.backupPath(file), new byte[] {5, 6, 7, 8});
+
+        assertNull(read(file));
+        assertFalse(Files.exists(file));
+        assertTrue(hasCorruptFile(dir));
+        assertTrue(Files.isRegularFile(SavedDataFiles.backupPath(file)), "the backup is left for inspection too");
+    }
+
+    @Test
     void aMissingFileDoesNotResurrectTheBackup() throws IOException {
         Path file = dir.resolve("progress.dat");
         storeWith("test:book/first").save(file.toFile(), null);

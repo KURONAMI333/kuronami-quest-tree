@@ -43,7 +43,6 @@ import java.util.function.Supplier;
  */
 public final class SavedDataFiles {
 
-    private static final Map<MinecraftServer, Boolean> RECOVERED = Collections.synchronizedMap(new WeakHashMap<>());
     /** The instance of a store per data storage, so a second call returns it instead of reading the file again. */
     private static final Map<DimensionDataStorage, Map<String, SavedData>> INSTANCES =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -194,67 +193,6 @@ public final class SavedDataFiles {
             } catch (IOException ignored) {
                 // the temporary file is only a leftover; the target was never touched
             }
-        }
-    }
-
-    /** Restores the backup once per server before the first store of this name is read. */
-    public static void recoverOnce(MinecraftServer server, String name) {
-        synchronized (RECOVERED) {
-            if (RECOVERED.containsKey(server)) {
-                return;
-            }
-            RECOVERED.put(server, Boolean.TRUE);
-        }
-        recover(path(server, name));
-    }
-
-    /** Returns true when the main file was unreadable and the backup replaced it. */
-    public static boolean recover(Path dataFile) {
-        if (!Files.isRegularFile(dataFile)) {
-            return false;
-        }
-        try {
-            NbtIo.readCompressed(dataFile, NbtAccounter.unlimitedHeap());
-            return false;
-        } catch (Exception ex) {
-            Path backup = backupPath(dataFile);
-            if (!Files.isRegularFile(backup)) {
-                Constants.LOG.warn("Could not read {} and there is no backup to fall back to: {}", dataFile, ex.toString());
-                return false;
-            }
-            if (!parses(backup)) {
-                Constants.LOG.warn("Could not read {} and the backup {} does not parse either; leaving both alone",
-                        dataFile, backup);
-                return false;
-            }
-            Path corrupt = dataFile.resolveSibling(dataFile.getFileName() + ".corrupt-" + System.currentTimeMillis());
-            Path restored = dataFile.resolveSibling(dataFile.getFileName() + ".restore");
-            try {
-                Files.copy(dataFile, corrupt, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-                Files.copy(backup, restored, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-                moveReplacing(restored, dataFile);
-                forceDirectory(dataFile.getParent());
-                Constants.LOG.warn("Could not read {} ({}); restored {} and kept the broken file as {}",
-                        dataFile, ex.toString(), backup, corrupt);
-                return true;
-            } catch (IOException io) {
-                Constants.LOG.error("Could not restore {} from {}", dataFile, backup, io);
-                try {
-                    Files.deleteIfExists(restored);
-                } catch (IOException ignored) {
-                    // the target is still the broken file, so there is nothing to clean up for correctness
-                }
-                return false;
-            }
-        }
-    }
-
-    private static boolean parses(Path file) {
-        try {
-            NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
-            return true;
-        } catch (Exception ex) {
-            return false;
         }
     }
 
