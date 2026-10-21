@@ -124,6 +124,33 @@ class ImporterTest {
         assertEquals("any", ch.getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonObject("requires").get("mode").getAsString());
     }
 
+    /** An optional reward type that is not installed becomes Pufferfish's dummy; a required one stays reported. */
+    @Test
+    void puffishOptionalUnknownRewardBecomesDummy() throws Exception {
+        Map<String, JsonElement> files = new LinkedHashMap<>();
+        try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
+            for (Path f : s.toList()) {
+                files.put(f.getFileName().toString(), JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)));
+            }
+        }
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject optional = new JsonObject();
+        optional.addProperty("type", "puffish_skills:missing_mod:optional");
+        optional.addProperty("required", false);
+        rewards.add(optional);
+        JsonObject required = new JsonObject();
+        required.addProperty("type", "puffish_skills:missing_mod:required");
+        required.addProperty("required", true);
+        rewards.add(required);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("ftb/mining", files, out);
+        JsonArray converted = out.chapters.get("skill_ftb_mining").getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonArray("rewards");
+        assertEquals("dummy", converted.get(converted.size() - 2).getAsJsonObject().get("type").getAsString());
+        assertEquals("puffish_skills:missing_mod:required", converted.get(converted.size() - 1).getAsJsonObject().get("type").getAsString());
+        assertTrue(out.unmapped.containsKey("skill_reward_type.puffish_skills:missing_mod:required"), out.unmapped.toString());
+        assertFalse(out.unmapped.containsKey("skill_reward_type.puffish_skills:missing_mod:optional"), out.unmapped.toString());
+    }
+
     /** The block, fluid, forge_energy and observation tasks each keep their own counter field after conversion. */
     @Test
     void taskTypesConvertToTheirOwnCounters() throws Exception {

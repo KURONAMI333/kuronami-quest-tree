@@ -120,8 +120,15 @@ public final class PuffishImporter {
                             String type = ro.has("type") ? ro.get("type").getAsString() : "?";
                             String shortType = type.substring(type.indexOf(':') + 1);
                             JsonObject conv = ro.has("data") && ro.get("data").isJsonObject() ? ro.getAsJsonObject("data").deepCopy() : new JsonObject();
-                            conv.addProperty("type", KNOWN_REWARDS.contains(shortType) ? shortType : type);
-                            if (!KNOWN_REWARDS.contains(shortType)) {
+                            // Pufferfish's Skills falls back to its dummy reward for an optional type that is missing
+                            boolean required = !ro.has("required") || !ro.get("required").isJsonPrimitive()
+                                    || ro.get("required").getAsJsonPrimitive().isBoolean() && ro.get("required").getAsBoolean();
+                            if (KNOWN_REWARDS.contains(shortType)) {
+                                conv.addProperty("type", shortType);
+                            } else if (!required) {
+                                conv.addProperty("type", "dummy");
+                            } else {
+                                conv.addProperty("type", type);
                                 out.unknown("skill_reward_type", type);
                             }
                             rw.add(conv);

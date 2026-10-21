@@ -45,6 +45,8 @@ public final class Rewards {
                 case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
                 case "toast" -> ProgressService.event(player, p, "toast", n.key);
                 case "scoreboard" -> scoreboard(player, p, n, rw);
+                // a placeholder a pack can keep where a reward type may not be installed (Pufferfish's Skills' dummy)
+                case "dummy" -> { }
                 // FTB Quests' custom reward: its effect is addon Java code; hand the claim to QuestEvents and do nothing else
                 case "custom" -> QuestEvents.fire(player, n, rw, false, -1);
                 // Kuronami's Trophies (mod-108): it gives each trophy once per player and engraves it; no dependency, only its command

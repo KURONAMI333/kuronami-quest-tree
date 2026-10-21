@@ -5,6 +5,7 @@ import com.kuronami.questtree.client.edit.EditorClipboard;
 import com.kuronami.questtree.client.edit.EditorSelection;
 import com.kuronami.questtree.client.edit.GridSnap;
 import com.kuronami.questtree.client.edit.MoveBatch;
+import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
@@ -379,6 +380,10 @@ public class ProgressScreen extends Screen {
     private double dragStartX;
     private double dragStartY;
     private final List<Button> buttons = new ArrayList<>();
+    /** The small "are you sure" card for point-spending actions: its own buttons, so the map's cannot be reached. */
+    private Component confirmPrompt;
+    private Runnable confirmRun;
+    private final List<Button> confirmButtons = new ArrayList<>();
     private final Map<String, Long> flashes = new HashMap<>();
     private final Map<String, Long> shakes = new HashMap<>();
 
@@ -499,7 +504,9 @@ public class ProgressScreen extends Screen {
         railRows.clear();
         railWidest = 0;
         for (ClientModel.Chapter c : m.chapters) {
-            if (!ClientProgress.chapterHidden(c.id)) {
+            boolean locked = ClientProgress.chapterLocked(c.id);
+            if (!ClientProgress.chapterAlwaysHidden(c.id)) {
+                // a locked chapter stays in the list, greyed with the pack's hint, instead of vanishing
                 railChapters.add(c);
                 railWidest = Math.max(railWidest, font.width(c.title));
             }
@@ -540,6 +547,9 @@ public class ProgressScreen extends Screen {
                 if (badge <= 0 || !hasTakeable(c)) {
                     badge = 0;
                 }
+            }
+            if (locked) {
+                badge = 0;
             }
             badges.put(c.id, badge);
             chapterCounts.put(c.id, new int[]{done, shown, hidden});
@@ -622,7 +632,12 @@ public class ProgressScreen extends Screen {
         if (!railFiltering() || m == null || railShown.isEmpty()) {
             return;
         }
-        select(m.chapters.indexOf(railShown.get(0)));
+        for (ClientModel.Chapter c : railShown) {
+            if (!ClientProgress.chapterLocked(c.id)) {
+                select(m.chapters.indexOf(c));
+                return;
+            }
+        }
     }
 
     private static boolean hasTakeable(ClientModel.Chapter c) {
@@ -672,15 +687,25 @@ public class ProgressScreen extends Screen {
         }
         // icon, gaps and a count like "12/127" beside the longest name, within two fifths of the screen
         railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width * 2 / 5));
-        if (chapter() == null || ClientProgress.chapterHidden(chapter().id)) {
-            // no overview screen any more: open on the last chapter, or the first one listed
-            if (railChapters.isEmpty()) {
+        if (chapter() == null || ClientProgress.chapterLocked(chapter().id)) {
+            // no overview screen any more: open on the last chapter, or the first one the player may enter
+            ClientModel.Chapter first = null;
+            for (ClientModel.Chapter c : railChapters) {
+                if (!ClientProgress.chapterLocked(c.id)) {
+                    first = c;
+                    break;
+                }
+            }
+            if (first == null) {
                 Ui.textCenter(g, font, Component.translatable("screen.kuronami_quest_tree.empty"), width / 2, height / 2 - 4, Ui.DIM);
                 return;
             }
-            select(m.chapters.indexOf(railChapters.get(0)));
+            select(m.chapters.indexOf(first));
         }
         ClientModel.Chapter ch = chapter();
+        if (ch == null) {
+            return;
+        }
         boolean overRail = mouseX < (railT > 0.5f ? railOpenW : RAIL) + 8;
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
@@ -705,12 +730,81 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
         renderEditorNotices(g);
         renderEditorMenu(g, mouseX, mouseY);
-        if (pendingTip != null) {
+        if (pendingTip != null && confirmPrompt == null) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 300);
             Ui.tooltip(g, font, pendingTip, mouseX, mouseY);
             g.pose().popPose();
         }
+        renderConfirm(g, mouseX, mouseY);
+    }
+
+    /**
+     * The "are you sure" card over the map: one short line with the action's value and two buttons. Point-spending
+     * actions (a respec) pass through here; the map and the chapter list underneath take no clicks while it shows.
+     */
+    private void renderConfirm(GuiGraphics g, int mouseX, int mouseY) {
+        confirmButtons.clear();
+        if (confirmPrompt == null) {
+            return;
+        }
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z + 400);
+        g.fill(0, 0, width, height, 0x99000000);
+        int panelW = Math.min(width - 2 * Ui.S3, 280);
+        int inner = panelW - 2 * Ui.S3;
+        List<FormattedCharSequence> lines = font.split(confirmPrompt, inner);
+        int panelH = Ui.S3 + Math.max(10, lines.size() * 10) + Ui.S2 + BTN + Ui.S3;
+        int x = (width - panelW) / 2;
+        int y = (height - panelH) / 2;
+        if (GlassPanel.on()) {
+            GlassPanel.render(g, GlassPanel.SHEET, GlassPanel.Kind.REGULAR, x, y, panelW, panelH, Ui.R4, mouseX, mouseY);
+        } else {
+            Ui.floating(g, x, y, panelW, panelH, Ui.PANEL);
+        }
+        int ty = y + Ui.S3;
+        for (FormattedCharSequence line : lines) {
+            Ui.text(g, font, line, x + Ui.S3, ty, Ui.TEXT);
+            ty += 10;
+        }
+        Component ok = Component.translatable("screen.kuronami_quest_tree.confirm");
+        Component no = Component.translatable("screen.kuronami_quest_tree.cancel");
+        int gap = Ui.S1;
+        int half = (inner - gap) / 2;
+        confirmButton(g, no, x + Ui.S3, y + panelH - Ui.S3 - BTN, half, 0, mouseX, mouseY, this::cancelConfirm);
+        confirmButton(g, ok, x + Ui.S3 + half + gap, y + panelH - Ui.S3 - BTN, inner - half - gap, Ui.ACCENT,
+                mouseX, mouseY, this::runConfirm);
+        g.pose().popPose();
+    }
+
+    private void confirmButton(GuiGraphics g, Component label, int x, int y, int w, int accent, int mouseX, int mouseY, Runnable run) {
+        boolean primary = accent != 0;
+        boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + BTN;
+        if (primary) {
+            Ui.surface(g, x, y, w, BTN, Ui.R2, hover ? lerpColor(accent, 0xFFFFFFFF, 0.25f) : accent);
+        } else {
+            Ui.surface(g, x, y, w, BTN, Ui.R2, hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
+            Ui.outline(g, x, y, w, BTN, Ui.R2, Ui.HAIRLINE);
+        }
+        Ui.textCenter(g, font, label, x + w / 2, y + (BTN - 8) / 2, primary ? Ui.BRIGHT : Ui.TEXT);
+        confirmButtons.add(new Button(x, y, w, BTN, run));
+    }
+
+    private void runConfirm() {
+        Runnable run = confirmRun;
+        confirmPrompt = null;
+        confirmRun = null;
+        confirmButtons.clear();
+        if (run != null) {
+            run.run();
+        }
+    }
+
+    private void cancelConfirm() {
+        confirmPrompt = null;
+        confirmRun = null;
+        confirmButtons.clear();
+        ProgressFeedback.click();
     }
 
     /**
@@ -847,17 +941,24 @@ public class ProgressScreen extends Screen {
                     drawRailHeader(g, ry, row.header(), w, hover, folded(row.fold()));
                 } else {
                     ClientModel.Chapter c = row.chapter();
+                    boolean locked = ClientProgress.chapterLocked(c.id);
                     int[] cnt = chapterCounts.getOrDefault(c.id, new int[]{0, 0, 0});
                     String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
                             ClientProgress.progress().level.getOrDefault(ProgressRules.key(c.id, c.pool), 0)).getString() : cnt[0] + "/" + cnt[1];
                     boolean hover = mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + RAIL_ROW;
+                    if (hover && locked) {
+                        // the pack's own words for why it is closed; the row itself stays a row
+                        Component hint = c.lockHint != null ? c.lockHint
+                                : Component.translatable("screen.kuronami_quest_tree.chapter_locked");
+                        pendingTip = List.of(c.title, hint);
+                    }
                     if (searching()) {
                         // while searching, the rail shows where the matches are instead
                         int hits = matchCount.getOrDefault(c.id, 0);
-                        rowRail(g, ry, m.chapters.indexOf(c), c.displayIcon(), c.title, w, hover, 0, String.valueOf(hits));
+                        rowRail(g, ry, m.chapters.indexOf(c), c.displayIcon(), c.title, w, hover, 0, String.valueOf(hits), locked);
                     } else {
                         rowRail(g, ry, m.chapters.indexOf(c), c.displayIcon(), c.title, w, hover, badges.getOrDefault(c.id, 0),
-                                !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right);
+                                !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right, locked);
                     }
                 }
             }
@@ -991,19 +1092,29 @@ public class ProgressScreen extends Screen {
      * open chapter is one solid accent pill with bright text, the one mark of selection (2026-10-20, the player: the pale
      * grey box together with a blue bar on the left read cheap and said the same thing twice); hover is a faint pill.
      */
-    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, boolean hover, int badge, String right) {
+    private void rowRail(GuiGraphics g, int y, int index, ItemStack icon, Component label, int w, boolean hover, int badge,
+                         String right, boolean locked) {
         boolean on = index == chapterIndex;
-        if (on || hover) {
+        if ((on || hover) && !locked) {
             Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, RAIL_ROW, RAIL_ROW / 2, on ? Ui.ACCENT : Ui.OVERLAY_1);
+        } else if (hover) {
+            Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, RAIL_ROW, RAIL_ROW / 2, Ui.OVERLAY_1);
         }
         g.pose().pushPose();
         g.pose().translate(RAIL_ICON_X, y + (RAIL_ROW - RAIL_ICON) / 2f, 0);
         g.pose().scale(RAIL_ICON / 16f, RAIL_ICON / 16f, 1);
+        if (locked) {
+            g.setColor(1, 1, 1, 0.45f);
+        }
         g.renderItem(icon, 0, 0);
+        g.setColor(1, 1, 1, 1);
         g.pose().popPose();
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        if (railT <= 0.6f && badge > 0) {
+        if (railT <= 0.6f && locked) {
+            // closed rail: only icons, so the lock sits on the icon's corner
+            Tiles.icon(g, "lock", RAIL_ICON_X + RAIL_ICON - 7, y + RAIL_ROW - 8, 7, Ui.DIM);
+        } else if (railT <= 0.6f && badge > 0) {
             // closed rail: a dot on the icon's corner
             Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, y, 6, Tiles.GOLD);
         }
@@ -1012,7 +1123,10 @@ public class ProgressScreen extends Screen {
             int edge = w - Ui.S2;
             int rightW = 0;
             int ty = y + (RAIL_ROW - 8) / 2;
-            if (badge > 0) {
+            if (locked) {
+                rightW = 12;
+                Tiles.icon(g, "lock", edge - 8, y + (RAIL_ROW - 8) / 2f, 8, (Ui.DIM & 0xFFFFFF) | alpha);
+            } else if (badge > 0) {
                 rightW = Ui.badge(g, font, String.valueOf(badge), edge + 2, y + (RAIL_ROW - Ui.BADGE_H) / 2) + 4;
             } else if (right != null && right.isEmpty()) {
                 rightW = 12;
@@ -1021,8 +1135,9 @@ public class ProgressScreen extends Screen {
                 rightW = font.width(right) + 6;
                 Ui.textRight(g, font, right, edge, ty, ((on ? Ui.BRIGHT : Ui.DIM) & 0xFFFFFF) | alpha);
             }
+            int color = locked ? Ui.DIM : on ? Ui.BRIGHT : Ui.MUTED;
             Ui.text(g, font, trim(label.getString(), w - RAIL_TEXT_X - Ui.S1 - rightW), RAIL_TEXT_X, ty,
-                    ((on ? Ui.BRIGHT : Ui.MUTED) & 0xFFFFFF) | alpha);
+                    (color & 0xFFFFFF) | alpha);
         }
         g.pose().popPose();
     }
@@ -1575,7 +1690,7 @@ public class ProgressScreen extends Screen {
             }
         }
         if (ch.skills) {
-            renderSkillHeader(g, ch, skillX, ty);
+            renderSkillHeader(g, ch, skillX, ty, mouseX, mouseY);
         }
         // the pin: gold while the chapter is pinned to the top of the list
         boolean pinned = ClientConfig.railPinned(ch.id);
@@ -1672,11 +1787,35 @@ public class ProgressScreen extends Screen {
     private int skillHeaderWidth(ClientModel.Chapter ch) {
         String lv = Component.translatable("screen.kuronami_quest_tree.level_short", ClientProgress.progress().level.getOrDefault(ProgressRules.key(ch.id, ch.pool), 0)).getString();
         int pts = ClientProgress.points(ch.id);
-        return font.width(lv) + Ui.S1 + 60 + (pts > 0 ? 8 + font.width(pointsLabel(pts)) : 0);
+        int w = font.width(lv) + Ui.S1 + 68 + (pts > 0 ? 8 + font.width(pointsLabel(pts)) : 0);
+        w += Ui.S1 + font.width(respecLabel(ch)) + 2 * Ui.S1;
+        Component exchange = exchangeLabel(ch);
+        if (exchange != null) {
+            w += Ui.S1 + font.width(exchange) + 2 * Ui.S1;
+        }
+        return w;
     }
 
-    /** Level, experience bar and points to spend, under a skill chapter's title. */
-    private void renderSkillHeader(GuiGraphics g, ClientModel.Chapter ch, int x, int y) {
+    private static Component respecLabel(ClientModel.Chapter ch) {
+        return ch.respecCost > 0
+                ? Component.translatable("screen.kuronami_quest_tree.skill.respec_cost", ch.respecCost)
+                : Component.translatable("screen.kuronami_quest_tree.skill.respec");
+    }
+
+    /** {@code null} when the pack offers no exchange (no {@code points.exchange.xp_levels}). */
+    private static Component exchangeLabel(ClientModel.Chapter ch) {
+        if (ch.exchangeCost <= 0) {
+            return null;
+        }
+        if (ch.exchangeLimit == Integer.MAX_VALUE) {
+            return Component.translatable("screen.kuronami_quest_tree.skill.exchange");
+        }
+        int left = Math.max(0, ch.exchangeLimit - ClientProgress.exchangeUsed(ch));
+        return Component.translatable("screen.kuronami_quest_tree.skill.exchange_left", left);
+    }
+
+    /** Level, experience bar, points to spend, and the two actions a skill chapter has (respec, exchange). */
+    private void renderSkillHeader(GuiGraphics g, ClientModel.Chapter ch, int x, int y, int mouseX, int mouseY) {
         PlayerProgress p = ClientProgress.progress();
         String key = ProgressRules.key(ch.id, ch.pool);
         int level = p.level.getOrDefault(key, 0);
@@ -1690,10 +1829,88 @@ public class ProgressScreen extends Screen {
         Ui.surface(g, bx, y + 2, 60, 4, 2, Ui.OVERLAY_2);
         Ui.surface(g, bx, y + 2, frac <= 0 ? 0 : Math.max(1, (int) (60 * frac)), 4, 2, Tiles.GREEN_TEXT);
         int pts = ClientProgress.points(ch.id);
+        int next = bx + 68;
         if (pts > 0) {
             Component t = pointsLabel(pts);
-            Ui.text(g, font, t, bx + 68, y, Tiles.GOLD);
+            Ui.text(g, font, t, next, y, Tiles.GOLD);
+            next += font.width(t) + 8;
         }
+        int bx2 = next + Ui.S1;
+        if (mc != null) {
+            skillActionButtons(g, ch, mc, p, bx2, y, mouseX, mouseY);
+        }
+    }
+
+    /** The respec and exchange chips beside a skill chapter's points. */
+    private void skillActionButtons(GuiGraphics g, ClientModel.Chapter ch, ProgressModel.Chapter mc, PlayerProgress p,
+                                    int x, int y, int mouseX, int mouseY) {
+        var rules = ClientProgress.rules();
+        if (rules == null) {
+            return;
+        }
+        Component respec = respecLabel(ch);
+        int rw = font.width(respec) + 2 * Ui.S1;
+        boolean canRespec = rules.canRespec(p, mc);
+        List<Component> respecTip = new ArrayList<>();
+        respecTip.add(respec);
+        if (ch.respecCost > 0) {
+            respecTip.add(Component.translatable("screen.kuronami_quest_tree.skill.cost_points", ch.respecCost));
+        }
+        if (!canRespec) {
+            respecTip.add(Component.translatable(ProgressRules.chapterRefund(p, mc) > 0
+                    ? "screen.kuronami_quest_tree.skill.not_enough_points"
+                    : "screen.kuronami_quest_tree.skill.nothing_spent"));
+        }
+        skillButton(g, respec, x, y, rw, canRespec, mouseX, mouseY, respecTip, () -> askRespec(ch, ch.respecCost));
+        x += rw + Ui.S1;
+
+        Component exchange = exchangeLabel(ch);
+        if (exchange == null) {
+            return;
+        }
+        int ew = font.width(exchange) + 2 * Ui.S1;
+        int playerLevel = minecraft == null || minecraft.player == null ? 0 : minecraft.player.experienceLevel;
+        boolean canExchange = ProgressRules.canExchange(p, mc, playerLevel);
+        List<Component> exchangeTip = new ArrayList<>();
+        exchangeTip.add(exchange);
+        exchangeTip.add(Component.translatable("screen.kuronami_quest_tree.skill.cost_levels", ch.exchangeCost));
+        if (!canExchange) {
+            int used = ClientProgress.exchangeUsed(ch);
+            exchangeTip.add(Component.translatable(ch.exchangeLimit != Integer.MAX_VALUE && used >= ch.exchangeLimit
+                    ? "screen.kuronami_quest_tree.skill.exchange_limit"
+                    : "screen.kuronami_quest_tree.skill.not_enough_levels"));
+        }
+        skillButton(g, exchange, x, y, ew, canExchange, mouseX, mouseY, exchangeTip,
+                () -> {
+                    ClientProgress.send("exchange", ch.id, -1);
+                    ProgressFeedback.click();
+                });
+    }
+
+    /** A 14px chip for the title row: quiet surface, dim while it cannot be used. */
+    private void skillButton(GuiGraphics g, Component label, int x, int y, int w, boolean enabled, int mouseX, int mouseY,
+                             List<Component> tip, Runnable run) {
+        int h = 14;
+        boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
+        Ui.surface(g, x, y, w, h, 3, enabled ? (hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1) : Ui.DISABLED);
+        Ui.outline(g, x, y, w, h, 3, Ui.HAIRLINE);
+        Ui.textCenter(g, font, label, x + w / 2, y + (h - 8) / 2, enabled ? Ui.TEXT : Ui.DIM);
+        if (hover) {
+            pendingTip = tip;
+        }
+        if (enabled) {
+            buttons.add(new Button(x, y, w, h, run));
+        }
+    }
+
+    private void askRespec(ClientModel.Chapter ch, int cost) {
+        confirmPrompt = Component.translatable(cost > 0
+                ? "screen.kuronami_quest_tree.skill.respec_confirm_cost"
+                : "screen.kuronami_quest_tree.skill.respec_confirm", cost);
+        confirmRun = () -> {
+            ClientProgress.send("respec", ch.id, -1);
+            ProgressFeedback.click();
+        };
     }
 
     private static Component pointsLabel(int n) {
@@ -2810,6 +3027,17 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (confirmPrompt != null) {
+            // modal: only the card's two buttons work; a click beside them cancels
+            for (int i = confirmButtons.size() - 1; i >= 0; i--) {
+                if (confirmButtons.get(i).hit(mx, my)) {
+                    confirmButtons.get(i).run.run();
+                    return true;
+                }
+            }
+            cancelConfirm();
+            return true;
+        }
         ClientModel m = model();
         if (railBox != null && inRect(railRect, mx, my)) {
             setFocused(railBox);
@@ -3150,6 +3378,11 @@ public class ProgressScreen extends Screen {
     }
 
     private void select(int index) {
+        ClientModel m = model();
+        if (m != null && index >= 0 && index < m.chapters.size() && ClientProgress.chapterLocked(m.chapters.get(index).id)) {
+            // a locked chapter is listed to show the hint, not to be entered
+            return;
+        }
         if (index >= 0 && index != chapterIndex && chapterIndex >= 0) {
             chapterHistory.addFirst(chapterIndex);
             // a new chapter starts its own trail; Backspace can still walk back to the chapters before it
@@ -3195,6 +3428,13 @@ public class ProgressScreen extends Screen {
         int at = railChapters.indexOf(now);
         int size = railChapters.size();
         int next = Math.floorMod(at < 0 ? (direction > 0 ? 0 : size - 1) : at + direction, size);
+        // walk past locked rows: they are shown so their hint can be read, not to be opened
+        for (int i = 0; i < size && ClientProgress.chapterLocked(railChapters.get(next).id); i++) {
+            next = Math.floorMod(next + direction, size);
+        }
+        if (ClientProgress.chapterLocked(railChapters.get(next).id)) {
+            return;
+        }
         ClientModel.Chapter target = railChapters.get(next);
         select(m.chapters.indexOf(target));
         railScrollTarget = 0;
@@ -3417,6 +3657,15 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (confirmPrompt != null) {
+            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+                cancelConfirm();
+            } else if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) {
+                runConfirm();
+            }
+            // the map's keys stay behind the card
+            return true;
+        }
         if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_F && Screen.hasControlDown()) {
             // from anywhere, including the chapter list's filter: the quest search gets the title row
             focusSearch();
