@@ -82,9 +82,10 @@ public final class ProgressStore extends SavedData {
      * Keys are {@code <node>#<index>} for claims and {@code <node>#<rank>#<index>} for pending, roll and skill records;
      * a record whose reward was deleted is dropped.
      */
-    public void remapRewardIndices(Map<String, Map<Integer, Integer>> remaps) {
+    /** Moves saved claim records for a reward remap; true when one changed, so the sender knows to resend progress. */
+    public boolean remapRewardIndices(Map<String, Map<Integer, Integer>> remaps) {
         if (remaps.isEmpty()) {
-            return;
+            return false;
         }
         boolean changed = false;
         for (TeamProgress team : data.teams.values()) {
@@ -100,6 +101,7 @@ public final class ProgressStore extends SavedData {
         if (changed) {
             setDirty();
         }
+        return changed;
     }
 
     private static boolean remapPending(PlayerPart part,
