@@ -20,6 +20,8 @@ public final class PlayerProgress {
 
     /** Nodes whose tasks are all done (quests) — rewards may still be unclaimed. */
     public Set<String> completed = new HashSet<>();
+    /** When each completed node was finished (epoch millis), for the debug details sheet (2026-10-22). */
+    public Map<String, Long> completedAt = new HashMap<>();
     /** Nodes whose rewards were claimed (all of them; kept for data from before per-reward claims). */
     public Set<String> claimed = new HashSet<>();
     /**
@@ -66,6 +68,9 @@ public final class PlayerProgress {
     public Map<String, String> rewardRolls = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public Deque<String> recent = new ArrayDeque<>();
+    /** Emergency items: when this player may use them again, and whether the wait message was already shown. */
+    private long emergencyReadyAt;
+    private boolean emergencyWaitNotice;
     /** The quest book was handed out on first join (server config, 2026-10-20). */
     private boolean bookGiven;
     /** Set only on a view: writes of the book flag and reward flag go to this player's part. */
@@ -74,6 +79,8 @@ public final class PlayerProgress {
     private boolean rewardsBlocked;
 
     public static final int RECENT_MAX = 20;
+    /** Old shared cooldown key; kept so saves from before the per-player change can be migrated. */
+    public static final String EMERGENCY_COOLDOWN = "#emergency";
 
     /** Node keys of {@code shared:false} nodes; their progress lives in each player's part. */
     private static volatile Set<String> personalNodes = Set.of();
@@ -116,6 +123,8 @@ public final class PlayerProgress {
                                       Set<String> paidSkillRewards) {
         PlayerProgress p = new PlayerProgress();
         p.completed = personalNodes.isEmpty() ? shared.completed : new RoutedSet(shared.completed, part.completed);
+        p.completedAt = personalNodes.isEmpty() ? shared.completedAt
+                : new RoutedMap<>(shared.completedAt, part.completedAt);
         p.tasks = personalNodes.isEmpty() ? shared.tasks : new RoutedMap<>(shared.tasks, part.tasks);
         p.taken = shared.taken;
         p.xp = shared.xp;
@@ -138,8 +147,33 @@ public final class PlayerProgress {
         p.recent = part.recent;
         p.bookGiven = part.bookGiven;
         p.rewardsBlocked = part.rewardsBlocked;
+        p.emergencyReadyAt = part.emergencyReadyAt;
+        p.emergencyWaitNotice = part.emergencyWaitNotice;
         p.part = part;
         return p;
+    }
+
+    /** When this player may use the emergency items again (epoch millis). Per player, never the team's. */
+    public long emergencyReadyAt() {
+        return emergencyReadyAt;
+    }
+
+    public void setEmergencyReadyAt(long at) {
+        emergencyReadyAt = at;
+        if (part != null) {
+            part.emergencyReadyAt = at;
+        }
+    }
+
+    public boolean emergencyWaitNotice() {
+        return emergencyWaitNotice;
+    }
+
+    public void setEmergencyWaitNotice(boolean shown) {
+        emergencyWaitNotice = shown;
+        if (part != null) {
+            part.emergencyWaitNotice = shown;
+        }
     }
 
     public long task(String node, int index) {
@@ -194,6 +228,7 @@ public final class PlayerProgress {
     public void clearPersonalAll() {
         if (part != null) {
             part.completed.clear();
+            part.completedAt.clear();
             part.tasks.clear();
             part.repeats.clear();
             part.cooldown.clear();
@@ -207,6 +242,7 @@ public final class PlayerProgress {
         }
         String prefix = id + "/";
         part.completed.removeIf(k -> k.equals(id) || k.startsWith(prefix));
+        part.completedAt.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
         part.tasks.keySet().removeIf(k -> k.startsWith(id + "/") || k.startsWith(id + "#"));
         part.repeats.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
         part.cooldown.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
@@ -218,6 +254,7 @@ public final class PlayerProgress {
      */
     public void clearRound(String node) {
         completed.remove(node);
+        completedAt.remove(node);
         claimed.remove(node);
         tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
         clearRewardMarks(node);
@@ -254,6 +291,8 @@ public final class PlayerProgress {
     public void copySharedFrom(PlayerProgress other) {
         completed.clear();
         completed.addAll(other.completed);
+        completedAt.clear();
+        completedAt.putAll(other.completedAt);
         tasks.clear();
         tasks.putAll(other.tasks);
         taken.clear();

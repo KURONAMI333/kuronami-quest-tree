@@ -193,6 +193,8 @@ public final class ProgressValidator {
                 checkChapter(out, refs.get(e.getKey()), e.getKey(), e.getValue().getAsJsonObject());
             }
         }
+        // pack-wide settings: the emergency button's items are handed out as written, so a bad id is a lost use
+        checkSettings(out, bundle, registry);
 
         // pass 1: the node itself (shape, types, required fields, ids, numbers)
         for (Map.Entry<String, JsonObject> e : nodes.entrySet()) {
@@ -449,6 +451,89 @@ public final class ProgressValidator {
             }
             default -> problem(out, Severity.WARNING, ref, curvePath + ".type",
                     "unknown curve type " + quote(type) + ", so the fixed cost is used");
+        }
+    }
+
+    /**
+     * Pack-wide settings from {@code progression/settings.json}. Nothing here drops a node: the emergency button takes
+     * its items as written, so a definition that cannot be read is reported instead of guessed at.
+     */
+    private static void checkSettings(Result out, JsonObject bundle, Registry registry) {
+        JsonElement settingsElement = bundle.get("settings");
+        if (settingsElement == null) {
+            return;
+        }
+        ChapterRef ref = new ChapterRef("progression/settings.json", null, "settings.");
+        if (!settingsElement.isJsonObject()) {
+            problem(out, Severity.WARNING, ref, "settings", "\"settings\" is not an object, so it is not read");
+            return;
+        }
+        JsonObject settings = settingsElement.getAsJsonObject();
+        JsonElement emergencyElement = settings.get("emergency");
+        JsonObject emergency;
+        String path;
+        if (emergencyElement != null && emergencyElement.isJsonObject()) {
+            emergency = emergencyElement.getAsJsonObject();
+            path = "settings.emergency";
+        } else {
+            if (emergencyElement != null) {
+                problem(out, Severity.WARNING, ref, "settings.emergency",
+                        "\"emergency\" is not an object, so the top-level items and cooldown are read instead");
+            }
+            emergency = settings;
+            path = "settings";
+        }
+        JsonElement itemsElement = emergency.get("items");
+        if (itemsElement != null && !itemsElement.isJsonArray()) {
+            problem(out, Severity.WARNING, ref, path + ".items",
+                    "\"items\" is not an array, so the emergency button hands out nothing");
+        } else {
+            for (int i = 0; i < arr(emergency, "items").size(); i++) {
+                JsonElement entry = arr(emergency, "items").get(i);
+                String itemPath = path + ".items[" + i + "]";
+                JsonElement item = null;
+                if (entry.isJsonPrimitive()) {
+                    item = entry;
+                } else if (entry.isJsonObject()) {
+                    JsonObject o = entry.getAsJsonObject();
+                    item = o.has("item") ? o.get("item") : o.get("id");
+                    countProblem(out, ref, itemPath, o.get("count"));
+                    if (item != null && item.isJsonObject()) {
+                        countProblem(out, ref, itemPath, item.getAsJsonObject().get("count"));
+                    }
+                }
+                String id = null;
+                if (item != null && item.isJsonPrimitive() && item.getAsJsonPrimitive().isString()) {
+                    id = item.getAsString();
+                } else if (item != null && item.isJsonObject()) {
+                    JsonElement named = item.getAsJsonObject().get("id");
+                    if (named != null && named.isJsonPrimitive() && named.getAsJsonPrimitive().isString()) {
+                        id = named.getAsString();
+                    }
+                }
+                if (id == null || id.isBlank() || id.startsWith("#")) {
+                    problem(out, Severity.WARNING, ref, itemPath,
+                            "emergency item cannot be read as an item id, so it is skipped");
+                    continue;
+                }
+                String full = id.contains(":") ? id : "minecraft:" + id;
+                if (registry != Registry.NONE && !registry.known("item", full)) {
+                    problem(out, Severity.WARNING, ref, itemPath,
+                            "emergency item " + quote(id) + " does not exist, so it is skipped");
+                }
+            }
+        }
+        JsonElement cooldown = emergency.get("cooldown_seconds");
+        if (cooldown != null && !jsonNumber(cooldown)) {
+            problem(out, Severity.WARNING, ref, path + ".cooldown_seconds",
+                    "\"cooldown_seconds\" is not a number, so the default 3600 s is used");
+        }
+    }
+
+    private static void countProblem(Result out, ChapterRef ref, String path, JsonElement count) {
+        if (count != null && (!jsonNumber(count) || count.getAsDouble() < 1)) {
+            problem(out, Severity.WARNING, ref, path + ".count",
+                    "\"count\" is not a number of 1 or more, so one is handed out");
         }
     }
 
@@ -1852,6 +1937,10 @@ public final class ProgressValidator {
      * Whether a reader that calls {@code getAsDouble} can turn the value into a number. Gson parses a numeric string
      * ("16", "1.5", "1e3", "NaN"), and throws on anything else (a boolean, a word, an object, an array, null).
      */
+    private static boolean jsonNumber(JsonElement e) {
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber();
+    }
+
     private static boolean numeric(JsonElement e) {
         if (e == null || !e.isJsonPrimitive()) {
             return false;

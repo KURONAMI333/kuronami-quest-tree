@@ -85,12 +85,30 @@ class TeamProgressTest {
     }
 
     @Test
+    void completionTimesFollowTheirOwnership() {
+        PlayerProgress.setPersonalNodes(Set.of("t:q/private"));
+        TeamProgress team = new TeamProgress(TEAM);
+        team.view(A).completedAt.put("t:q/private", 1234L);
+        team.shared.completedAt.put("t:q/shared", 500L);
+
+        assertFalse(team.view(B).completedAt.containsKey("t:q/private"));
+        assertEquals(500L, team.view(B).completedAt.get("t:q/shared"));
+        TeamProgress read = TeamProgress.parse(team.toJson().toString());
+        assertEquals(1234L, read.view(A).completedAt.get("t:q/private"));
+        assertEquals(500L, read.view(B).completedAt.get("t:q/shared"));
+
+        TeamProgress solo = team.leaveCopy(A);
+        assertEquals(1234L, solo.view(A).completedAt.get("t:q/private"));
+    }
+
+    @Test
     void personalNodesStayWithTheirPlayer() {
         PlayerProgress.setPersonalNodes(Set.of("t:q/private"));
         TeamProgress team = new TeamProgress(TEAM);
 
         PlayerProgress a = team.view(A);
         a.completed.add("t:q/private");
+        a.completedAt.put("t:q/private", 1234L);
         a.setTask("t:q/private", 0, 4);
         a.repeats.put("t:q/private", 2);
         a.cooldown.put("t:q/private", 99L);
@@ -98,6 +116,7 @@ class TeamProgressTest {
 
         PlayerProgress b = team.view(B);
         assertFalse(b.completed.contains("t:q/private"));
+        assertFalse(b.completedAt.containsKey("t:q/private"));
         assertEquals(0, b.task("t:q/private", 0));
         assertFalse(b.repeats.containsKey("t:q/private"));
         assertFalse(team.shared.completed.contains("t:q/private"));
@@ -110,6 +129,7 @@ class TeamProgressTest {
         assertTrue(read.view(A).completed.contains("t:q/private"));
         assertFalse(read.view(B).completed.contains("t:q/private"));
         assertEquals(4, read.view(A).task("t:q/private", 0));
+        assertEquals(1234L, read.view(A).completedAt.get("t:q/private"));
         assertEquals(2, read.view(A).repeats.get("t:q/private"));
         assertEquals(99L, read.view(A).cooldown.get("t:q/private"));
     }

@@ -22,6 +22,7 @@ public final class PlayerPart {
     public final Set<String> claimedRewards = new HashSet<>();
     public final Deque<String> recent = new ArrayDeque<>();
     public final Set<String> completed = new HashSet<>();
+    public final Map<String, Long> completedAt = new HashMap<>();
     public final Map<String, Long> tasks = new HashMap<>();
     public final Map<String, Integer> repeats = new HashMap<>();
     public final Map<String, Long> cooldown = new HashMap<>();
@@ -33,6 +34,9 @@ public final class PlayerPart {
     public final Map<String, Integer> pendingRewards = new HashMap<>();
     /** Rolls already made for a reward table, so a failed pay-out does not roll again: reward key → picked indexes. */
     public final Map<String, String> rewardRolls = new HashMap<>();
+    /** Emergency items: when this player may use them again, and whether the wait message was already shown. */
+    public long emergencyReadyAt;
+    public boolean emergencyWaitNotice;
     public boolean bookGiven;
     /** An admin stopped this player from taking rewards; tasks still count and completions still happen. */
     public boolean rewardsBlocked;
@@ -52,6 +56,7 @@ public final class PlayerPart {
         recent.clear();
         recent.addAll(other.recent);
         completed.addAll(other.completed);
+        completedAt.putAll(other.completedAt);
         tasks.putAll(other.tasks);
         repeats.putAll(other.repeats);
         cooldown.putAll(other.cooldown);
@@ -59,6 +64,8 @@ public final class PlayerPart {
         teamStagesApplied.addAll(other.teamStagesApplied);
         other.pendingRewards.forEach((k, v) -> pendingRewards.merge(k, v, Integer::sum));
         rewardRolls.putAll(other.rewardRolls);
+        emergencyReadyAt = Math.max(emergencyReadyAt, other.emergencyReadyAt);
+        emergencyWaitNotice |= other.emergencyWaitNotice;
         bookGiven |= other.bookGiven;
         rewardsBlocked |= other.rewardsBlocked;
     }
@@ -69,6 +76,7 @@ public final class PlayerPart {
         o.add("claimed_rewards", strings(claimedRewards));
         o.add("recent", strings(recent));
         o.add("completed", strings(completed));
+        o.add("completed_at", longs(completedAt));
         o.add("tasks", longs(tasks));
         o.add("repeats", ints(repeats));
         o.add("cooldown", longs(cooldown));
@@ -76,6 +84,8 @@ public final class PlayerPart {
         o.add("team_stages_applied", strings(teamStagesApplied));
         o.add("pending_rewards", ints(pendingRewards));
         o.add("reward_rolls", textMap(rewardRolls));
+        o.addProperty("emergency_ready_at", emergencyReadyAt);
+        o.addProperty("emergency_wait_notice", emergencyWaitNotice);
         o.addProperty("book_given", bookGiven);
         o.addProperty("rewards_blocked", rewardsBlocked);
         return o;
@@ -94,6 +104,11 @@ public final class PlayerPart {
         }
         for (JsonElement e : arr(o, "completed")) {
             part.completed.add(e.getAsString());
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
+            if (e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isNumber()) {
+                part.completedAt.put(e.getKey(), e.getValue().getAsLong());
+            }
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
             part.tasks.put(e.getKey(), e.getValue().getAsLong());
@@ -131,6 +146,9 @@ public final class PlayerPart {
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
             part.rewardRolls.put(e.getKey(), e.getValue().getAsString());
         }
+        part.emergencyReadyAt = PackNumbers.longOr(o.get("emergency_ready_at"), 0L);
+        part.emergencyWaitNotice = o.has("emergency_wait_notice") && o.get("emergency_wait_notice").isJsonPrimitive()
+                && o.get("emergency_wait_notice").getAsBoolean();
         part.rewardsBlocked = o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
                 && o.get("rewards_blocked").getAsBoolean();
         part.bookGiven = o.has("book_given") && o.get("book_given").isJsonPrimitive()

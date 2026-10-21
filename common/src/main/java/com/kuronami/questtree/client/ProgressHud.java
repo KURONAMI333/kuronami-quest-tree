@@ -30,10 +30,14 @@ public final class ProgressHud {
     private static long noticeNeed;
     private static long noticeAt;
     private static boolean noticeHeld;
-    private static boolean tracker;
     /** Closest unfinished quests, recomputed only when new progress arrives (scanning every node per frame is too slow). */
     private static final List<ClientModel.Node> CLOSEST = new ArrayList<>();
     private static Object closestFor;
+    /** The current chapter's next open quest, recomputed with the same cache as {@link #CLOSEST}. */
+    private static ClientModel.Node AUTO;
+    private static String autoFor;
+    /** Keys drawn as pinned rows in the last frame, so their materials are shown too. */
+    private static final List<String> shownKeys = new ArrayList<>();
 
     private ProgressHud() {
     }
@@ -54,8 +58,9 @@ public final class ProgressHud {
         noticeHeld = held;
     }
 
+    /** J cycles all / pinned only / hidden, as FTB Quests' tracker key does (2026-10-22). */
     static void toggleTracker() {
-        tracker = !tracker;
+        ClientConfig.cycleTrackerMode();
         ProgressFeedback.click();
     }
 
@@ -63,6 +68,42 @@ public final class ProgressHud {
         noticeTask = null;
         CLOSEST.clear();
         closestFor = null;
+        AUTO = null;
+        shownKeys.clear();
+    }
+
+    /**
+     * The current chapter's next open quest: one already in progress first, then a reward waiting, then one that can be
+     * started. Hidden quests and locked chapters are skipped, as everywhere else.
+     */
+    private static ClientModel.Node autoQuest(ClientModel m) {
+        String id = ProgressScreen.currentChapterId();
+        ClientModel.Chapter c = null;
+        if (id != null) {
+            for (ClientModel.Chapter ch : m.chapters) {
+                if (ch.id.equals(id)) {
+                    c = ch;
+                    break;
+                }
+            }
+        }
+        if (c == null || ClientProgress.chapterLocked(c.id)) {
+            return null;
+        }
+        ClientModel.Node fallback = null;
+        for (ClientModel.Node n : c.nodes.values()) {
+            if (!ClientProgress.visible(n.key)) {
+                continue;
+            }
+            State s = ClientProgress.state(n.key);
+            if (s == State.PROGRESS) {
+                return n;
+            }
+            if (fallback == null && (s == State.CLAIM || s == State.OPEN)) {
+                fallback = n;
+            }
+        }
+        return fallback;
     }
 
     /** Called by the loader's HUD layer after the vanilla HUD. */
@@ -74,7 +115,7 @@ public final class ProgressHud {
             return;
         }
         renderNotice(g, mc.font);
-        if (tracker) {
+        if (ClientConfig.trackerMode() != ClientConfig.TrackerMode.HIDDEN) {
             renderTracker(g, mc.font);
         }
     }
@@ -129,14 +170,28 @@ public final class ProgressHud {
     /** Pinned quests at the left edge, vertically centred; the closest unfinished quests when nothing is pinned. */
     private static void renderTracker(GuiGraphics g, Font font) {
         ClientModel m = ClientProgress.model();
+        shownKeys.clear();
         List<ClientModel.Node> rows = new ArrayList<>();
-        for (String key : Pins.all()) {
-            ClientModel.Node n = m.nodesByKey.get(key);
-            if (n != null && ClientProgress.state(key) != State.DONE && ClientProgress.visible(key)) {
-                rows.add(n);
+        if (TrackerRules.autoPin(ClientConfig.autoPin(), ClientConfig.trackerMode() == ClientConfig.TrackerMode.ALL)) {
+            String chapter = ProgressScreen.currentChapterId();
+            String cache = System.identityHashCode(ClientProgress.progress()) + "|" + chapter;
+            if (!cache.equals(autoFor)) {
+                autoFor = cache;
+                AUTO = autoQuest(m);
+            }
+            if (AUTO != null && ClientProgress.state(AUTO.key) != State.DONE && ClientProgress.visible(AUTO.key)) {
+                rows.add(AUTO);
+                shownKeys.add(AUTO.key);
             }
         }
-        if (rows.isEmpty()) {
+        for (String key : Pins.all()) {
+            ClientModel.Node n = m.nodesByKey.get(key);
+            if (n != null && ClientProgress.state(key) != State.DONE && ClientProgress.visible(key) && !shownKeys.contains(key)) {
+                rows.add(n);
+                shownKeys.add(key);
+            }
+        }
+        if (rows.isEmpty() && ClientConfig.trackerMode() == ClientConfig.TrackerMode.ALL) {
             if (closestFor != ClientProgress.progress()) {
                 closestFor = ClientProgress.progress();
                 CLOSEST.clear();
@@ -145,7 +200,10 @@ public final class ProgressHud {
                         .sorted(Comparator.comparingDouble((ClientModel.Node n) -> -ClientProgress.fraction(n.key)))
                         .limit(3).forEach(CLOSEST::add);
             }
-            rows.addAll(CLOSEST);
+            for (ClientModel.Node n : CLOSEST) {
+                rows.add(n);
+                shownKeys.add(n.key);
+            }
         }
         int total = 0;
         int bw = 0;
@@ -173,6 +231,7 @@ public final class ProgressHud {
             g.pose().scale(scale, scale, 1);
             g.pose().translate(0, -g.guiHeight() / 2f, 0);
         }
+        g.pose().translate(ClientConfig.trackerOffsetX() / scale, ClientConfig.trackerOffsetY() / scale, 0);
         if (total > 0) {
             // one card behind every entry: a band per entry, advanced by 22 less its 2px overhang, overlapped its
             // neighbour by 4px and doubled the edge there, which read as stacked boxes (the player, 2026-10-19)
@@ -220,7 +279,7 @@ public final class ProgressHud {
     private static List<long[]> materials(ClientModel.Node n) {
         List<long[]> out = new ArrayList<>();
         var player = Minecraft.getInstance().player;
-        if (player == null || !Pins.has(n.key)) {
+        if (player == null || !shownKeys.contains(n.key)) {
             return out;
         }
         var p = ClientProgress.progress();

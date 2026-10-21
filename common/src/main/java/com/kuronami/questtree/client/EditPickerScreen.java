@@ -118,9 +118,9 @@ final class EditPickerScreen extends Screen {
                 g.pose().popPose();
                 tx += 18;
             }
-            String name = font.plainSubstrByWidth(o.label().getString(), pw - 40 - (tx - px - 12) - 70);
+            String name = font.plainSubstrByWidth(o.label().getString(), Ui.textRoom(pw - 40 - (tx - px - 12) - 70));
             Ui.text(g, font, name, tx, ry + (ROW_H - 8) / 2, Ui.TEXT);
-            String id = font.plainSubstrByWidth(o.id(), 140);
+            String id = font.plainSubstrByWidth(o.id(), Ui.textRoom(140));
             Ui.textRight(g, font, id, px + pw - 14, ry + (ROW_H - 8) / 2, Ui.DIM);
         }
         g.disableScissor();

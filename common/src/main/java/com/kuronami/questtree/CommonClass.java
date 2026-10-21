@@ -103,6 +103,10 @@ public final class CommonClass {
     }
 
     /** After respawning (death or returning from the End): attribute modifiers are not copied by vanilla. */
+    public static void onDeath(ServerPlayer player) {
+        ProgressService.onDeath(player);
+    }
+
     public static void onRespawn(ServerPlayer player, boolean died) {
         ProgressService.onRespawn(player, died);
     }

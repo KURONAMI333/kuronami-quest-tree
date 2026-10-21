@@ -98,9 +98,11 @@ public final class TeamProgress {
                 }
             }
         }
+        moveMapToParts(shared.completedAt, p -> p.completedAt, toPersonal);
         moveMapToParts(shared.tasks, p -> p.tasks, toPersonal);
         moveIntMapToParts(shared.repeats, p -> p.repeats, toPersonal);
         moveMapToParts(shared.cooldown, p -> p.cooldown, toPersonal);
+        moveMapToShared(p -> p.completedAt, shared.completedAt, toShared);
         moveMapToShared(p -> p.tasks, shared.tasks, toShared);
         moveIntMapToShared(p -> p.repeats, shared.repeats, toShared);
         moveMapToShared(p -> p.cooldown, shared.cooldown, toShared);
@@ -188,6 +190,7 @@ public final class TeamProgress {
         part.claimedRewards.addAll(old.claimedRewards);
         part.recent.addAll(old.recent);
         part.bookGiven = old.bookGiven();
+        team.absorbLegacyEmergencyCooldown();
         return team;
     }
 
@@ -242,6 +245,7 @@ public final class TeamProgress {
 
     private void mergeShared(PlayerProgress other) {
         shared.completed.addAll(other.completed);
+        other.completedAt.forEach((k, v) -> shared.completedAt.merge(k, v, Math::max));
         other.tasks.forEach((k, v) -> shared.tasks.merge(k, v, Math::max));
         other.taken.forEach((k, v) -> shared.taken.merge(k, v, Math::max));
         other.xp.forEach((k, v) -> shared.xp.merge(k, v, Math::max));
@@ -254,6 +258,17 @@ public final class TeamProgress {
         // the team's own lock override wins; one set by the joiner is used only where the team has none
         other.chapterOpen.forEach(shared.chapterOpen::putIfAbsent);
         shared.teamStages.addAll(other.teamStages);
+    }
+
+    /** Moves the old shared emergency wait to every member so an update does not hand out a free use. */
+    private void absorbLegacyEmergencyCooldown() {
+        Long legacy = shared.cooldown.remove(PlayerProgress.EMERGENCY_COOLDOWN);
+        if (legacy == null) {
+            return;
+        }
+        for (PlayerPart part : players.values()) {
+            part.emergencyReadyAt = Math.max(part.emergencyReadyAt, legacy);
+        }
     }
 
     public JsonObject toJson() {
@@ -303,6 +318,7 @@ public final class TeamProgress {
                 team.paidSkillRewards.add(e.getAsString());
             }
         }
+        team.absorbLegacyEmergencyCooldown();
         return team;
     }
 

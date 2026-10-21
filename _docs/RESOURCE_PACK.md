@@ -41,6 +41,10 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
   itself, white, tinted by the line's colour. One tile covers the belt's full width across and half of it along the
   line, so the arms meet the edges and the period is half the belt width. It repeats left to right, so its left and
   right edges must meet.
+- 章アイコンは、章 JSON の `icon` にテクスチャを指すと `renderItem` の代わりに 16×16 で描く。
+  `"icon": "mypack:textures/gui/chapter.png"`、`"icon": "#mypack:gui/chapter"`、または
+  `{"icon": {"type": "texture", "texture": "mypack:gui/chapter"}}`。名前空間を省くとパックの名前空間。
+  テクスチャはファイルの大きさにかかわらず 16×16 の枠いっぱいに縮小して描く（16×16 でなくても切れない）。
 - `icon/<name>.png`: small white glyphs (`fold` the group fold mark in the chapter list, drawn pointing right and turned down while the group is open;
   `dot` the badge, `search` the search at the top of the chapter list, `pin`, `lock`, `tick`, `cross`, `link`, `plus`, `minus`, `center`).
 

@@ -46,6 +46,30 @@ public final class ClientConfig {
         }
     }
 
+    /** What the side tracker shows (FTB Quests' pinned tracker visibility). */
+    public enum TrackerMode {
+        ALL("all"), QUESTS_ONLY("quests_only"), HIDDEN("hidden");
+
+        final String id;
+
+        TrackerMode(String id) {
+            this.id = id;
+        }
+
+        static TrackerMode byId(String id) {
+            for (TrackerMode m : values()) {
+                if (m.id.equals(id)) {
+                    return m;
+                }
+            }
+            return HIDDEN;
+        }
+
+        TrackerMode next() {
+            return values()[(ordinal() + 1) % values().length];
+        }
+    }
+
     /** The "needed for" line on item tooltips. */
     public static boolean itemTooltips = true;
 
@@ -58,10 +82,21 @@ public final class ClientConfig {
     public static boolean completionSounds = true;
     /** The pinned-quest tracker on the right edge instead of the left. */
     public static boolean trackerRight = false;
+    /** What the tracker shows; hidden until its key is pressed, as before. */
+    public static TrackerMode trackerMode = TrackerMode.HIDDEN;
+    /** Fine position of the tracker in GUI px, independent of the side setting. */
+    public static int trackerOffsetX = 0;
+    public static int trackerOffsetY = 0;
     /** Scale of the pinned-quest tracker (0.5 to 2.0). */
     public static float trackerScale = 1f;
     /** Keep the chapter list open instead of opening it on hover. */
     public static boolean keepRailOpen = false;
+    /** Add the current chapter's next open quest to the tracker (2026-10-22). */
+    public static boolean autoPin = true;
+    /** Screen text scale: separate from Minecraft's GUI scale (2026-10-22). */
+    public static float textScale = 1f;
+    /** White-on-black text and stronger marks over any resource pack palette (2026-10-22). */
+    public static boolean highContrast = false;
 
     /** Chapters kept at the top of the chapter list, in pin order. Not per world: it follows the player. */
     public static final List<String> railPinned = new ArrayList<>();
@@ -98,8 +133,18 @@ public final class ClientConfig {
                 }
                 completionSounds = bool(o, "completion_sounds", completionSounds);
                 trackerRight = bool(o, "tracker_right", trackerRight);
+                if (o.has("tracker_mode") && o.get("tracker_mode").isJsonPrimitive()) {
+                    trackerMode = TrackerMode.byId(o.get("tracker_mode").getAsString());
+                }
+                trackerOffsetX = offset(o, "tracker_offset_x", trackerOffsetX);
+                trackerOffsetY = offset(o, "tracker_offset_y", trackerOffsetY);
                 trackerScale = number(o, "tracker_scale", trackerScale);
                 keepRailOpen = bool(o, "keep_rail_open", keepRailOpen);
+                autoPin = bool(o, "auto_pin", autoPin);
+                if (o.has("text_scale") && o.get("text_scale").isJsonPrimitive() && o.get("text_scale").getAsJsonPrimitive().isNumber()) {
+                    textScale = net.minecraft.util.Mth.clamp(o.get("text_scale").getAsFloat(), 0.8f, 1.2f);
+                }
+                highContrast = bool(o, "high_contrast", highContrast);
                 if (o.has("rail_pinned") && o.get("rail_pinned").isJsonArray()) {
                     for (JsonElement e : o.getAsJsonArray("rail_pinned")) {
                         if (e.isJsonPrimitive() && !railPinned.contains(e.getAsString())) {
@@ -136,6 +181,12 @@ public final class ClientConfig {
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean() ? e.getAsBoolean() : fallback;
     }
 
+    static int offset(JsonObject o, String key, int fallback) {
+        JsonElement e = o.get(key);
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
+                ? net.minecraft.util.Mth.clamp(e.getAsInt(), -64, 64) : fallback;
+    }
+
     private static float number(JsonObject o, String key, float fallback) {
         JsonElement e = o.get(key);
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
@@ -168,6 +219,27 @@ public final class ClientConfig {
         return trackerRight;
     }
 
+    public static TrackerMode trackerMode() {
+        ensureLoaded();
+        return trackerMode;
+    }
+
+    public static void cycleTrackerMode() {
+        ensureLoaded();
+        trackerMode = trackerMode.next();
+        write();
+    }
+
+    public static int trackerOffsetX() {
+        ensureLoaded();
+        return trackerOffsetX;
+    }
+
+    public static int trackerOffsetY() {
+        ensureLoaded();
+        return trackerOffsetY;
+    }
+
     public static float trackerScale() {
         ensureLoaded();
         return net.minecraft.util.Mth.clamp(trackerScale, 0.5f, 2f);
@@ -176,6 +248,21 @@ public final class ClientConfig {
     public static boolean keepRailOpen() {
         ensureLoaded();
         return keepRailOpen;
+    }
+
+    public static boolean autoPin() {
+        ensureLoaded();
+        return autoPin;
+    }
+
+    public static float textScale() {
+        ensureLoaded();
+        return textScale;
+    }
+
+    public static boolean highContrast() {
+        ensureLoaded();
+        return highContrast;
     }
 
     /** Saves the settings after a screen changed them. */
@@ -248,8 +335,14 @@ public final class ClientConfig {
             o.addProperty("notification_style", notificationStyle.id);
             o.addProperty("completion_sounds", completionSounds);
             o.addProperty("tracker_right", trackerRight);
+            o.addProperty("tracker_mode", trackerMode.id);
+            o.addProperty("tracker_offset_x", trackerOffsetX);
+            o.addProperty("tracker_offset_y", trackerOffsetY);
             o.addProperty("tracker_scale", trackerScale);
             o.addProperty("keep_rail_open", keepRailOpen);
+            o.addProperty("auto_pin", autoPin);
+            o.addProperty("text_scale", textScale);
+            o.addProperty("high_contrast", highContrast);
             JsonArray a = new JsonArray();
             railPinned.forEach(a::add);
             o.add("rail_pinned", a);

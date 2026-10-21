@@ -42,6 +42,37 @@ final class Tiles {
      * Shape names outside {@link #SHAPES} draw as a square. FTB Quests' hexagon is one of them: dropped on 2026-10-15
      * (the player: it looked bad at every proportion tried), so imported hexagon quests show as squares.
      */
+    /** Pixel size of a texture, read once from its file ({0, 0} = missing or unreadable). */
+    static int[] textureSize(ResourceLocation id) {
+        return TEXTURE_SIZES.computeIfAbsent(id, k -> {
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(k);
+            if (res.isEmpty()) {
+                Constants.LOG.warn("Texture {} does not exist", k);
+                return new int[]{0, 0};
+            }
+            try (var in = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(in)) {
+                return new int[]{img.getWidth(), img.getHeight()};
+            } catch (java.io.IOException ex) {
+                Constants.LOG.warn("Could not read texture {}: {}", k, ex.toString());
+                return new int[]{0, 0};
+            }
+        });
+    }
+
+    /** Draws a whole texture into a square, however many pixels the file has (chapter icons are not always 16x16). */
+    static void textureIcon(GuiGraphics g, ResourceLocation id, float x, float y, float size) {
+        int[] dims = textureSize(id);
+        int w = dims[0] > 0 ? dims[0] : 16;
+        int h = dims[1] > 0 ? dims[1] : 16;
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(size / 16f, size / 16f, 1);
+        g.blit(id, 0, 0, 16, 16, 0, 0, w, h, w, h);
+        g.pose().popPose();
+    }
+
+    private static final Map<ResourceLocation, int[]> TEXTURE_SIZES = new HashMap<>();
+
     static String shapeOf(String shape) {
         return SHAPES.contains(shape) ? shape : "square";
     }
@@ -186,6 +217,7 @@ final class Tiles {
         PREPARED_REPEAT.clear();
         Metrics.ALL.values().forEach(Metrics::release);
         Metrics.ALL.clear();
+        TEXTURE_SIZES.clear();
     }
 
     /**

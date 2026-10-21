@@ -755,4 +755,29 @@ class ProgressValidatorTest {
             }
         }
     }
+
+    /** The emergency button's items are handed out as written; a shape it cannot read only warns (2026-10-22 review). */
+    @Test
+    void emergencyItemsAreCheckedWithoutDroppingNodes() {
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "settings": {"emergency": {
+                  "items": ["minecraft:bread", {"item": "minecraft:stone", "count": 3},
+                            {"id": "minecraft:dirt", "count": "many"}, 7],
+                  "cooldown_seconds": "soon"}}}
+                """);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "cooldown_seconds"));
+        assertTrue(says(r, "count"));
+        assertTrue(says(r, "cannot be read as an item id"));
+        assertEquals(3, warnings(r));
+    }
+
+    @Test
+    void anEmergencyItemThatDoesNotExistWarns() {
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "settings": {"items": ["minecraft:nope"], "cooldown_seconds": 60}}
+                """, (kind, id) -> !id.equals("minecraft:nope"));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "does not exist"));
+    }
 }

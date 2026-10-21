@@ -38,6 +38,19 @@ data/<ns>/progression/
   patches/<anything>.json       他のデータパックの章・ノードの一部だけを上書きする
 ```
 
+`settings.json` はパック全体の設定で、次のキーを読む（無いキーは既定値）。最初に `settings.json` を持つ名前空間が勝つ。
+
+| キー | 型 | 既定 | 何 |
+|---|---|---|---|
+| `emergency.items` | 配列 | 空 | 進行画面の緊急ボタンが渡すアイテム。`"minecraft:bread"` か `{"item":"minecraft:bread","count":3}` |
+| `emergency.cooldown_seconds` | 整数 | 3600 | 緊急ボタンの間隔（秒）。0 で間隔なし。待ち時間はプレイヤーごとに保存し、チームの出入りでも消えない |
+
+旧版のチーム共有の待ち時間は、保存を読む時にメンバー全員へ移す。保存時点でメンバーが居ないチームでは、その待ち時間（最大1時間）が消えることがある（許容）。
+| `wiki_url` / `guide_url` | 文字列 | 無し | 設定画面に出す外部リンク。`http` / `https` だけを受け付ける |
+
+`emergency` を書かずに `items` / `cooldown_seconds` を直下へ置いても読む（旧いパック向け）。
+死亡時に本を落とすかはパックではなく `config/kuronami_quest_tree-server.json` の `drop_book_on_death`。
+
 `patches` は Mystic Horizons で必要と分かった。別MOD（SimplySkills）が持つスキルツリーの一部を、パック側から書き換えている。
 
 ## Translating a quest book

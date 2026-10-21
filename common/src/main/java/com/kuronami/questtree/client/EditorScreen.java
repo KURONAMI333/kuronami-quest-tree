@@ -120,14 +120,14 @@ abstract class EditorScreen extends Screen {
         g.fill(0, 0, width, height, Ui.GROUND);
         Ui.panel(g, px, py, pw, ph, Ui.PANEL);
         Ui.outline(g, px, py, pw, ph, Ui.R2, Ui.HAIRLINE);
-        Ui.text(g, font, font.plainSubstrByWidth(title.getString(), pw - 70), px + 10, py + 9, Ui.BRIGHT);
+        Ui.text(g, font, font.plainSubstrByWidth(title.getString(), Ui.textRoom(pw - 70)), px + 10, py + 9, Ui.BRIGHT);
         int cross = px + pw - 10 - 18;
         int tick = cross - 20;
         renderHeaderButton(g, tick, py + 4, "tick", tickHit(mouseX, mouseY, true));
         renderHeaderButton(g, cross, py + 4, "cross", tickHit(mouseX, mouseY, false));
         form.render(g, font, mouseX, mouseY);
         if (status != null) {
-            Ui.text(g, font, font.plainSubstrByWidth(status.getString(), pw - 20), px + 10, py + ph - 12,
+            Ui.text(g, font, font.plainSubstrByWidth(status.getString(), Ui.textRoom(pw - 20)), px + 10, py + ph - 12,
                     statusError ? Ui.TEXT_ERROR : Ui.MUTED);
         }
     }

@@ -64,6 +64,8 @@ final class ProgressFeedback {
         motions(m, old, now, events);
         // claim all sends one event per quest: play each sound once per update, not once per quest
         java.util.Set<String> played = new java.util.HashSet<>();
+        java.util.List<ItemStack> rewardIcons = new java.util.ArrayList<>();
+        java.util.List<Component> rewardNames = new java.util.ArrayList<>();
         for (String ev : events) {
             Event event = Event.parse(ev);
             String kind = event.kind();
@@ -88,11 +90,42 @@ final class ProgressFeedback {
                         feedback(QtSounds.CLAIM, 0.97f + (float) Math.random() * 0.06f, 0.8f);
                     }
                 }
+                case "reward" -> {
+                    if (n != null) {
+                        int index = event.actor() == null ? -1 : parseIntOr(event.actor(), -1);
+                        ItemStack icon = rewardIcon(n, index);
+                        if (!icon.isEmpty()) {
+                            rewardIcons.add(icon);
+                        }
+                        rewardNames.add(icon.isEmpty() ? Component.translatable("toast.kuronami_quest_tree.reward")
+                                : icon.getHoverName());
+                    }
+                }
                 case "submit" -> feedback(QtSounds.SUBMIT, 1, 0.8f);
                 case "take" -> feedback(QtSounds.UNLOCK, 1, 0.8f);
                 case "level" -> feedback(QtSounds.LEVEL, 1, 0.8f);
                 default -> { }
             }
+        }
+        RewardToast.show(rewardIcons, rewardNames);
+    }
+
+    /** The display stack of a raw reward index, or empty for a reward that has no item. */
+    private static ItemStack rewardIcon(ClientModel.Node n, int index) {
+        for (int i = 0; i < n.rewards.size(); i++) {
+            int raw = i < n.rewardIndices.size() ? n.rewardIndices.get(i) : i;
+            if (raw == index) {
+                return n.rewards.get(i);
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private static int parseIntOr(String s, int fallback) {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException ex) {
+            return fallback;
         }
     }
 
