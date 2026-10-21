@@ -108,23 +108,55 @@ public final class ProgressRules {
                 && c.points.get("unlocked_by_default").getAsBoolean();
     }
 
-    /** Whether the requirements are met (not considering exclusivity). */
+    /**
+     * Whether the requirements are met (not considering exclusivity). Besides the connection graph, Pufferfish's
+     * Skills gates a skill on points it must have left ({@code required_points}), points already spent in the tree
+     * ({@code required_spent_points}) and mods that must be installed ({@code required_mods}).
+     */
     public boolean unlocked(PlayerProgress p, ProgressModel.Node n) {
+        if (!modsLoaded(n.requiredMods)) {
+            return false;
+        }
+        boolean reachable;
         // Pufferfish's Skills roots are available from the start even though connections also point back at them
         if (n.requires.isEmpty() || n.root) {
-            return true;
-        }
-        boolean started = n.requireMode.endsWith("started");
-        int met = 0;
-        for (String r : n.requires) {
-            if (satisfied(p, r, started)) {
-                met++;
+            reachable = true;
+        } else {
+            boolean started = n.requireMode.endsWith("started");
+            int met = 0;
+            for (String r : n.requires) {
+                if (satisfied(p, r, started)) {
+                    met++;
+                }
+            }
+            if (n.requireMin > 0) {
+                reachable = met >= n.requireMin;
+            } else {
+                reachable = n.requireMode.startsWith("any") || n.requireMode.equals("one")
+                        ? met > 0 : met == n.requires.size();
             }
         }
-        if (n.requireMin > 0) {
-            return met >= n.requireMin;
+        return reachable
+                && availablePoints(p, n.chapter) >= Math.max(0, n.requiredPoints)
+                && p.spent.getOrDefault(key(n.chapter), 0) >= Math.max(0, n.requiredSpentPoints);
+    }
+
+    /** Pufferfish's Skills drops a skill whose required mods are not all installed. */
+    private static boolean modsLoaded(List<String> mods) {
+        if (mods.isEmpty()) {
+            return true;
         }
-        return n.requireMode.startsWith("any") || n.requireMode.equals("one") ? met > 0 : met == n.requires.size();
+        try {
+            for (String mod : mods) {
+                if (!com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded(mod)) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (RuntimeException | LinkageError ex) {
+            // no platform service (plain unit test): keep the data readable instead of failing the whole tree
+            return true;
+        }
     }
 
     private boolean satisfied(PlayerProgress p, String key, boolean startedIsEnough) {
@@ -142,10 +174,14 @@ public final class ProgressRules {
         if (doneOnce(p, n.key)) {
             return false;
         }
+        int closed = 0;
         for (String other : n.exclusiveWith) {
             if (doneOnce(p, other)) {
-                return true;
+                closed++;
             }
+        }
+        if (closed >= Math.max(1, n.requiredExclusions)) {
+            return true;
         }
         if (n.exclusiveGroup != null) {
             List<ProgressModel.Node> group = n.chapter.exclusiveGroups.get(n.exclusiveGroup);

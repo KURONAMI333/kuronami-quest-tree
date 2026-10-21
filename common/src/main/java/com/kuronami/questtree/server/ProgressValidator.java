@@ -417,6 +417,10 @@ public final class ProgressValidator {
                 namesShape(out, ref, path + ".requires", r, "nodes");
                 textShape(out, ref, path + ".requires", r, "mode", Severity.ERROR);
                 whole(out, ref, path + ".requires", r, "min");
+                whole(out, ref, path + ".requires", r, "points");
+                whole(out, ref, path + ".requires", r, "spent_points");
+                whole(out, ref, path + ".requires", r, "exclusions");
+                stringArrayShape(out, ref, path + ".requires", r, "mods", "mod ids");
             }
         }
         JsonElement ex = node.get("exclusive_with");
@@ -1102,6 +1106,22 @@ public final class ProgressValidator {
     }
 
     /** {@code ProgressModel.intOf} keeps only a number and silently falls back to its default for anything else. */
+    private static void stringArrayShape(Result out, ChapterRef ref, String path, JsonObject o, String field, String what) {
+        JsonElement a = o.get(field);
+        if (a == null) {
+            return;
+        }
+        if (!a.isJsonArray()) {
+            problem(out, Severity.WARNING, ref, path + "." + field, quote(field) + " is not an array of " + what + ", so it is not read");
+            return;
+        }
+        for (int i = 0; i < a.getAsJsonArray().size(); i++) {
+            if (!a.getAsJsonArray().get(i).isJsonPrimitive() || !a.getAsJsonArray().get(i).getAsJsonPrimitive().isString()) {
+                problem(out, Severity.WARNING, ref, path + "." + field + "[" + i + "]", "is not a " + what + " string, so it is skipped");
+            }
+        }
+    }
+
     private static void whole(Result out, ChapterRef ref, String path, JsonObject o, String field) {
         JsonElement e = o.get(field);
         if (e != null && !(e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber())) {

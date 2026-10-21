@@ -301,6 +301,28 @@ class ImporterTest {
         org.junit.jupiter.api.Assertions.assertEquals("ffffffffffffffff", FtbQuestsImporter.tableId("-1"));
         org.junit.jupiter.api.Assertions.assertEquals("611a165b35847a5a", FtbQuestsImporter.tableId("611A165B35847A5A"));
     }
+    /** 10. Pufferfish's required_* fields keep their meaning in our requires block; required_skills 0 is a root. */
+    @Test
+    void puffishReturnRequirementsConvert() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        JsonObject def = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0");
+        def.addProperty("required_skills", 0);
+        def.addProperty("required_points", 2);
+        def.addProperty("required_spent_points", 1);
+        def.addProperty("required_exclusions", 2);
+        JsonArray mods = new JsonArray();
+        mods.add("minecraft");
+        def.add("required_mods", mods);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject node = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0");
+        assertTrue(node.get("root").getAsBoolean());
+        JsonObject requires = node.getAsJsonObject("requires");
+        assertEquals(2, requires.get("points").getAsInt());
+        assertEquals(1, requires.get("spent_points").getAsInt());
+        assertEquals(2, requires.get("exclusions").getAsInt());
+        assertEquals("minecraft", requires.getAsJsonArray("mods").get(0).getAsString());
+    }
     /** 3. A points reward for another category names the chapter the importer writes for it. */
     @Test
     void puffishPointsRewardToAnotherCategoryNamesItsChapter() throws Exception {

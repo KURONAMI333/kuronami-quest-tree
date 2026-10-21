@@ -20,7 +20,6 @@ import java.util.Set;
 public final class PuffishImporter {
 
     private static final Set<String> KNOWN_REWARDS = Set.of("attribute", "command", "points", "scoreboard", "tag", "dummy");
-    private static final List<String> REQUIRED = List.of("required_skills", "required_points", "required_spent_points", "required_exclusions");
 
     private PuffishImporter() {
     }
@@ -162,13 +161,23 @@ public final class PuffishImporter {
                         n.add("rewards", rw);
                     }
                     case "metadata", "editor-color" -> { }
-                    default -> {
-                        if (REQUIRED.contains(kv.getKey())) {
-                            FtbQuestsImporter.put(n, "requires." + kv.getKey().substring("required_".length()), v);
+                    case "required_skills" -> {
+                        // Pufferfish counts unlocked normal neighbours; 0 makes the skill a root
+                        if (intOf(v, 1) <= 0) {
+                            n.addProperty("root", true);
                         } else {
-                            out.unknown("definition", kv.getKey());
+                            FtbQuestsImporter.put(n, "requires.min", v);
                         }
                     }
+                    case "required_points" -> FtbQuestsImporter.put(n, "requires.points", v);
+                    case "required_spent_points" -> FtbQuestsImporter.put(n, "requires.spent_points", v);
+                    case "required_exclusions" -> FtbQuestsImporter.put(n, "requires.exclusions", v);
+                    case "required_mods" -> {
+                        if (v.isJsonArray() && !v.getAsJsonArray().isEmpty()) {
+                            FtbQuestsImporter.put(n, "requires.mods", v.deepCopy());
+                        }
+                    }
+                    default -> out.unknown("definition", kv.getKey());
                 }
             }
             if (!n.has("cost")) {
@@ -220,7 +229,10 @@ public final class PuffishImporter {
     }
 
     private static void addRequire(JsonObject nodes, String node, String from) {
-        JsonObject n = nodes.has(node) ? nodes.getAsJsonObject(node) : new JsonObject();
+        if (!nodes.has(node) || !nodes.has(from)) {
+            return;
+        }
+        JsonObject n = nodes.getAsJsonObject(node);
         nodes.add(node, n);
         JsonObject r = n.has("requires") ? n.getAsJsonObject("requires") : new JsonObject();
         n.add("requires", r);
@@ -231,7 +243,10 @@ public final class PuffishImporter {
     }
 
     private static void addTo(JsonObject nodes, String node, String key, String value) {
-        JsonObject n = nodes.has(node) ? nodes.getAsJsonObject(node) : new JsonObject();
+        if (!nodes.has(node)) {
+            return;
+        }
+        JsonObject n = nodes.getAsJsonObject(node);
         nodes.add(node, n);
         JsonArray list = n.has(key) ? n.getAsJsonArray(key) : new JsonArray();
         list.add(value);

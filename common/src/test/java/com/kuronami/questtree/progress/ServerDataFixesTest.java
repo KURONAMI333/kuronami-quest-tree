@@ -276,6 +276,31 @@ class ServerDataFixesTest {
         assertTrue(p.exchange.isEmpty());
         assertTrue(p.chapterOpen.isEmpty(), "both chapters in the pool forget the override");
     }
+    /** 10. Pufferfish's required points, spent points and exclusive count gate a skill without hiding its data. */
+    @Test
+    void pufferfishReturnRequirementsGateSkills() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 2}, "nodes": {
+                  "pts": {"requires": {"points": 3}},
+                  "spent": {"requires": {"spent_points": 4}},
+                  "a": {"exclusive_with": ["b", "c"]},
+                  "b": {"requires": {"exclusions": 2}},
+                  "c": {"exclusive_with": ["a"], "requires": {"exclusions": 1}}
+                }}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertFalse(rules.unlocked(p, a.nodes.get("pts")));
+        p.bonus.put(ProgressRules.key(a), 1);
+        assertTrue(rules.unlocked(p, a.nodes.get("pts")), "three points left should pass a required_points of 3");
+        assertFalse(rules.unlocked(p, a.nodes.get("spent")));
+        p.spent.put(ProgressRules.key(a), 4);
+        assertTrue(rules.unlocked(p, a.nodes.get("spent")));
+        p.taken.put(a.nodes.get("a").key, 1);
+        assertFalse(rules.excluded(p, a.nodes.get("b")), "one unlocked exclusive does not close a skill that wants two");
+        assertTrue(rules.excluded(p, a.nodes.get("c")), "the default/explicit one closes it");
+    }
     /** 7. A pack's malformed exchange/respec numbers fall back to the defaults instead of throwing. */
     @Test
     void malformedExchangeAndRespecNumbersUseDefaults() {

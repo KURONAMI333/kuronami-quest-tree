@@ -121,6 +121,12 @@ public final class ProgressModel {
         /** "all" (default), "any", "all_started", "any_started" */
         public final String requireMode;
         public final int requireMin;
+        /** Pufferfish's Skills: points that must be left, and points already spent in the tree, before unlocking. */
+        public final int requiredPoints;
+        public final int requiredSpentPoints;
+        /** Pufferfish's Skills: how many exclusive neighbours must be unlocked to close this skill (default 1). */
+        public final int requiredExclusions;
+        public final List<String> requiredMods;
         public final int tasksRequired;
         /**
          * FTB Quests' {@code require_sequential_tasks} (2026-10-20): only the first task that is not done yet may move,
@@ -172,6 +178,16 @@ public final class ProgressModel {
             }
             this.requireMode = req.has("mode") ? req.get("mode").getAsString() : "all";
             this.requireMin = intOf(req, "min", 0);
+            this.requiredPoints = intOf(req, "points", 0);
+            this.requiredSpentPoints = intOf(req, "spent_points", 0);
+            this.requiredExclusions = intOf(req, "exclusions", 1);
+            List<String> mods = new ArrayList<>();
+            for (JsonElement e : arr(req, "mods")) {
+                if (e.isJsonPrimitive()) {
+                    mods.add(e.getAsString());
+                }
+            }
+            this.requiredMods = Collections.unmodifiableList(mods);
             this.tasksRequired = intOf(o, "tasks_required", 0);
             // a quest without its own value inherits the chapter's; an explicit false overrides it (FTB Quests)
             this.sequentialTasks = boolOr(o, "sequential_tasks", boolOf(chapter.defaults, "sequential_tasks"));
