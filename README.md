@@ -64,4 +64,4 @@ Both can be rebound in Controls.
 
 ## Experience sources
 
-Skill chapters take Pufferfish's Skills experience sources as they are (`variables` with `operations`, `experience` as an expression or a list of `condition`/`expression` cases). Supported now: `mine_block`, `kill_entity`, `craft_item`, `smelt_item`, `eat_food`, `fish_item`, `take_damage`, `deal_damage`, `heal`, `increase_stat`. An operation the mod does not know gives no experience and is logged once.
+Skill chapters take Pufferfish's Skills experience sources as they are (`variables` with `operations`, `experience` as an expression or a list of `condition`/`expression` cases). Supported now: `mine_block`, `kill_entity`, `craft_item`, `enchant_item`, `smelt_item`, `eat_food`, `fish_item`, `take_damage`, `deal_damage`, `heal`, `increase_stat`. An operation the mod does not know gives no experience and is logged once.
