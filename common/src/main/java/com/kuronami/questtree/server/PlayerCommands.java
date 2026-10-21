@@ -15,9 +15,12 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
@@ -111,10 +114,10 @@ final class PlayerCommands {
                                                         .executes(c -> giveBlock(c, false)))))))
                 .then(Commands.literal("rewards").requires(s -> s.hasPermission(2))
                         .then(Commands.literal("block")
-                                .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.argument("players", GameProfileArgument.gameProfile())
                                         .executes(c -> rewardsBlocked(c, true))))
                         .then(Commands.literal("unblock")
-                                .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.argument("players", GameProfileArgument.gameProfile())
                                         .executes(c -> rewardsBlocked(c, false))))
                         .then(Commands.literal("status")
                                 .then(Commands.argument("players", EntityArgument.players())
@@ -313,16 +316,29 @@ final class PlayerCommands {
 
     /** The reward flag belongs to one player, so this does not fold players of one team together like {@link #each}. */
     private static int rewardsBlocked(CommandContext<CommandSourceStack> c, boolean blocked) throws CommandSyntaxException {
-        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
-        for (ServerPlayer p : players) {
-            PlayerProgress pr = ProgressService.progress(p);
-            pr.setRewardsBlocked(blocked);
-            if (!blocked) {
-                Rewards.payPending(p, pr);
+        // offline players too: an admin may block someone who is not logged in, and the block must hold at their login
+        Collection<GameProfile> players = GameProfileArgument.getGameProfiles(c, "players");
+        MinecraftServer server = c.getSource().getServer();
+        for (GameProfile profile : players) {
+            ServerPlayer online = server.getPlayerList().getPlayer(profile.getId());
+            PlayerProgress pr;
+            if (online != null) {
+                pr = ProgressService.progress(online);
+            } else if (profile.getId() != null) {
+                // for an offline player the record is still theirs alone; the team fold happens at login as usual
+                pr = ProgressStore.get(server).view(server, profile.getId());
+            } else {
+                continue;
             }
-            ProgressStore.get(p.server).setDirty();
-            ProgressService.markDirty(p);
-            ProgressService.flush(p);
+            pr.setRewardsBlocked(blocked);
+            if (!blocked && online != null) {
+                Rewards.payPending(online, pr);
+            }
+            ProgressStore.get(server).setDirty();
+            if (online != null) {
+                ProgressService.markDirty(online);
+                ProgressService.flush(online);
+            }
         }
         c.getSource().sendSuccess(() -> Component.translatableWithFallback(
                 blocked ? "commands.kuronami_quest_tree.rewards_blocked" : "commands.kuronami_quest_tree.rewards_unblocked",

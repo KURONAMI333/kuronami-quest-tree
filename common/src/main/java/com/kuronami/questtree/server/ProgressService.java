@@ -153,6 +153,10 @@ public final class ProgressService {
         // drop every modifier first: ones left from a skill the team no longer has must not survive the login
         Rewards.refreshAttributes(player, p);
         recheck(player, p);
+        if (!p.rewardsBlocked()) {
+            // a block lifted while this player was offline is paid at their next login
+            Rewards.payPending(player, p);
+        }
         giveBookOnce(player, p);
         markDirty(player);
         flush(player);

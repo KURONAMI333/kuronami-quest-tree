@@ -100,9 +100,11 @@ class ReviewFixesTest {
     @Test
     void pendingCountsSurviveASaveAndOldSavesStillLoad() {
         PlayerPart part = new PlayerPart();
+        part.rewardsBlocked = true;
         part.pendingRewards.put("t:q/n#-1#0", 3);
         part.pendingRewards.put("t:q/m#-1#1", 1);
         PlayerPart loaded = PlayerPart.fromJson(part.toJson());
+        assertTrue(loaded.rewardsBlocked);
         assertEquals(3, loaded.pendingRewards.get("t:q/n#-1#0"));
         assertEquals(1, loaded.pendingRewards.get("t:q/m#-1#1"));
 

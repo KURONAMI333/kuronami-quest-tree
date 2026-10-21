@@ -20,6 +20,12 @@ Pack authors who need more should use a `craft` or `consume` task instead.
   rewards are part of the skill effect and are always applied, even while pay-outs are blocked.
 - `ignore_reward_blocking` / `ignore_blocking` still exempt one reward.
 
+## Blocking rewards (review item 8)
+
+`/quest_tree rewards block|unblock` accepts a player who is offline (a name from the server's profile cache). The flag
+and the pending rewards live in that player's own record. Lifting the block pays immediately for an online player;
+for an offline player the pending rewards are paid at the next login, where a still-blocked flag keeps them waiting.
+
 ## Stages (review item 6)
 
 `teamStagesApplied` is the record of the team stages this player currently holds; the team's `teamStages` is the
