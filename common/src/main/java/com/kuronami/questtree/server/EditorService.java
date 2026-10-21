@@ -197,9 +197,9 @@ public final class EditorService {
                 return;
             }
             int result = ServerCommands.run(player, command, 2, false);
-            Path folder = player.server.getWorldPath(LevelResource.DATAPACK_DIR)
-                    .resolve(ProgressExport.packFolder(namespace));
-            EditorOps.ControlOutcome outcome = EditorOps.controlOutcome("export", result, folder.toString());
+            // the reply carries the pack folder's name, not a path on the server: the author already knows their world
+            EditorOps.ControlOutcome outcome = EditorOps.controlOutcome("export", result,
+                    ProgressExport.packFolder(namespace));
             reply(player, request, chapterId, outcome.ok(), "", messages(outcome), revision);
             return;
         }
