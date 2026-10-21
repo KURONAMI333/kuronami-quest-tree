@@ -80,9 +80,7 @@ public final class ProgressData {
         JsonObject settings = settings();
         JsonObject emergency = settings.has("emergency") && settings.get("emergency").isJsonObject()
                 ? settings.getAsJsonObject("emergency") : settings;
-        long seconds = emergency.has("cooldown_seconds") && emergency.get("cooldown_seconds").isJsonPrimitive()
-                ? Math.max(0, emergency.get("cooldown_seconds").getAsLong()) : 3600;
-        return seconds * 1000L;
+        return com.kuronami.questtree.progress.PackNumbers.cooldownMs(emergency, "cooldown_seconds", 3600);
     }
 
     private static JsonArray arr(JsonObject o, String key) {

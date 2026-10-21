@@ -55,9 +55,8 @@ public final class ClientModel {
         this.settings = obj(bundle, "settings");
         JsonObject emergency = settings.has("emergency") && settings.get("emergency").isJsonObject()
                 ? settings.getAsJsonObject("emergency") : settings;
-        long cooldown = emergency.has("cooldown_seconds") && emergency.get("cooldown_seconds").isJsonPrimitive()
-                ? Math.max(0, emergency.get("cooldown_seconds").getAsLong()) : 3600;
-        this.emergencyCooldownMs = cooldown * 1000L;
+        this.emergencyCooldownMs = com.kuronami.questtree.progress.PackNumbers.cooldownMs(
+                emergency, "cooldown_seconds", 3600);
         for (JsonElement e : arr(emergency, "items")) {
             ItemStack stack = e.isJsonObject() ? stack(e.getAsJsonObject().has("item")
                     ? e.getAsJsonObject().get("item") : e.getAsJsonObject()) : stack(e);
@@ -66,7 +65,8 @@ public final class ClientModel {
             }
             if (e.isJsonObject()) {
                 JsonObject o = e.getAsJsonObject();
-                int count = o.has("count") ? Math.max(1, o.get("count").getAsInt()) : stack.getCount();
+                int count = Math.max(1, com.kuronami.questtree.progress.PackNumbers.intOr(
+                        o.get("count"), stack.getCount()));
                 stack.setCount(Math.min(count, Math.max(1, stack.getMaxStackSize())));
             }
             emergencyItems.add(stack);
@@ -326,10 +326,12 @@ public final class ClientModel {
             }
         } else if (e != null && e.isJsonObject()) {
             JsonObject o = e.getAsJsonObject();
-            String type = o.has("type") ? o.get("type").getAsString() : "";
+            String type = o.has("type") && o.get("type").isJsonPrimitive()
+                    && o.get("type").getAsJsonPrimitive().isString() ? o.get("type").getAsString() : "";
             if (type.equals("texture") || o.has("texture")) {
                 for (String key : List.of("texture", "id", "path")) {
-                    if (o.has(key) && o.get(key).isJsonPrimitive()) {
+                    if (o.has(key) && o.get(key).isJsonPrimitive()
+                            && o.get(key).getAsJsonPrimitive().isString()) {
                         path = o.get(key).getAsString();
                         break;
                     }
