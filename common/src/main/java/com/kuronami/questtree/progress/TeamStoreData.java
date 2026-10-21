@@ -4,8 +4,10 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -28,6 +30,8 @@ public final class TeamStoreData {
      * skills that were erased, so the command refuses it unless forced.
      */
     public final Map<String, String> migrations = new LinkedHashMap<>();
+    /** The set of personal node keys the saved values were routed with; a change is migrated on the next view. */
+    public final Set<String> personalNodes = new HashSet<>();
 
     public TeamProgress team(UUID id) {
         return teams.computeIfAbsent(id, TeamProgress::new);
@@ -111,6 +115,9 @@ public final class TeamStoreData {
         JsonObject migrationJson = new JsonObject();
         migrations.forEach(migrationJson::addProperty);
         root.add("migrations", migrationJson);
+        com.google.gson.JsonArray personal = new com.google.gson.JsonArray();
+        personalNodes.forEach(personal::add);
+        root.add("personal_nodes", personal);
         return root;
     }
 
@@ -140,6 +147,25 @@ public final class TeamStoreData {
                 data.migrations.put(e.getKey(), e.getValue().getAsString());
             }
         }
+        if (root.has("personal_nodes") && root.get("personal_nodes").isJsonArray()) {
+            for (JsonElement e : root.getAsJsonArray("personal_nodes")) {
+                data.personalNodes.add(e.getAsString());
+            }
+        }
         return data;
+    }
+
+    /** Routes saved values after the set of personal nodes changed, and remembers the new set. */
+    public boolean migratePersonalNodes(Set<String> current) {
+        if (personalNodes.equals(current)) {
+            return false;
+        }
+        Set<String> old = new HashSet<>(personalNodes);
+        for (TeamProgress team : teams.values()) {
+            team.migratePersonal(old, current);
+        }
+        personalNodes.clear();
+        personalNodes.addAll(current);
+        return true;
     }
 }

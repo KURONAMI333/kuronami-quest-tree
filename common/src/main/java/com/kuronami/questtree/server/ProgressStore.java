@@ -47,6 +47,15 @@ public final class ProgressStore extends SavedData {
         return data.team(id);
     }
 
+    /** Routes saved values if the data model changed which nodes are personal. */
+    public boolean migratePersonalNodes(java.util.Set<String> current) {
+        if (data.migratePersonalNodes(current)) {
+            setDirty();
+            return true;
+        }
+        return false;
+    }
+
     /**
      * The record the player currently acts on. A change of team is detected here: joining folds the player's own
      * record into the team, leaving copies the team back to a new solo record.

@@ -83,6 +83,16 @@ public final class PlayerProgress {
         return personalVersion;
     }
 
+    /** The node keys that are personal now, for migrating saved progress after {@code shared} changes. */
+    public static Set<String> personalNodesSnapshot() {
+        return personalNodes;
+    }
+
+    private static String nodeOf(String key) {
+        int hash = key.lastIndexOf('#');
+        return hash < 0 ? key : key.substring(0, hash);
+    }
+
     static boolean isPersonal(String key) {
         return personalNodes.contains(key);
     }
