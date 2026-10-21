@@ -847,25 +847,26 @@ public final class ProgressionEditor {
     private List<String> newWarnings(JsonObject before, Map<String, ProgressValidator.Source> beforeSources,
                                      JsonObject after, Map<String, ProgressValidator.Source> afterSources,
                                      JsonObject tables, String chapterId, Set<String> unreadable) {
-        Set<String> old = warnings(before, beforeSources, tables, chapterId, unreadable);
+        Map<String, String> old = warnings(before, beforeSources, tables, chapterId, unreadable);
         List<String> fresh = new ArrayList<>();
-        for (String w : warnings(after, afterSources, tables, chapterId, unreadable)) {
-            if (!old.contains(w)) {
-                fresh.add(w);
+        for (Map.Entry<String, String> e : warnings(after, afterSources, tables, chapterId, unreadable).entrySet()) {
+            if (!old.containsKey(e.getKey())) {
+                fresh.add(e.getValue());
             }
         }
         return fresh;
     }
 
-    private Set<String> warnings(JsonObject chapters, Map<String, ProgressValidator.Source> sources, JsonObject tables,
-                                 String chapterId, Set<String> unreadable) {
+    /** Warning sentence per identity, so an unchanged warning is not reported again by an edit that only moves it. */
+    private Map<String, String> warnings(JsonObject chapters, Map<String, ProgressValidator.Source> sources,
+                                         JsonObject tables, String chapterId, Set<String> unreadable) {
         ProgressValidator.Result result = ProgressValidator.validateChapter(chapterId,
                 object(chapters, chapterId) ? chapters.getAsJsonObject(chapterId) : null,
                 chapters, tables, sources, registry);
-        Set<String> out = new LinkedHashSet<>();
+        Map<String, String> out = new LinkedHashMap<>();
         for (ProgressValidator.Problem p : result.problems) {
             if (p.severity() == ProgressValidator.Severity.WARNING) {
-                out.add(errorKey(p));
+                out.putIfAbsent(errorKey(p), p.format());
             }
         }
         return out;
@@ -880,19 +881,19 @@ public final class ProgressionEditor {
                                           JsonObject beforeTables, JsonObject after,
                                           Map<String, ProgressValidator.Source> afterSources, JsonObject afterTables,
                                           Set<String> unreadable) {
-        Set<String> old = tableWarnings(before, beforeTables, beforeSources, unreadable);
+        Map<String, String> old = tableWarnings(before, beforeTables, beforeSources, unreadable);
         List<String> fresh = new ArrayList<>();
-        for (String w : tableWarnings(after, afterTables, afterSources, unreadable)) {
-            if (!old.contains(w)) {
-                fresh.add(w);
+        for (Map.Entry<String, String> e : tableWarnings(after, afterTables, afterSources, unreadable).entrySet()) {
+            if (!old.containsKey(e.getKey())) {
+                fresh.add(e.getValue());
             }
         }
         return fresh;
     }
 
-    private Set<String> tableWarnings(JsonObject chapters, JsonObject tables,
-                                      Map<String, ProgressValidator.Source> sources, Set<String> unreadable) {
-        Set<String> out = new LinkedHashSet<>();
+    private Map<String, String> tableWarnings(JsonObject chapters, JsonObject tables,
+                                              Map<String, ProgressValidator.Source> sources, Set<String> unreadable) {
+        Map<String, String> out = new LinkedHashMap<>();
         for (String chapterId : chapters.keySet()) {
             if (!object(chapters, chapterId)) {
                 continue;
@@ -901,7 +902,8 @@ public final class ProgressionEditor {
                     chapters.getAsJsonObject(chapterId), chapters, tables, sources, registry);
             for (ProgressValidator.Problem p : result.problems) {
                 if (p.severity() == ProgressValidator.Severity.WARNING) {
-                    out.add(errorKey(p));
+                    // the chapter is part of the identity: the same path in two chapters is two different warnings
+                    out.putIfAbsent(chapterId + "\u0000" + errorKey(p), p.format());
                 }
             }
         }
