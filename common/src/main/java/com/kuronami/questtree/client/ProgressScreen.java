@@ -152,8 +152,6 @@ public class ProgressScreen extends Screen {
         // every resize or return from another screen)
         Tiles.reloadIfPacksChanged();
         imageCache.clear();
-        // a resource pack change can add, drop or resize background pictures
-        TEXTURE_SIZES.clear();
         searchBox = new net.minecraft.client.gui.components.EditBox(font, 0, 8, 120 - 2 * Ui.S2, EDIT_H, Component.translatable("screen.kuronami_quest_tree.search"));
         // drawn as one of the screen's flat controls (renderHeader), not vanilla's black box with a grey border
         searchBox.setBordered(false);

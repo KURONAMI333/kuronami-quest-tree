@@ -97,7 +97,7 @@ class TeamProgressTest {
         assertEquals(1234L, read.view(A).completedAt.get("t:q/private"));
         assertEquals(500L, read.view(B).completedAt.get("t:q/shared"));
 
-        PlayerProgress solo = team.leaveCopy(A);
+        TeamProgress solo = team.leaveCopy(A);
         assertEquals(1234L, solo.view(A).completedAt.get("t:q/private"));
     }
 

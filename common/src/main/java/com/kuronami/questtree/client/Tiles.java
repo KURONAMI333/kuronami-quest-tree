@@ -217,6 +217,7 @@ final class Tiles {
         PREPARED_REPEAT.clear();
         Metrics.ALL.values().forEach(Metrics::release);
         Metrics.ALL.clear();
+        TEXTURE_SIZES.clear();
     }
 
     /**
