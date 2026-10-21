@@ -3302,19 +3302,16 @@ public class ProgressScreen extends Screen {
         if (mx < railW + 4) {
             if (my >= RAIL_LIST_TOP && my < railListBottom()) {
                 double at = my - RAIL_LIST_TOP + railScrollShown();
-                int rowY = 0;
-                for (RailRow row : railRows) {
-                    int hgt = row.isHeader() ? HEADER_H : RAIL_ROW;
-                    if (at >= rowY && at < rowY + hgt) {
-                        if (!row.isHeader()) {
-                            select(m.chapters.indexOf(row.chapter()));
-                        } else if (!searching() && !railFiltering()) {
-                            // FTB Quests folds a group shut on its name; while searching every group stays open
-                            ClientConfig.toggleRailFold(row.fold());
-                        }
-                        break;
+                int[] heights = railRows.stream().mapToInt(this::railRowHeight).toArray();
+                int hit = RailMetrics.rowAt(heights, (int) Math.floor(at));
+                if (hit >= 0) {
+                    RailRow row = railRows.get(hit);
+                    if (!row.isHeader()) {
+                        select(m.chapters.indexOf(row.chapter()));
+                    } else if (!searching() && !railFiltering()) {
+                        // FTB Quests folds a group shut on its name; while searching every group stays open
+                        ClientConfig.toggleRailFold(row.fold());
                     }
-                    rowY += hgt;
                 }
             }
             return true;
