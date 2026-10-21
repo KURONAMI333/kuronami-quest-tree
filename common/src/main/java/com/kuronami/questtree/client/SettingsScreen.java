@@ -308,7 +308,8 @@ public final class SettingsScreen extends Screen {
      */
     private static int rowHeight() {
         float scale = ClientConfig.textScale();
-        return Math.max(ROW_H, Math.round(ROW_H * scale) + (scale > 1f ? 6 : 0));
+        int padding = scale > 1f ? Math.round(40 * (scale - 1f)) : 0;
+        return Math.max(ROW_H, Math.round(ROW_H * scale) + padding);
     }
 
     private static int textHeight() {
