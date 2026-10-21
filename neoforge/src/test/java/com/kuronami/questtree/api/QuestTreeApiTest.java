@@ -9,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The addon-facing registry as the validator sees it: a registered type is not reported, an absent one is. */
@@ -40,6 +41,18 @@ class QuestTreeApiTest {
         assertFalse(QuestTreeApi.conditionTypeRegistered("questtree_test:missing"));
         assertEquals(0, result.errors(), result.problems.toString());
         assertEquals(0, result.warnings(), result.problems.toString());
+    }
+
+    @Test
+    void aScriptCannotTakeOverAJavaType() {
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath("questtree_test", "script_dup");
+        QuestTaskType javaHandler = context -> 7;
+        QuestTreeApi.registerTaskType(id, javaHandler);
+
+        assertFalse(QuestTreeApi.registerTaskType(id.toString(), context -> 8),
+                "a script registration is refused instead of replacing Java's handler");
+        assertSame(javaHandler, QuestTreeApi.taskType(id.toString()));
+        assertTrue(QuestTreeApi.unregisterTaskType(id.toString()), "the script reload can still forget its own id");
     }
 
     @Test

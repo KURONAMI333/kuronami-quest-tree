@@ -24,7 +24,8 @@ import java.util.function.Consumer;
  * QuestTreeApi.registerConditionType(id, context -> context.player().experienceLevel >= 30);
  * }</pre>
  * A pack then writes {@code "type": "example:level"} and the server consults the handler on its tick (tasks) or at
- * claim time (rewards). Registration replaces a type with the same id, so a reload can update one without a restart.
+ * claim time (rewards). Java registration replaces a type with the same id, so a reload can update one without a
+ * restart; a script's register call never replaces one, so the next script reload cannot take a Java handler with it.
  * <h2>Events</h2>
  * <pre>{@code
  * QuestTreeApi.addListener(event -> {
@@ -70,48 +71,76 @@ public final class QuestTreeApi {
         LISTENERS.add(listener);
     }
 
-    /** String form, for a script bridge. An id that is not a resource location is ignored and logged. */
+    /**
+     * String form, for a script bridge. An id that is not a resource location is ignored and logged. A script never
+     * replaces an existing type: that would overwrite a Java addon's handler, and the next script reload would remove
+     * both. The existing handler is kept and false is returned.
+     */
     public static boolean registerTaskType(String id, QuestTaskType type) {
-        ResourceLocation parsed = ResourceLocation.tryParse(id);
-        if (parsed == null) {
+        String key = key(id);
+        if (key == null) {
             Constants.LOG.warn("Not a task type id: '{}'", id);
             return false;
         }
-        registerTaskType(parsed, type);
+        if (type == null) {
+            Constants.LOG.warn("Task type '{}' has no handler", key);
+            return false;
+        }
+        if (TASKS.putIfAbsent(key, type) != null) {
+            Constants.LOG.warn("Task type '{}' is already registered; the existing handler is kept", key);
+            return false;
+        }
         return true;
     }
 
     public static boolean registerRewardType(String id, QuestRewardType type) {
-        ResourceLocation parsed = ResourceLocation.tryParse(id);
-        if (parsed == null) {
+        String key = key(id);
+        if (key == null) {
             Constants.LOG.warn("Not a reward type id: '{}'", id);
             return false;
         }
-        registerRewardType(parsed, type);
+        if (type == null) {
+            Constants.LOG.warn("Reward type '{}' has no handler", key);
+            return false;
+        }
+        if (REWARDS.putIfAbsent(key, type) != null) {
+            Constants.LOG.warn("Reward type '{}' is already registered; the existing handler is kept", key);
+            return false;
+        }
         return true;
     }
 
     public static boolean registerConditionType(String id, QuestConditionType type) {
-        ResourceLocation parsed = ResourceLocation.tryParse(id);
-        if (parsed == null) {
+        String key = key(id);
+        if (key == null) {
             Constants.LOG.warn("Not a condition type id: '{}'", id);
             return false;
         }
-        registerConditionType(parsed, type);
+        if (type == null) {
+            Constants.LOG.warn("Condition type '{}' has no handler", key);
+            return false;
+        }
+        if (CONDITIONS.putIfAbsent(key, type) != null) {
+            Constants.LOG.warn("Condition type '{}' is already registered; the existing handler is kept", key);
+            return false;
+        }
         return true;
     }
 
     /** Removes a type an addon registered, for a script reload. Returns whether one was there. */
     public static boolean unregisterTaskType(String id) {
-        return TASKS.remove(id) != null;
+        String key = key(id);
+        return key != null && TASKS.remove(key) != null;
     }
 
     public static boolean unregisterRewardType(String id) {
-        return REWARDS.remove(id) != null;
+        String key = key(id);
+        return key != null && REWARDS.remove(key) != null;
     }
 
     public static boolean unregisterConditionType(String id) {
-        return CONDITIONS.remove(id) != null;
+        String key = key(id);
+        return key != null && CONDITIONS.remove(key) != null;
     }
 
     public static boolean taskTypeRegistered(String id) {
@@ -182,5 +211,11 @@ public final class QuestTreeApi {
 
     private static String key(ResourceLocation id) {
         return id == null ? "" : id.toString();
+    }
+
+    /** The registry key for a script's id, or null when it is not a resource location. */
+    private static String key(String id) {
+        ResourceLocation parsed = id == null ? null : ResourceLocation.tryParse(id);
+        return parsed == null ? null : key(parsed);
     }
 }
