@@ -192,7 +192,7 @@ data/<ns>/progression/
 {"type": "example:enabled"}
 ```
 
-`stage` は Pack Stages の段階（`team_stages` も含む）、`score` はスコアボードの値、`item` は手持ち、`advancement` は進捗、`party_size` はオンラインのパーティ人数。`score` は `scoreboard` でも書ける。組み込みの5種類は名前空間を付けてもよい（`kuronami_quest_tree:stage` は `stage` として読む）。
+`stage` は Pack Stages の段階（`team_stages` も含む）、`score` はスコアボードの値、`item` は手持ち、`advancement` は進捗、`party_size` はオンラインのパーティ人数。`score` は `scoreboard` でも書ける。組み込みの5種類は名前空間なし（`item`）かこの MOD の名前空間（`kuronami_quest_tree:item`）で書け、どちらも組み込みとして読む。他の名前空間（`example:item`）は id が組み込みと同じでも組み込みにはせず、必ず登録表を引く。
 
 登録した種類は `<namespace>:<id>` で書き、`QuestTreeApi.registerConditionType` か KubeJS の `QuestTree.registerCondition` で登録する（[_docs/API.md](API.md)）。登録した種類は名前空間込みの id で照合し、その項目の判定はハンドラに任せる。どちらにも無い種類は条件を満たさない扱い（書いたゲートを開けない側に倒す）。検証では未登録の種類を `WARNING` にし、ノードは落とさない。
 

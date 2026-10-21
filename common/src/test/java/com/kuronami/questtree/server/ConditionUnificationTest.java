@@ -52,7 +52,7 @@ class ConditionUnificationTest {
         }
     }
 
-    private static final Map<String, Boolean> ADDON = Map.of("example:enabled", true);
+    private static final Map<String, Boolean> ADDON = Map.of("example:enabled", true, "example:item", true);
 
     /** The same call {@code ProgressService.conditionsMet} makes: built-ins there, the registry for everything else. */
     private static boolean gate(JsonObject holder) {
@@ -130,5 +130,16 @@ class ConditionUnificationTest {
         assertEveryRoute(false, json("{\"conditions\": [{\"type\": \"example:missing\"}]}"));
         assertFalse(QuestConditions.allMet(json("{\"conditions\": {}}"), new Fake()),
                 "a malformed list cannot open a gate");
+    }
+
+    @Test
+    void aRegisteredKindThatSharesABuiltInIdIsStillTheRegistrys() {
+        Fake closed = new Fake();
+        closed.item = false;
+        assertTrue(QuestConditions.allMet(json("{\"conditions\": [{\"type\": \"example:item\"}]}"), closed,
+                condition -> ADDON.getOrDefault(typeOf(condition), false)),
+                "example:item is the registry's kind, not the built-in item");
+        assertFalse(QuestConditions.allMet(json("{\"conditions\": [{\"type\": \"item\"}]}"), closed),
+                "the unqualified item is the built-in kind");
     }
 }

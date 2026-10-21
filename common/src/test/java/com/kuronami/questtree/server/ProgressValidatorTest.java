@@ -200,6 +200,18 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void anotherModsNamespaceIsNeverABuiltInCondition() {
+        ProgressValidator.Result other = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": ["
+                        + "{\"type\": \"example:stage\", \"stage\": \"chapter_one\"}]}", ""));
+        assertTrue(says(other, "unknown condition type"), "example:stage is not our built-in stage");
+        ProgressValidator.Result ours = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": ["
+                        + "{\"type\": \"kuronami_quest_tree:stage\", \"stage\": \"chapter_one\"}]}", ""));
+        assertEquals(List.of(), ours.problems, ours.problems.toString());
+    }
+
+    @Test
     void aZeroCountIsAWarning() {
         ProgressValidator.Result r = validate(chapter(
                 "{\"type\": \"item\", \"count\": 0, \"item\": {\"id\": \"minecraft:stone\"}}", ""));

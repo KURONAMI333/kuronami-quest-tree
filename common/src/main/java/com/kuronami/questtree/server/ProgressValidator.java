@@ -116,10 +116,6 @@ public final class ProgressValidator {
             "tag", "toast", "trophy", "scoreboard", "custom", "dummy", "currency");
     private static final Set<String> REWARD_UNIMPLEMENTED = Set.of();
 
-    /** Conditions accepted on a task or reward (DATA_MODEL.md "条件"). */
-    private static final Set<String> CONDITION_TYPES = Set.of(
-            "stage", "score", "item", "advancement", "party_size");
-
     /** The observation kinds {@code ProgressService.observing} answers; any other kind never matches. */
     private static final Set<String> OBSERVE_KINDS = Set.of(
             "block", "block_tag", "block_state", "entity_type", "entity_type_tag");
@@ -847,8 +843,7 @@ public final class ProgressValidator {
                 problem(out, Severity.ERROR, ref, at, "condition has no \"type\", so it can never be met");
                 continue;
             }
-            String type = raw.contains(":") ? raw.substring(raw.indexOf(':') + 1) : raw;
-            if (!CONDITION_TYPES.contains(type)) {
+            if (!QuestConditions.isBuiltIn(raw)) {
                 if (QuestTreeApi.conditionTypeRegistered(raw)) {
                     // an addon owns this kind and its fields; the five built-ins keep their checks below
                     continue;
@@ -857,7 +852,7 @@ public final class ProgressValidator {
                         "unknown condition type " + quote(raw) + ", which is not registered and not built in, so it can never be met");
                 continue;
             }
-            switch (type) {
+            String type = QuestConditions.builtInName(raw);            switch (type) {
                 case "stage" -> {
                     if (str(o, "stage").isEmpty()) {
                         problem(out, Severity.ERROR, ref, at + ".stage", "stage condition has no stage, so it can never be met");

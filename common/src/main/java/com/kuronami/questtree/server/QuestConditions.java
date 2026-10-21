@@ -2,7 +2,9 @@ package com.kuronami.questtree.server;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.Constants;
 
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -12,6 +14,9 @@ import java.util.function.Predicate;
  * is where the public registry of {@code QuestTreeApi} comes in. This class stays testable without Minecraft.
  */
 public final class QuestConditions {
+
+    /** The five built-in kinds, answered here rather than by the registry. */
+    private static final Set<String> BUILT_IN = Set.of("stage", "score", "item", "advancement", "party_size");
 
     /** What a condition can ask the running game. */
     public interface Context {
@@ -62,8 +67,8 @@ public final class QuestConditions {
 
     /** One condition; a kind the built-ins do not know is asked of {@code addon}. */
     public static boolean met(JsonObject c, Context context, Predicate<JsonObject> addon) {
-        String type = builtInType(str(c, "type"));
-        return switch (type) {
+        String type = builtInName(str(c, "type"));
+        return switch (type == null ? "" : type) {
             case "stage" -> {
                 String stage = str(c, "stage");
                 yield !stage.isEmpty() && context.hasStage(stage);
@@ -85,8 +90,23 @@ public final class QuestConditions {
         };
     }
 
-    private static String builtInType(String type) {
-        return type.contains(":") ? type.substring(type.indexOf(':') + 1) : type;
+    /**
+     * The built-in kind a condition's type names, or null when it names a kind the registry owns. Only an
+     * unqualified name or this mod's own namespace is built in: another mod's {@code example:item} must always reach
+     * the registry, even though the id after the colon is one of ours (2026-10-22 review).
+     */
+    static String builtInName(String type) {
+        int colon = type.indexOf(':');
+        if (colon < 0) {
+            return type;
+        }
+        return Constants.MOD_ID.equals(type.substring(0, colon)) ? type.substring(colon + 1) : null;
+    }
+
+    /** Whether a condition's raw type is one of the five built-in kinds. */
+    static boolean isBuiltIn(String type) {
+        String name = builtInName(type);
+        return name != null && BUILT_IN.contains(name);
     }
 
     private static String str(JsonObject o, String k) {

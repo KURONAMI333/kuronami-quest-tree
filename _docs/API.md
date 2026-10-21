@@ -31,7 +31,7 @@ QuestTreeApi.registerConditionType(id, context -> context.player().experienceLev
 
 - **タスク**: サーバーの tick で `QuestTaskType.progress(TaskContext)` を呼び、返した値を進捗として保存する。`count` / `amount` は `maxProgress()` で読める。`currentProgress()` はこのタスクの現在値。
 - **報酬**: 受取が確定した時に `QuestRewardType.give(RewardContext)` を呼ぶ。例外は Quest Tree が捕まえてログする。権限・距離などの検証はハンドラ側の責任。
-- **条件**: `conditions` の全項目が true の時だけ、タスクは進み、報酬は渡される。組み込みの5種類（`stage`・`score`・`item`・`advancement`・`party_size`）と登録した種類は同じ1つの判定器で評価される。登録した種類は名前空間込みの id で照合し、どちらにも無い種類は false（fail closed）。`QuestTreeApi.conditionsMet(player, node, data, task)` はこの同じ判定を呼ぶ公開の入口。
+- **条件**: `conditions` の全項目が true の時だけ、タスクは進み、報酬は渡される。組み込みの5種類（`stage`・`score`・`item`・`advancement`・`party_size`）と登録した種類は同じ1つの判定器で評価される。組み込みとして扱うのは名前空間なし（`item`）か `kuronami_quest_tree:item` だけで、他の名前空間（`example:item`）は id が組み込みと同じでも必ず登録表を引く。登録した種類は名前空間込みの id で照合し、どちらにも無い種類は false（fail closed）。`QuestTreeApi.conditionsMet(player, node, data, task)` はこの同じ判定を呼ぶ公開の入口。
 - 登録した type は `ProgressValidator` の未知 type 警告/エラーから除外される。条件は組み込みと登録済みを既知として扱い、それ以外は警告（ノードは落とさない）。
 
 ## 進行イベント
