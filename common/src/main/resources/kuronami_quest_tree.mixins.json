@@ -17,6 +17,7 @@
         "PlayerEatMixin",
         "PlayerInteractEntityMixin",
         "ResultSlotMixin",
+        "ServerPlayerGameModeUseItemOnMixin",
         "StatsCounterMixin",
         "TamableAnimalTameMixin"
     ],
