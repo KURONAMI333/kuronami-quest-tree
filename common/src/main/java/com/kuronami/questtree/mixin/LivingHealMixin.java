@@ -28,10 +28,18 @@ public abstract class LivingHealMixin {
 
     @Inject(method = "heal", at = @At("RETURN"))
     private void questTree$afterHeal(float amount, CallbackInfo ci) {
-        if (--questTree$depth == 0 && (Object) this instanceof ServerPlayer sp) {
-            float gained = sp.getHealth() - questTree$before;
-            if (gained > 0) {
-                SkillExperience.onHeal(sp, gained);
+        // counting down in finally keeps a throw from our own report (or an addon listener it calls) from leaving the
+        // counter stuck, which would silence every later heal for this entity (2026-10-22 release review)
+        try {
+            if (questTree$depth == 1 && (Object) this instanceof ServerPlayer sp) {
+                float gained = sp.getHealth() - questTree$before;
+                if (gained > 0) {
+                    SkillExperience.onHeal(sp, gained);
+                }
+            }
+        } finally {
+            if (questTree$depth > 0) {
+                questTree$depth--;
             }
         }
     }
