@@ -1176,7 +1176,11 @@ public final class ProgressionEditor {
 
     private static Double number(JsonObject o, String key) {
         JsonElement e = o == null ? null : o.get(key);
-        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() ? e.getAsDouble() : null;
+        if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) {
+            return null;
+        }
+        double value = e.getAsDouble();
+        return Double.isFinite(value) ? value : null;
     }
 
     static boolean validChapterId(String id) {

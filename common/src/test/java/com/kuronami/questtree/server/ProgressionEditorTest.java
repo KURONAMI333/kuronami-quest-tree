@@ -107,6 +107,22 @@ class ProgressionEditorTest {
     }
 
     @Test
+    void aMoveWithANonFiniteCoordinateIsRefusedAndWritesNothing() {
+        ProgressionEditor editor = editor();
+        JsonObject args = new JsonObject();
+        args.addProperty("id", "a");
+        args.addProperty("x", Double.POSITIVE_INFINITY);
+        args.addProperty("y", 0);
+
+        ProgressionEditor.Outcome out = editor.apply(pack(), new JsonObject(), Map.of(), CHAPTER, 0, "move_node",
+                args, Set.of());
+
+        assertFalse(out.ok());
+        assertTrue(out.messages().toString().contains("numeric x and y"));
+        assertFalse(Files.exists(overlayFile(CHAPTER)));
+    }
+
+    @Test
     void aStaleRevisionIsRefusedAndWritesNothing() {
         apply(editor(), CHAPTER, 0, "update_node", "{\"id\":\"a\",\"patch\":{\"x\":7}}");
 

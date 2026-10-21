@@ -267,7 +267,7 @@ public final class ClientModel {
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
             this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive()
                     && defaults.get("size").getAsJsonPrimitive().isNumber();
-            this.defaultSize = defaultSizeSet ? defaults.get("size").getAsDouble() : 1;
+            this.defaultSize = defaultSizeSet ? PackNumbers.coordinate(defaults.get("size").getAsDouble()) : 1;
             this.hideDetailsByDefault = defaults.has("hide_details_until_startable") && defaults.get("hide_details_until_startable").isJsonPrimitive()
                     && defaults.get("hide_details_until_startable").getAsBoolean();
             this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
@@ -417,7 +417,7 @@ public final class ClientModel {
             boolean milestone = ProgressModel.boolOf(o, "milestone");
             this.root = ProgressModel.boolOf(o, "root");
             this.size = o.has("size") && o.get("size").isJsonPrimitive()
-                    && o.get("size").getAsJsonPrimitive().isNumber() ? Math.max(0.3, o.get("size").getAsDouble())
+                    && o.get("size").getAsJsonPrimitive().isNumber() ? Math.max(0.3, PackNumbers.coordinate(o.get("size").getAsDouble()))
                     : milestone && !ch.defaultSizeSet ? MILESTONE_SIZE : Math.max(0.3, ch.defaultSize);
             String sh = o.has("shape") ? o.get("shape").getAsString() : "";
             this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
@@ -712,7 +712,8 @@ public final class ClientModel {
         }
 
         private static float num(JsonObject o, String key, float fallback) {
-            return o.has(key) && o.get(key).isJsonPrimitive() && o.get(key).getAsJsonPrimitive().isNumber() ? o.get(key).getAsFloat() : fallback;
+            return o.has(key) && o.get(key).isJsonPrimitive() && o.get(key).getAsJsonPrimitive().isNumber()
+                    ? (float) PackNumbers.coordinate(o.get(key).getAsFloat()) : fallback;
         }
     }
 
@@ -853,6 +854,7 @@ public final class ClientModel {
 
     private static double num(JsonObject o, String k) {
         JsonElement e = o.get(k);
-        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() ? e.getAsDouble() : 0;
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
+                ? PackNumbers.coordinate(e.getAsDouble()) : 0;
     }
 }

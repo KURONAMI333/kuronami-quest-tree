@@ -375,6 +375,23 @@ public final class ProgressValidator {
      * fixed {@code xp_levels} cost. That is a WARNING (the chapter still works), not an ERROR.
      */
     private static void checkChapter(Result out, ChapterRef ref, String chapterId, JsonObject chapter) {
+        String geometry = "chapters." + local(chapterId);
+        for (int i = 0; i < arr(chapter, "decorations").size(); i++) {
+            JsonElement d = arr(chapter, "decorations").get(i);
+            if (d.isJsonObject()) {
+                for (String field : new String[]{"x", "y", "w", "h", "rotation"}) {
+                    finite(out, ref, geometry + ".decorations[" + i + "]", d.getAsJsonObject(), field);
+                }
+            }
+        }
+        for (int i = 0; i < arr(chapter, "links").size(); i++) {
+            JsonElement l = arr(chapter, "links").get(i);
+            if (l.isJsonObject()) {
+                for (String field : new String[]{"x", "y", "size"}) {
+                    finite(out, ref, geometry + ".links[" + i + "]", l.getAsJsonObject(), field);
+                }
+            }
+        }
         JsonElement pointsElement = chapter.get("points");
         if (pointsElement == null) {
             return;
@@ -591,6 +608,21 @@ public final class ProgressValidator {
         booleanShape(out, ref, nodePath, node, "hidden");
         whole(out, ref, nodePath, node, "cost");
         whole(out, ref, nodePath, node, "tasks_required");
+        finite(out, ref, nodePath, node, "x");
+        finite(out, ref, nodePath, node, "y");
+        finite(out, ref, nodePath, node, "size");
+    }
+
+    /**
+     * A coordinate the client reads with {@code getAsDouble}: 1e999 becomes an infinity and NaN parses too, which
+     * would blank the whole map. It is only a warning here; the reader turns it into 0.
+     */
+    private static void finite(Result out, ChapterRef ref, String path, JsonObject o, String field) {
+        JsonElement e = o.get(field);
+        if (e != null && jsonNumber(e) && !Double.isFinite(e.getAsDouble())) {
+            problem(out, Severity.WARNING, ref, path + "." + field,
+                    quote(field) + " is not a finite number, so it is read as 0");
+        }
     }
 
     /** The shape of "requires", "exclusive_with" and "exclusive". */

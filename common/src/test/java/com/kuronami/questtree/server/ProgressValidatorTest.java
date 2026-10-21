@@ -52,6 +52,19 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aNonFiniteNodeCoordinateIsAWarningAndTheNodeStays() {
+        JsonObject bundle = JsonParser.parseString(chapter(
+                "{\"type\": \"checkmark\", \"count\": 1}", "")).getAsJsonObject();
+        bundle.getAsJsonObject("chapters").getAsJsonObject("t:basics")
+                .getAsJsonObject("nodes").getAsJsonObject("a")
+                .addProperty("x", Double.POSITIVE_INFINITY);
+        ProgressValidator.Result r = ProgressValidator.validate(bundle, Map.of(), ProgressValidator.Registry.NONE);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "not a finite number"));
+        assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
     void aWellFormedNodeHasNoProblems() {
         ProgressValidator.Result r = validate(chapter(
                 "{\"type\": \"item\", \"count\": 1, \"item\": {\"id\": \"minecraft:stone\"}}",

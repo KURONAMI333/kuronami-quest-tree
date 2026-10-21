@@ -27,6 +27,16 @@ class PackNumbersTest {
     }
 
     @Test
+    void brokenCoordinatesBecomeZeroAndHugeOnesArePulledToTheEdge() {
+        assertEquals(0.0, PackNumbers.coordinate(Double.POSITIVE_INFINITY));
+        assertEquals(0.0, PackNumbers.coordinate(Double.NEGATIVE_INFINITY));
+        assertEquals(0.0, PackNumbers.coordinate(Double.NaN));
+        assertEquals(PackNumbers.MAX_COORDINATE, PackNumbers.coordinate(1e300));
+        assertEquals(-PackNumbers.MAX_COORDINATE, PackNumbers.coordinate(-1e300));
+        assertEquals(12.5, PackNumbers.coordinate(12.5));
+    }
+
+    @Test
     void wrongNumberTypesUseTheFallback() {
         assertEquals(4, PackNumbers.intOr(JsonParser.parseString("\"3\""), 4));
         assertEquals(3, PackNumbers.intOr(JsonParser.parseString("3"), 4));

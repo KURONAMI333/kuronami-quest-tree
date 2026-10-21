@@ -76,6 +76,18 @@ class EditorContentTest {
     }
 
     @Test
+    void aNonFiniteNumberIsNotWritten() {
+        JsonObject o = new JsonObject();
+        o.addProperty("x", 1.0);
+        for (String text : java.util.List.of("Infinity", "-Infinity", "NaN", "1e999")) {
+            EditorDoc.setNumber(o, "x", text, false);
+            assertEquals(1.0, o.get("x").getAsDouble(), text);
+        }
+        EditorDoc.setNumber(o, "x", "2.5", false);
+        assertEquals(2.5, o.get("x").getAsDouble());
+    }
+
+    @Test
     void patchKeepsMembersTheFormNeverTouched() {
         JsonObject original = JsonParser.parseString("""
                 {"id":"q","display":{"icon":"minecraft:book","title":"Old"},"x":1,"tasks":[]}

@@ -12,6 +12,9 @@ public final class PackNumbers {
     /** 30 days: long enough for any emergency cooldown, short enough that seconds * 1000 cannot overflow. */
     public static final long MAX_COOLDOWN_SECONDS = 30L * 24 * 60 * 60;
 
+    /** A map coordinate outside this range is a broken pack or a typo, not a place to draw. */
+    public static final double MAX_COORDINATE = 1_000_000;
+
     private PackNumbers() {
     }
 
@@ -23,6 +26,17 @@ public final class PackNumbers {
     public static int intOr(JsonElement e, int fallback) {
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
                 ? e.getAsInt() : fallback;
+    }
+
+    /**
+     * A map coordinate or size from a pack or the editor: NaN and the infinities (1e999) would turn the whole map
+     * blank, so they become 0, and anything beyond ±{@link #MAX_COORDINATE} is pulled back to that edge.
+     */
+    public static double coordinate(double value) {
+        if (!Double.isFinite(value)) {
+            return 0;
+        }
+        return Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, value));
     }
 
     /** {@code cooldown_seconds} from an emergency block, clamped before the conversion to milliseconds. */
