@@ -118,7 +118,13 @@ public class QuestTree {
             }
         });
         NeoForge.EVENT_BUS.addListener((LivingDeathEvent e) -> {
-            if (!e.getEntity().level().isClientSide() && e.getSource().getEntity() instanceof ServerPlayer sp) {
+            if (e.getEntity().level().isClientSide()) {
+                return;
+            }
+            if (e.getEntity() instanceof ServerPlayer dead) {
+                CommonClass.onDeath(dead);
+            }
+            if (e.getSource().getEntity() instanceof ServerPlayer sp) {
                 CommonClass.onKill(sp, e.getEntity());
             }
         });

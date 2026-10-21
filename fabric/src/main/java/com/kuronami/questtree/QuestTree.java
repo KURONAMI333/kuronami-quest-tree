@@ -120,6 +120,11 @@ public class QuestTree implements ModInitializer {
             }
         });
         net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> CommonClass.onRespawn(newPlayer, !alive));
+        net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
+            if (entity instanceof ServerPlayer sp) {
+                CommonClass.onDeath(sp);
+            }
+        });
         // damage experience: FabricActuallyHurtMixin (health actually lost, same as NeoForge)
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> CommonClass.onLogout(handler.player));
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> CommonClass.onServerStopping());

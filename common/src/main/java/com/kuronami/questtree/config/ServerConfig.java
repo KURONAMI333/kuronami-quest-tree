@@ -19,40 +19,58 @@ public final class ServerConfig {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static Boolean giveBook;
+    private static Boolean dropBook;
 
     private ServerConfig() {
     }
 
     public static boolean giveBookOnFirstJoin() {
-        if (giveBook == null) {
-            giveBook = read();
-        }
+        load();
         return giveBook;
     }
 
-    private static boolean read() {
+    /** Drop a quest book at the death spot, so a player who lost theirs can pick it up again (2026-10-22). */
+    public static boolean dropBookOnDeath() {
+        load();
+        return dropBook;
+    }
+
+    private static void load() {
+        if (giveBook != null && dropBook != null) {
+            return;
+        }
         Path file = Services.PLATFORM.getGameDir().resolve("config").resolve("kuronami_quest_tree-server.json");
+        boolean give = true;
+        boolean drop = false;
         try {
             if (Files.isRegularFile(file)) {
                 JsonObject o = GSON.fromJson(Files.readString(file), JsonObject.class);
-                if (o != null && o.has("give_book_on_first_join")) {
-                    return o.get("give_book_on_first_join").getAsBoolean();
+                if (o != null) {
+                    if (o.has("give_book_on_first_join")) {
+                        give = o.get("give_book_on_first_join").getAsBoolean();
+                    }
+                    if (o.has("drop_book_on_death")) {
+                        drop = o.get("drop_book_on_death").getAsBoolean();
+                    }
                 }
             } else {
-                // write the default so the option is discoverable; the value read stays the default
+                // write the defaults so every option is discoverable
                 JsonObject o = new JsonObject();
-                o.addProperty("give_book_on_first_join", true);
+                o.addProperty("give_book_on_first_join", give);
+                o.addProperty("drop_book_on_death", drop);
                 Files.createDirectories(file.getParent());
                 Files.writeString(file, GSON.toJson(o));
             }
         } catch (IOException | RuntimeException e) {
             Constants.LOG.warn("Could not read {}; using the defaults", file, e);
         }
-        return true;
+        giveBook = give;
+        dropBook = drop;
     }
 
     /** Data packs or a new world are not a reason to re-read; only the next game start is. */
     public static void reload() {
         giveBook = null;
+        dropBook = null;
     }
 }
