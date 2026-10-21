@@ -147,7 +147,8 @@ public final class EditorService {
             dirty = true;
         }
         String replyChapter = chapterId;
-        if (!outcome.createdId().isEmpty() && payload.op().equals("create_chapter")) {
+        if (!outcome.createdId().isEmpty()
+                && (payload.op().equals("create_chapter") || payload.op().equals("update_table"))) {
             replyChapter = outcome.createdId();
         }
         reply(player, payload, replyChapter, outcome.ok(), outcome.createdId(), outcome.messages(), outcome.revision());

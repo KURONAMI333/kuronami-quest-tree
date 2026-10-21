@@ -115,6 +115,32 @@ public final class ClientModel {
         return component("progression." + c.namespace + ".group." + c.group + ".title", null);
     }
 
+    /** A string, or page array, written directly into the node; null when the node has no inline text. */
+    static String inlineText(JsonObject o, String key) {
+        JsonElement e = o.get(key);
+        if (e == null) {
+            return null;
+        }
+        if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+            String text = e.getAsString();
+            return text.isBlank() ? null : text;
+        }
+        if (e.isJsonArray()) {
+            StringBuilder joined = new StringBuilder();
+            for (JsonElement page : e.getAsJsonArray()) {
+                if (!page.isJsonPrimitive() || !page.getAsJsonPrimitive().isString()) {
+                    continue;
+                }
+                if (!joined.isEmpty()) {
+                    joined.append('\n');
+                }
+                joined.append(page.getAsString());
+            }
+            return joined.isEmpty() ? null : joined.toString();
+        }
+        return null;
+    }
+
     /** Plain text with FTB colour codes, or a JSON text component (Pufferfish titles often are {"translate": ...}). */
     static Component parseText(String v) {
         String t = v.trim();
@@ -366,11 +392,15 @@ public final class ClientModel {
             String base = "progression." + ch.namespace + "." + ch.path + "." + id;
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString())
                     : !tasks.isEmpty() ? tasks.get(0).name() : Component.literal(id);
-            this.title = m.component(base + ".title", fallbackTitle);
-            // the importer keeps FTB Quests' subtitle under the same prefix; it is optional, so null when absent
-            String sub = m.lookup(base + ".subtitle");
+            // text written into the node wins over the translation key the overlay replaced it with: the editor keeps
+            // the pack's key in the overlay but shows the text the author just typed
+            String inlineTitle = inlineText(o, "title");
+            this.title = inlineTitle != null ? parseText(inlineTitle) : m.component(base + ".title", fallbackTitle);
+            String inlineSubtitle = inlineText(o, "subtitle");
+            String sub = inlineSubtitle != null ? inlineSubtitle : m.lookup(base + ".subtitle");
             this.subtitle = sub == null ? null : parseText(sub);
-            String d = m.lookup(base + ".desc");
+            String inlineDescription = inlineText(o, "description");
+            String d = inlineDescription != null ? inlineDescription : m.lookup(base + ".desc");
             // Pufferfish descriptions are JSON text components ({"translate": ..., "fallback": ...}): resolve them first,
             // or the raw JSON shows in the details sheet
             String dt = d == null ? null : d.trim();

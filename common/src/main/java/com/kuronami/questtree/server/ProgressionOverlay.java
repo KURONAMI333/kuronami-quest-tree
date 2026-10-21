@@ -124,11 +124,44 @@ public final class ProgressionOverlay {
         }
     }
 
+    /**
+     * One reward table's overlay (2026-10-21, phase 3): the whole table, because a table is small and partial table
+     * patches would have to decide which entry a nested array index means. {@code base} records whether the pack had
+     * the table when it was first edited; the revision guard is per table and separate from chapters.
+     */
+    public static final class TableOverlay {
+        public final String id;
+        public long revision;
+        public boolean base;
+        public boolean remove;
+        public JsonObject table = new JsonObject();
+        public String file = "";
+        public String raw = "";
+
+        public TableOverlay(String id) {
+            this.id = id;
+        }
+
+        public JsonObject toJson() {
+            JsonObject out = new JsonObject();
+            out.addProperty("revision", revision);
+            out.addProperty("base", base);
+            if (remove) {
+                out.addProperty("remove", true);
+            }
+            out.add("table", table.deepCopy());
+            return out;
+        }
+    }
+
     /** Everything the overlay directory held, plus what could not be read. */
     public static final class Overlay {
         public final Map<String, ChapterOverlay> chapters = new LinkedHashMap<>();
         /** Per-chapter revisions, including chapters whose file an undo deleted (see {@code revisions.json}). */
         public final Map<String, Long> revisions = new LinkedHashMap<>();
+        public final Map<String, TableOverlay> tables = new LinkedHashMap<>();
+        /** Per-table revisions (see {@code table_revisions.json}); kept apart from chapter revisions. */
+        public final Map<String, Long> tableRevisions = new LinkedHashMap<>();
         public final List<ProgressValidator.Problem> problems = new ArrayList<>();
 
         public ChapterOverlay chapter(String id) {
@@ -140,10 +173,23 @@ public final class ProgressionOverlay {
             return revision == null ? 0 : revision;
         }
 
+        public long tableRevision(String id) {
+            Long revision = tableRevisions.get(id);
+            return revision == null ? 0 : revision;
+        }
+
         /** The revisions the clients receive with the bundle, so an editor knows what to send without a reply. */
         public JsonObject revisionsJson() {
             JsonObject out = new JsonObject();
             for (Map.Entry<String, Long> e : revisions.entrySet()) {
+                out.addProperty(e.getKey(), e.getValue());
+            }
+            return out;
+        }
+
+        public JsonObject tableRevisionsJson() {
+            JsonObject out = new JsonObject();
+            for (Map.Entry<String, Long> e : tableRevisions.entrySet()) {
                 out.addProperty(e.getKey(), e.getValue());
             }
             return out;
@@ -196,6 +242,24 @@ public final class ProgressionOverlay {
                 }
             }
         }
+
+        /**
+         * Merges the table overlay into {@code tables} in place. A table is replaced whole: its entries are an array,
+         * and RFC 7396 would replace the array anyway, so a partial table would only decide where an index points.
+         */
+        public void applyTablesTo(JsonObject tables, Map<String, ProgressValidator.Source> sources) {
+            for (TableOverlay overlay : new ArrayList<>(this.tables.values())) {
+                if (overlay.remove) {
+                    tables.remove(overlay.id);
+                    continue;
+                }
+                tables.add(overlay.id, overlay.table.deepCopy());
+                if (!overlay.file.isEmpty()) {
+                    sources.put("reward_tables/" + overlay.id,
+                            new ProgressValidator.Source(overlay.file, overlay.raw));
+                }
+            }
+        }
     }
 
     private ProgressionOverlay() {
@@ -206,7 +270,9 @@ public final class ProgressionOverlay {
         Overlay out = new Overlay();
         Path chaptersDir = progressionRoot.resolve("chapters");
         if (!Files.isDirectory(chaptersDir)) {
+            readTables(progressionRoot, out);
             readRevisions(progressionRoot, out);
+            readTableRevisions(progressionRoot, out);
             return out;
         }
         List<Path> files = new ArrayList<>();
@@ -256,8 +322,84 @@ public final class ProgressionOverlay {
             out.chapters.put(id, overlay);
             out.revisions.merge(id, overlay.revision, Math::max);
         }
+        readTables(progressionRoot, out);
         readRevisions(progressionRoot, out);
+        readTableRevisions(progressionRoot, out);
         return out;
+    }
+
+    /** Reads {@code tables/<namespace>/<table>.json}; a table is one object, not a patch of one. */
+    private static void readTables(Path progressionRoot, Overlay out) {
+        Path tablesDir = progressionRoot.resolve("tables");
+        if (!Files.isDirectory(tablesDir)) {
+            return;
+        }
+        List<Path> files = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(tablesDir)) {
+            walk.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".json")).forEach(files::add);
+        } catch (IOException ex) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR,
+                    display(progressionRoot, tablesDir), "",
+                    "could not read the table overlay: " + ex.getMessage(), 0));
+            return;
+        }
+        files.sort(Path::compareTo);
+        for (Path file : files) {
+            String relative = tablesDir.relativize(file).toString().replace(java.io.File.separatorChar, '/');
+            String id = chapterId(relative);
+            String shown = display(progressionRoot, file);
+            if (id == null) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "overlay table file is not tables/<namespace>/<table>.json", 0));
+                continue;
+            }
+            String text;
+            try {
+                text = Files.readString(file, StandardCharsets.UTF_8);
+            } catch (IOException ex) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "could not be read: " + ex.getMessage(), 0));
+                continue;
+            }
+            JsonElement parsed;
+            try {
+                parsed = JsonParser.parseString(text);
+            } catch (Exception ex) {
+                out.problems.add(ProgressValidator.parseError(shown, text, ex));
+                continue;
+            }
+            if (!parsed.isJsonObject()) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "the table file is not a JSON object", 0));
+                continue;
+            }
+            TableOverlay overlay = readTable(id, parsed.getAsJsonObject(), shown, text, out.problems);
+            if (out.tables.containsKey(id)) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "table " + id + " is declared by more than one overlay file", 0));
+                continue;
+            }
+            out.tables.put(id, overlay);
+            out.tableRevisions.merge(id, overlay.revision, Math::max);
+        }
+    }
+
+    static TableOverlay readTable(String id, JsonObject o, String file, String raw,
+                                  List<ProgressValidator.Problem> problems) {
+        TableOverlay overlay = new TableOverlay(id);
+        overlay.file = file;
+        overlay.raw = raw;
+        overlay.revision = number(o, "revision");
+        overlay.base = bool(o, "base");
+        overlay.remove = bool(o, "remove");
+        JsonElement table = o.get("table");
+        if (table == null || !table.isJsonObject()) {
+            problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, file, "table",
+                    "\"table\" is not an object, so nothing in it is read", 0));
+        } else {
+            overlay.table = table.getAsJsonObject().deepCopy();
+        }
+        return overlay;
     }
 
     /**
@@ -296,18 +438,55 @@ public final class ProgressionOverlay {
 
     /** Writes the revision sidecar atomically; the caller passes the overlay's complete map. */
     public static void writeRevisions(Path progressionRoot, Map<String, Long> revisions) throws IOException {
+        writeNumbers(progressionRoot.resolve("revisions.json"), revisions);
+    }
+
+    /** Writes the table revision sidecar; separate from chapters so one kind of edit never moves the other's numbers. */
+    public static void writeTableRevisions(Path progressionRoot, Map<String, Long> revisions) throws IOException {
+        writeNumbers(progressionRoot.resolve("table_revisions.json"), revisions);
+    }
+
+    private static void writeNumbers(Path file, Map<String, Long> revisions) throws IOException {
         JsonObject out = new JsonObject();
         for (Map.Entry<String, Long> e : revisions.entrySet()) {
             out.addProperty(e.getKey(), e.getValue());
         }
-        Path file = progressionRoot.resolve("revisions.json");
-        Files.createDirectories(progressionRoot);
-        Path temp = Files.createTempFile(progressionRoot, "revisions", ".tmp");
+        Path root = file.getParent();
+        Files.createDirectories(root);
+        Path temp = Files.createTempFile(root, "revisions", ".tmp");
         try {
             Files.writeString(temp, GSON.toJson(out), StandardCharsets.UTF_8);
             moveAtomically(temp, file);
         } finally {
             Files.deleteIfExists(temp);
+        }
+    }
+
+    private static void readTableRevisions(Path progressionRoot, Overlay out) {
+        Path file = progressionRoot.resolve("table_revisions.json");
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        String shown = display(progressionRoot, file);
+        try {
+            JsonElement parsed = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
+            if (!parsed.isJsonObject()) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "the table revision sidecar is not a JSON object", 0));
+                return;
+            }
+            for (Map.Entry<String, JsonElement> e : parsed.getAsJsonObject().entrySet()) {
+                JsonElement value = e.getValue();
+                if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+                    continue;
+                }
+                out.tableRevisions.merge(e.getKey(), Math.max(0, value.getAsLong()), Math::max);
+            }
+        } catch (IOException ex) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                    "could not be read: " + ex.getMessage(), 0));
+        } catch (RuntimeException ex) {
+            out.problems.add(ProgressValidator.parseError(shown, readQuietly(file), ex));
         }
     }
 

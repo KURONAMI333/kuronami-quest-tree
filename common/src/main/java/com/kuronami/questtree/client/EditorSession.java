@@ -44,7 +44,7 @@ public final class EditorSession {
     }
 
     private record Pending(long requestId, String chapterId, String op, JsonObject args,
-                           Consumer<EditorReplyPayload> then) {
+                           Consumer<EditorReplyPayload> then, boolean table) {
     }
 
     private static final Deque<Pending> queue = new ArrayDeque<>();
@@ -56,6 +56,8 @@ public final class EditorSession {
 
     /** The revision the client last saw per chapter; the bundle sets it, every reply updates it. */
     private static final Map<String, Long> revisions = new HashMap<>();
+    /** Reward-table revisions are separate: editing a table does not move a chapter's number. */
+    private static final Map<String, Long> tableRevisions = new HashMap<>();
     /** Where nodes are drawn while their move waits for the server: global key to {x, y} in grid units. */
     private static final Map<String, double[]> optimistic = new LinkedHashMap<>();
     private static final List<Notice> notices = new ArrayList<>();
@@ -97,14 +99,24 @@ public final class EditorSession {
         return revisions.getOrDefault(chapterId, 0L);
     }
 
+    public static long tableRevision(String tableId) {
+        return tableRevisions.getOrDefault(tableId, 0L);
+    }
+
     /** A new bundle arrived: take its authoritative revisions. */
     public static void onBundle(JsonObject bundle) {
         revisions.clear();
-        if (bundle.has("revisions") && bundle.get("revisions").isJsonObject()) {
-            for (Map.Entry<String, JsonElement> e : bundle.getAsJsonObject("revisions").entrySet()) {
+        tableRevisions.clear();
+        readRevisions(bundle, "revisions", revisions);
+        readRevisions(bundle, "table_revisions", tableRevisions);
+    }
+
+    private static void readRevisions(JsonObject bundle, String key, Map<String, Long> into) {
+        if (bundle.has(key) && bundle.get(key).isJsonObject()) {
+            for (Map.Entry<String, JsonElement> e : bundle.getAsJsonObject(key).entrySet()) {
                 if (e.getValue().isJsonPrimitive()) {
                     try {
-                        revisions.put(e.getKey(), e.getValue().getAsLong());
+                        into.put(e.getKey(), e.getValue().getAsLong());
                     } catch (RuntimeException ignored) {
                         // a malformed revision is the same as none: the server will refuse the next op with a sentence
                     }
@@ -192,8 +204,18 @@ public final class EditorSession {
     }
 
     public static long send(String chapterId, String op, JsonObject args, Consumer<EditorReplyPayload> then) {
+        return send(chapterId, op, args, then, false);
+    }
+
+    /** A reward-table op: its revision comes from the table sidecar, not the chapter the table may belong to. */
+    public static long sendTable(String tableId, String op, JsonObject args, Consumer<EditorReplyPayload> then) {
+        return send(tableId, op, args, then, true);
+    }
+
+    private static long send(String targetId, String op, JsonObject args,
+                             Consumer<EditorReplyPayload> then, boolean table) {
         long id = nextRequestId++;
-        queue.add(new Pending(id, chapterId, op, args, then));
+        queue.add(new Pending(id, targetId, op, args, then, table));
         pump();
         return id;
     }
@@ -249,7 +271,11 @@ public final class EditorSession {
     /** A loader module calls this for each {@code EditorReplyPayload}. */
     public static void onReply(EditorReplyPayload reply) {
         if (reply.chapterId() != null && !reply.chapterId().isEmpty()) {
-            revisions.put(reply.chapterId(), reply.revision());
+            if (current != null && current.requestId() == reply.requestId() && current.table()) {
+                tableRevisions.put(reply.chapterId(), reply.revision());
+            } else {
+                revisions.put(reply.chapterId(), reply.revision());
+            }
         }
         showMessages(reply.lines(), !reply.ok());
         if (current != null && current.requestId() == reply.requestId()) {
@@ -274,16 +300,17 @@ public final class EditorSession {
         Pending next = queue.poll();
         current = next;
         try {
+            long revision = next.table() ? tableRevision(next.chapterId()) : revision(next.chapterId());
             List<EditorOpPayload> payloads = EditorOpPayload.split(next.requestId(), next.chapterId(),
-                    revision(next.chapterId()), next.op(), next.args().toString());
+                    revision, next.op(), next.args().toString());
             for (EditorOpPayload payload : payloads) {
                 ClientProgress.editorSender.accept(payload);
             }
         } catch (RuntimeException ex) {
             // too large to send, or no connection: answer locally so the queue does not stall behind it
             String message = ex.getMessage() == null ? "the edit could not be sent" : ex.getMessage();
-            onReply(new EditorReplyPayload(next.requestId(), next.chapterId(), false, "", message,
-                    revision(next.chapterId())));
+            long revision = next.table() ? tableRevision(next.chapterId()) : revision(next.chapterId());
+            onReply(new EditorReplyPayload(next.requestId(), next.chapterId(), false, "", message, revision));
         }
     }
 
@@ -309,6 +336,7 @@ public final class EditorSession {
         allowed = false;
         active = false;
         revisions.clear();
+        tableRevisions.clear();
         optimistic.clear();
         settledAt.clear();
         notices.clear();

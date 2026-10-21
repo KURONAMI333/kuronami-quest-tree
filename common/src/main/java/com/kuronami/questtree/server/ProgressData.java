@@ -151,9 +151,12 @@ public final class ProgressData {
                 ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot.resolve(ProgressionOverlay.DIR));
                 found.addAll(overlay.problems);
                 overlay.applyTo(chapters, sources);
+                JsonObject tables = bundle.getAsJsonObject("reward_tables");
+                overlay.applyTablesTo(tables, sources);
                 // editors learn each chapter's current revision from the bundle, without spending a request
                 revisions = overlay.revisionsJson();
                 bundle.add("revisions", revisions);
+                bundle.add("table_revisions", overlay.tableRevisionsJson());
             } catch (RuntimeException ex) {
                 Constants.LOG.error("Could not read the progression overlay", ex);
                 found.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, ProgressionOverlay.DIR, "",
@@ -240,7 +243,7 @@ public final class ProgressData {
                 ? packBundle.getAsJsonObject("chapters").deepCopy() : new JsonObject();
     }
 
-    /** The pack reward tables; the overlay does not change them in this phase. */
+    /** The pack reward tables; the writable table overlay is applied on top in {@link #rebuild()}. */
     public static JsonObject packTables() {
         return packBundle.has("reward_tables") && packBundle.get("reward_tables").isJsonObject()
                 ? packBundle.getAsJsonObject("reward_tables").deepCopy() : new JsonObject();
