@@ -40,6 +40,8 @@ The original FTB Quests and Pufferfish's Skills files are only read. Settings th
 | `lang/<locale>.json` | Text shipped with the data (titles, descriptions) |
 | `patches/<id>.json` | Partial changes to a chapter another pack or mod ships (`"target": "<ns>:<chapter>"`) |
 
+Description markup (colours, links, images) is in [_docs/DESCRIPTION_TEXT.md](_docs/DESCRIPTION_TEXT.md).
+
 ## Keys
 
 | Key | |

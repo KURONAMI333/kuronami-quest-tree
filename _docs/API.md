@@ -13,6 +13,8 @@ QuestTreeApi.registerConditionType(id, context -> context.player().experienceLev
 
 同じ id の再登録は置き換え。`unregisterTaskType` / `unregisterRewardType` / `unregisterConditionType` もある（スクリプト再読み込み用）。
 
+説明文の色・リンク・画像の書き方は [_docs/DESCRIPTION_TEXT.md](DESCRIPTION_TEXT.md) を参照。
+
 データ側は登録した id をそのまま書く。
 
 ```json
