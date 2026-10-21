@@ -574,15 +574,18 @@ public final class ProgressService {
             case "exchange" -> {
                 // the skills screen's buy button: spend vanilla levels for one point (DATA_MODEL points.exchange)
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
-                if (c != null && TeamResolver.isOwner(player.server, player.getUUID())) {
+                if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
+                    refuseSharedAction(player);
+                } else if (c != null) {
                     exchange(player, p, c);
                 }
             }
             case "respec" -> {
                 // the skills screen's respec button: give back every point taken in the chapter, for points.respec.cost
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
-                if (c != null && TeamResolver.isOwner(player.server, player.getUUID())
-                        && PlayerCommands.respec(player, p, c, true)) {
+                if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
+                    refuseSharedAction(player);
+                } else if (c != null && PlayerCommands.respec(player, p, c, true)) {
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
                 }
@@ -591,6 +594,20 @@ public final class ProgressService {
         }
         recheck(player, p);
         flush(player);
+    }
+
+    /**
+     * Tells the player why a shared skill action did nothing. The server refuses a non-owner silently, which on a solo
+     * world whose FTB Teams manager failed to load looks like a dead button and gives nothing to report (2026-10-22
+     * review).
+     */
+    private static void refuseSharedAction(ServerPlayer player) {
+        boolean known = !TeamResolver.managedByFtbTeams()
+                || TeamResolver.teamOwner(player.server, TeamResolver.teamId(player.server, player.getUUID())) != null;
+        player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                known ? "message.kuronami_quest_tree.team_owner_only" : "message.kuronami_quest_tree.owner_unknown",
+                known ? "Only the team owner can use this."
+                        : "The team owner could not be read, so this is refused."));
     }
 
     /**

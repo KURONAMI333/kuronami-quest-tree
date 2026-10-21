@@ -80,6 +80,7 @@
   "screen.kuronami_quest_tree.unlock_path": "%s freischalten (%s)",
   "hud.kuronami_quest_tree.held": "Im Besitz %s",
   "screen.kuronami_quest_tree.skill.owner_unknown": "Der Team-Besitzer konnte nicht gelesen werden",
+  "screen.kuronami_quest_tree.skill.team_owner_only": "Nur der Team-Besitzer kann das benutzen",
   "task.kuronami_quest_tree.craft": "Herstellen",
   "task.kuronami_quest_tree.craft_named": "%s herstellen",
   "task.kuronami_quest_tree.use_item": "Gegenstand benutzen",
@@ -101,5 +102,7 @@
   "block.kuronami_quest_tree.quest_barrier": "Questschranke",
   "commands.kuronami_quest_tree.block_given": "%s Block/Blöcke für %s gegeben",
   "message.kuronami_quest_tree.currency_failed": "Die Währungsbelohnung konnte nicht ausgezahlt werden; sie bleibt unbeansprucht.",
-  "message.kuronami_quest_tree.choice_blocked": "Diese Belohnung kann nicht angenommen werden, solange Belohnungen gesperrt sind: die Auswahl wird nicht gespeichert."
+  "message.kuronami_quest_tree.choice_blocked": "Diese Belohnung kann nicht angenommen werden, solange Belohnungen gesperrt sind: die Auswahl wird nicht gespeichert.",
+  "message.kuronami_quest_tree.team_owner_only": "Nur der Team-Besitzer kann das benutzen.",
+  "message.kuronami_quest_tree.owner_unknown": "Der Team-Besitzer konnte nicht gelesen werden; daher abgelehnt."
 }

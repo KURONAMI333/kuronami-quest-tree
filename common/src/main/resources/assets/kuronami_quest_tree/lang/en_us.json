@@ -447,5 +447,7 @@
   "block.kuronami_quest_tree.quest_barrier": "Quest Gate",
   "commands.kuronami_quest_tree.block_given": "Gave %s block(s) for %s",
   "message.kuronami_quest_tree.currency_failed": "The currency reward could not be paid; it stays unclaimed.",
-  "message.kuronami_quest_tree.choice_blocked": "This reward cannot be taken while rewards are blocked: its choice is not kept."
+  "message.kuronami_quest_tree.choice_blocked": "This reward cannot be taken while rewards are blocked: its choice is not kept.",
+  "message.kuronami_quest_tree.team_owner_only": "Only the team owner can use this.",
+  "message.kuronami_quest_tree.owner_unknown": "The team owner could not be read, so this is refused."
 }
