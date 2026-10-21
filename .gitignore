@@ -23,10 +23,6 @@ eclipse
 run
 runs
 
-### 統括↔executor の作業文書（公開 repo に入れない）
-GAP_LOG.md
-_handoff/
-
 # dev run folders (worlds, configs, logs)
 neoforge/run/
 fabric/runs/
