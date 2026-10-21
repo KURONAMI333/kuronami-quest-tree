@@ -115,9 +115,11 @@ public final class SkillRewardPolicy {
      * Fills {@code team.paidSkillRewards} for a save made before the record existed, once: only a team whose saved form
      * had no {@code paid_skill_rewards} key needs it, and the flag is cleared here so a later load leaves a new save
      * alone. Old per-reward and per-rank skill marks under {@code claimedRewards} are converted first, so a reward that
-     * was refused then is not recorded as paid. A taken skill node with no record at all is filled for every reward of
-     * its taken ranks: before the record existed the conditions were not there, so those rewards had all been paid.
-     * Returns whether the saved form changed.
+     * was refused then is not recorded as paid. Every revocable reward of a taken rank is recorded even when an old
+     * mark already filled the node: a converted mark can name one reward only, and a missing points record would let a
+     * respec return nothing while a retake paid again (2026-10-22 review). A taken skill node with no record at all is
+     * filled for every reward of its taken ranks: before the record existed the conditions were not there, so those
+     * rewards had all been paid. Returns whether the saved form changed.
      */
     public static boolean migratePaidSkillRewards(TeamProgress team, ProgressModel model) {
         if (!team.needsPaidMigration) {
@@ -136,14 +138,14 @@ public final class SkillRewardPolicy {
                 continue;
             }
             boolean recorded = team.paidSkillRewards.stream().anyMatch(k -> k.startsWith(n.key + "#"));
-            if (recorded) {
-                continue;
-            }
             int taken = Math.max(0, e.getValue());
             for (int rank = 0; rank < taken; rank++) {
                 java.util.List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
                 for (int index = 0; index < list.size(); index++) {
-                    changed |= team.paidSkillRewards.add(paidKey(n, rank, index));
+                    // a converted mark can name one reward of the node; every revocable one must be recorded as well
+                    if (!recorded || revocable(list.get(index))) {
+                        changed |= team.paidSkillRewards.add(paidKey(n, rank, index));
+                    }
                 }
             }
         }

@@ -238,6 +238,35 @@ class SkillRewardPolicyTest {
                 "the filled record is the same after a reload");
     }
 
+    /**
+     * An old mark can name one reward of a node. The migration must still record every revocable reward of the taken
+     * rank, or a respec takes back no points and a retake stacks them (2026-10-22 review).
+     */
+    @Test
+    void anOldMarkDoesNotHideTheRevocableRewardsOfTheNode() {
+        ProgressModel model = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {"start": 0}, "nodes": {"n": {"cost": 1, "ranks": [
+                  {"rewards": [{"type": "points", "amount": 2}, {"type": "item"}]}]}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.needsPaidMigration = true;
+        team.shared.taken.put(n.key, 1);
+        team.part(A).claimedRewards.add("s:a/n#skill0#1");
+        team.view(A).bonus.put(ProgressRules.key(model.chapters.get("s:a")), 2);
+
+        assertTrue(SkillRewardPolicy.migratePaidSkillRewards(team, model));
+
+        assertTrue(team.paidSkillRewards.contains("s:a/n#0#0"),
+                "the points reward is recorded even though the item mark filled the node");
+        assertTrue(team.paidSkillRewards.contains("s:a/n#0#1"));
+
+        new ProgressRules(model).revokePoints(team.view(A), n, 1);
+        assertEquals(0, team.view(A).bonus.getOrDefault(ProgressRules.key(model.chapters.get("s:a")), 0),
+                "the respec takes the points back once");
+        assertFalse(team.paidSkillRewards.contains("s:a/n#0#0"));
+    }
+
     /** A leaver keeps the team's one-off marks and paid records: taking the rank alone again must not pay again. */
     @Test
     void aLeaverKeepsTheTeamsOneOffRecords() {
