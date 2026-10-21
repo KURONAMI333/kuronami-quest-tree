@@ -42,7 +42,7 @@ public class QuestTaskBlockEntity extends BlockEntity {
             return;
         }
         CompoundTag tag = new CompoundTag();
-        tag.putString("quest_node", node);
+        tag.putString(QuestNodeKey.KEY, node);
         components.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
@@ -51,20 +51,21 @@ public class QuestTaskBlockEntity extends BlockEntity {
         super.applyImplicitComponents(input);
         CustomData data = input.get(DataComponents.CUSTOM_DATA);
         if (data != null) {
-            setNode(data.copyTag().getString("quest_node"));
+            CompoundTag tag = data.copyTag();
+            setNode(QuestNodeKey.read(tag::contains, tag::getString));
         }
     }
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.putString("quest_node", node);
+        tag.putString(QuestNodeKey.KEY, node);
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        node = tag.getString("node");
+        node = QuestNodeKey.read(tag::contains, tag::getString);
     }
 
     @Override
