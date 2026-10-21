@@ -76,7 +76,9 @@ public final class ProgressionEditor {
     }
 
     public ProgressionEditor(Path worldRoot, Supplier<String> ids, ProgressValidator.Registry registry) {
-        this.overlayRoot = worldRoot.resolve(ProgressionOverlay.DIR);
+        // LevelResource.ROOT is "." on a real server: an unnormalized root makes every file path contain "/./", so the
+        // fileFor/tableFileFor startsWith guard refused every write as "outside the overlay". Normalize once here.
+        this.overlayRoot = worldRoot.toAbsolutePath().normalize().resolve(ProgressionOverlay.DIR);
         this.ids = ids;
         this.registry = registry;
     }

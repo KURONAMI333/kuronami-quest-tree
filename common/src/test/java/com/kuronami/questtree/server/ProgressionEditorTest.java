@@ -87,6 +87,24 @@ class ProgressionEditorTest {
                 .resolve(chapterId.replace(':', '/') + ".json");
     }
 
+    /** A real world root is "." (LevelResource.ROOT): the overlay must still be inside it (2026-10-22 review). */
+    @Test
+    void aWorldPathWithDotStillWritesInsideTheOverlay() throws Exception {
+        Path dotted = temp.resolve(".").resolve("world");
+        ProgressionEditor editor = new ProgressionEditor(dotted,
+                () -> "minted", ProgressValidator.Registry.NONE);
+        assertFalse(editor.overlayRoot().toString().contains("/./"),
+                "the overlay root is normalized: " + editor.overlayRoot());
+
+        ProgressionEditor.Outcome out = apply(editor, CHAPTER, 0, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"x\":7}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        Path written = temp.resolve("world").resolve(ProgressionOverlay.DIR).resolve("chapters")
+                .resolve(CHAPTER.replace(':', '/') + ".json");
+        assertTrue(Files.isRegularFile(written), "the chapter was written inside the world: " + written);
+    }
+
     @Test
     void updateNodeWritesAReplaceEntryWithTheNextRevision() throws Exception {
         ProgressionEditor.Outcome out = apply(editor(), CHAPTER, 0, "update_node",

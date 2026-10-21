@@ -47,7 +47,7 @@ public final class EditorService {
 
     /** The server started: point the overlay at this world and drop the previous world's editing state. */
     public static void onServerStarted(MinecraftServer server) {
-        worldRoot = server.getWorldPath(LevelResource.ROOT);
+        worldRoot = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
         editor = new ProgressionEditor(worldRoot, GameRegistry.INSTANCE);
         editing.clear();
         assemblers.clear();
