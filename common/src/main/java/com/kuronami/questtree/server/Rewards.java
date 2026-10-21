@@ -3,6 +3,8 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.api.QuestRewardType;
+import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
@@ -31,6 +33,8 @@ import java.util.Set;
 /** Hands out rewards (DATA_MODEL.md "報酬"). Every reward is checked again here; nothing trusts the client. */
 public final class Rewards {
 
+    private static final RewardAttempts FAILED = new RewardAttempts();
+
     private Rewards() {
     }
 
@@ -46,7 +50,7 @@ public final class Rewards {
      */
     private static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
                                 String rollKey, boolean ignoreBlock) {
-        if (!ProgressService.conditionsMet(player, p, rw) || (!ignoreBlock && blocked(p, rw))) {
+        if (!ProgressService.conditionsMet(player, p, n, rw, false) || (!ignoreBlock && blocked(p, rw))) {
             return false;
         }
         try {
@@ -80,13 +84,22 @@ public final class Rewards {
                     yield true;
                 }
                 default -> {
-                    Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                    QuestRewardType addon = QuestTreeApi.rewardType(ProgressService.type(rw));
+                    if (addon != null) {
+                        addon.give(new QuestRewardType.RewardContext(player, n, rw, choice));
+                    } else {
+                        Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                    }
                     yield true;
                 }
             };
         } catch (RuntimeException ex) {
-            Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
-            return false;
+            // the claim is kept: retrying a reward that always throws would only fail again, and FTB Quests also
+            // spends the claim. One broken reward must not make the quest look unclaimed forever.
+            if (FAILED.first(rewardKey(n, rw))) {
+                Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+            }
+            return true;
         }
     }
 
@@ -195,7 +208,7 @@ public final class Rewards {
                 continue;
             }
             JsonObject rw = list.get(index);
-            if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, rw)) {
+            if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, n, rw, false)) {
                 continue;
             }
             int owed = p.pendingRewards.getOrDefault(key, 0);
@@ -238,6 +251,16 @@ public final class Rewards {
         }
     }
 
+    /** Identifies one reward entry for the once-only log: its place in the node, or its contents for a rank reward. */
+    private static String rewardKey(ProgressModel.Node n, JsonObject rw) {
+        for (int i = 0; i < n.rewards.size(); i++) {
+            if (n.rewards.get(i) == rw) {
+                return n.key + "#" + i;
+            }
+        }
+        return n.key + "#rank:" + rw;
+    }
+
     /**
      * Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. Skill
      * rewards are always paid on the spot, even while an admin blocks quest rewards (2026-10-22 review).
@@ -267,7 +290,7 @@ public final class Rewards {
         List<JsonObject> list = rewardsOfRank(n, rank);
         for (int index = 0; index < list.size(); index++) {
             JsonObject rw = list.get(index);
-            if (!ProgressService.conditionsMet(player, p, rw)) {
+            if (!ProgressService.conditionsMet(player, p, n, rw, false)) {
                 continue;
             }
             boolean firstTake = SkillRewardPolicy.owed(claimed, n, rank, index);
@@ -348,7 +371,7 @@ public final class Rewards {
                     List<JsonObject> list = rewardsOfRank(n, rank);
                     // a reward whose conditions did not hold was never handed out, so do not put it back either
                     for (int i : SkillRewardPolicy.grantedIndexes(n, rank,
-                            rw -> ProgressService.conditionsMet(player, p, rw))) {
+                            rw -> ProgressService.conditionsMet(player, p, n, rw, false))) {
                         if (ProgressService.type(list.get(i)).equals("attribute")) {
                             attribute(player, n.key, rank * 100 + i, list.get(i));
                         }
@@ -370,7 +393,7 @@ public final class Rewards {
             if (n != null && ProgressRules.chapterUnlocked(p, n.chapter)) {
                 for (JsonObject rw : n.rewards) {
                     if (ProgressService.type(rw).equals("attribute")
-                            && ProgressService.conditionsMet(player, p, rw)) {
+                            && ProgressService.conditionsMet(player, p, n, rw, false)) {
                         attribute(player, n.key, slotOf(n, rw), rw);
                     }
                 }
@@ -397,7 +420,7 @@ public final class Rewards {
             if (n != null && index >= 0 && index < n.rewards.size()) {
                 JsonObject rw = n.rewards.get(index);
                 if (ProgressService.type(rw).equals("attribute")
-                        && ProgressService.conditionsMet(player, p, rw)) {
+                        && ProgressService.conditionsMet(player, p, n, rw, false)) {
                     attribute(player, n.key, slotOf(n, rw), rw);
                 }
             }
@@ -413,7 +436,7 @@ public final class Rewards {
         // points are shared, and giveSkill paid them only for the taker: take them back once, before the member
         // loop can run the per-player effects (a respec before this point is refused when they were already spent).
         Map<String, Integer> before = new HashMap<>(p.bonus);
-        ProgressService.rules().revokePoints(p, n, taken, rw -> ProgressService.conditionsMet(player, p, rw));
+        ProgressService.rules().revokePoints(p, n, taken, rw -> ProgressService.conditionsMet(player, p, n, rw, false));
         // an admin respec/reset does not go through the screen's affordability check, so an overdraft must at least
         // leave a trace instead of quietly showing 0 points (2026-10-22 review)
         for (Map.Entry<String, Integer> e : p.bonus.entrySet()) {
@@ -439,7 +462,7 @@ public final class Rewards {
                     // revokePoints took the shared points back once for the team
                     continue;
                 }
-                if (!ProgressService.conditionsMet(player, p, rw)) {
+                if (!ProgressService.conditionsMet(player, p, n, rw, false)) {
                     // the conditions did not hold when it was taken, so it was never handed out: nothing to undo
                     continue;
                 }

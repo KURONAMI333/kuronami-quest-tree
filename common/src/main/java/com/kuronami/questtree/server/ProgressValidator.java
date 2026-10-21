@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.points.Expression;
 
 import java.util.ArrayDeque;
@@ -114,10 +115,6 @@ public final class ProgressValidator {
             "item", "xp", "xp_levels", "command", "table", "advancement", "stage", "attribute", "points",
             "tag", "toast", "trophy", "scoreboard", "custom", "dummy", "currency");
     private static final Set<String> REWARD_UNIMPLEMENTED = Set.of();
-
-    /** Conditions accepted on a task or reward (DATA_MODEL.md "条件"). */
-    private static final Set<String> CONDITION_TYPES = Set.of(
-            "stage", "score", "item", "advancement", "party_size");
 
     /** The observation kinds {@code ProgressService.observing} answers; any other kind never matches. */
     private static final Set<String> OBSERVE_KINDS = Set.of(
@@ -622,7 +619,7 @@ public final class ProgressValidator {
             problem(out, Severity.ERROR, ref, path, type == null ? "task has no \"type\"" : "\"type\" is not a string");
             return;
         }
-        if (!TASK_TYPES.contains(name)) {
+        if (!TASK_TYPES.contains(name) && !QuestTreeApi.taskTypeRegistered(name)) {
             problem(out, Severity.ERROR, ref, path + ".type", "unknown task type " + quote(name) + ", so the task never counts");
             return;
         }
@@ -841,20 +838,21 @@ public final class ProgressValidator {
                 continue;
             }
             JsonObject o = c.getAsJsonObject();
-            String type = str(o, "type");
-            if (type.isEmpty()) {
+            String raw = str(o, "type");
+            if (raw.isEmpty()) {
                 problem(out, Severity.ERROR, ref, at, "condition has no \"type\", so it can never be met");
                 continue;
             }
-            if (type.contains(":")) {
-                type = type.substring(type.indexOf(':') + 1);
-            }
-            if (!CONDITION_TYPES.contains(type)) {
+            if (!QuestConditions.isBuiltIn(raw)) {
+                if (QuestTreeApi.conditionTypeRegistered(raw)) {
+                    // an addon owns this kind and its fields; the five built-ins keep their checks below
+                    continue;
+                }
                 problem(out, Severity.WARNING, ref, at + ".type",
-                        "unknown condition type " + quote(type) + ", so it can never be met");
+                        "unknown condition type " + quote(raw) + ", which is not registered and not built in, so it can never be met");
                 continue;
             }
-            switch (type) {
+            String type = QuestConditions.builtInName(raw);            switch (type) {
                 case "stage" -> {
                     if (str(o, "stage").isEmpty()) {
                         problem(out, Severity.ERROR, ref, at + ".stage", "stage condition has no stage, so it can never be met");
@@ -948,7 +946,7 @@ public final class ProgressValidator {
             }
             return;
         }
-        if (!REWARD_TYPES.contains(name)) {
+        if (!REWARD_TYPES.contains(name) && !QuestTreeApi.rewardTypeRegistered(name)) {
             problem(out, Severity.WARNING, ref, path + ".type", "unknown reward type " + quote(name) + ", so nothing is given");
             return;
         }

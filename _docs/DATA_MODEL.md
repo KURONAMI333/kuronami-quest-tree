@@ -6,7 +6,7 @@ updated: 2026-10-22
 
 # データの形（案 v1）
 
-置き場はデータパックの `data/<namespace>/progression/`。サーバーが読み、クライアントへ送る。文言は言語ファイル（`assets/<namespace>/lang/<locale>.json`）に置く。
+置き場はデータパックの `data/<namespace>/progression/`。サーバーが読み、クライアントへ送る。文言は言語ファイル（`data/<namespace>/progression/lang/<locale>.json`）に置く。
 
 決め方: 6本のパック（ATM10・FTB Skies 2・FTB Evolution・Prominence II・DarkRPG・Mystic Horizons）の定義を全部数え、使われている項目はすべて表せるようにした。
 
@@ -39,6 +39,23 @@ data/<ns>/progression/
 ```
 
 `patches` は Mystic Horizons で必要と分かった。別MOD（SimplySkills）が持つスキルツリーの一部を、パック側から書き換えている。
+
+## Translating a quest book
+
+パックの本の文言はデータパック側の言語ファイルに置く。MOD 本体の UI（`assets/kuronami_quest_tree/lang/<locale>.json`）とは別物。
+
+- 置き場は `data/<namespace>/progression/lang/<locale>.json`。1 locale 1ファイルのフラットな JSON オブジェクトで、インポーターもここへ書き出す。
+- locale 名は Minecraft と同じ（`en_us`, `ja_jp`, `de_de`, `fr_fr`, `es_es`, `zh_cn`, `ru_ru`, `pt_br`, `ko_kr`）。プレイヤーには選択中の locale と `en_us` だけが送られ、無いキーは `en_us` に落ちる。
+- キーの形（`<ns>` はデータパックの名前空間、`<chapter>` は `chapters/<chapter>.json` の名前）:
+  - 章: `progression.<ns>.<chapter>.title`
+  - 章の群: `progression.<ns>.group.<group>.title`
+  - ノード: `progression.<ns>.<chapter>.<node>.title` / `.subtitle` / `.desc`
+  - タスク名の上書き: タスクの `text` に書いた値を前置きにした `<text>.title`
+  - `visibility.lock_hint`: キーを書けばその訳、キーでない文字列ならそのまま表示
+- 値は文字列。`\n` で改ページ、FTB の色コード（`&a` など）も使える。翻訳キーではなくそのまま表示されるので `%s` の穴埋めは無い。
+- locale を足すには `en_us.json` をコピーして値を訳し、キーとファイル名以外を変えない。
+- リソースパックの `assets/<namespace>/lang/<locale>.json` もバニラの I18n として読まれるが、効くのは章題・群題・`lock_hint` だけ（`ClientModel.component` のフォールバック）。`subtitle` と `desc` はデータ側の言語ファイルしか見ないので、本文はデータパックに入れる。
+- 翻訳されない文字列: ノードや章に直接書いた `title` / `subtitle` / `description` は言語キーより優先される。装飾の `hover` は配列の文字列をそのまま表示する（言語キーを引かない）。
 
 ## 章
 
@@ -162,6 +179,8 @@ data/<ns>/progression/
 
 タスクにも報酬にも `"conditions": [...]` を書ける。全部満たしたときだけ、タスクは数えられ、報酬は渡される。条件を満たさない報酬は未受取のまま残り、あとで満たせば受け取れる。
 
+判定は1つの入口だけを通る。組み込みの5種類と、他 MOD・KubeJS が登録した種類を同じ配列に混ぜて書ける。
+
 条件は取得時だけでなく、報酬の取り消し（振り直し・リセット）とログイン時の再付与でもその都度評価する。取得時に満たさず渡していない報酬は、取り消しでも再付与でも触らない。スキルの `points` 報酬は、取得時に条件を満たさず払わなかった分を振り直しの判定にも取り消しにも数えない（2026-10-22）。
 
 ```json
@@ -170,9 +189,12 @@ data/<ns>/progression/
 {"type": "item", "item": {"id": "minecraft:diamond", "count": 3}}
 {"type": "advancement", "advancement": "minecraft:story/root", "criterion": null}
 {"type": "party_size", "min": 2}
+{"type": "example:enabled"}
 ```
 
-`stage` は Pack Stages の段階（`team_stages` も含む）、`score` はスコアボードの値、`item` は手持ち、`advancement` は進捗、`party_size` はオンラインのパーティ人数。`score` は `scoreboard` でも書ける。知らない種類は条件を満たさない扱い（書いたゲートを開けない側に倒す）。
+`stage` は Pack Stages の段階（`team_stages` も含む）、`score` はスコアボードの値、`item` は手持ち、`advancement` は進捗、`party_size` はオンラインのパーティ人数。`score` は `scoreboard` でも書ける。組み込みの5種類は名前空間なし（`item`）かこの MOD の名前空間（`kuronami_quest_tree:item`）で書け、どちらも組み込みとして読む。他の名前空間（`example:item`）は id が組み込みと同じでも組み込みにはせず、必ず登録表を引く。
+
+登録した種類は `<namespace>:<id>` で書き、`QuestTreeApi.registerConditionType` か KubeJS の `QuestTree.registerCondition` で登録する（[_docs/API.md](API.md)）。登録した種類は名前空間込みの id で照合し、その項目の判定はハンドラに任せる。どちらにも無い種類は条件を満たさない扱い（書いたゲートを開けない側に倒す）。検証では未登録の種類を `WARNING` にし、ノードは落とさない。
 
 ## ブロック
 

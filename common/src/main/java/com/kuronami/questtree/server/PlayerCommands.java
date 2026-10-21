@@ -423,7 +423,7 @@ final class PlayerCommands {
      */
     static boolean respec(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch, boolean charge) {
         if (charge && !ProgressService.rules().canRespec(pr, ch,
-                rw -> ProgressService.conditionsMet(p, pr, rw))) {
+                rw -> ProgressService.conditionsMet(p, pr, null, rw, false))) {
             return false;
         }
         // refund before the nodes are removed: the amount is the chapter's taken nodes (2026-10-20 review)

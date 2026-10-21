@@ -81,6 +81,21 @@ class QuestConditionsTest {
     }
 
     @Test
+    void anotherModsNamespaceAlwaysReachesTheRegistry() {
+        Fake f = new Fake();
+        f.stage = "s";
+        f.item = false;
+        // the id after the colon is one of ours, but example:item is the addon's kind, not the built-in item
+        assertFalse(QuestConditions.met(json("{\"type\": \"example:item\", \"item\": \"minecraft:stone\"}"), f));
+        assertFalse(QuestConditions.met(json("{\"type\": \"example:stage\", \"stage\": \"s\"}"), f));
+        assertTrue(QuestConditions.met(json("{\"type\": \"example:item\", \"item\": \"minecraft:stone\"}"), f,
+                condition -> true), "a registered handler decides the entry");
+        // no namespace and this mod's namespace are still built in
+        assertTrue(QuestConditions.met(json("{\"type\": \"stage\", \"stage\": \"s\"}"), f));
+        assertTrue(QuestConditions.met(json("{\"type\": \"kuronami_quest_tree:stage\", \"stage\": \"s\"}"), f));
+    }
+
+    @Test
     void aMissingScoreObjectiveReadsAsZero() {
         Fake f = new Fake();
         f.score = 10;

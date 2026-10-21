@@ -5,6 +5,10 @@ Quest books and skill trees in one screen, defined by data packs. Imports existi
 - Minecraft 1.21.1, NeoForge and Fabric
 - Status: early development. Progress is shared with the team you are in and saved with the world; each player claims their own rewards.
 
+## Addons
+
+Task, reward and condition types can be registered from another mod, and progression events are available. See [_docs/API.md](_docs/API.md). KubeJS scripts can register the same handlers on NeoForge.
+
 ## Commands
 
 Most commands need permission level 2. `migrate` needs level 4 (or the server console); `party` is open to every player.
@@ -52,6 +56,8 @@ Team progress is saved in `<world>/data/kuronami_quest_tree.dat`.
 | `groups.json` | Chapter groups and their order |
 | `lang/<locale>.json` | Text shipped with the data (titles, descriptions) |
 | `patches/<id>.json` | Partial changes to a chapter another pack or mod ships (`"target": "<ns>:<chapter>"`) |
+
+Description markup (colours, links, images) is in [_docs/DESCRIPTION_TEXT.md](_docs/DESCRIPTION_TEXT.md).
 
 ## Keys
 
