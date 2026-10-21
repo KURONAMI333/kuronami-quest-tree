@@ -11,11 +11,8 @@ import dev.latvian.mods.kubejs.event.KubeEvent;
 import dev.latvian.mods.kubejs.plugin.KubeJSPlugin;
 import dev.latvian.mods.kubejs.script.BindingRegistry;
 import dev.latvian.mods.kubejs.script.ScriptManager;
-import dev.latvian.mods.kubejs.script.ScriptType;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * The KubeJS integration. KubeJS 7 is NeoForge-only on 1.21.1, so this class lives in {@code :neoforge}; the operations
@@ -29,8 +26,8 @@ import java.util.Set;
  * QuestTree.registerTask('example:held_level', context => context.player().experienceLevel)
  * QuestTree.registerCondition('example:level_30', context => context.player().experienceLevel >= 30)
  * }</pre>
- * The handler ids are tracked so a server-script reload forgets exactly what the previous scripts registered; a Java
- * addon's own registrations are left alone.
+ * The handler ids are tracked by script type, so reloading one kind of script forgets exactly what that kind registered;
+ * a Java addon's own registrations and the other script types' handlers are left alone.
  */
 public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
 
@@ -39,9 +36,7 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
     private static final EventHandler TASK_COMPLETED = EVENTS.server("taskCompleted", () -> TaskEvent.class);
     private static final EventHandler REWARD_CLAIMED = EVENTS.server("rewardClaimed", () -> QuestEvent.class);
 
-    private static final Set<String> SCRIPT_TASKS = new HashSet<>();
-    private static final Set<String> SCRIPT_REWARDS = new HashSet<>();
-    private static final Set<String> SCRIPT_CONDITIONS = new HashSet<>();
+    private static final QuestTreeScriptTypes TYPES = new QuestTreeScriptTypes();
 
     @Override
     public void init() {
@@ -61,29 +56,30 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
 
     @Override
     public void registerBindings(BindingRegistry event) {
-        event.add("QuestTree", new Bindings());
+        event.add("QuestTree", new Bindings(event.type().name));
     }
 
-    /** A server reload is a statement about the handlers the scripts left; a client reload is not. */
+    /** Reloading one kind of script forgets the handlers that kind registered, and nothing else. */
     @Override
     public void beforeScriptsLoaded(ScriptManager manager) {
-        if (manager.scriptType != ScriptType.SERVER) {
-            return;
-        }
-        SCRIPT_TASKS.forEach(QuestTreeApi::unregisterTaskType);
-        SCRIPT_REWARDS.forEach(QuestTreeApi::unregisterRewardType);
-        SCRIPT_CONDITIONS.forEach(QuestTreeApi::unregisterConditionType);
-        SCRIPT_TASKS.clear();
-        SCRIPT_REWARDS.clear();
-        SCRIPT_CONDITIONS.clear();
+        QuestTreeScriptTypes.Cleared cleared = TYPES.clear(manager.scriptType.name);
+        cleared.tasks().forEach(QuestTreeApi::unregisterTaskType);
+        cleared.rewards().forEach(QuestTreeApi::unregisterRewardType);
+        cleared.conditions().forEach(QuestTreeApi::unregisterConditionType);
     }
 
     /** The object a script sees as {@code QuestTree}. */
     public static final class Bindings {
 
+        private final String scriptType;
+
+        Bindings(String scriptType) {
+            this.scriptType = scriptType;
+        }
+
         public boolean registerTask(String id, QuestTaskType handler) {
             if (QuestTreeApi.registerTaskType(id, handler)) {
-                SCRIPT_TASKS.add(id);
+                TYPES.task(scriptType, id);
                 return true;
             }
             return false;
@@ -91,7 +87,7 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
 
         public boolean registerReward(String id, QuestRewardType handler) {
             if (QuestTreeApi.registerRewardType(id, handler)) {
-                SCRIPT_REWARDS.add(id);
+                TYPES.reward(scriptType, id);
                 return true;
             }
             return false;
@@ -99,7 +95,7 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
 
         public boolean registerCondition(String id, QuestConditionType handler) {
             if (QuestTreeApi.registerConditionType(id, handler)) {
-                SCRIPT_CONDITIONS.add(id);
+                TYPES.condition(scriptType, id);
                 return true;
             }
             return false;
