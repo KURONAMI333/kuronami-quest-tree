@@ -115,14 +115,15 @@ public final class SavedDataFiles {
     private static <T extends SavedData> T readFile(Path file,
                                                     BiFunction<CompoundTag, HolderLookup.Provider, T> deserializer,
                                                     HolderLookup.Provider registries) {
-        CompoundTag root;
         try {
-            root = readRoot(file);
+            CompoundTag root = readRoot(file);
+            // The load is part of the check: a gzip that opens but throws while it is decoded is just as unreadable
+            // as a truncated one, and must reach the backup too (2026-10-22 release review).
+            return deserializer.apply(root.getCompound("data"), registries);
         } catch (IOException | RuntimeException ex) {
             Constants.LOG.warn("Could not read {}: {}", file, ex.toString());
             return null;
         }
-        return deserializer.apply(root.getCompound("data"), registries);
     }
 
     private static boolean readable(Path file) {

@@ -6,6 +6,8 @@ import net.minecraft.SharedConstants;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.world.level.saveddata.SavedData;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,9 +53,43 @@ class ProgressStoreLoadTest {
         return SavedDataFiles.read(file, ProgressStore::load, null);
     }
 
-    private static boolean hasCorruptFile(Path dir) throws IOException {
-        try (Stream<Path> files = Files.list(dir)) {
-            return files.anyMatch(p -> p.getFileName().toString().startsWith("progress.dat.corrupt-"));
+    private static boolean hasCorruptFile(Path dataFile) throws IOException {
+        String prefix = dataFile.getFileName() + ".corrupt-";
+        try (Stream<Path> files = Files.list(dataFile.getParent())) {
+            return files.anyMatch(p -> p.getFileName().toString().startsWith(prefix));
+        }
+    }
+
+    private static void writeRoot(Path file, String marker) throws IOException {
+        CompoundTag data = new CompoundTag();
+        if ("bad".equals(marker)) {
+            data.putInt("bad", 1);
+        } else {
+            data.putString("marker", marker);
+        }
+        CompoundTag root = new CompoundTag();
+        root.put("data", data);
+        NbtIo.writeCompressed(root, file);
+    }
+
+    /** A store whose load fails on a record that parses as NBT but not as this store. */
+    private static final class Dummy extends SavedData {
+        private final String marker;
+
+        private Dummy(String marker) {
+            this.marker = marker;
+        }
+
+        private static Dummy load(CompoundTag tag, HolderLookup.Provider registries) {
+            if (tag.contains("bad")) {
+                throw new IllegalStateException("bad record");
+            }
+            return new Dummy(tag.getString("marker"));
+        }
+
+        @Override
+        public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+            return tag;
         }
     }
 
@@ -80,7 +116,7 @@ class ProgressStoreLoadTest {
 
         assertEquals(Set.of("test:book/first"), recovered.team(TEAM).shared.completed,
                 "the backup of the previous save is read");
-        assertTrue(hasCorruptFile(dir), "the unreadable file is kept for inspection");
+        assertTrue(hasCorruptFile(file), "the unreadable file is kept for inspection");
         assertEquals(Set.of("test:book/first"), read(file).team(TEAM).shared.completed,
                 "the backup was restored as the main file");
     }
@@ -92,7 +128,7 @@ class ProgressStoreLoadTest {
 
         assertNull(read(file), "a caller starts with an empty store when nothing reads");
         assertFalse(Files.exists(file), "the broken file is not left where the next save would append it");
-        assertTrue(hasCorruptFile(dir));
+        assertTrue(hasCorruptFile(file));
     }
 
     @Test
@@ -103,8 +139,22 @@ class ProgressStoreLoadTest {
 
         assertNull(read(file));
         assertFalse(Files.exists(file));
-        assertTrue(hasCorruptFile(dir));
+        assertTrue(hasCorruptFile(file));
         assertTrue(Files.isRegularFile(SavedDataFiles.backupPath(file)), "the backup is left for inspection too");
+    }
+
+    @Test
+    void aGzipFileThatFailsToLoadFallsBackToTheBackup() throws IOException {
+        Path file = dir.resolve("store.dat");
+        writeRoot(file, "bad");
+        writeRoot(SavedDataFiles.backupPath(file), "backup");
+
+        Dummy recovered = SavedDataFiles.read(file, Dummy::load, null);
+
+        assertEquals("backup", recovered.marker, "a readable gzip whose record does not load still uses the backup");
+        assertTrue(hasCorruptFile(file), "the unloadable file is kept");
+        assertEquals("backup", SavedDataFiles.read(file, Dummy::load, null).marker,
+                "the backup was restored as the main file");
     }
 
     @Test
