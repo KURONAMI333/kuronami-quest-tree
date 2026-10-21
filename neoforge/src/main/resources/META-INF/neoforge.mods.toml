@@ -33,7 +33,56 @@ side = "BOTH"
 [[dependencies.${mod_id}]]
 modId = "ftbteams"
 type="optional"
-versionRange = "[2101.1,)"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "ftblibrary"
+type="optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "roughlyenoughitems"
+type="optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.${mod_id}]]
+modId = "emi"
+type="optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.${mod_id}]]
+modId = "jei"
+type="optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.${mod_id}]]
+modId = "kubejs"
+type="optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "pack_stages"
+type="optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "kuronami_trophies"
+type="optional"
+versionRange = "[0,)"
 ordering = "AFTER"
 side = "BOTH"
 
