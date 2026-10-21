@@ -143,6 +143,9 @@ public class ProgressScreen extends Screen {
      */
     private static final Map<ResourceLocation, Boolean> imageCache = new HashMap<>();
     private static boolean tourResting;
+    /** Dev tour only: a pointer in GUI pixels, so a hover and its tooltip can be in a photo without moving the mouse. */
+    private static Double tourPointerX;
+    private static Double tourPointerY;
 
     @Override
     protected void init() {
@@ -670,6 +673,9 @@ public class ProgressScreen extends Screen {
         if (tourResting) {
             mouseX = width + 8;
             mouseY = height + 8;
+        } else if (tourPointerX != null && tourPointerY != null) {
+            mouseX = (int) Math.floor(tourPointerX);
+            mouseY = (int) Math.floor(tourPointerY);
         }
         super.render(g, mouseX, mouseY, partialTick);
         g.fill(0, 0, width, height, SCRIM);
@@ -3433,6 +3439,18 @@ public class ProgressScreen extends Screen {
         }
     }
 
+    /** Dev tour only: select a node by key (the details sheet, with the map moved to keep it in view). */
+    void tourSelect(String key) {
+        ClientModel m = model();
+        ClientModel.Chapter ch = chapter();
+        ClientModel.Node n = m == null ? null : m.nodesByKey.get(key);
+        if (ch == null || n == null) {
+            return;
+        }
+        selected = key;
+        keepVisible(view(ch), n);
+    }
+
     /**
      * Dev tour only: draw the resting layout. A tour runs in an unfocused window whose pointer still sits wherever it
      * was, and hover would then hold the chapter rail open in every photo. Turned on for the photos and off again when
@@ -3485,6 +3503,120 @@ public class ProgressScreen extends Screen {
 
     static void tourRailOpen(boolean open) {
         tourRailOpen = open;
+    }
+
+    /** Dev tour only: put the pointer at a GUI pixel, so a hover row and its tooltip can be photographed. */
+    static void tourPointer(int x, int y) {
+        tourPointerX = (double) x;
+        tourPointerY = (double) y;
+    }
+
+    static void tourPointerClear() {
+        tourPointerX = null;
+        tourPointerY = null;
+    }
+
+    /** Dev tour only: select a visible node in edit mode (the map's own selection marks, not the details sheet). */
+    void tourEditSelectFirst() {
+        ClientModel.Chapter ch = chapter();
+        if (ch == null) {
+            return;
+        }
+        selected = null;
+        editSelection.clear();
+        for (ClientModel.Node n : ch.nodes.values()) {
+            if (ClientProgress.visible(n.key)) {
+                editSelection.click(n.key, false);
+                return;
+            }
+        }
+    }
+
+    /** Dev tour only: open one node's edit screen, the way a double click in edit mode does. */
+    void tourOpenNodeEditor(String chapterId, String nodeId) {
+        ClientModel m = model();
+        ClientModel.Chapter ch = m == null ? null : m.chapters.stream()
+                .filter(c -> c.id.equals(chapterId)).findFirst().orElse(null);
+        ClientModel.Node n = ch == null ? null : ch.nodes.get(nodeId);
+        if (ch != null && n != null && minecraft != null) {
+            minecraft.setScreen(new NodeEditScreen(this, ch.id, n.id));
+        }
+    }
+
+    /** Dev tour only: open one chapter's settings screen. */
+    void tourOpenChapterEditor(String chapterId) {
+        ClientModel m = model();
+        ClientModel.Chapter ch = m == null ? null : m.chapters.stream()
+                .filter(c -> c.id.equals(chapterId)).findFirst().orElse(null);
+        if (ch != null && minecraft != null) {
+            minecraft.setScreen(new ChapterEditScreen(this, ch.id));
+        }
+    }
+
+    /** Dev tour only: open a reward table's edit screen (the first table the pack ships). */
+    void tourOpenTableEditor() {
+        if (minecraft == null) {
+            return;
+        }
+        var tables = ClientProgress.rawTables();
+        String id = tables.isEmpty() ? "devtour:empty_table" : tables.keySet().iterator().next();
+        minecraft.setScreen(new TableEditScreen(this, id, tables.isEmpty()));
+    }
+
+    /** Dev tour only: open the list of deleted chapters and nodes. */
+    void tourOpenRestore() {
+        openDeleted();
+    }
+
+    /** Dev tour only: open the party screen. */
+    void tourOpenParty() {
+        if (minecraft != null) {
+            minecraft.setScreen(new PartyScreen(this));
+        }
+    }
+
+    /** Dev tour only: open the respec confirmation card on a skill chapter. */
+    void tourAskRespec(String chapterId) {
+        ClientModel m = model();
+        ClientModel.Chapter ch = m == null ? null : m.chapters.stream()
+                .filter(c -> c.id.equals(chapterId)).findFirst().orElse(null);
+        if (ch != null) {
+            askRespec(ch, ch.respecCost);
+        }
+    }
+
+    void tourClearConfirm() {
+        confirmPrompt = null;
+        confirmRun = null;
+    }
+
+    /** Dev tour only: the centre of a chapter's row in the open list, scrolling the list so the row is visible. */
+    int[] tourRailRow(String chapterId) {
+        int ry = 0;
+        for (RailRow row : railRows) {
+            int h = railRowHeight(row);
+            if (!row.isHeader() && row.chapter().id.equals(chapterId)) {
+                float want = Mth.clamp(ry - 20, 0, railMaxScroll());
+                railScroll = want;
+                railScrollTarget = want;
+                int y = RAIL_LIST_TOP + ry - Math.round(railScrollShown());
+                return new int[]{4 + Ui.S1 + 24, y + h / 2};
+            }
+            ry += h;
+        }
+        return null;
+    }
+
+    /** Dev tour only: the centre of the emergency row, or null when the pack hands nothing out. */
+    int[] tourEmergencyRow() {
+        if (!emergencyRow()) {
+            return null;
+        }
+        int sy = height - 8 - railFootH() + 2 + RAIL_FOOT_ROW + 4;
+        if (partyRow()) {
+            sy += RAIL_FOOT_ROW + 4;
+        }
+        return new int[]{4 + Ui.S1 + 24, sy + RAIL_FOOT_ROW / 2};
     }
 
 

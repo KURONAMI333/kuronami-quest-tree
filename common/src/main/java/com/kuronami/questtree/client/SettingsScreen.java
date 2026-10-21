@@ -420,4 +420,16 @@ public final class SettingsScreen extends Screen {
             minecraft.setScreen(parent);
         }
     }
+
+    /** Dev tour only: show the list from its top. */
+    void tourScrollTop() {
+        scroll = 0;
+        scrollTarget = 0;
+    }
+
+    /** Dev tour only: show the list from its bottom. */
+    void tourScrollBottom() {
+        scroll = maxScroll();
+        scrollTarget = scroll;
+    }
 }
