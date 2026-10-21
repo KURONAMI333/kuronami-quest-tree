@@ -79,12 +79,6 @@ public final class ProgressModel {
         public final JsonObject defaults;
         /** The whole chapter is hidden from the list (FTB Quests "always invisible"). */
         public final boolean alwaysHidden;
-        /**
-         * {@code visibility.lock_hint}: what a pack tells a player whose chapter is locked. A language key or literal
-         * text; empty when the pack gives none.
-         */
-        public final String lockHint;
-
         Chapter(String id, JsonObject o) {
             this.id = id;
             int colon = id.indexOf(':');
@@ -94,8 +88,6 @@ public final class ProgressModel {
             this.defaults = obj(o, "defaults");
             JsonObject visibility = obj(o, "visibility");
             this.alwaysHidden = boolOf(visibility, "always_hidden");
-            this.lockHint = visibility.has("lock_hint") && visibility.get("lock_hint").isJsonPrimitive()
-                    ? visibility.get("lock_hint").getAsString() : "";
             for (Map.Entry<String, JsonElement> e : obj(o, "nodes").entrySet()) {
                 if (e.getValue().isJsonObject()) {
                     nodes.put(e.getKey(), new Node(this, e.getKey(), e.getValue().getAsJsonObject()));

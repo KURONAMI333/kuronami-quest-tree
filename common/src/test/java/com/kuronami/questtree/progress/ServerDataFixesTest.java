@@ -220,17 +220,15 @@ class ServerDataFixesTest {
         assertTrue(rules.canRespec(p, locked));
     }
 
-    /** 13. A pack's unlock hint is read from visibility.lock_hint, and an empty one is no hint. */
+    /** 13. A chapter is locked by points.unlocked_by_default; visibility.lock_hint is only the client's hint. */
     @Test
-    void lockHintIsReadFromVisibility() {
+    void chapterUnlockUsesUnlockedByDefault() {
         ProgressModel m = model("""
                 {"chapters": {
                   "s:hinted": {"visibility": {"lock_hint": "progression.pack.locked_hint"},
                                "points": {"unlocked_by_default": false}, "nodes": {}},
                   "s:plain": {"visibility": {"lock_hint": ""}, "nodes": {}}}}
                 """);
-        assertEquals("progression.pack.locked_hint", m.chapters.get("s:hinted").lockHint);
-        assertEquals("", m.chapters.get("s:plain").lockHint);
         assertFalse(ProgressRules.chapterUnlocked(new PlayerProgress(), m.chapters.get("s:hinted")));
         assertTrue(ProgressRules.chapterUnlocked(new PlayerProgress(), m.chapters.get("s:plain")));
     }
