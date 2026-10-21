@@ -280,6 +280,18 @@ final class PlayerCommands {
         if (ch == null || !ch.isSkills()) {
             throw new IllegalArgumentException("Unknown skill chapter " + id);
         }
+        // the command is an admin action and does not charge the pack's screen fee
+        respec(p, pr, ch, false);
+    }
+
+    /**
+     * The screen's respec (2026-10-21): with {@code charge}, the pack's {@code points.respec.cost} is taken in points
+     * after the refund. Returns false when the player may not respec now (locked chapter, nothing taken, too few points).
+     */
+    static boolean respec(ServerPlayer p, PlayerProgress pr, ProgressModel.Chapter ch, boolean charge) {
+        if (charge && !ProgressService.rules().canRespec(pr, ch)) {
+            return false;
+        }
         // refund before the nodes are removed: the amount is the chapter's taken nodes (2026-10-20 review)
         ProgressRules.refundChapterSpent(pr, ch);
         for (ProgressModel.Node n : ch.nodes.values()) {
@@ -288,5 +300,10 @@ final class PlayerCommands {
                 Rewards.revokeSkill(p, pr, n, taken);
             }
         }
+        int cost = charge ? ProgressRules.respecCost(ch) : 0;
+        if (cost > 0) {
+            pr.spent.merge(ProgressRules.key(ch), cost, Integer::sum);
+        }
+        return true;
     }
 }

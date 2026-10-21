@@ -173,6 +173,68 @@ class ServerDataFixesTest {
         assertEquals(3, p.exchange.get(pooled));
     }
 
+    /** 11. The screen's respec charges points.respec.cost and only lets it happen when the points cover it. */
+    @Test
+    void respecCostIsChargedOnlyWhenAffordable() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 2, "respec": {"cost": 3}},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(3, ProgressRules.respecCost(a));
+        assertFalse(rules.canRespec(p, a), "nothing taken: no respec");
+        p.taken.put(a.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(a), 1);
+        assertEquals(1, ProgressRules.chapterRefund(p, a), "reading the refund changes nothing");
+        assertEquals(1, p.spent.get(ProgressRules.key(a)));
+        assertFalse(rules.canRespec(p, a), "1 point left + 1 refunded does not cover a cost of 3");
+        p.bonus.put(ProgressRules.key(a), 2);
+        assertTrue(rules.canRespec(p, a));
+        p.spent.merge(ProgressRules.key(a), 3, Integer::sum);
+        assertEquals(0, rules.availablePoints(p, a), "the fee stays spent after the respec");
+    }
+
+    /** 12. A pack without points.respec charges nothing, and a locked chapter cannot be respeced from the screen. */
+    @Test
+    void respecDefaultsToFreeAndWaitsForTheChapterToOpen() {
+        ProgressModel m = model("""
+                {"chapters": {
+                  "s:free": {"points": {"per_level": 1, "start": 1}, "nodes": {"n": {"cost": 1}}},
+                  "s:locked": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": false,
+                                           "respec": {"cost": 1}}, "nodes": {"m": {"cost": 1}}}}}
+                """);
+        ProgressRules rules = new ProgressRules(m);
+        ProgressModel.Chapter free = m.chapters.get("s:free");
+        ProgressModel.Chapter locked = m.chapters.get("s:locked");
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(0, ProgressRules.respecCost(free));
+        p.taken.put(free.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(free), 1);
+        assertTrue(rules.canRespec(p, free));
+        p.taken.put(locked.nodes.get("m").key, 1);
+        p.spent.merge(ProgressRules.key(locked), 1, Integer::sum);
+        assertFalse(rules.canRespec(p, locked));
+        p.chapterOpen.put(locked.id, true);
+        assertTrue(rules.canRespec(p, locked));
+    }
+
+    /** 13. A pack's unlock hint is read from visibility.lock_hint, and an empty one is no hint. */
+    @Test
+    void lockHintIsReadFromVisibility() {
+        ProgressModel m = model("""
+                {"chapters": {
+                  "s:hinted": {"visibility": {"lock_hint": "progression.pack.locked_hint"},
+                               "points": {"unlocked_by_default": false}, "nodes": {}},
+                  "s:plain": {"visibility": {"lock_hint": ""}, "nodes": {}}}}
+                """);
+        assertEquals("progression.pack.locked_hint", m.chapters.get("s:hinted").lockHint);
+        assertEquals("", m.chapters.get("s:plain").lockHint);
+        assertFalse(ProgressRules.chapterUnlocked(new PlayerProgress(), m.chapters.get("s:hinted")));
+        assertTrue(ProgressRules.chapterUnlocked(new PlayerProgress(), m.chapters.get("s:plain")));
+    }
+
     /** 10. A random reward never rolls empty, and weight-0 entries are granted outside the rolls. */
     @Test
     void randomRewardHonoursEmptyOnlyForLootAndZeroWeights() {

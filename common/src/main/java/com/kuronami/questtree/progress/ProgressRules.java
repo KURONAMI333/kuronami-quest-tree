@@ -430,6 +430,16 @@ public final class ProgressRules {
      * share leaves the others' points spent (2026-10-20 review).
      */
     public static int refundChapterSpent(PlayerProgress p, ProgressModel.Chapter c) {
+        int refund = chapterRefund(p, c);
+        if (refund > 0) {
+            int refunded = refund;
+            p.spent.computeIfPresent(key(c), (k, v) -> Math.max(0, v - refunded));
+        }
+        return refund;
+    }
+
+    /** The points a respec would give back now, without changing anything. */
+    public static int chapterRefund(PlayerProgress p, ProgressModel.Chapter c) {
         int refund = 0;
         for (ProgressModel.Node n : c.nodes.values()) {
             int taken = p.taken.getOrDefault(n.key, 0);
@@ -437,11 +447,33 @@ public final class ProgressRules {
                 refund += Math.max(0, n.cost) * taken;
             }
         }
-        if (refund > 0) {
-            int refunded = refund;
-            p.spent.computeIfPresent(key(c), (k, v) -> Math.max(0, v - refunded));
-        }
         return refund;
+    }
+
+    /** A respec's cost in points ({@code points.respec.cost}); 0 when the pack does not charge. */
+    public static int respecCost(ProgressModel.Chapter c) {
+        if (c == null || c.points == null || !c.points.has("respec") || !c.points.get("respec").isJsonObject()) {
+            return 0;
+        }
+        JsonObject respec = c.points.getAsJsonObject("respec");
+        if (!respec.has("cost") || !respec.get("cost").isJsonPrimitive()
+                || !respec.get("cost").getAsJsonPrimitive().isNumber()) {
+            return 0;
+        }
+        return Math.max(0, respec.get("cost").getAsInt());
+    }
+
+    /**
+     * Whether a player may respec this chapter from the screen now: the chapter is open, something is taken, and the
+     * points left after the refund cover {@code points.respec.cost}. The cost stays spent afterwards (a later respec
+     * refunds only the nodes), so the fee is never handed back.
+     */
+    public boolean canRespec(PlayerProgress p, ProgressModel.Chapter c) {
+        if (c == null || !c.isSkills() || !chapterUnlocked(p, c)) {
+            return false;
+        }
+        int refund = chapterRefund(p, c);
+        return refund > 0 && availablePoints(p, c) + refund >= respecCost(c);
     }
 
     /**

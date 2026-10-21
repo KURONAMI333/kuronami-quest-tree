@@ -339,6 +339,14 @@ public final class ProgressService {
                     exchange(player, p, c);
                 }
             }
+            case "respec" -> {
+                // the skills screen's respec button: give back every point taken in the chapter, for points.respec.cost
+                ProgressModel.Chapter c = r.model().chapters.get(a.node());
+                if (c != null && PlayerCommands.respec(player, p, c, true)) {
+                    ProgressStore.get(player.server).setDirty();
+                    markDirty(player);
+                }
+            }
             default -> Constants.LOG.debug("Unknown progression action {}", a.action());
         }
         recheck(player, p);

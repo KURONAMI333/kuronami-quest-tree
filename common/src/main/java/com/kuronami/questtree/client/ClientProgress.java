@@ -192,6 +192,23 @@ public final class ClientProgress {
         return c != null && (c.alwaysHidden || !ProgressRules.chapterUnlocked(progress, c));
     }
 
+    /** A chapter the pack marks {@code visibility.always_hidden}: not even a locked row is shown for it. */
+    public static boolean chapterAlwaysHidden(String id) {
+        ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(id);
+        return c != null && c.alwaysHidden;
+    }
+
+    /** A chapter the player has not unlocked yet: shown greyed in the list, not opened. */
+    public static boolean chapterLocked(String id) {
+        ProgressModel.Chapter c = rules == null ? null : rules.model().chapters.get(id);
+        return c != null && !c.alwaysHidden && !ProgressRules.chapterUnlocked(progress, c);
+    }
+
+    /** Exchange purchases already made on the chapter's pool. */
+    public static int exchangeUsed(ClientModel.Chapter c) {
+        return c == null ? 0 : progress.exchange.getOrDefault(ProgressRules.key(c.id, c.pool), 0);
+    }
+
     /**
      * How a node's tile looks. A quest's "claim" is done with a reward waiting (green + gold); a skill's is "can unlock"
      * (white). Locked nodes carry a lock only when they are the next step (every requirement started or done).

@@ -161,6 +161,14 @@ public final class ClientModel {
         public final List<Link> links = new ArrayList<>();
         /** Pictures behind the map, bottom first (chapter {@code background}); empty = the plain ground. */
         public final List<BackgroundLayer> background = new ArrayList<>();
+        /** {@code points.exchange.xp_levels}: vanilla levels for one point (0 = no exchange button). */
+        public final int exchangeCost;
+        /** {@code points.exchange.level_limit}: how many purchases the chapter allows. */
+        public final int exchangeLimit;
+        /** {@code points.respec.cost}: points charged by the screen's respec. */
+        public final int respecCost;
+        /** {@code visibility.lock_hint}: what the pack tells a player whose chapter is locked; null when unset. */
+        public final Component lockHint;
 
         Chapter(ClientModel m, String id, JsonObject o, Map<String, Integer> groupOrder) {
             this.id = id;
@@ -178,6 +186,18 @@ public final class ClientModel {
             this.skills = o.has("points") && o.get("points").isJsonObject();
             JsonObject pointsJson = obj(o, "points");
             this.pool = pointsJson.has("pool") && pointsJson.get("pool").isJsonPrimitive() ? pointsJson.get("pool").getAsString() : null;
+            JsonObject exchange = obj(pointsJson, "exchange");
+            this.exchangeCost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
+                    ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
+            this.exchangeLimit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
+                    ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
+            JsonObject respec = obj(pointsJson, "respec");
+            this.respecCost = respec.has("cost") && respec.get("cost").isJsonPrimitive()
+                    && respec.get("cost").getAsJsonPrimitive().isNumber() ? Math.max(0, respec.get("cost").getAsInt()) : 0;
+            JsonObject visibility = obj(o, "visibility");
+            String hint = visibility.has("lock_hint") && visibility.get("lock_hint").isJsonPrimitive()
+                    ? visibility.get("lock_hint").getAsString() : "";
+            this.lockHint = hint.isBlank() ? null : m.component(hint, parseText(hint));
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
             this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive();
