@@ -106,6 +106,29 @@ class ReviewFixesTest {
     }
 
     @Test
+    void aPartlyPaidTableRetriesOnlyTheEntriesThatFailed() {
+        PlayerProgress p = new PlayerProgress();
+        java.util.List<Integer> entries = java.util.List.of(0, 1, 2);
+        java.util.List<Integer> paid = new java.util.ArrayList<>();
+        assertFalse(RewardPayout.pay(p, "t:q/n#-1#0", entries, (index, position) -> {
+            if (index == 1) {
+                return false;
+            }
+            paid.add(index);
+            return true;
+        }));
+        assertEquals(java.util.List.of(0, 2), paid);
+
+        paid.clear();
+        assertTrue(RewardPayout.pay(p, "t:q/n#-1#0", entries, (index, position) -> {
+            paid.add(index);
+            return true;
+        }));
+        assertEquals(java.util.List.of(1), paid, "the entries already paid are not handed out again");
+        assertTrue(p.rewardRolls.isEmpty(), "the marks go with the finished table");
+    }
+
+    @Test
     void aBlockedMemberSkillRewardIsOwedToThatMemberOnly() {
         // Rewards.giveSkillOne writes a member's own command/tag pay-out into that member's progress
         PlayerProgress taker = new PlayerProgress();

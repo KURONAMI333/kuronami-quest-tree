@@ -554,11 +554,13 @@ public final class Rewards {
         String mode = rw.has("mode") ? rw.get("mode").getAsString() : "random";
         switch (mode) {
             case "all" -> {
-                boolean paid = true;
+                // every entry is paid once; a retry after a failure skips the entries already paid
+                List<Integer> all = new ArrayList<>();
                 for (int i = 0; i < entries.size(); i++) {
-                    paid &= give(player, p, n, entries.get(i), -1, key + ">all>" + i);
+                    all.add(i);
                 }
-                return paid;
+                return com.kuronami.questtree.progress.RewardPayout.pay(p, key + ">all", all,
+                        (index, position) -> give(player, p, n, entries.get(index), -1, key + ">all>" + position));
             }
             case "choice" -> {
                 if (choice < 0 || choice >= entries.size()) {
@@ -579,14 +581,9 @@ public final class Rewards {
                     // decide and record before paying, so a failed entry does not make the next attempt roll again
                     p.rewardRolls.put(picksKey, com.kuronami.questtree.progress.RewardRoll.encode(picks));
                 }
-                boolean paid = true;
-                int position = 0;
-                for (int index : picks) {
-                    if (index >= 0 && index < entries.size()) {
-                        paid &= give(player, p, n, entries.get(index), -1, key + ">" + position);
-                    }
-                    position++;
-                }
+                boolean paid = com.kuronami.questtree.progress.RewardPayout.pay(p, key, picks,
+                        (index, position) -> index < 0 || index >= entries.size()
+                                || give(player, p, n, entries.get(index), -1, key + ">" + position));
                 if (paid) {
                     p.rewardRolls.remove(picksKey);
                 }

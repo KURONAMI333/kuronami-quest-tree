@@ -61,3 +61,9 @@ unclaimed forever is withdrawn; the reward is simply not offered to that player 
 saved stages, and the client reads the copy Pack Stages syncs to it. A stage granted by another mod therefore opens the
 gate on both sides. A team stage this player was given is tracked in `teamStagesApplied`; on login only the stages the
 team no longer holds are removed, so an offline removal is followed without stripping stages another mod granted.
+
+## Reward tables with a failing entry (2026-10-22 review)
+
+A table pays its entries in order. An entry that was paid is marked in the player's saved `rewardRolls`, so a retry
+after a later entry failed hands out only the entries still missing. When the whole table is through, the marks and
+the recorded roll are removed together. A `choice` table pays one entry, so it has nothing to mark.
