@@ -927,15 +927,15 @@ public final class ProgressService {
         return sum + (long) (player.experienceProgress * player.getXpNeededForNextLevel());
     }
 
+    /**
+     * Writes a task's progress and announces the TASK event once it first reaches the target. Conditions are not
+     * judged here: every caller has already judged them, and a hand-in has already taken the items by the time it
+     * writes, so re-judging would drop the progress of a condition that names the item just handed over
+     * (2026-10-22 review). The observation scan keeps its own guard in {@link ObservationWrite}.
+     */
     private static void bump(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int i, long value) {
-        JsonObject task = n.tasks.get(i);
-        if (!conditionsMet(player, p, n, task, true)) {
-            return;
-        }
-        long target = ProgressRules.target(task);
-        long before = p.task(n.key, i);
-        p.setTask(n.key, i, value);
-        if (before < target && value >= target) {
+        long target = ProgressRules.target(n.tasks.get(i));
+        if (TaskWrite.records(p, n, i, value, target)) {
             QuestTreeApi.fire(QuestTreeApi.QuestEvent.Kind.TASK, player, n, i);
         }
         ProgressStore.get(player.server).setDirty();
