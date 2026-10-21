@@ -468,11 +468,16 @@ public final class ProgressService {
             int run = observing(player, t) ? Math.min(seen.getOrDefault(key, 0) + 1, (int) target) : 0;
             seen.put(key, run);
             if (persist || run >= target) {
-                if (p.task(n.key, i) != run) {
+                long before = p.task(n.key, i);
+                boolean conditions = conditionsMet(player, n, t, true);
+                if (ObservationWrite.writes(before, run, conditions)) {
                     // quiet write: a look that lasts a while would otherwise send a packet every tick
                     p.setTask(n.key, i, run);
                     ProgressStore.get(player.server).setDirty();
                     markExperienceDirty(player);
+                    if (ObservationWrite.announces(before, run, target, conditions)) {
+                        QuestTreeApi.fire(QuestTreeApi.QuestEvent.Kind.TASK, player, n, i);
+                    }
                 }
                 if (run >= target) {
                     recheck(player, p);
