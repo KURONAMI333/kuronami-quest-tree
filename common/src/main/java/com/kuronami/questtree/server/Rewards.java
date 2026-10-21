@@ -227,7 +227,8 @@ public final class Rewards {
         // Shared values (points) and one-off pay-outs are applied once, by the player who took it
         for (ServerPlayer member : members(player)) {
             if (!member.getUUID().equals(player.getUUID())) {
-                giveSkillOne(member, p, n, rank, false);
+                // a member's own pay-out (a blocked command or tag) is owed to that member, not to the taker
+                giveSkillOne(member, ProgressService.progress(member), n, rank, false);
             }
         }
     }

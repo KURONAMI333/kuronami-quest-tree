@@ -106,6 +106,17 @@ class ReviewFixesTest {
     }
 
     @Test
+    void aBlockedMemberSkillRewardIsOwedToThatMemberOnly() {
+        // Rewards.giveSkillOne writes a member's own command/tag pay-out into that member's progress
+        PlayerProgress taker = new PlayerProgress();
+        PlayerProgress member = new PlayerProgress();
+        JsonObject reward = reward("command");
+        assertTrue(RewardLedger.claim(member, reward, "s:q/skill", 0, 0, false, true, () -> true));
+        assertEquals(1, member.pendingRewards.get("s:q/skill#0#0"));
+        assertTrue(taker.pendingRewards.isEmpty(), "the taker is not owed another member's pay-out");
+    }
+
+    @Test
     void aBlockedChoiceTableIsRefusedInsteadOfPaidWithNoChoice() {
         PlayerProgress p = new PlayerProgress();
         JsonObject reward = reward("table");
