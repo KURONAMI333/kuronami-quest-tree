@@ -4,6 +4,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.progress.ProgressRules.State;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
@@ -50,6 +51,11 @@ final class DevTour {
                     Screenshot.grab(mc.gameDirectory, "questtree_00_waiting.png", mc.getMainRenderTarget(), msg -> { });
                 }
             }
+            return;
+        }
+        // a death screen would replace the screen a photo is waiting for; respawn and keep the tour on its rail.
+        // anything that wants to see the death screen itself belongs after the last shot.
+        if (respawnIfDead()) {
             return;
         }
         if (ticks < 0) {
@@ -378,6 +384,19 @@ final class DevTour {
             }
         }
         return null;
+    }
+
+    private static boolean respawnIfDead() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            return false;
+        }
+        if (!mc.player.isDeadOrDying() && !(mc.screen instanceof DeathScreen)) {
+            return false;
+        }
+        Constants.LOG.info("Dev tour: respawned instead of photographing the death screen");
+        mc.player.respawn();
+        return true;
     }
 
     private static void giveNow(ClientModel.Node n, double share) {
