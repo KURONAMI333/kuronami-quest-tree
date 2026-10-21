@@ -186,14 +186,11 @@ public final class ClientModel {
             this.skills = o.has("points") && o.get("points").isJsonObject();
             JsonObject pointsJson = obj(o, "points");
             this.pool = pointsJson.has("pool") && pointsJson.get("pool").isJsonPrimitive() ? pointsJson.get("pool").getAsString() : null;
-            JsonObject exchange = obj(pointsJson, "exchange");
-            this.exchangeCost = exchange.has("xp_levels") && exchange.get("xp_levels").isJsonPrimitive()
-                    ? Math.max(1, exchange.get("xp_levels").getAsInt()) : 0;
-            this.exchangeLimit = exchange.has("level_limit") && exchange.get("level_limit").isJsonPrimitive()
-                    ? exchange.get("level_limit").getAsInt() : Integer.MAX_VALUE;
-            JsonObject respec = obj(pointsJson, "respec");
-            this.respecCost = respec.has("cost") && respec.get("cost").isJsonPrimitive()
-                    && respec.get("cost").getAsJsonPrimitive().isNumber() ? Math.max(0, respec.get("cost").getAsInt()) : 0;
+            // the server reads the same block through these helpers, so the exchange and respec rules cannot drift
+            ProgressRules.Exchange exchange = ProgressRules.exchangeOf(pointsJson);
+            this.exchangeCost = exchange.cost();
+            this.exchangeLimit = exchange.limit();
+            this.respecCost = ProgressRules.respecCost(pointsJson);
             JsonObject visibility = obj(o, "visibility");
             String hint = visibility.has("lock_hint") && visibility.get("lock_hint").isJsonPrimitive()
                     ? visibility.get("lock_hint").getAsString() : "";

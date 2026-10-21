@@ -567,10 +567,15 @@ public final class ProgressRules {
 
     /** A respec's cost in points ({@code points.respec.cost}); 0 when the pack does not charge. */
     public static int respecCost(ProgressModel.Chapter c) {
-        if (c == null || c.points == null || !c.points.has("respec") || !c.points.get("respec").isJsonObject()) {
+        return respecCost(c == null ? null : c.points);
+    }
+
+    /** The same from raw {@code points}; the client and server share this reading. */
+    public static int respecCost(JsonObject points) {
+        if (points == null || !points.has("respec") || !points.get("respec").isJsonObject()) {
             return 0;
         }
-        JsonObject respec = c.points.getAsJsonObject("respec");
+        JsonObject respec = points.getAsJsonObject("respec");
         if (!respec.has("cost") || !respec.get("cost").isJsonPrimitive()
                 || !respec.get("cost").getAsJsonPrimitive().isNumber()) {
             return 0;
