@@ -112,13 +112,38 @@ class ProgressValidatorTest {
     }
 
     @Test
-    void anUnknownTaskOrRewardTypeEmitsAWarningNotAnError() {
+    void interactionAndDummyAreImplementedNow() {
         ProgressValidator.Result r = validate(chapter(
-                "{\"type\": \"interaction\", \"count\": 1}",
+                "{\"type\": \"interaction\", \"action\": \"pickup\", \"item\": \"minecraft:stone\"}",
                 "{\"type\": \"dummy\"}"));
-        assertEquals(0, errors(r));
-        assertTrue(says(r, "is not implemented yet"));
+        assertEquals(List.of(), r.problems);
         assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
+    void anInteractionWithoutAnActionIsAnError() {
+        ProgressValidator.Result r = validate(chapter("{\"type\": \"interaction\", \"count\": 1}", ""));
+        assertTrue(says(r, "has no \"action\""));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void interactionTasksCheckTheirMatchingField() {
+        assertEquals(List.of(), validate(chapter(
+                "{\"type\": \"craft\", \"item\": \"minecraft:stone\"}", "")).problems);
+        assertEquals(List.of(), validate(chapter(
+                "{\"type\": \"right_click_block\", \"block\": \"minecraft:lever\"}", "")).problems);
+        assertEquals(List.of(), validate(chapter(
+                "{\"type\": \"tame\", \"entity\": \"minecraft:wolf\"}", "")).problems);
+        assertTrue(says(validate(chapter(
+                "{\"type\": \"interaction\", \"action\": \"nope\"}", "")), "unknown interaction action"));
+    }
+
+    @Test
+    void killFiltersAreShapedText() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"kill\", \"entity\": \"minecraft:zombie\", \"name\": \"Bob\", \"nbt\": \"{HasOnGround:1b}\"}", ""));
+        assertEquals(List.of(), r.problems);
     }
 
     @Test

@@ -99,9 +99,54 @@ final class TaskText {
                         ? "task." + p + ".xp_points" : "task." + p + ".xp_levels"));
             case "checkmark":
                 return new Shown(ItemStack.EMPTY, Component.translatable("task." + p + ".checkmark"));
+            case "craft":
+                return new Shown(item.isEmpty() ? new ItemStack(Items.CRAFTING_TABLE) : item,
+                        item.isEmpty() ? Component.translatable("task." + p + ".craft")
+                                : Component.translatable("task." + p + ".craft_named", item.getHoverName()));
+            case "use_item":
+                return new Shown(item, item.isEmpty() ? Component.translatable("task." + p + ".use_item")
+                        : Component.translatable("task." + p + ".use_item_named", item.getHoverName()));
+            case "right_click_block": {
+                String spec = spec(o, "block");
+                return new Shown(new ItemStack(Items.OAK_BUTTON),
+                        Component.translatable("task." + p + ".right_click_block_named", targetName(spec, "block")));
+            }
+            case "pickup":
+                return new Shown(item, item.isEmpty() ? Component.translatable("task." + p + ".pickup")
+                        : Component.translatable("task." + p + ".pickup_named", item.getHoverName()));
+            case "interact_entity", "tame", "breed", "ride": {
+                String entity = entityTarget(o);
+                EntityType<?> et = entityId(o);
+                SpawnEggItem egg = et == null ? null : SpawnEggItem.byId(et);
+                ItemStack icon = new ItemStack(egg != null ? egg : switch (type) {
+                    case "tame" -> Items.LEAD;
+                    case "breed" -> Items.WHEAT;
+                    case "ride" -> Items.SADDLE;
+                    default -> Items.EMERALD;
+                });
+                Component target = et != null ? et.getDescription() : entity.isEmpty()
+                        ? Component.translatable("task." + p + ".any_mob") : pretty(entity);
+                return new Shown(icon, Component.translatable("task." + p + "." + type + "_named", target));
+            }
+            case "interaction":
+                return describe(str(o, "action").isEmpty() ? str(o, "kind") : str(o, "action"), o, item);
             default:
                 return new Shown(ItemStack.EMPTY, Component.translatable("task." + p + "." + type));
         }
+    }
+
+    /** The entity a task targets, from {@code entity} or {@code entity_tag}. */
+    private static String entityTarget(JsonObject o) {
+        String tag = str(o, "entity_tag");
+        return tag.isEmpty() ? str(o, "entity") : "#" + tag;
+    }
+
+    private static EntityType<?> entityId(JsonObject o) {
+        String id = str(o, "entity");
+        if (id.isEmpty() || id.startsWith("#")) {
+            return null;
+        }
+        return BuiltInRegistries.ENTITY_TYPE.getOptional(ResourceLocation.tryParse(id)).orElse(null);
     }
 
     /** Vanilla-style translation ("biome.minecraft.plains", "stat.minecraft.jump") when one exists, else a tidy id. */

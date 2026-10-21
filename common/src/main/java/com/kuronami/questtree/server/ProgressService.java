@@ -21,6 +21,9 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -32,6 +35,7 @@ import net.minecraft.stats.Stats;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ItemStack;
@@ -46,6 +50,8 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Optional;
+import java.util.WeakHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -226,7 +232,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (r.taskOpen(p, n, i) && type(t).equals("kill") && entityMatches(str(t, "entity"), killed.getType())) {
+                if (r.taskOpen(p, n, i) && type(t).equals("kill") && entityMatches(player, t, killed)) {
                     hits.add(new TaskRef(n, i));
                 }
             }
@@ -267,6 +273,187 @@ public final class ProgressService {
             }
         }
         recheck(player, p);
+    }
+
+    // ------------------------------------------------------------------ interaction tasks (2026-10-21)
+
+    private static final Map<Animal, UUID> BREEDERS = new WeakHashMap<>();
+    private static final Map<String, Optional<CompoundTag>> NBT_FILTERS = new HashMap<>();
+
+    /** A crafted result was taken out of a crafting grid. Counts the result's size, so one recipe can finish "4 planks". */
+    public static void onCraft(ServerPlayer player, ItemStack stack) {
+        if (stack != null && !stack.isEmpty()) {
+            interaction(player, "craft", stack, null, null, null, stack.getCount());
+        }
+    }
+
+    /** An item was used (food, potion, bucket, bow, ...). Counts the action once, not the stack size. */
+    public static void onUseItem(ServerPlayer player, ItemStack stack) {
+        if (stack != null && !stack.isEmpty()) {
+            interaction(player, "use_item", stack, null, null, null, 1);
+        }
+    }
+
+    /** A block was right-clicked (placed against, opened, or used). */
+    public static void onRightClickBlock(ServerPlayer player, BlockState state) {
+        if (state != null) {
+            interaction(player, "right_click_block", null, state, null, null, 1);
+        }
+    }
+
+    /** A player interacted with an entity (right-click, including feeding and mounting). */
+    public static void onInteractEntity(ServerPlayer player, Entity target) {
+        if (target != null) {
+            interaction(player, "interact_entity", null, null, target, null, 1);
+        }
+    }
+
+    public static void onTame(ServerPlayer player, Entity target) {
+        if (target != null) {
+            interaction(player, "tame", null, null, target, null, 1);
+        }
+    }
+
+    /** Remember who last fed an animal, so the breeding event can credit that player. */
+    public static void rememberBreeder(Animal animal, ServerPlayer player) {
+        if (animal != null && player != null) {
+            BREEDERS.put(animal, player.getUUID());
+        }
+    }
+
+    /** Two animals bred; the player who fed either one gets the credit. */
+    public static void onBreed(ServerLevel level, Animal first, Animal second) {
+        UUID id = BREEDERS.get(first);
+        if (id == null) {
+            id = BREEDERS.get(second);
+        }
+        if (id == null) {
+            return;
+        }
+        ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
+        if (player != null) {
+            interaction(player, "breed", null, null, first, second, 1);
+        }
+    }
+
+    /** A player mounted an entity. */
+    public static void onRide(ServerPlayer player, Entity vehicle) {
+        if (vehicle != null) {
+            interaction(player, "ride", null, null, vehicle, null, 1);
+        }
+    }
+
+    /** An item entity was picked up. Counts the picked-up size. */
+    public static void onPickup(ServerPlayer player, ItemStack stack) {
+        if (stack != null && !stack.isEmpty()) {
+            interaction(player, "pickup", stack, null, null, null, stack.getCount());
+        }
+    }
+
+    /**
+     * Counts one interaction task. {@code kind} is the concrete type (craft, use_item, ...); the generic
+     * {@code interaction} type is included when its {@code action} matches. Every field is optional: an empty item,
+     * block or entity matches any of them, as in the other task types.
+     */
+    private static void interaction(ServerPlayer player, String kind, ItemStack stack, BlockState state,
+                                    Entity entity, Entity other, int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        ProgressRules r = rules();
+        List<TaskRef> refs = new ArrayList<>(tasksOfType(r, kind));
+        refs.addAll(tasksOfType(r, "interaction"));
+        if (refs.isEmpty()) {
+            return;
+        }
+        PlayerProgress p = progress(player);
+        List<TaskRef> hits = new ArrayList<>();
+        for (TaskRef ref : refs) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
+            if (!working(r, p, n) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
+                continue;
+            }
+            String wanted = type(t).equals("interaction") ? interactionKind(t) : type(t);
+            if (!kind.equals(wanted)) {
+                continue;
+            }
+            if (interactionMatches(player, t, kind, stack, state, entity, other)) {
+                hits.add(ref);
+            }
+        }
+        for (TaskRef ref : hits) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            long target = ProgressRules.target(n.tasks.get(i));
+            long had = p.task(n.key, i);
+            if (had < target) {
+                bump(player, p, n, i, Math.min(had + amount, target));
+            }
+        }
+        if (!hits.isEmpty()) {
+            recheck(player, p);
+        }
+    }
+
+    /** Conditions are added in the next step; a task without conditions always passes. */
+    static boolean conditionsMet(ServerPlayer player, PlayerProgress p, JsonObject holder) {
+        return true;
+    }
+
+    private static String interactionKind(JsonObject t) {
+        String action = str(t, "action");
+        return action.isEmpty() ? str(t, "kind") : action;
+    }
+
+    private static boolean interactionMatches(ServerPlayer player, JsonObject t, String kind, ItemStack stack,
+                                              BlockState state, Entity entity, Entity other) {
+        return switch (kind) {
+            case "craft", "use_item", "pickup" -> !t.has("item") || stack != null && ItemRequirement.of(t).matches(stack, player.registryAccess());
+            case "right_click_block" -> state != null && blockMatches(blockSpec(t), state);
+            default -> {
+                if (entity == null) {
+                    yield false;
+                }
+                yield entityMatches(player, t, entity) || other != null && entityMatches(player, t, other);
+            }
+        };
+    }
+
+    /** A kill (or interaction) task's entity filters: type/tag, custom name, and an optional SNBT subset. */
+    static boolean entityMatches(ServerPlayer player, JsonObject task, Entity entity) {
+        String tag = str(task, "entity_tag");
+        if (!tag.isEmpty()) {
+            if (!entityTypeTagMatches(tag.startsWith("#") ? tag : "#" + tag, entity.getType())) {
+                return false;
+            }
+        } else if (!entityMatches(str(task, "entity"), entity.getType())) {
+            return false;
+        }
+        String name = str(task, "name");
+        if (!name.isEmpty()) {
+            String actual = entity instanceof ServerPlayer other
+                    ? other.getGameProfile().getName()
+                    : entity.getCustomName() == null ? "" : entity.getCustomName().getString();
+            if (!name.equals(actual)) {
+                return false;
+            }
+        }
+        String nbt = str(task, "nbt");
+        if (!nbt.isEmpty()) {
+            Optional<CompoundTag> filter = NBT_FILTERS.computeIfAbsent(nbt, text -> {
+                try {
+                    return Optional.of(TagParser.parseTag(text));
+                } catch (CommandSyntaxException e) {
+                    return Optional.empty();
+                }
+            });
+            if (filter.isEmpty() || !NbtUtils.compareNbt(filter.get(), entity.saveWithoutId(new CompoundTag()), true)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static void onAction(ServerPlayer player, ActionPayload a) {

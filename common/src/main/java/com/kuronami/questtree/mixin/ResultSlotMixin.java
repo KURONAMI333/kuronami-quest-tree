@@ -1,5 +1,6 @@
 package com.kuronami.questtree.mixin;
 
+import com.kuronami.questtree.server.ProgressService;
 import com.kuronami.questtree.server.SkillExperience;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -28,6 +29,7 @@ public abstract class ResultSlotMixin {
         // vanilla skips the second call of a partial shift-click (removeCount already 0); so do we, or it counts twice
         if (removeCount > 0 && player instanceof ServerPlayer sp && !stack.isEmpty()) {
             SkillExperience.onCraft(sp, stack.copy());
+            ProgressService.onCraft(sp, stack.copy());
         }
     }
 }

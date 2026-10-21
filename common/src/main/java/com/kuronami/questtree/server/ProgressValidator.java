@@ -99,12 +99,19 @@ public final class ProgressValidator {
     // WARNING instead of an ERROR, so adding a field to the documented format never breaks a pack that uses it.
     private static final Set<String> TASK_TYPES = Set.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
-            "observation", "stat", "xp", "fluid", "energy", "break", "stage", "custom", "interaction");
-    private static final Set<String> TASK_UNIMPLEMENTED = Set.of("interaction");
+            "observation", "stat", "xp", "fluid", "energy", "break", "stage", "custom", "interaction",
+            "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
+    private static final Set<String> TASK_UNIMPLEMENTED = Set.of();
+    private static final Set<String> INTERACTION_KINDS = Set.of(
+            "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
     private static final Set<String> REWARD_TYPES = Set.of(
             "item", "xp", "xp_levels", "command", "table", "advancement", "stage", "attribute", "points",
             "tag", "toast", "trophy", "scoreboard", "custom", "dummy");
-    private static final Set<String> REWARD_UNIMPLEMENTED = Set.of("custom", "dummy");
+    private static final Set<String> REWARD_UNIMPLEMENTED = Set.of();
+
+    /** Conditions accepted on a task or reward (DATA_MODEL.md "条件"). */
+    private static final Set<String> CONDITION_TYPES = Set.of(
+            "stage", "score", "item", "advancement", "party_size");
 
     /** The observation kinds {@code ProgressService.observing} answers; any other kind never matches. */
     private static final Set<String> OBSERVE_KINDS = Set.of(
@@ -399,6 +406,7 @@ public final class ProgressValidator {
         textShape(out, ref, nodePath, node, "shape", Severity.WARNING);
         textShape(out, ref, nodePath, node, "milestone", Severity.WARNING);
         booleanShape(out, ref, nodePath, node, "root");
+        booleanShape(out, ref, nodePath, node, "shared");
         booleanShape(out, ref, nodePath, node, "optional");
         booleanShape(out, ref, nodePath, node, "hidden");
         whole(out, ref, nodePath, node, "cost");
@@ -551,6 +559,13 @@ public final class ProgressValidator {
             }
             case "kill" -> {
                 textShape(out, ref, path, t, "entity", Severity.WARNING);
+                textShape(out, ref, path, t, "entity_tag", Severity.WARNING);
+                textShape(out, ref, path, t, "name", Severity.WARNING);
+                textShape(out, ref, path, t, "nbt", Severity.WARNING);
+                String entityTag = str(t, "entity_tag");
+                if (!entityTag.isEmpty()) {
+                    id(out, ref, path + ".entity_tag", "entity", entityTag.startsWith("#") ? entityTag : "#" + entityTag, registry);
+                }
                 id(out, ref, path + ".entity", "entity", str(t, "entity"), registry);
             }
             case "advancement" -> required(out, ref, path, t, "advancement");
@@ -585,9 +600,31 @@ public final class ProgressValidator {
                 }
             }
             case "stage" -> required(out, ref, path, t, "stage");
+            case "craft", "use_item", "pickup" -> interactionItem(out, ref, path, t, registry);
+            case "right_click_block" -> interactionBlock(out, ref, path, t, registry);
+            case "interact_entity", "tame", "breed", "ride" -> interactionEntity(out, ref, path, t, registry);
+            case "interaction" -> {
+                String action = str(t, "action");
+                if (action.isEmpty()) {
+                    action = str(t, "kind");
+                }
+                if (action.isEmpty()) {
+                    problem(out, Severity.ERROR, ref, path, "interaction task has no \"action\", so it never counts");
+                } else if (!INTERACTION_KINDS.contains(action)) {
+                    problem(out, Severity.ERROR, ref, path + ".action",
+                            "unknown interaction action " + quote(action) + ", so the task never counts");
+                } else {
+                    switch (action) {
+                        case "craft", "use_item", "pickup" -> interactionItem(out, ref, path, t, registry);
+                        case "right_click_block" -> interactionBlock(out, ref, path, t, registry);
+                        default -> interactionEntity(out, ref, path, t, registry);
+                    }
+                }
+            }
             default -> {
             }
         }
+        conditionList(out, ref, path, t, registry);
         // ProgressRules.target reads all four of these with getAsLong on the server tick, whichever task type it is
         taskNumber(out, ref, path, t, "count", true);
         taskNumber(out, ref, path, t, "amount", false);
@@ -627,6 +664,115 @@ public final class ProgressValidator {
         if (!mode.equals("none") && !hasComponents) {
             problem(out, Severity.WARNING, ref, path + ".match_components",
                     "match_components is " + mode + " but the item has no components, so only its id is checked");
+        }
+    }
+
+    /** The item half of craft / use_item / pickup / interaction. No item means "any item". */
+    private static void interactionItem(Result out, ChapterRef ref, String path, JsonObject t, Registry registry) {
+        if (!t.has("item")) {
+            problem(out, Severity.WARNING, ref, path + ".item", "task has no item, so any item counts");
+            return;
+        }
+        JsonElement it = t.get("item");
+        if (it.isJsonPrimitive()) {
+            id(out, ref, path + ".item", "item", it.getAsString(), registry);
+        } else if (it.isJsonObject()) {
+            JsonObject o = it.getAsJsonObject();
+            if (o.has("tag")) {
+                id(out, ref, path + ".item", "item", "#" + o.get("tag").getAsString(), registry);
+            } else if (o.has("id")) {
+                id(out, ref, path + ".item", "item", o.get("id").getAsString(), registry);
+            } else {
+                problem(out, Severity.ERROR, ref, path + ".item", "item task has no item, so it never counts");
+            }
+        } else {
+            problem(out, Severity.ERROR, ref, path + ".item", "item task has no item, so it never counts");
+        }
+        matchComponents(out, ref, path, t);
+    }
+
+    /** The block half of right_click_block / interaction. An empty block means "any block". */
+    private static void interactionBlock(Result out, ChapterRef ref, String path, JsonObject t, Registry registry) {
+        Spec s = specText(t.get("block"));
+        if (s.unreadable()) {
+            specProblem(out, ref, path + ".block", "block");
+        } else if (!s.empty()) {
+            id(out, ref, path + ".block", "block", s.text(), registry);
+        }
+    }
+
+    /** The entity half of interact_entity / tame / breed / ride / interaction. Empty means "any entity". */
+    private static void interactionEntity(Result out, ChapterRef ref, String path, JsonObject t, Registry registry) {
+        textShape(out, ref, path, t, "entity", Severity.WARNING);
+        textShape(out, ref, path, t, "entity_tag", Severity.WARNING);
+        String tag = str(t, "entity_tag");
+        if (!tag.isEmpty()) {
+            id(out, ref, path + ".entity_tag", "entity", tag.startsWith("#") ? tag : "#" + tag, registry);
+        }
+        id(out, ref, path + ".entity", "entity", str(t, "entity"), registry);
+    }
+
+    /** A "conditions" array: every entry is an object with a known type and the fields that type reads. */
+    private static void conditionList(Result out, ChapterRef ref, String path, JsonObject holder, Registry registry) {
+        JsonElement e = holder.get("conditions");
+        if (e == null) {
+            return;
+        }
+        if (!e.isJsonArray()) {
+            problem(out, Severity.ERROR, ref, path + ".conditions",
+                    "\"conditions\" is not an array, so the task or reward would be open to everyone");
+            return;
+        }
+        for (int i = 0; i < e.getAsJsonArray().size(); i++) {
+            JsonElement c = e.getAsJsonArray().get(i);
+            String at = path + ".conditions[" + i + "]";
+            if (!c.isJsonObject()) {
+                problem(out, Severity.ERROR, ref, at, "condition is not an object, so it can never be met");
+                continue;
+            }
+            JsonObject o = c.getAsJsonObject();
+            String type = str(o, "type");
+            if (type.isEmpty()) {
+                problem(out, Severity.ERROR, ref, at, "condition has no \"type\", so it can never be met");
+                continue;
+            }
+            if (type.contains(":")) {
+                type = type.substring(type.indexOf(':') + 1);
+            }
+            if (!CONDITION_TYPES.contains(type)) {
+                problem(out, Severity.WARNING, ref, at + ".type",
+                        "unknown condition type " + quote(type) + ", so it can never be met");
+                continue;
+            }
+            switch (type) {
+                case "stage" -> {
+                    if (str(o, "stage").isEmpty()) {
+                        problem(out, Severity.ERROR, ref, at + ".stage", "stage condition has no stage, so it can never be met");
+                    }
+                }
+                case "score" -> {
+                    if (str(o, "objective").isEmpty() && str(o, "scoreboard").isEmpty()) {
+                        problem(out, Severity.ERROR, ref, at + ".objective", "score condition has no objective");
+                    }
+                    whole(out, ref, at, o, "min");
+                }
+                case "item" -> {
+                    if (!o.has("item")) {
+                        problem(out, Severity.ERROR, ref, at + ".item", "item condition has no item, so it can never be met");
+                    } else {
+                        interactionItem(out, ref, at, o, registry);
+                    }
+                    whole(out, ref, at, o, "count");
+                }
+                case "advancement" -> {
+                    if (str(o, "advancement").isEmpty()) {
+                        problem(out, Severity.ERROR, ref, at + ".advancement", "advancement condition has no advancement");
+                    }
+                }
+                case "party_size" -> whole(out, ref, at, o, "min");
+                default -> {
+                }
+            }
         }
     }
 
@@ -699,6 +845,7 @@ public final class ProgressValidator {
         if (REWARD_UNIMPLEMENTED.contains(name)) {
             problem(out, Severity.WARNING, ref, path + ".type", "reward type " + quote(name) + " is not implemented yet");
         }
+        conditionList(out, ref, path, rw, registry);
         switch (name) {
             case "item" -> itemReward(out, ref, path, rw, registry);
             case "command" -> {
