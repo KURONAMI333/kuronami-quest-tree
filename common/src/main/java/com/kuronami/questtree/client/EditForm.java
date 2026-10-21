@@ -338,7 +338,7 @@ final class EditForm {
         @Override
         public void render(GuiGraphics g, Font font, int x, int y, int w, int mouseX, int mouseY) {
             place(x, y, w);
-            Ui.text(g, font, font.plainSubstrByWidth(label.getString(), labelW() - 4), x + 4, y + (ROW - 8) / 2,
+            Ui.text(g, font, font.plainSubstrByWidth(label.getString(), Ui.textRoom(labelW() - 4)), x + 4, y + (ROW - 8) / 2,
                     error != null ? Ui.TEXT_ERROR : Ui.MUTED);
             int cx = x + labelW();
             int cw = w - labelW() - 4;
@@ -348,7 +348,7 @@ final class EditForm {
                 default -> renderBox(g, font, cx, y, cw, mouseX, mouseY);
             }
             if (error != null) {
-                Ui.text(g, font, font.plainSubstrByWidth(error, w - 8), x + 4, y + ROW, Ui.TEXT_ERROR);
+                Ui.text(g, font, font.plainSubstrByWidth(error, Ui.textRoom(w - 8)), x + 4, y + ROW, Ui.TEXT_ERROR);
             }
         }
 
@@ -371,7 +371,7 @@ final class EditForm {
             boolean over = inside(mx, my, cx, y + 1, cw, ROW - 2);
             Ui.surface(g, cx, y + 1, cw, ROW - 2, Ui.R1, over ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
             Component name = optionText(EditorDoc.text(root, spec.path()));
-            Ui.text(g, font, font.plainSubstrByWidth(name.getString(), cw - 8), cx + 4, y + (ROW - 8) / 2, Ui.TEXT);
+            Ui.text(g, font, font.plainSubstrByWidth(name.getString(), Ui.textRoom(cw - 8)), cx + 4, y + (ROW - 8) / 2, Ui.TEXT);
         }
 
         private int boxLeft(int cx) {
@@ -432,7 +432,7 @@ final class EditForm {
         private void renderTextButton(GuiGraphics g, Font font, int bx, int y, int mx, int my, Component text) {
             boolean over = inside(mx, my, bx + 2, y + 1, 16, ROW - 2);
             Ui.surface(g, bx + 2, y + 1, 16, ROW - 2, Ui.R1, over ? Ui.OVERLAY_3 : Ui.OVERLAY_2);
-            Ui.text(g, font, text, bx + 10 - font.width(text) / 2, y + (ROW - 8) / 2, Ui.TEXT);
+            Ui.text(g, font, text, bx + 10 - Ui.textWidth(font, text) / 2, y + (ROW - 8) / 2, Ui.TEXT);
         }
 
         @Override
@@ -608,7 +608,7 @@ final class EditForm {
         public void render(GuiGraphics g, Font f, int x, int y, int w, int mouseX, int mouseY) {
             place(x, y, w);
             int lw = w * LABEL_FRACTION / 100;
-            Ui.text(g, f, f.plainSubstrByWidth(label.getString(), lw - 4), x + 4, y + (ROW - 8) / 2,
+            Ui.text(g, f, f.plainSubstrByWidth(label.getString(), Ui.textRoom(lw - 4)), x + 4, y + (ROW - 8) / 2,
                     error != null ? Ui.TEXT_ERROR : Ui.MUTED);
             int cw = w - lw - 4;
             for (int i = 0; i < boxes.size(); i++) {
@@ -630,7 +630,7 @@ final class EditForm {
                 }
             }
             if (error != null) {
-                Ui.text(g, f, f.plainSubstrByWidth(error, w - 8), x + 4, y + ROW * boxes.size() + 1, Ui.TEXT_ERROR);
+                Ui.text(g, f, f.plainSubstrByWidth(error, Ui.textRoom(w - 8)), x + 4, y + ROW * boxes.size() + 1, Ui.TEXT_ERROR);
             }
         }
 
@@ -754,7 +754,7 @@ final class EditForm {
             place(x, y, w);
             Ui.surface(g, x, y + 6, w, ROW, Ui.R1, Ui.OVERLAY_2);
             boolean over = open != null && inside(mouseX, mouseY, x, y + 6, w - actions.size() * 18, ROW);
-            Ui.text(g, font, font.plainSubstrByWidth(title.getString(), w - actions.size() * 18 - 12), x + 6,
+            Ui.text(g, font, font.plainSubstrByWidth(title.getString(), Ui.textRoom(w - actions.size() * 18 - 12)), x + 6,
                     y + 6 + (ROW - 8) / 2, error != null ? Ui.TEXT_ERROR : over ? Ui.BRIGHT : Ui.TEXT);
             int bx = x + w - actions.size() * 18;
             for (Action a : actions) {
@@ -766,12 +766,12 @@ final class EditForm {
                 if (a.icon() != null) {
                     Tiles.icon(g, a.icon(), bx + 4, y + 6 + 4, 10, tone);
                 } else {
-                    Ui.text(g, font, a.glyph(), bx + 9 - font.width(a.glyph()) / 2, y + 6 + (ROW - 8) / 2, tone);
+                    Ui.text(g, font, a.glyph(), bx + 9 - Ui.textWidth(font, a.glyph()) / 2, y + 6 + (ROW - 8) / 2, tone);
                 }
                 bx += 18;
             }
             if (error != null) {
-                Ui.text(g, font, font.plainSubstrByWidth(error, w - 8), x + 6, y + 6 + ROW, Ui.TEXT_ERROR);
+                Ui.text(g, font, font.plainSubstrByWidth(error, Ui.textRoom(w - 8)), x + 6, y + 6 + ROW, Ui.TEXT_ERROR);
             }
         }
 
@@ -819,8 +819,8 @@ final class EditForm {
             place(x, y, w);
             boolean over = inside(mouseX, mouseY, x, y + 4, w, ROW);
             Ui.surface(g, x, y + 4, w, ROW, Ui.R1, over ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
-            Tiles.icon(g, "plus", x + w / 2 - font.width(label) / 2 - 14, y + 4 + 4, 10, Ui.TEXT);
-            Ui.text(g, font, label, x + w / 2 - font.width(label) / 2, y + 4 + (ROW - 8) / 2, Ui.TEXT);
+            Tiles.icon(g, "plus", x + w / 2 - Ui.textWidth(font, label) / 2 - 14, y + 4 + 4, 10, Ui.TEXT);
+            Ui.text(g, font, label, x + w / 2 - Ui.textWidth(font, label) / 2, y + 4 + (ROW - 8) / 2, Ui.TEXT);
         }
 
         @Override
@@ -850,7 +850,7 @@ final class EditForm {
         public void render(GuiGraphics g, Font font, int x, int y, int w, int mouseX, int mouseY) {
             place(x, y, w);
             Ui.text(g, font, label, x + 4, y + 6, Ui.DIM);
-            g.fill(x + 8 + font.width(label), y + 10, x + w, y + 11, Ui.DIVIDER);
+            g.fill(x + 8 + Ui.textWidth(font, label), y + 10, x + w, y + 11, Ui.DIVIDER);
         }
     }
 }

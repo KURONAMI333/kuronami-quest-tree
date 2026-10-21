@@ -88,7 +88,7 @@ public final class PartyScreen extends Screen {
 
         Ui.surface(g, px, py, pw, ph, Ui.R4, Ui.PANEL_TRANSLUCENT);
         Ui.outline(g, px, py, pw, ph, Ui.R4, Ui.HAIRLINE);
-        Ui.text(g, font, font.plainSubstrByWidth(ClientTeam.title().getString(), pw - 48), px + 12, py + 10, Ui.TEXT);
+        Ui.text(g, font, font.plainSubstrByWidth(ClientTeam.title().getString(), Ui.textRoom(pw - 48)), px + 12, py + 10, Ui.TEXT);
         if (team.ftbManaged()) {
             Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.party.ftb"), px + 12, py + 21, Ui.DIM);
         } else if (team.inTeam()) {
@@ -125,7 +125,7 @@ public final class PartyScreen extends Screen {
                 tx += 10;
             }
             if (row.invite()) {
-                Ui.text(g, font, font.plainSubstrByWidth(row.name().getString(), pw - 130), tx, ry + 2, Ui.TEXT);
+                Ui.text(g, font, font.plainSubstrByWidth(row.name().getString(), Ui.textRoom(pw - 130)), tx, ry + 2, Ui.TEXT);
                 Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.party.invited_by", row.from()),
                         tx, ry + 12, Ui.DIM);
                 int bw = 46;
@@ -141,18 +141,18 @@ public final class PartyScreen extends Screen {
                             ProgressFeedback.click();
                         });
             } else {
-                Ui.text(g, font, font.plainSubstrByWidth(row.name().getString(), pw - (row.run() != null ? 120 : 40)),
+                Ui.text(g, font, font.plainSubstrByWidth(row.name().getString(), Ui.textRoom(pw - (row.run() != null ? 120 : 40))),
                         tx, ry + 6, Ui.TEXT);
                 int right = px + pw - 12;
                 if (row.owner()) {
                     Component owner = Component.translatable("screen.kuronami_quest_tree.party.owner");
                     Ui.textRight(g, font, owner, right, ry + 6, Tiles.GOLD);
-                    right -= font.width(owner) + 8;
+                    right -= Ui.textWidth(font, owner) + 8;
                 }
                 if (row.self()) {
                     Component you = Component.translatable("screen.kuronami_quest_tree.party.you");
                     Ui.textRight(g, font, you, right, ry + 6, Ui.DIM);
-                    right -= font.width(you) + 8;
+                    right -= Ui.textWidth(font, you) + 8;
                 }
                 if (row.kick() && row.run() != null) {
                     button(g, Component.translatable("screen.kuronami_quest_tree.party.kick"), right - 40, ry + 2, 40,
