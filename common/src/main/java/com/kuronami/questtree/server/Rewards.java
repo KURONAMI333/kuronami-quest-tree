@@ -211,6 +211,9 @@ public final class Rewards {
      * {@code lock_command}, and tag rewards are removed, as Pufferfish's Skills does on a respec.
      */
     static void revokeSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
+        // points are shared, and giveSkill paid them only for the taker: take them back once, before the member
+        // loop can run the per-player effects (a respec before this point is refused when they were already spent)
+        ProgressService.rules().revokePoints(p, n, taken);
         for (ServerPlayer member : members(player)) {
             revokeSkillOne(member, p, n, taken);
         }

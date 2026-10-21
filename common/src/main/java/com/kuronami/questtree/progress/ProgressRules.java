@@ -450,6 +450,83 @@ public final class ProgressRules {
         return refund;
     }
 
+    /**
+     * The points a respec would take back: points rewards of the taken ranks, which were paid into the pool's
+     * bonus once per taker. Kept separate from {@link #chapterRefund} because this comes out of the bonus while the
+     * node costs come back out of spent.
+     */
+    public static int chapterPointsReward(PlayerProgress p, ProgressModel.Chapter c) {
+        int total = 0;
+        for (ProgressModel.Node n : c.nodes.values()) {
+            int taken = p.taken.getOrDefault(n.key, 0);
+            for (int rank = 0; rank < taken; rank++) {
+                total += pointsReward(n, rank);
+            }
+        }
+        return total;
+    }
+
+    /** The points a node's rank pays, read from the same ranks/rewards shape the rewards code gives out. */
+    public static int pointsReward(ProgressModel.Node n, int rank) {
+        int total = 0;
+        for (JsonObject rw : rewardsOfRank(n, rank)) {
+            if (isPoints(rw)) {
+                total += intOf(rw, "amount", 1);
+            }
+        }
+        return total;
+    }
+
+    /** Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into). */
+    public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken) {
+        for (int rank = 0; rank < Math.max(0, taken); rank++) {
+            for (JsonObject rw : rewardsOfRank(n, rank)) {
+                if (isPoints(rw)) {
+                    p.bonus.merge(pointsTarget(n, rw), -Math.max(0, intOf(rw, "amount", 1)), Integer::sum);
+                }
+            }
+        }
+    }
+
+    private static boolean isPoints(JsonObject rw) {
+        String type = rw.has("type") && rw.get("type").isJsonPrimitive() ? rw.get("type").getAsString() : "";
+        return type.substring(type.indexOf(':') + 1).equals("points");
+    }
+
+    private String pointsTarget(ProgressModel.Node n, JsonObject rw) {
+        String c = rw.has("chapter") && rw.get("chapter").isJsonPrimitive() ? rw.get("chapter").getAsString() : "";
+        if (c.isEmpty()) {
+            return key(n.chapter);
+        }
+        ProgressModel.Chapter target = model.chapters.get(c);
+        return target == null ? c : key(target);
+    }
+
+    private static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
+        if (n.ranks > 0 && n.json.has("ranks") && n.json.get("ranks").isJsonArray()) {
+            var ranks = n.json.getAsJsonArray("ranks");
+            if (!ranks.isEmpty()) {
+                JsonElement r = ranks.get(Math.min(rank, ranks.size() - 1));
+                List<JsonObject> list = new ArrayList<>();
+                if (r.isJsonObject() && r.getAsJsonObject().has("rewards")
+                        && r.getAsJsonObject().get("rewards").isJsonArray()) {
+                    for (JsonElement e : r.getAsJsonObject().getAsJsonArray("rewards")) {
+                        if (e.isJsonObject()) {
+                            list.add(e.getAsJsonObject());
+                        }
+                    }
+                }
+                return list;
+            }
+        }
+        return n.rewards;
+    }
+
+    private static int intOf(JsonObject o, String k, int def) {
+        return o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isNumber()
+                ? o.get(k).getAsInt() : def;
+    }
+
     /** A respec's cost in points ({@code points.respec.cost}); 0 when the pack does not charge. */
     public static int respecCost(ProgressModel.Chapter c) {
         if (c == null || c.points == null || !c.points.has("respec") || !c.points.get("respec").isJsonObject()) {
@@ -473,7 +550,8 @@ public final class ProgressRules {
             return false;
         }
         int refund = chapterRefund(p, c);
-        return refund > 0 && availablePoints(p, c) + refund >= respecCost(c);
+        return refund > 0
+                && availablePoints(p, c) + refund - chapterPointsReward(p, c) >= respecCost(c);
     }
 
     /**

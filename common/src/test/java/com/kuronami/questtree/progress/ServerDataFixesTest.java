@@ -276,4 +276,28 @@ class ServerDataFixesTest {
         assertTrue(p.exchange.isEmpty());
         assertTrue(p.chapterOpen.isEmpty(), "both chapters in the pool forget the override");
     }
+    /** 1. A respec takes back the points a skill paid out, and refuses when that would overdraw the pool. */
+    @Test
+    void respecRevokesPointsRewardsAndRefusesOverdraft() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"per_level": 1, "start": 1},
+                                      "nodes": {"n": {"cost": 1, "rewards": [{"type": "points", "amount": 2}]}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressModel.Node n = a.nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(a), 3);
+        p.bonus.put(ProgressRules.key(a), 2);
+        assertEquals(2, ProgressRules.chapterPointsReward(p, a));
+        assertFalse(rules.canRespec(p, a), "the refund plus what is left does not cover the points the skill paid");
+        p.spent.put(ProgressRules.key(a), 1);
+        assertTrue(rules.canRespec(p, a));
+        rules.revokePoints(p, n, 1);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "the paid points came back out once");
+        assertEquals(0, rules.availablePoints(p, a));
+        assertEquals(1, ProgressRules.refundChapterSpent(p, a));
+        assertEquals(1, rules.availablePoints(p, a), "the cost comes back separately from the points reward");
+    }
 }
