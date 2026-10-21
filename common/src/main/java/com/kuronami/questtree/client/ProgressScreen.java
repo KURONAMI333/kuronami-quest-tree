@@ -922,6 +922,10 @@ public class ProgressScreen extends Screen {
         if (row.isHeader()) {
             return HEADER_H;
         }
+        if (railT <= 0.6f) {
+            // the folded rail draws one line, so it must not reserve the two-line height
+            return RAIL_ROW;
+        }
         int avail = Math.max(20, railOpenW - RAIL_TEXT_X - Ui.S1 - 34);
         return font.width(row.chapter().title) > avail ? RAIL_ROW_WRAP : RAIL_ROW;
     }
