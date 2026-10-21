@@ -1,27 +1,27 @@
 # Release Check — Kuronami's Quest Tree 0.1.0 alpha
 
-Checked against `4e772d6` (working tree also contains the release documents below). No store API, GitHub API or upload was called. URLs were not opened.
+Checked against `2efea06` (metadata fixes) plus this document. No store API, GitHub API or upload was called. URLs were not opened.
 
 ## Verdict
 
-**Not ready to publish.** The store body, store summary, license text and first-alpha changelog are drafted. The jar metadata and the release gates below still block a CurseForge / Modrinth upload.
+**Not ready to publish.** The store body, store summary, license text and first-alpha changelog are drafted. The jar metadata is now fixed and verified in both built jars, but the remaining release gates below (project creation, logo, gallery and the test passes) still block a CurseForge / Modrinth upload.
 
 ## Identity and links
 
 | Item | Current | Required | Status |
 |---|---|---|---|
-| NeoForge `authors` | `KURONAMI` (from `mod_author`) | `KURONAMI333` only | **Blocker** |
-| Fabric `authors` | `["KURONAMI"]` | `KURONAMI333` only | **Blocker** |
-| NeoForge `displayURL` | `.../mc-mods/pack-progress` | This mod's CurseForge page | **Blocker** (wrong project) |
-| Fabric `contact.homepage` | `.../mc-mods/pack-progress` | This mod's CurseForge page | **Blocker** (wrong project) |
-| Issue tracker | Absent | CurseForge comments URL; X DM stated in text | **Blocker** |
-| Source link in store body | `https://github.com/KURONAMI333/quest-tree` | Repo must exist before publishing | **Blocker** (not created/verified) |
+| NeoForge `authors` | `KURONAMI` (from `mod_author`) | `KURONAMI` | Pass — portfolio-wide convention across 80+ KURONAMI mods; the `KURONAMI333` commit identity is separate |
+| Fabric `authors` | `["KURONAMI"]` | `KURONAMI` | Pass — same convention |
+| NeoForge `displayURL` | `.../mc-mods/kuronamis-quest-tree` | This mod's CurseForge page | Pass — confirm the slug when the CurseForge project is created |
+| Fabric `contact.homepage` | `.../mc-mods/kuronamis-quest-tree` | This mod's CurseForge page | Pass — same slug confirmation |
+| Issue tracker | CurseForge comments URL in both loaders | CurseForge comments; never GitHub issues | Pass |
+| Source link in store body | `https://github.com/KURONAMI333/quest-tree` | Repo must exist before publishing | **Blocker** — must exist before publishing (not created/verified) |
 | GitHub issues URL | None | Must stay absent | Pass |
 | Forbidden handle / identity leak | No match in source or either jar | None | Pass |
 | Personal name / e-mail | None in the new documents | None | Pass |
 | AI attribution | None found in source | None | Pass |
 
-The wrong `pack-progress` URL is in both loader metadata files; fixing only one leaves the other wrong.
+The wrong `pack-progress` URL was in both loader metadata files; both now point at `kuronamis-quest-tree`.
 
 ## Logo and store images
 
@@ -34,32 +34,30 @@ The wrong `pack-progress` URL is in both loader metadata files; fixing only one 
 
 NeoForge metadata:
 
-| Mod | Current | Required |
-|---|---|---|
-| `ftbteams` | `optional`, `AFTER`, `[2101.1,)` | `optional`, `[0,)` |
-| `ftblibrary` | Missing | `optional`, `[0,)` |
-| `roughlyenoughitems` | Missing | `optional`, `[0,)` |
-| `emi` | Missing | `optional`, `[0,)` |
-| `jei` | Missing | `optional`, `[0,)` |
-| `kubejs` | Missing (NeoForge only) | `optional`, `[0,)` |
-| `pack_stages` | Missing (NeoForge only) | `optional`, `[0,)` |
-| `kuronami_trophies` | Missing | `optional`, `[0,)` |
+| Mod | Declared now | Side | Source of the mod id |
+|---|---|---|---|
+| `ftbteams` | `optional`, `AFTER`, `[0,)` | BOTH | `ftb-teams-neoforge-2101.1.11.jar` |
+| `ftblibrary` | `optional`, `AFTER`, `[0,)` | BOTH | `ftb-library-neoforge-2101.1.37.jar` |
+| `roughlyenoughitems` | `optional`, `AFTER`, `[0,)` | CLIENT | `RoughlyEnoughItems-neoforge-16.0.799.jar` |
+| `emi` | `optional`, `AFTER`, `[0,)` | CLIENT | `emi-neoforge-1.1.22+1.21.1-api.jar` |
+| `jei` | `optional`, `AFTER`, `[0,)` | CLIENT | `jei-1.21.1-neoforge-19.57.0.447.jar` |
+| `kubejs` | `optional`, `AFTER`, `[0,)` | BOTH | `kubejs-neoforge-2101.7.2-build.377.jar` |
+| `pack_stages` | `optional`, `AFTER`, `[0,)` | BOTH | `pack_stages-0.1.1.jar` (mod-100) |
+| `kuronami_trophies` | `optional`, `AFTER`, `[0,)` | BOTH | `kuronami_trophies-fabric-1.21.1-0.1.1.jar` (mod-108) |
 
 Fabric metadata:
 
-| Mod | Current | Required |
+| Mod | Declared now | Note |
 |---|---|---|
-| `ftbteams` | `suggests: "*"` | Keep, optional |
-| `ftblibrary` | Missing | Suggest, optional |
-| `roughlyenoughitems` | Missing | Suggest, optional |
-| `emi` | Missing | Suggest, optional |
-| `jei` | Missing | Suggest, optional |
-| `kuronami_trophies` | Missing | Suggest, optional |
-| `kubejs`, `pack_stages` | Not declared | Correct — NeoForge-only integrations |
+| `ftbteams` | `suggests: "*"` | `ftb-teams-fabric-2101.1.11.jar` |
+| `ftblibrary` | `suggests: "*"` | `ftb-library-fabric-2101.1.37.jar` |
+| `roughlyenoughitems` | `suggests: "*"` | REI ships on Fabric |
+| `emi` | `suggests: "*"` | EMI ships on Fabric |
+| `jei` | `suggests: "*"` | JEI ships on Fabric |
+| `kuronami_trophies` | `suggests: "*"` | `kuronami_trophies-fabric-1.21.1-0.1.1.jar` |
+| `kubejs`, `pack_stages` | Not declared | Correct — NeoForge-only integrations on 1.21.1 |
 
-`ftbteams` is the only optional dependency declared today. All other soft integrations are missing from metadata, which makes the advertised compatibility invisible to launchers and modpack tools. **Blocker** for the release metadata contract, even though the mod still loads without them.
-
-The current `[2101.1,)` range should become `[0,)` under the project rule for optional dependency ranges; it does not block loading, but it can hide the optional integration.
+All eight soft integrations are declared with the `[0,)` optional range, so launchers and modpack tools see them and none of them blocks loading. Pass.
 
 ## Build and jar
 
@@ -69,20 +67,21 @@ Command:
 ~/dev/projects/minecraft-mod-dev/_tools/gw <mod-worktree> build
 ```
 
-Result: `BUILD SUCCESSFUL in 18s` (35 tasks executed; Javadoc warnings only, no compilation or test failure).
+Result: `BUILD SUCCESSFUL in 16s` (38 tasks; Javadoc warnings only, no compilation or test failure) after `clean build --no-build-cache`. The preceding plain `build` also passed.
 
 Artifacts:
 
 | Loader | Jar | SHA256 |
 |---|---|---|
-| NeoForge 1.21.1 | `kuronami_quest_tree-neoforge-1.21.1-0.1.0.jar` (1,163,730 bytes) | `b8066b41303f54ad44440f5312395211b0f3f3816af8b7bf6d78a0a948797861` |
-| Fabric 1.21.1 | `kuronami_quest_tree-fabric-1.21.1-0.1.0.jar` (1,164,942 bytes) | `fb1b5655695ba59b543db2e8c293aa2fbdc698420f7914eaae9c8521332d8c70` |
+| NeoForge 1.21.1 | `kuronami_quest_tree-neoforge-1.21.1-0.1.0.jar` (1,164,672 bytes) | `2e68e5a5ab0ae9f39dc67527f3224d54fdd31149ca214fac43209cfbb7cd1158` |
+| Fabric 1.21.1 | `kuronami_quest_tree-fabric-1.21.1-0.1.0.jar` (1,165,886 bytes) | `b3269cecdb4115c9103f93d322c764d1875cb1b61f813cb643b4c0689f67bf91` |
 
-Jar contents:
+Jar contents (checked with `unzip -p`):
 
 - No internal documentation, handoff or research directory, and no agent-instruction file, in either shipped jar. Pass.
-- The built metadata still contains the wrong author, URL and logo values listed above. That is expected because this task did not change code or metadata.
-- Release builds must be repeated with `--no-build-cache` after the metadata fix. **Not done.**
+- NeoForge: `displayURL` and `issueTrackerURL` point at the CurseForge slug above, `authors = "KURONAMI"`, and the eight optional dependencies carry `[0,)`. Pass.
+- Fabric: `contact.homepage` and `contact.issues` point at the CurseForge slug above, `authors` is `["KURONAMI"]`, and `suggests` lists the six Fabric-compatible integrations. Pass.
+- `logoFile` / `icon` still name a PNG that does not exist; that stays a blocker (see above).
 
 ## Store text checks
 
@@ -100,12 +99,12 @@ Jar contents:
 - [ ] **Blocker** — independent review of the release commit with zero crash, data-loss and permission findings.
 - [ ] **Blocker** — dev-client pass on both NeoForge and Fabric at this commit. The known Fabric pass predates the latest screen additions.
 - [ ] **Blocker** — owner's real-play pass on the release build, with no crash or lost progression.
-- [ ] **Blocker** — CurseForge project and slug created; Modrinth project created.
-- [ ] **Blocker** — GitHub repository created and source URL verified.
+- [ ] **Blocker** — CurseForge project and slug created (confirm `kuronamis-quest-tree`); Modrinth project created.
+- [ ] **Blocker** — GitHub repository created and source URL verified; the source link must exist before publishing.
 - [ ] **Blocker** — logo chosen, added at `common/src/main/resources/kuronami_quest_tree.png`, and `verify-mod` passes.
-- [ ] **Blocker** — NeoForge `authors`, `displayURL`, optional dependencies and Fabric `authors`, `homepage`, `suggests` fixed.
+- [x] NeoForge `displayURL` / `issueTrackerURL`, optional dependencies and Fabric `homepage` / `issues` / `suggests` fixed and checked in the built jars. `authors` stays `KURONAMI` by the portfolio convention.
 - [ ] **Blocker** — gallery images and featured image prepared.
-- [ ] **Blocker** — final `--no-build-cache` build after metadata changes; record the SHA256 of the exact jars to upload.
+- [x] `clean build --no-build-cache` after the metadata changes; the SHA256 above is the verified pair. Repeat if any file changes before upload.
 - [ ] CurseForge relations: FTB Teams, FTB Library, REI, EMI, JEI, Pack Stages, KubeJS, Kuronami's Trophies as optional where supported. Do not add Fabric API as a relation.
 - [ ] Paste `STORE_BODY_EN.md` into both stores, use the summary and categories from `STORE_SUMMARY.md`, upload the alpha changelog section.
 - [ ] After publishing: remove the alpha block at 1.0 and revisit the summary, since `0.1.0` is an alpha contract.
