@@ -172,7 +172,7 @@ public final class ProgressHud {
         ClientModel m = ClientProgress.model();
         shownKeys.clear();
         List<ClientModel.Node> rows = new ArrayList<>();
-        if (ClientConfig.autoPin()) {
+        if (TrackerRules.autoPin(ClientConfig.autoPin(), ClientConfig.trackerMode() == ClientConfig.TrackerMode.ALL)) {
             String chapter = ProgressScreen.currentChapterId();
             String cache = System.identityHashCode(ClientProgress.progress()) + "|" + chapter;
             if (!cache.equals(autoFor)) {
