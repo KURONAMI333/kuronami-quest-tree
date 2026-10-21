@@ -499,8 +499,8 @@ public final class Rewards {
 
     /**
      * Pufferfish's Skills' {@code lockCategory}: the skills stay unlocked, but their rewards are taken back and every
-     * scoreboard reward goes to zero on the hidden category. {@code unlockCategory} later re-applies them through
-     * {@link #reapplyAttributes}.
+     * scoreboard reward goes to zero on the hidden category. Every paid record stays: unlocking puts the attribute,
+     * tag and unlock command back from it through {@link #reapplyChapter} (2026-10-22 review).
      */
     static void revokeChapter(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
         java.util.Set<String> paid = new java.util.HashSet<>(p.paidSkillRewards);
@@ -509,10 +509,32 @@ public final class Rewards {
             PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
             revokeChapterOne(member, mp, c, paid);
         }
-        for (ProgressModel.Node n : c.nodes.values()) {
-            // the lock takes the effects back but leaves the points, so their record stays
-            SkillRewardPolicy.clearRevoked(p, n, p.taken.getOrDefault(n.key, 0), false);
+    }
+
+    /**
+     * Pufferfish's Skills' {@code unlockCategory}: the effects a lock took back are applied again, to every member,
+     * from the records the lock kept, and the attribute modifiers are recomputed from them (2026-10-22 review).
+     */
+    static void reapplyChapter(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
+        for (ServerPlayer member : members(player)) {
+            PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
+            for (ProgressModel.Node n : c.nodes.values()) {
+                int taken = mp.taken.getOrDefault(n.key, 0);
+                for (JsonObject rw : SkillRewardPolicy.reapplyOnUnlock(n, mp.paidSkillRewards, taken)) {
+                    try {
+                        switch (ProgressService.type(rw)) {
+                            case "tag" -> member.addTag(ProgressService.str(rw, "tag"));
+                            case "command" -> command(member, rw);
+                            default -> { }
+                        }
+                    } catch (RuntimeException ex) {
+                        Constants.LOG.error("Putting back a reward of {} failed for {}: {}", n.key,
+                                member.getGameProfile().getName(), ex.toString());
+                    }
+                }
+            }
         }
+        refreshTeamAttributes(player);
     }
 
     private static void revokeChapterOne(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c,

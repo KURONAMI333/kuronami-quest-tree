@@ -56,26 +56,36 @@ public final class SkillRewardPolicy {
      * rewards keep their record: they are not revoked, and taking the rank again must not pay them again.
      */
     public static void clearRevoked(PlayerProgress p, ProgressModel.Node n, int taken) {
-        clearRevoked(p, n, taken, true);
-    }
-
-    /**
-     * As above; {@code withPoints} is false when a chapter lock takes the effects back but leaves the points. Such a
-     * lock also keeps the attribute record: unlocking puts the attribute back from that record, so forgetting it
-     * would lose the bonus for good (2026-10-22 review).
-     */
-    public static void clearRevoked(PlayerProgress p, ProgressModel.Node n, int taken, boolean withPoints) {
         for (int rank = 0; rank < Math.max(0, taken); rank++) {
-            java.util.List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
+            List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
             for (int index = 0; index < list.size(); index++) {
-                JsonObject rw = list.get(index);
-                String type = typeOf(rw);
-                boolean undoneByLock = type.equals("tag") || (type.equals("command") && hasLockCommand(rw));
-                if (revocable(rw) && (withPoints || undoneByLock)) {
+                if (revocable(list.get(index))) {
                     p.paidSkillRewards.remove(paidKey(n, rank, index));
                 }
             }
         }
+    }
+
+    /**
+     * The team-wide effects a chapter unlock puts back: the tag and the {@code lock_command} command of every taken
+     * rank whose record says they were paid. A chapter lock takes those effects back but keeps their record, as it
+     * keeps the attribute and points records, so unlocking applies exactly what was there before and nothing that
+     * was never paid. One-off gifts were not taken back by the lock (2026-10-22 review).
+     */
+    public static List<JsonObject> reapplyOnUnlock(ProgressModel.Node n, Set<String> paid, int taken) {
+        List<JsonObject> out = new ArrayList<>();
+        for (int rank = 0; rank < Math.max(0, taken); rank++) {
+            List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
+            for (int index = 0; index < list.size(); index++) {
+                JsonObject reward = list.get(index);
+                String type = typeOf(reward);
+                boolean effect = type.equals("tag") || (type.equals("command") && hasLockCommand(reward));
+                if (effect && paid.contains(paidKey(n, rank, index))) {
+                    out.add(reward);
+                }
+            }
+        }
+        return out;
     }
 
     public static boolean oneOff(String type) {
