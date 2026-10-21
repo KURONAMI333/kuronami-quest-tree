@@ -1,18 +1,15 @@
 ---
 name: progression-data-model
-description: The JSON shape of a progression data pack. One model for quests and skills, and the target of the importers. Every field was chosen from how six real packs use their data.
-updated: 2026-10-22
+description: The JSON shape of a progression data pack. One model for quests and skills, and the target of the importers.
 ---
 
 # Progression data model
 
 A pack lives in `data/<namespace>/progression/` of a data pack. The server reads it and sends the result to clients. Display text lives in the pack's own language files (`data/<namespace>/progression/lang/<locale>.json`), not in the JSON below.
 
-The shape was designed by counting every definition in six packs (ATM10, FTB Skies 2, FTB Evolution, Prominence II, DarkRPG and Mystic Horizons), so that every field those packs use has a place in one model.
-
 ## One shape for quests and skills
 
-| This mod | FTB Quests | Pufferfish's Skills |
+| Quest Tree | FTB Quests | Pufferfish's Skills |
 |---|---|---|
 | chapter `chapter` | chapter | category |
 | chapter group `group` | chapter group | — |
@@ -46,9 +43,9 @@ data/<ns>/progression/
 | `emergency.cooldown_seconds` | integer | 3600 | Seconds between emergency uses. `0` means no cooldown. The wait is saved per player and survives leaving and rejoining a team. |
 | `wiki_url` / `guide_url` | string | none | External links shown in the settings screen. Only `http` and `https` are accepted. |
 
-The older layout with `items` and `cooldown_seconds` directly under the root is still read (for old packs). Whether the quest book drops on death is not a pack setting; it is `drop_book_on_death` in `config/kuronami_quest_tree-server.json`.
+For compatibility, `items` and `cooldown_seconds` directly under the root are also read. Whether the quest book drops on death is not a pack setting; it is `drop_book_on_death` in `config/kuronami_quest_tree-server.json`.
 
-`patches` exists because Mystic Horizons needs it: another mod (SimplySkills) owns a skill tree, and the pack rewrites part of that tree from the outside.
+`patches` replaces part of another data pack's chapter or node.
 
 ## Translations
 
@@ -119,8 +116,8 @@ Pack text is stored in the data pack's own language files, separate from the mod
 
 - A node without a title uses the display name of its first task. This matches FTB Quests, and DarkRPG depends on it for 1,777 of its 1,892 quests.
 - Title, subtitle and description are read from `progression.<ns>.<chapter>.<node>.title` / `.subtitle` / `.desc`. The description is a list of pages and may use `&a` colour codes, images (`{image:...}`), page breaks and links. ATM10 uses 1,552 lines of colour codes and 63 page breaks.
-- `shape` accepts the eleven FTB Quests shapes: `square`, `rsquare`, `circle`, `diamond`, `hexagon`, `octagon`, `pentagon`, `gear`, `heart`, `none`, and the default. It is the tile outline; the fill stays inside that outline. `hexagon` was removed from rendering on 2026-10-15 and is drawn as a square (the author said no adjustment looked good).
-- When neither the node nor the chapter `defaults` sets `shape`, the node's role chooses it: `milestone: true` is a pentagon, a node with `exclusive` (or `exclusive_with`) is a diamond, a repeatable quest is a circle, and everything else is a square. If several apply, milestone wins, then exclusivity, then repetition. A milestone is drawn 1.5 times larger unless `size` is set. Chapters imported from FTB Quests always write `defaults.shape` so the original shape is preserved (2026-10-16).
+- `shape` accepts the eleven FTB Quests shapes: `square`, `rsquare`, `circle`, `diamond`, `hexagon`, `octagon`, `pentagon`, `gear`, `heart`, `none`, and the default. It is the tile outline; the fill stays inside that outline. `hexagon` is drawn as a square.
+- When neither the node nor the chapter `defaults` sets `shape`, the node's role chooses it: `milestone: true` is a pentagon, a node with `exclusive` (or `exclusive_with`) is a diamond, a repeatable quest is a circle, and everything else is a square. If several apply, milestone wins, then exclusivity, then repetition. A milestone is drawn 1.5 times larger unless `size` is set. Chapters imported from FTB Quests always write `defaults.shape` so the original shape is preserved.
 - `mode` is `all`, `any`, `all_started` or `any_started`.
 - `exclusive` allows at most `max` completed nodes from the same `group`.
 - `tasks_required` asks how many tasks are enough to open the node. `null` means all of them.
@@ -144,7 +141,7 @@ Action tasks replace FTB Quests' Task Screen by counting the player's own action
 
 `fluid` takes `fluid` (an id or `#tag`) and `amount` (mB, default 1000, one bucket). It counts the total matching liquid in the inventory, with a bucket counting as 1000. `energy` takes `amount` (FE) and counts the single inventory stack holding the most energy, not the total. Fabric has no common energy API, so `energy` remains 0 on Fabric; only NeoForge supports it.
 
-The energy rule differs from FTB Quests, confirmed against FTB Quests 2101.1.36 on 2026-10-19. FTB Quests' `forge_energy` accumulates energy poured into a special Task Screen block. Quest Tree has no such block, so it reads the fullest stack the player carries (Tenet makes the same substitution). A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
+Quest Tree has no Task Screen block, so `energy` reads the fullest stack the player carries instead of energy poured into a block. A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
 
 `observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`.
 
@@ -152,11 +149,11 @@ The energy rule differs from FTB Quests, confirmed against FTB Quests 2101.1.36 
 
 `requires` also accepts Pufferfish's Skills' `required_*` fields. `points` is the chapter points that must remain at unlock (default 0); `spent_points` is the points that must already have been spent in that chapter (default 0); `exclusions` is how many exclusive competitors may be taken before this node closes (default 1); `mods` lists mod ids that must all be present (default empty). `nodes` is read with `mode` (`all`, `any`, `all_started`, `any_started`; default `all`) and `min` (default 0). `required_skills` maps to `nodes` / `min`, and 0 becomes `root`. While a requirement is unmet the node is `LOCKED`, but its data is not erased. `points` and `spent_points` are not re-applied to a node that already has at least one rank; this matches Pufferfish's Skills, whose state check returns an already-taken skill as unlocked first, so taking a rank does not lock the next rank.
 
-Item counting (2026-10-16):
+Item counting:
 
 - Without `consume`, the task shows the number currently held; the count falls when items are spent.
-- Once `count` is reached, the task stays complete (as in FTB Quests). The FTB Quests "highest number ever held" display was dropped because the author read a stuck 8/16 as "total picked up".
-- Counting newly obtained items, or held plus crafted, was rejected: dropping and re-picking, chests, machines and recipes that can be run in both directions create loopholes that cannot be fully anticipated (the author: "a system where I cannot predict the loopholes is bad").
+- Once `count` is reached, the task stays complete (as in FTB Quests). The display shows the number currently held, not the highest number ever held.
+- Counting newly obtained items, or held plus crafted, is not supported: dropping and re-picking, chests, machines and recipes that can be run in both directions create loopholes that cannot be fully anticipated.
 - Use `consume` (delivery) when a quest should require collecting in several batches.
 
 ## Rewards
@@ -167,24 +164,26 @@ Item counting (2026-10-16):
 
 Every reward also accepts `team`, `auto`, `exclude_from_claim_all`, `ignore_reward_blocking` (alias `ignore_blocking`), `conditions`, `icon` and `title`.
 
-- `stage` grants a Pack Stages stage (mod-100). With `"team": true` the stage is recorded on the team and also given to every online member through Pack Stages; `"remove": true` takes it back. `/quest_tree team_stage add|remove <players> <stage>` does the same from a command.
+- `stage` grants a Pack Stages stage. With `"team": true` the stage is recorded on the team and also given to every online member through Pack Stages; `"remove": true` takes it back. `/quest_tree team_stage add|remove <players> <stage>` does the same from a command.
 - `dummy` grants nothing and exists to show only an icon in the reward list (FTB Quests' dummy reward). An unknown arbitrary reward from an importer keeps its original kind in `original_type`.
 - `currency` takes `amount` and pays through FTB Library's currency hook. With no economy mod registered, it logs once and pays nothing; the quest still completes.
-- `trophy` (`{"type": "trophy", "trophy": "<ns>:<id>"}`) grants a Kuronami's Trophies trophy (mod-108) by running `trophy award @s <id>`. It is paid once per player, and the imprint is set when received. The screen shows the real trophy in the reward slot before it is claimed. If Kuronami's Trophies is absent, nothing happens.
-- `icon` on any reward shows that icon in the reward list, including for rewards such as `command` that have nothing else to display (added 2026-10-15).
+- `trophy` (`{"type": "trophy", "trophy": "<ns>:<id>"}`) grants a Kuronami's Trophies trophy by running `trophy award @s <id>`. It is paid once per player, and the imprint is set when received. The screen shows the real trophy in the reward slot before it is claimed. If Kuronami's Trophies is absent, nothing happens.
+- `icon` on any reward shows that icon in the reward list, including for rewards such as `command` that have nothing else to display.
 - `points` adds to the chapter's points (`amount`, default 1). A non-number or a value of 0 or less is treated as 0 both when granting and when revoking; neither side is allowed to go negative alone. Without `chapter` the points go to the node's chapter; with it, to the chapter id (`<ns>:<chapter>`).
 
 ### One-time and revocable rewards
 
 `xp`, `xp_levels`, `item`, `table`, `advancement`, `command`, `currency` and `custom` are paid only once per team for the same rank, even after a reset and re-take. `custom` also fires an add-on event only once. The exception is a `command` with `lock_command`: its `command` runs again on every re-take, because a respec runs `lock_command` and the command must be run again to unlock.
 
-The paid record is per team, keyed `<node>#<rank>#<index>` in `paid_skill_rewards`; any team member's take counts once. A reward is recorded only when it was actually paid: unmet conditions, a failed payment and a declined `choice` table do not record it, so a later take can pay it.
+The paid record is kept by the team; any team member's take counts once. A reward is recorded only when it was actually paid: unmet conditions, a failed payment and a declined `choice` table do not record it, so a later take can pay it.
 
 A respec revokes only the rewards that are both revocable (`points`, `tag`, `attribute`, a `command` with `lock_command`) and present in the record, once each, then clears them from the record. One-off rewards are neither revoked nor removed from the record.
 
 ### Locking a chapter
 
-Locking a chapter (`chapterOpen` false) removes the effects but keeps the `points`, `attribute`, `tag` and `lock_command` records. Unlocking restores `attribute`, `tag` and `lock_command` rewards that are in the record to every member; rewards without a record are not restored. A locked chapter has already run every `lock_command` and removed every tag, so a reset or respec while it is locked only cleans the records and never repeats those effects (2026-10-22).
+Locking a chapter removes the effects but keeps the `points`, `attribute`, `tag` and `lock_command` records. Unlocking restores `attribute`, `tag` and `lock_command` rewards that are in the record to every member; rewards without a record are not restored. A locked chapter has already run every `lock_command` and removed every tag, so a reset or respec while it is locked only cleans the records and never repeats those effects.
+
+The chapter's open or locked state belongs to the team. A lock or unlock changes it for every member, and a member joining a team where either side has the chapter closed joins with it closed.
 
 ## Reward tables
 
@@ -193,11 +192,11 @@ Locking a chapter (`chapterOpen` false) removes the effects but keeps the `point
  "loot_crate": null}
 ```
 
-A table pays its entries in order. An entry that was paid is marked in the player's saved `rewardRolls`, so a retry after a later entry failed hands out only the entries still missing. When the whole table is through, the marks and the recorded roll are removed together. A `choice` table pays one entry and has nothing to mark.
+A table pays its entries in order. An entry that was paid is marked in the player's saved table progress, so a retry after a later entry failed hands out only the entries still missing. When the whole table is through, the marks and the recorded roll are removed together. A `choice` table pays one entry and has nothing to mark.
 
 ## Conditions
 
-Tasks and rewards accept `"conditions": [...]`. A task is counted, and a reward is paid, only when every condition is met. A reward whose conditions are unmet is skipped: it does not keep `allRewardsClaimed` false and does not hold the node in `CLAIM`. The node finishes and can repeat; the old note that such a reward stays unclaimed forever is withdrawn.
+Tasks and rewards accept `"conditions": [...]`. A task is counted, and a reward is paid, only when every condition is met. A reward whose conditions are unmet is skipped: it does not hold the node open as unclaimed. The node finishes and can repeat.
 
 The five built-in conditions and kinds registered by other mods or KubeJS may be mixed in the same list:
 
@@ -210,13 +209,13 @@ The five built-in conditions and kinds registered by other mods or KubeJS may be
 {"type": "example:enabled"}
 ```
 
-`stage` checks a Pack Stages stage (including `team_stages`); `score` checks a scoreboard value (also spelled `scoreboard`); `item` checks the inventory; `advancement` checks an advancement; `party_size` checks the number of online party members.
+`stage` checks a Pack Stages stage, including one granted to the team; `score` checks a scoreboard value (also spelled `scoreboard`); `item` checks the inventory; `advancement` checks an advancement; `party_size` checks the number of online party members.
 
-The five built-in kinds may be written without a namespace (`item`) or with this mod's namespace (`kuronami_quest_tree:item`); both are read as built in. Any other namespace is always looked up in the registration table, even when the id matches a built-in.
+The five built-in kinds may be written without a namespace (`item`) or with Quest Tree's namespace (`kuronami_quest_tree:item`); both are read as built in. Any other namespace is always looked up in the registration table, even when the id matches a built-in.
 
 A registered kind is written as `<namespace>:<id>` and registered through the public API or KubeJS. Registered kinds are matched by the namespaced id, and their check is delegated to the handler. A kind that is in neither table counts as unmet, so a written gate fails closed. Validation reports an unregistered kind as `WARNING` and keeps the node.
 
-Conditions are evaluated once, when the reward is granted. Revocation (respec, reset) and login re-granting follow the `paid_skill_rewards` record and do not re-evaluate conditions. A reward that was not paid because its conditions were unmet has no record and is never touched by revocation or re-granting. Skill `points` rewards count toward respec checks and revocation only when they are in the record (2026-10-22). A skill reward's conditions are checked against the player who took it, while its effects (`attribute`, `tag` and so on) apply to every team member. The record is team-shared (2026-10-22).
+Conditions are evaluated once, when the reward is granted. Revocation (respec, reset) and login re-granting follow the team's paid record and do not re-evaluate conditions. A reward that was not paid because its conditions were unmet has no record and is never touched by revocation or re-granting. Skill `points` rewards count toward respec checks and revocation only when they are in the record. A skill reward's conditions are checked against the player who took it, while its effects (`attribute`, `tag` and so on) apply to every team member. The record is shared by the team.
 
 ## Skills
 
@@ -262,7 +261,7 @@ Only the team owner can press "respec" and "exchange" on the screen, and the ser
 
 Taking a skill back through respec or reset removes its attribute bonuses (all ranks and quest rewards), runs each `lock_command` and removes each tag, as Pufferfish's Skills does. Points are shared, so they are taken back once for the taker before the per-player effects run; a respec is refused earlier if those points were already spent.
 
-A locked chapter already ran its `lock_command` and removed its tags, so a reset or respec while locked must not repeat those command or tag effects. The points and the paid records are still cleaned up (2026-10-22).
+A locked chapter already ran its `lock_command` and removed its tags, so a reset or respec while locked must not repeat those command or tag effects. The points and the paid records are still cleaned up.
 
 ## Teams and stages
 
@@ -270,33 +269,33 @@ Completion, task counters, repeat counts and cooldowns are team-shared unless a 
 
 When a team member takes a skill, the reward's conditions are checked against that member, but its effects (attributes, tags and so on) apply to every member.
 
-`teamStagesApplied` records the team stages this player currently holds; the team's `teamStages` is the wanted set. On login the difference is removed or added, and then every stage in the player's own `stages` list is added again. The re-add is deliberate: `p.stages` records stages granted directly to this player, and the stage mod may not report them back after a relog. Removing a team stage therefore skips keys still in `p.stages`, so a directly rewarded stage is not taken away with the team copy.
+Each player's saved stages are compared with the team's wanted stages on login. Missing team stages are added, and team stages the player should no longer hold are removed. Stages granted directly to the player are then added again, because the stage mod may not report them back after a relog. Removing a team stage therefore leaves a directly granted stage in place.
 
-`stages` is the player's copy of the stages the tree granted to them. A stage barrier opens when the key is in `stages` or in the shared `teamStages`. If it is in neither, both sides ask Pack Stages: the server checks the player's saved stages and the client reads the copy Pack Stages syncs to it. A stage granted by another mod therefore opens the gate on both sides. A team stage this player was given is tracked in `teamStagesApplied`; on login only stages the team no longer holds are removed, so an offline removal is followed without stripping a stage another mod granted.
+A stage barrier opens when the stage is in the player's own stages or in the team's. If it is in neither, both the server and the client ask Pack Stages, so a stage granted by another mod opens the gate on both sides. On login only stages the team no longer holds are removed, so an offline removal is followed without stripping a stage another mod granted.
 
-### Personal nodes and the saved routing set
+Chapter open and locked state is shared by the team in the same way.
 
-The saved record keeps the set of node keys that were routed as personal. The caller checks whether the loaded model has any node at all: a model that reads as empty leaves that set alone, so an unreadable pack file cannot move saved personal progress into the shared record. An empty set with a loaded model is a real change, because the pack made every node shared, and its saved personal values are moved to the shared record.
+### Personal nodes
+
+Completion, task counters, repeat counts and cooldowns of a `shared: false` node are kept for each player. When a pack cannot be read, saved personal progress is left alone. When the pack loads and every node is shared, the saved personal values move to the team's progress.
 
 ## Reward blocking
 
 `/quest_tree rewards block` stops the pay-out of quest rewards, not the quest or the skill.
 
 - Tasks, node completion, quest claims and taking a skill continue while rewards are blocked.
-- Only quest rewards are affected. Skill node rewards (the take, a respec, a rank, and a member's own command or tag) are never blocked and never enter the pending list; taking a skill is never stopped (2026-10-22).
+- Only quest rewards are affected. Skill node rewards (the take, a respec, a rank, and a member's own command or tag) are never blocked and never enter the pending list; taking a skill is never stopped.
 - A blocked quest reward is recorded as taken for its node and kept in the player's pending list. When the block is lifted, pending rewards are paid in their original order.
 - A repeatable quest starting its next round keeps the pending rewards of the round it just claimed, so a blocked pay-out is still owed afterward. Resetting the node forgets them together with the node's saved reward rolls.
 - The block is judged per quest reward. `attribute` rewards are part of the skill effect and are always applied, even while quest pay-outs are blocked.
 - `ignore_reward_blocking` / `ignore_blocking` still exempts one quest reward.
-- Old saves may still hold skill pending keys (a rank of 0 or more). Loading drops them and logs the count instead of paying them: a skill taken while blocked already had its effect, and login re-applies its attributes.
+- A skill reward is never kept waiting: a skill taken while quest rewards are blocked already had its effect, and login re-applies its attributes.
 
-`/quest_tree rewards block|unblock` accepts an offline player (a name from the server's profile cache). The flag and pending quest rewards live in that player's own record. Lifting the block pays immediately for an online player; for an offline player the pending rewards are paid at the next login, where a still-blocked flag keeps them waiting.
+`/quest_tree rewards block|unblock` accepts an offline player (a name from the server's profile cache). The block and pending quest rewards are kept for that player. Lifting the block pays immediately for an online player; for an offline player the pending rewards are paid at the next login, where a still-blocked flag keeps them waiting.
 
 ## Emergency items
 
 The emergency button on the progression screen gives the items in `emergency.items`. Its cooldown is `emergency.cooldown_seconds` (default 3600; 0 disables it) and is saved per player, surviving team changes.
-
-Old versions stored the cooldown on the team. When a save is read, that cooldown is moved to every current member. If a team has no members at save time, its cooldown (up to one hour) can be lost; this is accepted behavior.
 
 Whether the quest book drops on death is the server config `drop_book_on_death`.
 
@@ -345,7 +344,7 @@ A chapter file:
 - `base`: whether the pack had this chapter when it was first edited.
 - `replace`: use `chapter` as the whole chapter instead of merging it into the pack's chapter. `create_chapter` sets this.
 - `remove`: tombstone for the chapter, with the contents at deletion kept in `chapter`.
-- `edited`: whether the overlay had already changed the chapter before it was tombstoned. Restoring uses this to offer either the pack's original chapter or the author's version.
+- `edited`: whether the overlay had already changed the chapter before it was tombstoned. Restoring uses this to offer either the pack's original chapter or the edited version.
 - `chapter`: only the top-level keys changed by the edit, each holding its **new** value. With `replace: false` it is merged key by key into the pack chapter, and only the node entries below apply. Changing one nested value does not remove its siblings (changing `display.title` keeps the pack's `display.icon`).
 - `removed`: top-level keys that an RFC 7396 `null` deleted from the pack. With `replace: false`, these are removed from the pack chapter before merging. A `replace: true` chapter such as `create_chapter` does not use it.
 - `nodes`: `action` is `add`, `replace` or `remove`. `remove` keeps the contents so it can be restored. `edited` says whether it was changed before deletion.
@@ -435,11 +434,11 @@ If validation itself throws, that one failure is recorded as `ERROR` and loading
 - JSON syntax. A file that cannot be read is `ERROR`. References to that chapter remain `WARNING`, because their existence cannot be confirmed.
 - Id lookup checks only real items, blocks, fluids, entities and attributes. A missing id is `WARNING`; a missing namespace is `WARNING`. Tags (`#`) and dynamic registries (biome, structure, dimension, stat) are not checked at load, because their contents cannot be known then. Tag contents are final only after all reload listeners have run, so reading them inside a listener gives an empty result on first start and the previous contents on `/reload`; both are false warnings.
 - Known but not yet working kinds (a reward table's `loot_crate`) are `WARNING`.
-- Duplicate node ids across chapters are not checked: node keys are qualified by the chapter id, so they cannot collide, and using the same id in two chapters is normal (the test pack does it).
+- Duplicate node ids across chapters are not checked: node keys are qualified by the chapter id, so they cannot collide, and using the same id in two chapters is normal.
 
 ## Chapter backgrounds
 
-A chapter map can have any number of images behind it, drawn bottom to top. One image is a still background; two or more moving at different speeds give depth when the map moves (the Thaumaturge research screen's approach). Images are resources, so a resource pack can replace them.
+A chapter map can have any number of images behind it, drawn bottom to top. One image is a still background; two or more moving at different speeds give depth when the map moves. Images are resources, so a resource pack can replace them.
 
 ```json
 "background": {"layers": [
@@ -457,22 +456,10 @@ A chapter map can have any number of images behind it, drawn bottom to top. One 
 
 Quest Tree itself ships no background images. Without one, the palette's `ground` colour is used.
 
-## Migration notes
+## Importing existing progress
 
-Old saves and old packs:
-
-- A team whose `paid_skill_rewards` key is absent is migrated once on first load, and the key is written even when empty so a newer save is not treated as "everything paid" again.
-- The migration changes old markers (`<node>#skill<rank>` and `<node>#skill<rank>#<index>`) into records. For every taken skill node it records all revocable rewards (`points`, `tag`, `attribute`, a `command` with `lock_command`) up to that rank. A marker on one rank covers the whole node. A node with no record at all has all of its rewards up to that rank marked as paid, because before this version there were no conditions and everything was paid.
-- The old migration reads a marker as "paid". A one-off reward that was marked but not actually paid (a failure or a declined choice at the time) can therefore be paid again on a re-take. This is a known difference (2026-10-22).
-- A team cooldown for the emergency button is moved to its current members on read; a team with no members at save time may lose up to one hour of cooldown.
-- Old saves may hold skill pending keys from reward blocking; they are dropped with a count in the log, not paid. A skill taken while blocked already had its effect, and login re-applies its attributes.
-- Importing existing FTB Quests or Pufferfish's Skills progress is a separate command workflow; see [MIGRATION.md](MIGRATION.md). It merges only, never removes, takes the larger counter, and refuses a second `apply` of the same source unless `force` is given. Completion times and claim times are not carried because there is no field for them.
-- An unreadable chapter file must not move saved personal progress into the shared record; the saved personal routing set is left alone when the loaded model has no nodes at all.
+Importing existing FTB Quests or Pufferfish's Skills progress is a separate workflow; see [MIGRATION.md](MIGRATION.md). It merges only, never removes, keeps the larger counter, and refuses a second `apply` of the same source unless `force` is given. Completion times and claim times are not carried because there is no field for them.
 
 ## Extending tasks, rewards and conditions
 
 Other mods can register task and reward kinds (Pufferfish's Skills has add-ons that add kinds, for example) and experience sources. Conditions are registered through the public API or KubeJS. See [API.md](API.md).
-
-## Open questions
-
-- The public API for `custom` tasks and rewards (letting KubeJS and add-ons advance progress).
