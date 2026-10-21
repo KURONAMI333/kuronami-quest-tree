@@ -85,6 +85,24 @@
 - 貼り付けはサーバーが新しい id を付ける。作成の返答で旧 id と新 id を対応させ、コピー内のリンクを後から張る。
 - ネットワークのプロトコル版は 3（編集状態の payload が増えたため）。
 
+## Phase 3: 中身の編集画面（2026-10-21）
+
+- 右クリックの「編集」、ノードのダブルクリック、選択が1件の時の Enter で `NodeEditScreen` が開く。ノードの題名・説明・形・大きさ・アイコン・可視条件・前提条件・繰り返しを1枚に並べ、タスクと報酬はカードで追加・並べ替え・削除する。カードを開くと `ContentEditScreen` が型ごとの欄を出す。
+- 型は `ContentSchema` が唯一の定義で、画面と往復テストが同じ表を読む。型を変えると、その型だけのキーを消し、共通の欄と未知のキーは残す（`retypeTask` / `retypeReward`）。
+- アイテム・エンティティ・進捗・テーブルなどは `EditPickerScreen` で検索して選ぶ。一覧に無い id も入力できる（タグや、クライアントが持たない MOD の id のため）。
+- 画面は JSON の作業コピーを持ち、閉じる時に `update_node` / `update_chapter` の RFC 7396 patch を1回だけ送る。打鍵ごとの書き込みはしない。拒否された時は検証メッセージを該当の欄の下に出し、画面は閉じない。古い revision はサーバーが bundle を送り直し、画面は地図の短い通知に文面を残して閉じる。
+- 章の設定は `ChapterEditScreen`（題名・アイコン・既定値・可視性・スキルポイント・章の削除）、章の新規作成は `NewChapterScreen`（名前空間と任意の題名。id はサーバーが発番）。
+- 報酬テーブルは `TableEditScreen` で丸ごと編集する（`update_table`、テーブル専用の revision）。存在しない id を報酬の `table` に書いて開くと、保存時に `create: true` で作る。
+- 削除した章・ノードは、同期バンドルの `deleted` に入る。`deletedJson()` は墓石の章 id と、生きている章ごとの削除ノード id を返す。`RestoreScreen` はこの一覧から `restore_chapter` / `restore_node` を送る。
+- 画面の見た目は `Ui` / `Tiles` / `EditForm` の既存の面と行だけを使い、色を直書きしない。文字はラベル・値・状態・失敗理由だけで、説明文は置かない。
+
+## Phase 4: 操作ボタン（2026-10-21）
+
+- 地図の右クリックメニューに「章」「新しい章」「削除済み」「書き出し」「プレイヤーとして試す」を足した。どれも `EditorSession` の1件ずつの列に乗る。
+- `export`（`args.namespace`、無ければ章の名前空間）は `/quest_tree export <namespace>` を実行し、書き出し先のフォルダを返答の行に返す。地図の通知にそのパスが出る。
+- `test_chapter`（`chapterId`）は `/quest_tree reset @s <chapter>` を実行してから編集モードを切る。章が本に無ければ何もせず拒否する。返答は要求の revision をそのまま返す（章を書かないため、クライアントの版を動かさない）。
+- どちらも名前空間・章 id を `ProgressExport.validNamespace` / `ProgressionEditor.validChapterId` で確認してからコマンド文字列にする（`EditorOps`）。
+
 ## まだ無いもの
 
 - 実機（runClient）での確認。
