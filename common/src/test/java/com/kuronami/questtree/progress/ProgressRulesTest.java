@@ -365,6 +365,34 @@ class ProgressRulesTest {
                 ProgressModel.of(bundle).chapters.get("t:a")).costAt(3));
     }
 
+    /**
+     * A points reward paid to another chapter is taken out of that pool on respec, so the refusal has to check that
+     * pool too; else its points could be spent first and the respec would leave it overdrawn (2026-10-22 review).
+     */
+    @Test
+    void respecChecksEveryPoolThatReceivedTheSkillsPoints() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {
+                  "s:a": {"points": {"start": 5},
+                          "nodes": {"n": {"cost": 1, "rewards": [
+                            {"type": "points", "amount": 2, "chapter": "s:b"}]}}},
+                  "s:b": {"points": {"start": 2}, "nodes": {"m": {"cost": 2}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(a.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(a), 1);
+        p.bonus.put(ProgressRules.key(m.chapters.get("s:b")), 2);
+        p.spent.put(ProgressRules.key(m.chapters.get("s:b")), 4);
+        ProgressRules.RespecPlan refused = rules.respecPlan(p, a);
+        assertFalse(refused.allowed(), "the target pool cannot give the paid points back");
+        assertEquals(ProgressRules.RespecRefusal.NOT_ENOUGH_POINTS, refused.refusal());
+        assertEquals(ProgressRules.key(m.chapters.get("s:b")), refused.pool());
+        p.spent.put(ProgressRules.key(m.chapters.get("s:b")), 2);
+        assertTrue(rules.respecPlan(p, a).allowed());
+    }
+
     /** The new per-reward marks and the first-join flag survive the save file (2026-10-20). */
     @Test
     void perRewardClaimsAndBookFlagRoundTrip() {

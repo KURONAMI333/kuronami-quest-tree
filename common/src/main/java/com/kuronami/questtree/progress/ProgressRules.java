@@ -584,18 +584,80 @@ public final class ProgressRules {
         return Math.max(0, respec.get("cost").getAsInt());
     }
 
+    /** Why a screen respec is refused; {@link #ALLOWED} means it may run. */
+    public enum RespecRefusal { ALLOWED, LOCKED, NOTHING_TAKEN, NOT_ENOUGH_POINTS }
+
     /**
-     * Whether a player may respec this chapter from the screen now: the chapter is open, something is taken, and the
-     * points left after the refund cover {@code points.respec.cost}. The cost stays spent afterwards (a later respec
-     * refunds only the nodes), so the fee is never handed back.
+     * A screen respec's verdict. {@code pool} is the pool that cannot pay ({@code key(c)} for the chapter itself or a
+     * pool a points reward was paid into); it is empty when allowed.
      */
-    public boolean canRespec(PlayerProgress p, ProgressModel.Chapter c) {
+    public record RespecPlan(RespecRefusal refusal, String pool) {
+        public boolean allowed() {
+            return refusal == RespecRefusal.ALLOWED;
+        }
+    }
+
+    /**
+     * Whether a player may respec this chapter from the screen now: the chapter is open, something is taken, and every
+     * pool involved can pay for it. Node refunds go back to this chapter's pool and the points the taken ranks paid are
+     * taken out of the pools that received them, so a reward paid to another chapter has to be checked there: otherwise
+     * that chapter's points could be spent and the respec would leave it overdrawn (a free skill).
+     * The cost stays spent afterwards (a later respec refunds only the nodes), so the fee is never handed back.
+     */
+    public RespecPlan respecPlan(PlayerProgress p, ProgressModel.Chapter c) {
         if (c == null || !c.isSkills() || !chapterUnlocked(p, c)) {
-            return false;
+            return new RespecPlan(RespecRefusal.LOCKED, "");
         }
         int refund = chapterRefund(p, c);
-        return refund > 0
-                && availablePoints(p, c) + refund - chapterPointsReward(p, c) >= respecCost(c);
+        if (refund <= 0) {
+            return new RespecPlan(RespecRefusal.NOTHING_TAKEN, "");
+        }
+        String own = key(c);
+        Map<String, Integer> paidByPool = pointsRewardsByPool(p, c);
+        int ownPaid = paidByPool.getOrDefault(own, 0);
+        if (availablePoints(p, c) + refund - ownPaid - respecCost(c) < 0) {
+            return new RespecPlan(RespecRefusal.NOT_ENOUGH_POINTS, own);
+        }
+        for (Map.Entry<String, Integer> e : paidByPool.entrySet()) {
+            if (e.getKey().equals(own)) {
+                continue;
+            }
+            ProgressModel.Chapter target = chapterByKey(e.getKey());
+            if (target != null && availablePoints(p, target) - e.getValue() < 0) {
+                return new RespecPlan(RespecRefusal.NOT_ENOUGH_POINTS, e.getKey());
+            }
+        }
+        return new RespecPlan(RespecRefusal.ALLOWED, "");
+    }
+
+    /** The screen's yes/no view of {@link #respecPlan}. */
+    public boolean canRespec(PlayerProgress p, ProgressModel.Chapter c) {
+        return respecPlan(p, c).allowed();
+    }
+
+    /** The points the taken ranks paid, grouped by the pool that received them. */
+    private Map<String, Integer> pointsRewardsByPool(PlayerProgress p, ProgressModel.Chapter c) {
+        Map<String, Integer> paid = new LinkedHashMap<>();
+        for (ProgressModel.Node n : c.nodes.values()) {
+            int taken = p.taken.getOrDefault(n.key, 0);
+            for (int rank = 0; rank < taken; rank++) {
+                for (JsonObject rw : rewardsOfRank(n, rank)) {
+                    if (isPoints(rw)) {
+                        paid.merge(pointsTarget(n, rw), Math.max(0, intOf(rw, "amount", 1)), Integer::sum);
+                    }
+                }
+            }
+        }
+        return paid;
+    }
+
+    private ProgressModel.Chapter chapterByKey(String pool) {
+        for (ProgressModel.Chapter c : model.chapters.values()) {
+            if (key(c).equals(pool)) {
+                return c;
+            }
+        }
+        return null;
     }
 
     /**
