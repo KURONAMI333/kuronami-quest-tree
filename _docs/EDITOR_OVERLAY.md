@@ -56,6 +56,8 @@
 | `create_chapter` | `{"namespace": "...", "chapter": {...}}`（初期ノードの id はサーバーが振り直し、初期ノード同士の `requires` / `exclusive_with` も書き換える） |
 | `update_chapter` | `{"patch": {...}}`（`nodes` は不可。今の章全体に対する RFC 7396 で、`null` は pack の項目も消す） |
 | `delete_chapter` / `restore_chapter` | `{}` |
+| `update_table` | `{"id": "...", "create": true?, "table": {...}}`（丸ごと。`patch` も可） |
+| `delete_table` / `restore_table` | `{"id": "..."}` |
 | `link` / `unlink` | `{"from": "...", "to": "..."}`（`to` は同じ章ならノード名、別章なら `chapter/node`） |
 | `undo` / `redo` | `{}` |
 
@@ -65,7 +67,7 @@
 
 - 書き込み前に候補の章を `ProgressValidator` に通す。本全体の ERROR 集合を前後で比べ、**新しい ERROR** が1つでも出たら書かない（他章の前提を壊す削除もここで止まる）。既存の ERROR は編集を妨げない。
 - 拒否時は返答に検証メッセージが入り、ファイルは変わらない。
-- 取り消しは章ごとのスナップショット、直近50手（同じ端から積み、同じ端から戻す）。サーバー再起動では消える。ディスクに残るのは墓石、`.bak`（書き込み直前の版）、`revisions.json`。
+- 取り消しは章ごと・テーブルごとのスナップショット、直近50手（同じ端から積み、同じ端から戻す）。テーブルの履歴は章の履歴と別で、同じ id でも混ざらない。サーバー再起動では消える。ディスクに残るのは墓石、`.bak`（書き込み直前の版）、`revisions.json` / `table_revisions.json`。
 - 書き込みは同じフォルダの一時ファイルに書いてから置き換える（`ATOMIC_MOVE`、無い環境では `REPLACE_EXISTING`）。途中で落ちても半端な章ファイルは残らない。
 
 ## 通信の大きさ
@@ -90,17 +92,17 @@
 - 右クリックの「編集」、ノードのダブルクリック、選択が1件の時の Enter で `NodeEditScreen` が開く。ノードの題名・説明・形・大きさ・アイコン・可視条件・前提条件・繰り返しを1枚に並べ、タスクと報酬はカードで追加・並べ替え・削除する。カードを開くと `ContentEditScreen` が型ごとの欄を出す。
 - 型は `ContentSchema` が唯一の定義で、画面と往復テストが同じ表を読む。型を変えると、その型だけのキーを消し、共通の欄と未知のキーは残す（`retypeTask` / `retypeReward`）。
 - アイテム・エンティティ・進捗・テーブルなどは `EditPickerScreen` で検索して選ぶ。一覧に無い id も入力できる（タグや、クライアントが持たない MOD の id のため）。
-- 画面は JSON の作業コピーを持ち、閉じる時に `update_node` / `update_chapter` の RFC 7396 patch を1回だけ送る。打鍵ごとの書き込みはしない。拒否された時は検証メッセージを該当の欄の下に出し、画面は閉じない。古い revision はサーバーが bundle を送り直し、画面は地図の短い通知に文面を残して閉じる。
+- 画面は JSON の作業コピーを持ち、閉じる時に `update_node` / `update_chapter` の RFC 7396 patch を1回だけ送る。保存と削除は画面を開いた時点の revision で送り、その間に別の操作が入っていれば拒否される。打鍵ごとの書き込みはしない。拒否された時は検証メッセージを該当の欄の下に出し、画面は閉じない（もう一度 Esc か × を押すと破棄して閉じる）。古い revision はサーバーが bundle を送り直し、画面は地図の短い通知に文面を残して閉じる。
 - 章の設定は `ChapterEditScreen`（題名・アイコン・既定値・可視性・スキルポイント・章の削除）、章の新規作成は `NewChapterScreen`（名前空間と任意の題名。id はサーバーが発番）。
-- 報酬テーブルは `TableEditScreen` で丸ごと編集する（`update_table`、テーブル専用の revision）。存在しない id を報酬の `table` に書いて開くと、保存時に `create: true` で作る。
-- 削除した章・ノードは、同期バンドルの `deleted` に入る。`deletedJson()` は墓石の章 id と、生きている章ごとの削除ノード id を返す。`RestoreScreen` はこの一覧から `restore_chapter` / `restore_node` を送る。
+- 報酬テーブルは `TableEditScreen` で丸ごと編集する（`update_table`、テーブル専用の revision）。存在しない id を報酬の `table` に書いて開くと、保存時に `create: true` で作る。削除は墓石（`remove: true` と最後の内容）を書き、`RestoreScreen` の `restore_table` で戻す（pack の複製が無変更なら overlay を消して pack に戻す）。取り消しは直前のテーブルファイルを戻す。
+- 削除した章・テーブル・ノードは、同期バンドルの `deleted` に入る。`deletedJson()` は墓石の章 id、テーブル id、生きている章ごとの削除ノード id を返す。`RestoreScreen` はこの一覧から `restore_chapter` / `restore_table` / `restore_node` を送る。
 - 画面の見た目は `Ui` / `Tiles` / `EditForm` の既存の面と行だけを使い、色を直書きしない。文字はラベル・値・状態・失敗理由だけで、説明文は置かない。
 
 ## Phase 4: 操作ボタン（2026-10-21）
 
 - 地図の右クリックメニューに「章」「新しい章」「削除済み」「書き出し」「プレイヤーとして試す」を足した。どれも `EditorSession` の1件ずつの列に乗る。
-- `export`（`args.namespace`、無ければ章の名前空間）は `/quest_tree export <namespace>` を実行し、書き出し先のフォルダを返答の行に返す。地図の通知にそのパスが出る。
-- `test_chapter`（`chapterId`）は `/quest_tree reset @s <chapter>` を実行してから編集モードを切る。章が本に無ければ何もせず拒否する。返答は要求の revision をそのまま返す（章を書かないため、クライアントの版を動かさない）。
+- `export`（`args.namespace`、無ければ章の名前空間）は `/quest_tree export <namespace>` を実行し、書き出し先のフォルダ名（`quest_tree_export_<namespace>`）だけを返答の行に返す。サーバーの絶対パスは出さない。コマンドが失敗したら成功にせず、理由を返す。
+- `test_chapter`（`chapterId`）は `/quest_tree reset @s <chapter>` を実行してから、成功した時だけ編集モードを切る。章が本に無い時、パーティに入っている時（進行が共有で、他のメンバーの章まで消えるため）、コマンドが失敗した時は何もせず拒否する。返答は要求の revision をそのまま返す（章を書かないため、クライアントの版を動かさない）。
 - どちらも名前空間・章 id を `ProgressExport.validNamespace` / `ProgressionEditor.validChapterId` で確認してからコマンド文字列にする（`EditorOps`）。
 
 ## まだ無いもの
