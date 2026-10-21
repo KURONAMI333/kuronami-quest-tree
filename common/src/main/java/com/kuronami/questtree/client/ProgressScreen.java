@@ -1096,7 +1096,7 @@ public class ProgressScreen extends Screen {
         if (emergencyRow()) {
             int ey = sy;
             ClientModel m = model();
-            long until = ClientProgress.progress().cooldown.getOrDefault(PlayerProgress.EMERGENCY_COOLDOWN, 0L);
+            long until = ClientProgress.progress().emergencyReadyAt();
             long leftMs = Math.max(0, until - System.currentTimeMillis());
             boolean ready = leftMs <= 0;
             boolean hover = mouseX >= left && mouseX < left + rowW && mouseY >= ey && mouseY < ey + RAIL_FOOT_ROW;

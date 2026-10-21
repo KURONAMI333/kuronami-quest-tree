@@ -62,6 +62,9 @@ public final class PlayerProgress {
     public Map<String, String> rewardRolls = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public Deque<String> recent = new ArrayDeque<>();
+    /** Emergency items: when this player may use them again, and whether the wait message was already shown. */
+    private long emergencyReadyAt;
+    private boolean emergencyWaitNotice;
     /** The quest book was handed out on first join (server config, 2026-10-20). */
     private boolean bookGiven;
     /** Set only on a view: writes of the book flag and reward flag go to this player's part. */
@@ -70,7 +73,7 @@ public final class PlayerProgress {
     private boolean rewardsBlocked;
 
     public static final int RECENT_MAX = 20;
-    /** Cooldown key of the pack's emergency items (not a node, so no chapter key can collide with it). */
+    /** Old shared cooldown key; kept so saves from before the per-player change can be migrated. */
     public static final String EMERGENCY_COOLDOWN = "#emergency";
 
     /** Node keys of {@code shared:false} nodes; their progress lives in each player's part. */
@@ -136,8 +139,33 @@ public final class PlayerProgress {
         p.recent = part.recent;
         p.bookGiven = part.bookGiven;
         p.rewardsBlocked = part.rewardsBlocked;
+        p.emergencyReadyAt = part.emergencyReadyAt;
+        p.emergencyWaitNotice = part.emergencyWaitNotice;
         p.part = part;
         return p;
+    }
+
+    /** When this player may use the emergency items again (epoch millis). Per player, never the team's. */
+    public long emergencyReadyAt() {
+        return emergencyReadyAt;
+    }
+
+    public void setEmergencyReadyAt(long at) {
+        emergencyReadyAt = at;
+        if (part != null) {
+            part.emergencyReadyAt = at;
+        }
+    }
+
+    public boolean emergencyWaitNotice() {
+        return emergencyWaitNotice;
+    }
+
+    public void setEmergencyWaitNotice(boolean shown) {
+        emergencyWaitNotice = shown;
+        if (part != null) {
+            part.emergencyWaitNotice = shown;
+        }
     }
 
     public long task(String node, int index) {

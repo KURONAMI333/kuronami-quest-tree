@@ -48,6 +48,8 @@ public final class ProgressJson {
         JsonObject cd = new JsonObject();
         p.cooldown.forEach(cd::addProperty);
         o.add("cooldown", cd);
+        o.addProperty("emergency_ready_at", p.emergencyReadyAt());
+        o.addProperty("emergency_wait_notice", p.emergencyWaitNotice());
         o.addProperty("book_given", p.bookGiven());
         o.addProperty("rewards_blocked", p.rewardsBlocked());
         return o;
@@ -102,6 +104,9 @@ public final class ProgressJson {
         for (JsonElement e : arr(o, "recent")) {
             p.recent.addLast(e.getAsString());
         }
+        p.setEmergencyReadyAt(PackNumbers.longOr(o.get("emergency_ready_at"), 0L));
+        p.setEmergencyWaitNotice(o.has("emergency_wait_notice") && o.get("emergency_wait_notice").isJsonPrimitive()
+                && o.get("emergency_wait_notice").getAsBoolean());
         p.setRewardsBlocked(o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
                 && o.get("rewards_blocked").getAsBoolean());
         p.setBookGiven(o.has("book_given") && o.get("book_given").isJsonPrimitive() && o.get("book_given").getAsBoolean());

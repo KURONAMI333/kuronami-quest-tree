@@ -43,7 +43,7 @@ data/<ns>/progression/
 | キー | 型 | 既定 | 何 |
 |---|---|---|---|
 | `emergency.items` | 配列 | 空 | 進行画面の緊急ボタンが渡すアイテム。`"minecraft:bread"` か `{"item":"minecraft:bread","count":3}` |
-| `emergency.cooldown_seconds` | 整数 | 3600 | 緊急ボタンの間隔（秒）。0 で間隔なし |
+| `emergency.cooldown_seconds` | 整数 | 3600 | 緊急ボタンの間隔（秒）。0 で間隔なし。待ち時間はプレイヤーごとに保存し、チームの出入りでも消えない |
 | `wiki_url` / `guide_url` | 文字列 | 無し | 設定画面に出す外部リンク。`http` / `https` だけを受け付ける |
 
 `emergency` を書かずに `items` / `cooldown_seconds` を直下へ置いても読む（旧いパック向け）。

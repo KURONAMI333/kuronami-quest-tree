@@ -1183,11 +1183,17 @@ public final class ProgressService {
      */
     private static void emergency(ServerPlayer player, PlayerProgress p) {
         long now = System.currentTimeMillis();
-        long until = p.cooldown.getOrDefault(PlayerProgress.EMERGENCY_COOLDOWN, 0L);
+        long until = p.emergencyReadyAt();
         if (until > now) {
-            long minutes = Math.max(1, (until - now + 59_999) / 60_000);
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
-                    "message.kuronami_quest_tree.emergency_wait", "Emergency items are ready in %s min", minutes));
+            if (!p.emergencyWaitNotice()) {
+                // one notice per wait: a player pressing again must not fill the chat
+                long minutes = Math.max(1, (until - now + 59_999) / 60_000);
+                player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                        "message.kuronami_quest_tree.emergency_wait", "Emergency items are ready in %s min", minutes));
+                p.setEmergencyWaitNotice(true);
+                ProgressStore.get(player.server).setDirty();
+                markDirty(player);
+            }
             return;
         }
         java.util.List<JsonObject> items = ProgressData.emergencyItems();
@@ -1196,10 +1202,16 @@ public final class ProgressService {
                     "message.kuronami_quest_tree.emergency_none", "This pack has no emergency items."));
             return;
         }
+        boolean given = false;
         for (JsonObject rw : items) {
-            Rewards.item(player, rw);
+            given |= Rewards.item(player, rw);
         }
-        p.cooldown.put(PlayerProgress.EMERGENCY_COOLDOWN, now + ProgressData.emergencyCooldownMs());
+        if (!given) {
+            // a broken item list must not start the wait without handing anything out
+            return;
+        }
+        p.setEmergencyReadyAt(now + ProgressData.emergencyCooldownMs());
+        p.setEmergencyWaitNotice(false);
         ProgressStore.get(player.server).setDirty();
         markDirty(player);
         flush(player);

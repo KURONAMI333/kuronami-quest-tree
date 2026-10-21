@@ -535,19 +535,22 @@ public final class Rewards {
         return n.rewards;
     }
 
-    static void item(ServerPlayer player, JsonObject rw) {
+    static boolean item(ServerPlayer player, JsonObject rw) {
         JsonElement it = rw.get("item");
         String id;
         int count = 1;
         if (it == null) {
-            return;
+            return false;
         }
-        if (it.isJsonPrimitive()) {
+        if (it.isJsonPrimitive() && it.getAsJsonPrimitive().isString()) {
             id = it.getAsString();
-        } else {
+        } else if (it.isJsonObject()) {
             JsonObject o = it.getAsJsonObject();
-            id = o.has("id") ? o.get("id").getAsString() : "";
+            id = o.has("id") && o.get("id").isJsonPrimitive()
+                    && o.get("id").getAsJsonPrimitive().isString() ? o.get("id").getAsString() : "";
             count = intOf(o, "count", 1);
+        } else {
+            return false;
         }
         int bonus = intOf(rw, "random_bonus", 0);
         if (bonus > 0) {
@@ -557,7 +560,10 @@ public final class Rewards {
         Item item = rl == null ? Items.AIR : BuiltInRegistries.ITEM.get(rl);
         if (item == Items.AIR) {
             Constants.LOG.warn("Reward item '{}' does not exist", id);
-            return;
+            return false;
+        }
+        if (count <= 0) {
+            return false;
         }
         int max = new ItemStack(item).getMaxStackSize();
         while (count > 0) {
@@ -567,6 +573,7 @@ public final class Rewards {
                 player.drop(st, false);
             }
         }
+        return true;
     }
 
     private static void command(ServerPlayer player, JsonObject rw) {
@@ -751,6 +758,7 @@ public final class Rewards {
     }
 
     private static int intOf(JsonObject o, String k, int def) {
-        return o.has(k) && o.get(k).isJsonPrimitive() ? (int) o.get(k).getAsDouble() : def;
+        return o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsJsonPrimitive().isNumber()
+                ? (int) o.get(k).getAsDouble() : def;
     }
 }

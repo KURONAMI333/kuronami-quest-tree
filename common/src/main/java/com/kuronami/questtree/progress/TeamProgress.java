@@ -176,6 +176,7 @@ public final class TeamProgress {
         part.claimedRewards.addAll(old.claimedRewards);
         part.recent.addAll(old.recent);
         part.bookGiven = old.bookGiven();
+        team.absorbLegacyEmergencyCooldown();
         return team;
     }
 
@@ -232,6 +233,17 @@ public final class TeamProgress {
         shared.teamStages.addAll(other.teamStages);
     }
 
+    /** Moves the old shared emergency wait to every member so an update does not hand out a free use. */
+    private void absorbLegacyEmergencyCooldown() {
+        Long legacy = shared.cooldown.remove(PlayerProgress.EMERGENCY_COOLDOWN);
+        if (legacy == null) {
+            return;
+        }
+        for (PlayerPart part : players.values()) {
+            part.emergencyReadyAt = Math.max(part.emergencyReadyAt, legacy);
+        }
+    }
+
     public JsonObject toJson() {
         JsonObject o = new JsonObject();
         o.addProperty("id", id.toString());
@@ -265,6 +277,7 @@ public final class TeamProgress {
                 team.teamClaimedRewards.add(e.getAsString());
             }
         }
+        team.absorbLegacyEmergencyCooldown();
         return team;
     }
 

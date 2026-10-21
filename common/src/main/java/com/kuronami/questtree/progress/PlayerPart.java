@@ -34,6 +34,9 @@ public final class PlayerPart {
     public final Map<String, Integer> pendingRewards = new HashMap<>();
     /** Rolls already made for a reward table, so a failed pay-out does not roll again: reward key → picked indexes. */
     public final Map<String, String> rewardRolls = new HashMap<>();
+    /** Emergency items: when this player may use them again, and whether the wait message was already shown. */
+    public long emergencyReadyAt;
+    public boolean emergencyWaitNotice;
     public boolean bookGiven;
     /** An admin stopped this player from taking rewards; tasks still count and completions still happen. */
     public boolean rewardsBlocked;
@@ -59,6 +62,8 @@ public final class PlayerPart {
         teamStagesApplied.addAll(other.teamStagesApplied);
         other.pendingRewards.forEach((k, v) -> pendingRewards.merge(k, v, Integer::sum));
         rewardRolls.putAll(other.rewardRolls);
+        emergencyReadyAt = Math.max(emergencyReadyAt, other.emergencyReadyAt);
+        emergencyWaitNotice |= other.emergencyWaitNotice;
         bookGiven |= other.bookGiven;
         rewardsBlocked |= other.rewardsBlocked;
     }
@@ -77,6 +82,8 @@ public final class PlayerPart {
         o.add("team_stages_applied", strings(teamStagesApplied));
         o.add("pending_rewards", ints(pendingRewards));
         o.add("reward_rolls", textMap(rewardRolls));
+        o.addProperty("emergency_ready_at", emergencyReadyAt);
+        o.addProperty("emergency_wait_notice", emergencyWaitNotice);
         o.addProperty("book_given", bookGiven);
         o.addProperty("rewards_blocked", rewardsBlocked);
         return o;
@@ -129,6 +136,9 @@ public final class PlayerPart {
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
             part.rewardRolls.put(e.getKey(), e.getValue().getAsString());
         }
+        part.emergencyReadyAt = PackNumbers.longOr(o.get("emergency_ready_at"), 0L);
+        part.emergencyWaitNotice = o.has("emergency_wait_notice") && o.get("emergency_wait_notice").isJsonPrimitive()
+                && o.get("emergency_wait_notice").getAsBoolean();
         part.rewardsBlocked = o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
                 && o.get("rewards_blocked").getAsBoolean();
         part.bookGiven = o.has("book_given") && o.get("book_given").isJsonPrimitive()
