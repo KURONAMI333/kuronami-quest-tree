@@ -331,6 +331,22 @@ class ServerDataFixesTest {
         assertEquals(Integer.MAX_VALUE, ProgressRules.exchangeOf(a).limit());
         assertEquals(0, ProgressRules.respecCost(a));
     }
+    /** A points amount that is not a number pays and takes back nothing, the same reading on both sides (A5). */
+    @Test
+    void aPointsAmountThatIsNotANumberIsNotOwedBack() {
+        ProgressModel m = model("""
+                {"chapters": {
+                  "s:a": {"points": {"start": 0}, "nodes": {"n": {"cost": 1,
+                          "rewards": [{"type": "points", "amount": "lots", "chapter": "s:b"}]}}},
+                  "s:b": {"points": {"start": 0}, "nodes": {}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(a.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(a), 1);
+        assertTrue(new ProgressRules(m).canRespec(p, a), "a malformed amount owes nothing back");
+    }
+
     /** 1. A respec takes back the points a skill paid out, and refuses when that would overdraw the pool. */
     @Test
     void respecRevokesPointsRewardsAndRefusesOverdraft() {

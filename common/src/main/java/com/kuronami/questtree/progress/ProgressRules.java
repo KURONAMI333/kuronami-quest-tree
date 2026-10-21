@@ -708,7 +708,7 @@ public final class ProgressRules {
             for (int rank = 0; rank < taken; rank++) {
                 for (JsonObject rw : rewardsOfRank(n, rank)) {
                     if (isPoints(rw)) {
-                        paid.merge(pointsTarget(n, rw), Math.max(0, intOf(rw, "amount", 1)), Integer::sum);
+                        paid.merge(pointsTarget(n, rw), pointsAmount(rw), Integer::sum);
                     }
                 }
             }
