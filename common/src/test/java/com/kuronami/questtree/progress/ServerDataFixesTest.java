@@ -371,4 +371,37 @@ class ServerDataFixesTest {
         assertEquals(1, ProgressRules.refundChapterSpent(p, a));
         assertEquals(1, rules.availablePoints(p, a), "the cost comes back separately from the points reward");
     }
+
+    /**
+     * A points reward whose conditions did not hold was never paid: the respec neither counts it nor takes it back
+     * (2026-10-22 review). The same record refuses once the conditions hold, because then the points really were paid.
+     */
+    @Test
+    void pointsNotPaidForUnmetConditionsAreNotCountedOrRevoked() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"start": 0},
+                                      "nodes": {"n": {"cost": 1, "rewards": [
+                                        {"type": "points", "amount": 2,
+                                         "conditions": [{"type": "stage", "stage": "late"}]}]}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressModel.Node n = a.nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(a), 3);
+        p.bonus.put(ProgressRules.key(a), 0);
+
+        assertTrue(rules.canRespec(p, a, rw -> false),
+                "points that were never paid must not make the respec look overdrawn");
+        assertFalse(rules.canRespec(p, a, rw -> true),
+                "once the reward was paid, the pool has to give it back");
+
+        rules.revokePoints(p, n, 1, rw -> false);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "an unpaid reward is not taken back");
+
+        p.bonus.put(ProgressRules.key(a), 2);
+        rules.revokePoints(p, n, 1, rw -> true);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "a paid reward is still taken back");
+    }
 }

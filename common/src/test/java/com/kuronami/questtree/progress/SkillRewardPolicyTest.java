@@ -12,6 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Skill rewards that must not be farmed by respec and taking the same rank again (2026-10-21 review). */
 class SkillRewardPolicyTest {
 
+    private static final java.util.UUID A = java.util.UUID.fromString("00000000-0000-0000-0000-00000000000a");
+    private static final java.util.UUID B = java.util.UUID.fromString("00000000-0000-0000-0000-00000000000b");
+
     @Test
     void oneOffRewardsPayOnlyOnTheFirstTake() {
         for (String type : new String[]{"xp", "xp_levels", "item", "table", "advancement", "command",
@@ -83,6 +86,55 @@ class SkillRewardPolicyTest {
         assertFalse(SkillRewardPolicy.owed(p, n, 0, 0));
         assertFalse(SkillRewardPolicy.owed(p, n, 0, 1), "the old mark paid the whole rank");
         assertTrue(SkillRewardPolicy.owed(p, n, 1, 0), "another rank is not covered");
+    }
+
+    /** A one-off skill reward paid to any member is settled for the whole team (2026-10-22 review). */
+    @Test
+    void aMarkOnAnyMemberCountsForTheWholeTeam() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        PlayerProgress a = team.view(A);
+        PlayerProgress b = team.view(B);
+        java.util.function.Predicate<String> claimed = SkillRewardPolicy.teamClaimed(team);
+
+        assertTrue(SkillRewardPolicy.owed(claimed, n, 0, 0));
+        SkillRewardPolicy.recordPaid(a, n, 0, 0, true);
+
+        assertFalse(SkillRewardPolicy.owed(claimed, n, 0, 0), "another member's mark already paid the item");
+        assertTrue(SkillRewardPolicy.owed(claimed, n, 0, 1), "only the reward that was paid is settled");
+        assertFalse(SkillRewardPolicy.owed(SkillRewardPolicy.teamClaimed(team), n, 0, 0));
+        assertTrue(SkillRewardPolicy.owed(b, n, 0, 0), "without the team predicate this record alone is unpaid");
+    }
+
+    /** An old per-rank mark on any member also covers the whole team, so an upgraded save cannot pay twice. */
+    @Test
+    void anOldPerRankMarkOnAnyMemberCoversTheTeam() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.part(A).claimedRewards.add("s:a/n#skill0");
+        java.util.function.Predicate<String> claimed = SkillRewardPolicy.teamClaimed(team);
+        assertFalse(SkillRewardPolicy.owed(claimed, n, 0, 0));
+        assertFalse(SkillRewardPolicy.owed(claimed, n, 0, 1), "the old rank mark paid the whole rank for the team");
+        assertTrue(SkillRewardPolicy.owed(claimed, n, 1, 0), "another rank is not covered");
+    }
+
+    /**
+     * Skill rewards are paid on the spot, even while quest rewards are blocked: only a mark is written, never a
+     * pending entry (2026-10-22 review).
+     */
+    @Test
+    void aSkillRewardLeavesNoPendingEntryWhenQuestRewardsAreBlocked() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        PlayerProgress p = new PlayerProgress();
+        p.setRewardsBlocked(true);
+
+        SkillRewardPolicy.recordPaid(p, n, 0, 0, true);
+
+        assertTrue(p.rewardClaimed(SkillRewardPolicy.mark(n, 0, 0)));
+        assertTrue(p.pendingRewards.isEmpty(), "skill rewards never go to the pending ledger");
     }
 
     /**

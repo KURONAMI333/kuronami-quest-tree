@@ -3,7 +3,6 @@ package com.kuronami.questtree.progress;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.kuronami.questtree.Constants;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -37,6 +36,8 @@ public final class PlayerPart {
     public boolean bookGiven;
     /** An admin stopped this player from taking rewards; tasks still count and completions still happen. */
     public boolean rewardsBlocked;
+    /** Skill pending keys dropped while loading an old save, for the loader to log (never saved). */
+    public int droppedSkillPending;
 
     public void event(String kind, String node, long time) {
         recent.addFirst(kind + "|" + node + "|" + time);
@@ -120,16 +121,12 @@ public final class PlayerPart {
             }
         }
         // skill rewards are never blocked any more; keys an older save kept are dropped instead of paid at login
-        int dropped = 0;
         var pendingKeys = part.pendingRewards.keySet().iterator();
         while (pendingKeys.hasNext()) {
             if (RewardLedger.isSkillPending(pendingKeys.next())) {
                 pendingKeys.remove();
-                dropped++;
+                part.droppedSkillPending++;
             }
-        }
-        if (dropped > 0) {
-            Constants.LOG.info("Dropped {} pending skill rewards from an old save; skill rewards are paid on the spot", dropped);
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
             part.rewardRolls.put(e.getKey(), e.getValue().getAsString());

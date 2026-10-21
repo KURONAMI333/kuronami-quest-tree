@@ -177,6 +177,21 @@ class ReviewFixesTest {
         assertEquals(1, PlayerPart.fromJson(old).pendingRewards.get("t:q/n#-1#0"));
     }
 
+    /** Skill rewards are never held back, so an old save's skill pending keys are dropped instead of paid at login. */
+    @Test
+    void oldSkillPendingKeysAreDroppedAndQuestKeysStay() {
+        PlayerPart part = new PlayerPart();
+        part.pendingRewards.put("s:a/n#0#0", 1);
+        part.pendingRewards.put("s:a/n#1#2", 2);
+        part.pendingRewards.put("t:q/n#-1#0", 3);
+        PlayerPart loaded = PlayerPart.fromJson(part.toJson());
+        assertEquals(3, loaded.pendingRewards.get("t:q/n#-1#0"));
+        assertFalse(loaded.pendingRewards.containsKey("s:a/n#0#0"));
+        assertFalse(loaded.pendingRewards.containsKey("s:a/n#1#2"));
+        assertEquals(1, loaded.pendingRewards.size());
+        assertEquals(2, loaded.droppedSkillPending);
+    }
+
     @Test
     void barrierAnswersAreKeptPerQuestionAndExpire() {
         BarrierCache<Boolean> cache = new BarrierCache<>(4, 8);

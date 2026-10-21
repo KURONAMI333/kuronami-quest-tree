@@ -171,6 +171,15 @@ public final class ProgressStore extends SavedData {
             }
             root.add("migrations", migrations);
             store.data = TeamStoreData.fromJson(root);
+            int droppedSkillPending = 0;
+            for (TeamProgress team : store.data.teams.values()) {
+                for (PlayerPart part : team.players.values()) {
+                    droppedSkillPending += part.droppedSkillPending;
+                }
+            }
+            if (droppedSkillPending > 0) {
+                Constants.LOG.info("Dropped {} pending skill rewards from an old save; skill rewards are paid on the spot", droppedSkillPending);
+            }
             return store;
         }
 
