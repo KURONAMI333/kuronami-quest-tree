@@ -26,6 +26,14 @@ public final class ProgressRules {
     /** Parsed exchange cost expressions, shared because the screen asks for the next cost every frame. */
     private static final Map<String, Expression> EXCHANGE_CURVES = new ConcurrentHashMap<>();
 
+    /**
+     * Drops the parsed exchange formulas. A datapack reload can change an expression under the same text key, so the
+     * cache must not outlive the model that read it (2026-10-22 review).
+     */
+    public static void clearExchangeCurves() {
+        EXCHANGE_CURVES.clear();
+    }
+
     public ProgressRules(ProgressModel model) {
         this.model = model;
     }

@@ -79,6 +79,7 @@ public final class ProgressService {
         ProgressModel m = ProgressData.model();
         if (m != rulesFor) {
             rulesFor = m;
+            ProgressRules.clearExchangeCurves();
             rules = new ProgressRules(m);
         }
         return rules;
