@@ -28,6 +28,8 @@ import java.util.Locale;
 /** Hands out rewards (DATA_MODEL.md "報酬"). Every reward is checked again here; nothing trusts the client. */
 public final class Rewards {
 
+    private static final RewardAttempts FAILED = new RewardAttempts();
+
     private Rewards() {
     }
 
@@ -71,9 +73,23 @@ public final class Rewards {
             }
             return true;
         } catch (RuntimeException ex) {
-            Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
-            return false;
+            // the claim is kept: retrying a reward that always throws would only fail again, and FTB Quests also
+            // spends the claim. One broken reward must not make the quest look unclaimed forever.
+            if (FAILED.first(rewardKey(n, rw))) {
+                Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+            }
+            return true;
         }
+    }
+
+    /** Identifies one reward entry for the once-only log: its place in the node, or its contents for a rank reward. */
+    private static String rewardKey(ProgressModel.Node n, JsonObject rw) {
+        for (int i = 0; i < n.rewards.size(); i++) {
+            if (n.rewards.get(i) == rw) {
+                return n.key + "#" + i;
+            }
+        }
+        return n.key + "#rank:" + rw;
     }
 
     /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */
