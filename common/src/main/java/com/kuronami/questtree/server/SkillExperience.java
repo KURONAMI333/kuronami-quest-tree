@@ -161,7 +161,13 @@ public final class SkillExperience {
             if (c.points.has("experience_enabled") && !c.points.get("experience_enabled").getAsBoolean()) {
                 continue;
             }
-            if (!ProgressRules.chapterUnlocked(ProgressService.progress(player), c)) {
+            PlayerProgress progress = ProgressService.progress(player);
+            if (!ProgressRules.chapterUnlocked(progress, c)) {
+                continue;
+            }
+            // stop_when_maxed: at the cap, do not read the event or walk the sources at all
+            if (ProgressModel.boolOf(c.points, "stop_when_maxed") && progress.level.getOrDefault(
+                    ProgressRules.key(c), 0) >= intOf(c.points, "level_limit", Integer.MAX_VALUE)) {
                 continue;
             }
             double total = 0;

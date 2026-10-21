@@ -177,6 +177,29 @@ class ProgressRulesTest {
      * target, so a later step can neither be counted nor submitted early.
      */
     @Test
+    void stopWhenMaxedRefusesExperienceAtTheCap() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {
+                  "t:maxed": {"points": {"per_level": 100, "level_limit": 1, "stop_when_maxed": true},
+                              "nodes": {"n": {"cost": 1}}},
+                  "t:open": {"points": {"per_level": 100, "level_limit": 1},
+                             "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel m = ProgressModel.of(bundle);
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        ProgressModel.Chapter maxed = m.chapters.get("t:maxed");
+        assertEquals(1, rules.addExperience(p, maxed, 100));
+        assertEquals(0, rules.addExperience(p, maxed, 50));
+        assertEquals(0.0, p.xp.get(ProgressRules.key(maxed)));
+
+        ProgressModel.Chapter open = m.chapters.get("t:open");
+        assertEquals(1, rules.addExperience(p, open, 100));
+        assertEquals(0, rules.addExperience(p, open, 50));
+        assertEquals(50.0, p.xp.get(ProgressRules.key(open)));
+    }
+
+    @Test
     void sequentialTasksWaitForTheOneBefore() {
         JsonObject bundle = JsonParser.parseString("""
                 {"chapters": {"s:c": {"nodes": {

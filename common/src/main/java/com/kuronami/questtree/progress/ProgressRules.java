@@ -996,6 +996,10 @@ public final class ProgressRules {
         int limit = levelLimit(c.points);
         String key = key(c);
         int lvl = p.level.getOrDefault(key, 0);
+        // Pufferfish's Skills' points.stop_when_maxed: at the cap no more experience is taken at all
+        if (lvl >= limit && ProgressModel.boolOf(c.points, "stop_when_maxed")) {
+            return 0;
+        }
         double x = p.xp.getOrDefault(key, 0.0) + amount;
         int gained = 0;
         while (lvl < limit) {
@@ -1008,7 +1012,7 @@ public final class ProgressRules {
             lvl++;
             gained++;
         }
-        if (lvl >= limit) {
+        if (lvl >= limit && ProgressModel.boolOf(c.points, "stop_when_maxed")) {
             x = 0;
         }
         p.level.put(key, lvl);
