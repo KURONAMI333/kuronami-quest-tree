@@ -107,6 +107,21 @@ class ImporterTest {
     }
 
     @Test
+    void foreignConditionsKeyIsReportedAndNotWritten(@TempDir Path tmp) throws Exception {
+        Path chapters = tmp.resolve("quests/chapters");
+        Files.createDirectories(chapters);
+        Files.writeString(chapters.resolve("x.snbt"), """
+                { id: "1000000000000001" filename: "x" quests: [ {
+                  id: "1000000000000002" conditions: { fake: true } } ] }
+                """);
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(tmp.resolve("quests"), out);
+        JsonObject node = out.chapters.get("x").getAsJsonObject("nodes").getAsJsonObject("1000000000000002");
+        assertFalse(node.has("conditions"));
+        assertTrue(out.unmapped.containsKey("quest.conditions"), out.unmapped.toString());
+    }
+
+    @Test
     void puffishCategoryConverts() throws Exception {
         Map<String, JsonElement> files = new LinkedHashMap<>();
         try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
