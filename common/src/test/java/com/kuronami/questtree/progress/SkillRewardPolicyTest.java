@@ -76,6 +76,60 @@ class SkillRewardPolicyTest {
         assertTrue(SkillRewardPolicy.owed(p, n, 0, 1));
     }
 
+    /**
+     * The condition of a skill reward is judged once, with the taker's progress, and the same answer decides for
+     * every member: attributes, tags and a lock_command command reach all of them (2026-10-22 review).
+     */
+    @Test
+    void oneJudgementDecidesTheWholeTeamsEffects() {
+        java.util.List<JsonObject> rewards = java.util.List.of(
+                JsonParser.parseString("""
+                        {"type": "attribute", "attribute": "minecraft:generic.max_health", "value": 2}
+                        """).getAsJsonObject(),
+                JsonParser.parseString("""
+                        {"type": "tag", "tag": "x"}
+                        """).getAsJsonObject(),
+                JsonParser.parseString("""
+                        {"type": "command", "unlock_command": "say hi", "lock_command": "say bye"}
+                        """).getAsJsonObject(),
+                JsonParser.parseString("""
+                        {"type": "item", "id": "minecraft:stone"}
+                        """).getAsJsonObject());
+        java.util.concurrent.atomic.AtomicInteger judged = new java.util.concurrent.atomic.AtomicInteger();
+
+        var actions = SkillRewardPolicy.actions(rewards, rw -> {
+            judged.incrementAndGet();
+            return true;
+        }, index -> index == 3);
+
+        assertEquals(4, judged.get(), "each reward is judged once for the taker, not once per member");
+        assertEquals(3, actions.size(), "the one-off item was already paid for the team");
+        assertTrue(actions.get(0).teamWide(), "an attribute belongs to every member");
+        assertTrue(actions.get(1).teamWide(), "a tag belongs to every member");
+        assertTrue(actions.get(2).teamWide(), "the unlock half of a command belongs to every member");
+        assertFalse(actions.get(2).reward().has("command"), "the unlock command is what runs again");
+
+        assertTrue(SkillRewardPolicy.actions(rewards, rw -> false, index -> false).isEmpty(),
+                "a condition that failed for the taker pays nothing to any member");
+    }
+
+    /** A plain command and a one-off gift stay with the taker; a command with a lock half does not. */
+    @Test
+    void onlyTeamEffectsReachTheOtherMembers() {
+        assertFalse(SkillRewardPolicy.teamWide(JsonParser.parseString("""
+                {"type": "command", "command": "say hi"}
+                """).getAsJsonObject()));
+        assertFalse(SkillRewardPolicy.teamWide(JsonParser.parseString("""
+                {"type": "item", "id": "minecraft:stone"}
+                """).getAsJsonObject()));
+        assertFalse(SkillRewardPolicy.teamWide(JsonParser.parseString("""
+                {"type": "points", "amount": 2}
+                """).getAsJsonObject()));
+        assertTrue(SkillRewardPolicy.teamWide(JsonParser.parseString("""
+                {"type": "command", "command": "say hi", "lock_command": "say bye"}
+                """).getAsJsonObject()));
+    }
+
     /** A one-off skill reward paid to any member is settled for the whole team (2026-10-22 review). */
     @Test
     void aRecordOnAnyMemberCountsForTheWholeTeam() {

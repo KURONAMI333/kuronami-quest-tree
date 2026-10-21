@@ -4,6 +4,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.data.ProgressModel;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -183,6 +185,45 @@ public final class SkillRewardPolicy {
             changed |= team.paidSkillRewards.add(paidKey(n, rank, i));
         }
         return changed;
+    }
+
+    /**
+     * Whether the effect of this reward belongs to every member. The condition is judged once, for the member who
+     * took the skill, and the same answer is applied to the whole team; one-off gifts and shared values stay with the
+     * taker (2026-10-22 review, DATA_MODEL "スキル報酬の条件").
+     */
+    public static boolean teamWide(JsonObject reward) {
+        String type = typeOf(reward);
+        return type.equals("attribute") || type.equals("tag")
+                || (type.equals("command") && hasLockCommand(reward));
+    }
+
+    /** One reward of a taken rank, with the choices already made for the taker. */
+    public record Action(int index, JsonObject reward, boolean teamWide) {
+    }
+
+    /**
+     * The rewards of one taken rank that are paid now. {@code conditionsHold} is called exactly once per reward, with
+     * the taker's progress; {@code paid} says whether that reward already has a record (a one-off one is then skipped
+     * for the whole team). Team-wide effects are kept even when they were paid before: taking the rank again puts
+     * them back (2026-10-22 review).
+     */
+    public static List<Action> actions(List<JsonObject> rewards,
+                                       java.util.function.Predicate<JsonObject> conditionsHold,
+                                       java.util.function.IntPredicate paid) {
+        List<Action> out = new ArrayList<>();
+        for (int index = 0; index < rewards.size(); index++) {
+            JsonObject reward = rewards.get(index);
+            if (!conditionsHold.test(reward)) {
+                continue;
+            }
+            boolean teamWide = teamWide(reward);
+            if (!teamWide && !pays(reward, !paid.test(index))) {
+                continue;
+            }
+            out.add(new Action(index, reward, teamWide));
+        }
+        return out;
     }
 
     private static String typeOf(JsonObject reward) {

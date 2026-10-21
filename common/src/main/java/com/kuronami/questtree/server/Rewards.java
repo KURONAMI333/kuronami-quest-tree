@@ -50,7 +50,17 @@ public final class Rewards {
      */
     private static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
                                 String rollKey, boolean ignoreBlock) {
-        if (!ProgressService.conditionsMet(player, p, n, rw, false) || (!ignoreBlock && blocked(p, rw))) {
+        return give(player, p, n, rw, choice, rollKey, ignoreBlock, false);
+    }
+
+    /**
+     * As above; {@code conditionsChecked} is for a reward whose condition a caller already judged, so it is not
+     * judged twice (a skill reward, whose condition belongs to the member who took the skill).
+     */
+    private static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
+                                String rollKey, boolean ignoreBlock, boolean conditionsChecked) {
+        if ((!conditionsChecked && !ProgressService.conditionsMet(player, p, n, rw, false))
+                || (!ignoreBlock && blocked(p, rw))) {
             return false;
         }
         try {
@@ -266,50 +276,53 @@ public final class Rewards {
      * rewards are always paid on the spot, even while an admin blocks quest rewards (2026-10-22 review).
      */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
-        // What the team already paid is one record, kept on the shared side, so a respec cannot farm a one-off reward
-        // and a condition that stops holding later cannot change what gets paid now (2026-10-22 review).
-        giveSkillOne(player, p, n, rank, true);
-        // the skill belongs to the team: its per-player effects (attributes, tags, and the lock/unlock command pair)
-        // reach every online member. Shared values (points) and one-off pay-outs are applied once, by the taker
-        for (ServerPlayer member : members(player)) {
-            if (!member.getUUID().equals(player.getUUID())) {
-                giveSkillOne(member, ProgressService.progress(member), n, rank, false);
+        // The taker's condition decides once for the whole team, and its answer is used for every member. What the
+        // team already paid is one shared record, so a respec cannot farm a one-off reward (2026-10-22 review).
+        List<ServerPlayer> members = members(player);
+        List<SkillRewardPolicy.Action> actions = SkillRewardPolicy.actions(rewardsOfRank(n, rank),
+                rw -> ProgressService.conditionsMet(player, p, n, rw, false),
+                index -> !SkillRewardPolicy.owed(p, n, rank, index));
+        for (SkillRewardPolicy.Action action : actions) {
+            int index = action.index();
+            JsonObject rw = action.reward();
+            if (action.teamWide()) {
+                // attributes, tags, and the lock/unlock command pair belong to every online member
+                boolean paid = true;
+                for (ServerPlayer member : members) {
+                    paid &= applyTeamWide(member, n, rank, index, rw);
+                }
+                SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
+            } else {
+                // shared values (points) and one-off pay-outs are applied once, by the taker
+                String rollKey = com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, rank, index);
+                boolean paid = give(player, p, n, rw, -1, rollKey, true, true);
+                SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
             }
         }
+    }
+
+    /** Applies one team-wide effect of a taken skill to a member, using the taker's condition answer as it is. */
+    private static boolean applyTeamWide(ServerPlayer member, ProgressModel.Node n, int rank, int index,
+                                         JsonObject rw) {
+        try {
+            switch (ProgressService.type(rw)) {
+                case "attribute" -> attribute(member, n.key, rank * 100 + index, rw);
+                case "tag" -> member.addTag(ProgressService.str(rw, "tag"));
+                case "command" -> command(member, rw);
+                default -> { }
+            }
+        } catch (RuntimeException ex) {
+            if (FAILED.first(rewardKey(n, rw))) {
+                Constants.LOG.error("Reward of {} failed for {}: {}", n.key,
+                        member.getGameProfile().getName(), ex.toString());
+            }
+        }
+        return true;
     }
 
     /** Rewards that must not be paid twice for the same rank, even after a respec (DATA_MODEL "スキルの振り直し"). */
     private static List<ServerPlayer> members(ServerPlayer player) {
         return new ArrayList<>(com.kuronami.questtree.team.TeamResolver.onlineMembers(player.server, player.getUUID()));
-    }
-
-    private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank,
-                                     boolean full) {
-        List<JsonObject> list = rewardsOfRank(n, rank);
-        for (int index = 0; index < list.size(); index++) {
-            JsonObject rw = list.get(index);
-            // conditions are judged once, when the reward is taken; later visits read the paid record instead
-            if (!ProgressService.conditionsMet(player, p, n, rw, false)) {
-                continue;
-            }
-            boolean firstTake = SkillRewardPolicy.owed(p, n, rank, index);
-            String rollKey = com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, rank, index);
-            String type = ProgressService.type(rw);
-            if (type.equals("attribute")) {
-                attribute(player, n.key, rank * 100 + index, rw);
-                // login re-applies only what was recorded, so the attribute has to be recorded when it is applied
-                SkillRewardPolicy.recordPaid(p, n, rank, index, true);
-            } else if (full) {
-                if (SkillRewardPolicy.pays(rw, firstTake)) {
-                    boolean paid = give(player, p, n, rw, -1, rollKey, true);
-                    SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
-                }
-            } else if ((type.equals("command") && (firstTake || SkillRewardPolicy.hasLockCommand(rw)))
-                    || type.equals("tag")) {
-                boolean paid = give(player, p, n, rw, -1, rollKey, true);
-                SkillRewardPolicy.recordPaid(p, n, rank, index, paid);
-            }
-        }
     }
 
     /** Index of a quest reward, so two attribute rewards of one quest get separate modifiers (1000+ keeps clear of skill ranks). */
