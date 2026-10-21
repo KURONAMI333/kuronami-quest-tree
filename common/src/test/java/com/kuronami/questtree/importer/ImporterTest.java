@@ -54,11 +54,31 @@ class ImporterTest {
         // an image that appears after a quest keeps that link
         JsonObject api = out.chapters.get("apiculture");
         assertTrue(api.getAsJsonArray("decorations").get(1).getAsJsonObject().has("visible_after"));
+        // no FTB Quests condition block survives anywhere in the converted output
+        out.chapters.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        out.patches.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        out.tables.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        out.groups.forEach(ch -> assertNoKey(ch, "conditions"));
+        out.lang.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        assertNoKey(out.settings, "conditions");
         // random reward points at the converted table
         out.writeTo(tmp);
         assertTrue(Files.exists(tmp.resolve("data/test/progression/chapters/apiculture.json")));
         assertTrue(Files.exists(tmp.resolve("data/test/progression/lang/ja_jp.json")));
         assertTrue(Files.exists(tmp.resolve("pack.mcmeta")));
+    }
+
+    private static void assertNoKey(JsonElement e, String key) {
+        if (e == null) {
+            return;
+        }
+        if (e.isJsonObject()) {
+            JsonObject o = e.getAsJsonObject();
+            assertFalse(o.has(key), "converted output still has '" + key + "': " + o);
+            o.entrySet().forEach(en -> assertNoKey(en.getValue(), key));
+        } else if (e.isJsonArray()) {
+            e.getAsJsonArray().forEach(v -> assertNoKey(v, key));
+        }
     }
 
     @Test
