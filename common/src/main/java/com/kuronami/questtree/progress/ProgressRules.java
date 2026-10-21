@@ -115,6 +115,10 @@ public final class ProgressRules {
      * Whether the requirements are met (not considering exclusivity). Besides the connection graph, Pufferfish's
      * Skills gates a skill on points it must have left ({@code required_points}), points already spent in the tree
      * ({@code required_spent_points}) and mods that must be installed ({@code required_mods}).
+     * <p>
+     * Pufferfish's Skills' {@code CategoryData.getSkillState} answers UNLOCKED first for a skill already taken, so the
+     * point gates are not rechecked there. A ranked node follows the same rule: once one rank is taken, its own cost
+     * spending must not lock the next rank (2026-10-22 review).
      */
     public boolean unlocked(PlayerProgress p, ProgressModel.Node n) {
         if (!modsLoaded(n.requiredMods)) {
@@ -139,8 +143,10 @@ public final class ProgressRules {
                         ? met > 0 : met == n.requires.size();
             }
         }
-        return reachable
-                && availablePoints(p, n.chapter) >= Math.max(0, n.requiredPoints)
+        if (!reachable || p.taken.getOrDefault(n.key, 0) > 0) {
+            return reachable;
+        }
+        return availablePoints(p, n.chapter) >= Math.max(0, n.requiredPoints)
                 && p.spent.getOrDefault(key(n.chapter), 0) >= Math.max(0, n.requiredSpentPoints);
     }
 

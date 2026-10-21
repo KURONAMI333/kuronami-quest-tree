@@ -393,6 +393,25 @@ class ProgressRulesTest {
         assertTrue(rules.respecPlan(p, a).allowed());
     }
 
+    /**
+     * A ranked node that already has a rank does not lock itself with {@code requires.points}: Pufferfish's Skills
+     * checks UNLOCKED before the point gates, and its own cost must not block the next rank (2026-10-22 review).
+     */
+    @Test
+    void aTakenRankDoesNotLockTheNextRankWithRequiredPoints() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {}, "nodes": {
+                  "n": {"cost": 1, "ranks": 2, "requires": {"points": 1}}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = m.chapters.get("s:a").nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertFalse(rules.unlocked(p, n), "before the first rank the point gate still applies");
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(n.chapter), 1);
+        assertTrue(rules.unlocked(p, n), "the spent point must not lock the second rank");
+    }
+
     /** The new per-reward marks and the first-join flag survive the save file (2026-10-20). */
     @Test
     void perRewardClaimsAndBookFlagRoundTrip() {
