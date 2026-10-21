@@ -112,13 +112,19 @@ public final class SkillRewardPolicy {
     }
 
     /**
-     * Fills {@code team.paidSkillRewards} for a save made before the record existed. Old per-reward and per-rank skill
-     * marks under {@code claimedRewards} are converted first, so a reward that was refused then is not recorded as
-     * paid. A taken skill node with no record at all is filled for every reward of its taken ranks: before the record
-     * existed the conditions were not there, so those rewards had all been paid. Returns whether anything changed.
+     * Fills {@code team.paidSkillRewards} for a save made before the record existed, once: only a team whose saved form
+     * had no {@code paid_skill_rewards} key needs it, and the flag is cleared here so a later load leaves a new save
+     * alone. Old per-reward and per-rank skill marks under {@code claimedRewards} are converted first, so a reward that
+     * was refused then is not recorded as paid. A taken skill node with no record at all is filled for every reward of
+     * its taken ranks: before the record existed the conditions were not there, so those rewards had all been paid.
+     * Returns whether the saved form changed.
      */
     public static boolean migratePaidSkillRewards(TeamProgress team, ProgressModel model) {
-        boolean changed = false;
+        if (!team.needsPaidMigration) {
+            return false;
+        }
+        team.needsPaidMigration = false;
+        boolean changed = true;
         for (PlayerPart part : team.players.values()) {
             for (String mark : new java.util.ArrayList<>(part.claimedRewards)) {
                 changed |= convertMark(team, model, mark);

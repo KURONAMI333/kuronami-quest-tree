@@ -50,8 +50,10 @@ public final class ProgressStore extends SavedData {
     }
 
     /**
-     * Fills the paid-skill record of an old save once per loaded data model. A save from before the record existed has
-     * no way to say which reward was paid, so its taken skill nodes are filled as fully paid (2026-10-22 review).
+     * Fills the paid-skill record of old saves, once per team: a team loaded without the {@code paid_skill_rewards}
+     * key is migrated and the key is written by the next save, so a new save is never filled a second time
+     * (2026-10-22 review). A save from before the record existed has no way to say which reward was paid, so its taken
+     * skill nodes are filled as fully paid.
      */
     public void migratePaidSkillRewards(com.kuronami.questtree.data.ProgressModel model) {
         if (model == paidSkillModel || model == null || model.nodes.isEmpty()) {

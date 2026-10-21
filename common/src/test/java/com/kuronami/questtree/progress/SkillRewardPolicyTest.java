@@ -1,5 +1,6 @@
 package com.kuronami.questtree.progress;
 
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.data.ProgressModel;
 import org.junit.jupiter.api.Test;
@@ -162,6 +163,7 @@ class SkillRewardPolicyTest {
         ProgressModel model = modelWithRewards();
         ProgressModel.Node n = model.nodes.get("s:a/n");
         TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.needsPaidMigration = true;
         team.part(A).claimedRewards.add("s:a/n#skill0");
         team.part(A).claimedRewards.add("s:a/n#skill1#0");
 
@@ -180,6 +182,7 @@ class SkillRewardPolicyTest {
         ProgressModel model = modelWithRewards();
         ProgressModel.Node n = model.nodes.get("s:a/n");
         TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.needsPaidMigration = true;
         team.shared.taken.put(n.key, 1);
 
         assertTrue(SkillRewardPolicy.migratePaidSkillRewards(team, model));
@@ -187,6 +190,52 @@ class SkillRewardPolicyTest {
         assertTrue(team.paidSkillRewards.contains("s:a/n#0#0"));
         assertTrue(team.paidSkillRewards.contains("s:a/n#0#1"));
         assertFalse(team.paidSkillRewards.contains("s:a/n#1#0"), "a rank that was not taken is not paid");
+    }
+
+    /**
+     * A new save writes the record even when it is empty, so a node whose conditions did not hold is never filled as
+     * paid on a later load (2026-10-22 review).
+     */
+    @Test
+    void aNewSaveIsNotFilledAgainOnEveryLoad() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.shared.taken.put(n.key, 1);
+
+        JsonObject saved = team.toJson();
+        assertTrue(saved.has("paid_skill_rewards"), "an empty record must still be written");
+
+        TeamProgress loaded = TeamProgress.fromJson(saved);
+        assertFalse(loaded.needsPaidMigration);
+        assertFalse(SkillRewardPolicy.migratePaidSkillRewards(loaded, model));
+        assertTrue(loaded.paidSkillRewards.isEmpty(), "nothing was paid, so nothing may be recorded");
+
+        TeamProgress again = TeamProgress.fromJson(loaded.toJson());
+        assertFalse(SkillRewardPolicy.migratePaidSkillRewards(again, model));
+        assertTrue(again.paidSkillRewards.isEmpty(), "a second load must not fill it either");
+    }
+
+    /** A save without the record is filled once; the next load already has the key and is left alone. */
+    @Test
+    void anOldSaveIsFilledOnceAndRemembersIt() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.shared.taken.put(n.key, 1);
+        JsonObject saved = team.toJson();
+        saved.remove("paid_skill_rewards");
+
+        TeamProgress loaded = TeamProgress.fromJson(saved);
+        assertTrue(loaded.needsPaidMigration, "a save with no record is the old form");
+        assertTrue(SkillRewardPolicy.migratePaidSkillRewards(loaded, model));
+        assertFalse(loaded.needsPaidMigration, "the migration runs only once");
+        assertTrue(loaded.paidSkillRewards.contains("s:a/n#0#0"));
+
+        TeamProgress next = TeamProgress.fromJson(loaded.toJson());
+        assertFalse(SkillRewardPolicy.migratePaidSkillRewards(next, model));
+        assertEquals(java.util.Set.of("s:a/n#0#0", "s:a/n#0#1"), next.paidSkillRewards,
+                "the filled record is the same after a reload");
     }
 
     /** A leaver keeps the team's one-off marks and paid records: taking the rank alone again must not pay again. */

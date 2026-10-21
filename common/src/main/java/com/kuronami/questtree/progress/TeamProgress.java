@@ -32,6 +32,11 @@ public final class TeamProgress {
      * whichever member took the skill. Revocation, re-application and the respec judgement read only this set.
      */
     public final Set<String> paidSkillRewards = new HashSet<>();
+    /**
+     * The saved form has no {@code paid_skill_rewards} key, so this team predates the record and its taken skills are
+     * filled once. Written on every save, so a loaded team is never migrated again (2026-10-22 review).
+     */
+    public boolean needsPaidMigration;
     private final Map<UUID, PlayerProgress> views = new HashMap<>();
     private int viewsVersion = -1;
 
@@ -176,6 +181,7 @@ public final class TeamProgress {
         TeamProgress team = new TeamProgress(player);
         team.shared.copySharedFrom(old);
         team.paidSkillRewards.addAll(old.paidSkillRewards);
+        team.needsPaidMigration = true;
         PlayerPart part = team.part(player);
         part.claimed.addAll(old.claimed);
         part.claimedRewards.addAll(old.claimedRewards);
@@ -193,6 +199,7 @@ public final class TeamProgress {
         mergeShared(source.shared);
         teamClaimedRewards.addAll(source.teamClaimedRewards);
         paidSkillRewards.addAll(source.paidSkillRewards);
+        needsPaidMigration |= source.needsPaidMigration;
         PlayerPart from = source.players.get(player);
         if (from != null) {
             part(player).copyFrom(from);
@@ -215,6 +222,7 @@ public final class TeamProgress {
         solo.teamClaimedRewards.addAll(teamClaimedRewards);
         solo.teamClaimedRewards.addAll(settledTeamRewards);
         solo.paidSkillRewards.addAll(paidSkillRewards);
+        solo.needsPaidMigration = needsPaidMigration;
         PlayerPart own = players.get(player);
         if (own != null) {
             solo.part(player).copyFrom(own);
@@ -283,6 +291,8 @@ public final class TeamProgress {
                 team.teamClaimedRewards.add(e.getAsString());
             }
         }
+        // the key is written on every save (even empty): a save without it predates the record and is migrated once
+        team.needsPaidMigration = !o.has("paid_skill_rewards");
         if (o.has("paid_skill_rewards") && o.get("paid_skill_rewards").isJsonArray()) {
             for (JsonElement e : o.getAsJsonArray("paid_skill_rewards")) {
                 team.paidSkillRewards.add(e.getAsString());

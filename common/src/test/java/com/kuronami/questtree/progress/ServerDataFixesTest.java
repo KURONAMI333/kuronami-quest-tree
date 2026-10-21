@@ -450,6 +450,7 @@ class ServerDataFixesTest {
         ProgressModel.Chapter a = m.chapters.get("s:a");
         ProgressModel.Node n = a.nodes.get("n");
         TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.needsPaidMigration = true;
         team.shared.taken.put(n.key, 1);
         team.view(A).bonus.put(ProgressRules.key(a), 2);
 
