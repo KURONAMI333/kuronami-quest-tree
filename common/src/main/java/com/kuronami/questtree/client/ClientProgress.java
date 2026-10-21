@@ -46,6 +46,9 @@ public final class ClientProgress {
     private static int receivingGeneration = -1;
     private static ByteArrayOutputStream buffer;
     private static int nextPart;
+    /** The merged stage set for {@link #barrierProg}, so a barrier check per frame allocates nothing. */
+    private static PlayerProgress barrierProg;
+    private static java.util.Set<String> barrierStages = java.util.Set.of();
     /** Quests "claim all" would take; read every frame, so it is worked out once per progress/rules pair. */
     private static final ProgressCountCache CLAIMABLE = new ProgressCountCache();
 
@@ -103,6 +106,7 @@ public final class ClientProgress {
         }
         PlayerProgress old = progress;
         progress = next;
+        barrierProg = null;
         if (haveProgress) {
             ProgressFeedback.onUpdate(old, next, p.events());
         }
@@ -187,15 +191,26 @@ public final class ClientProgress {
         return n == null || sync.rules().unlocked(progress, n);
     }
 
+    /** Pack and team stages merged once per progress object; read by every barrier check. */
+    private static java.util.Set<String> stages() {
+        if (barrierProg != progress) {
+            java.util.Set<String> merged = new java.util.HashSet<>(progress.stages);
+            merged.addAll(progress.teamStages);
+            barrierStages = java.util.Set.copyOf(merged);
+            barrierProg = progress;
+        }
+        return barrierStages;
+    }
+
     /** The client's copy of a quest barrier: the same rule the server uses, from synced progress. */
     public static boolean barrierAllows(String mode, String key) {
         if (key == null || key.isEmpty()) {
             return false;
         }
-        java.util.Set<String> stages = new java.util.HashSet<>(progress.stages);
-        stages.addAll(progress.teamStages);
+        java.util.Set<String> stages = stages();
         if ("stage".equals(mode) && !stages.contains(key)
                 && com.kuronami.questtree.progress.PackStagesClient.has(key)) {
+            stages = new java.util.HashSet<>(stages);
             stages.add(key);
         }
         return com.kuronami.questtree.progress.BarrierRule.allows(mode, key, progress.completed, stages);
@@ -388,6 +403,8 @@ public final class ClientProgress {
 
     public static void onLogout() {
         sync = SyncState.empty();
+        barrierProg = null;
+        barrierStages = java.util.Set.of();
         progress = new PlayerProgress();
         haveProgress = false;
         receivingGeneration = -1;
