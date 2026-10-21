@@ -206,6 +206,7 @@ final class PlayerCommands {
         pr.claimed.clear();
         pr.claimedRewards.clear();
         pr.pendingRewards.clear();
+        pr.rewardRolls.clear();
         pr.recent.clear();
     }
 
@@ -218,12 +219,14 @@ final class PlayerCommands {
                 pr.claimed.remove(n.key);
                 pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
                 pr.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
+                pr.rewardRolls.keySet().removeIf(k -> k.startsWith(n.key + "#"));
             }
         } else if (model.nodes.containsKey(id)) {
             ProgressModel.Node n = model.nodes.get(id);
             pr.claimed.remove(n.key);
             pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
             pr.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
+            pr.rewardRolls.keySet().removeIf(k -> k.startsWith(n.key + "#"));
         }
     }
 

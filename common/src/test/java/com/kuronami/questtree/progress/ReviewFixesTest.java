@@ -88,6 +88,16 @@ class ReviewFixesTest {
     }
 
     @Test
+    void aResetForgetsTheSavedRewardRolls() {
+        PlayerProgress p = new PlayerProgress();
+        p.rewardRolls.put("t:q/n#-1#0>rolls", "1,2");
+        p.rewardRolls.put("t:q/m#-1#0>rolls", "0");
+        p.clearNode("t:q/n");
+        assertFalse(p.rewardRolls.containsKey("t:q/n#-1#0>rolls"));
+        assertTrue(p.rewardRolls.containsKey("t:q/m#-1#0>rolls"), "another node's roll stays");
+    }
+
+    @Test
     void aRepeatKeepsThePendingRewardsOfTheClaimedRound() {
         PlayerProgress p = new PlayerProgress();
         JsonObject reward = reward("item");
