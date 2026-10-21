@@ -212,15 +212,33 @@ public final class PlayerProgress {
         completed.remove(node);
         claimed.remove(node);
         tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
-        claimedRewards.removeIf(k -> k.startsWith(node + "#"));
-        teamClaimedRewards.removeIf(k -> k.startsWith(node + "#"));
-        rewardRolls.keySet().removeIf(k -> k.startsWith(node + "#"));
+        clearRewardMarks(node);
+    }
+
+    /**
+     * Forgets a node's reward marks for its next round, keeping the marks of a table pay-out that is still owed
+     * ({@code <pendingKey>>paid>...} and {@code <pendingKey>>rolls}). The pending table resumes after the block lifts,
+     * so its finished entries must not be paid again; a mark whose table is no longer owed goes with the round
+     * (2026-10-22 review). The team's repeat cleanup uses this too, so every member's rolls go the same way.
+     */
+    public void clearRewardMarks(String node) {
+        String prefix = node + "#";
+        claimedRewards.removeIf(k -> k.startsWith(prefix));
+        teamClaimedRewards.removeIf(k -> k.startsWith(prefix));
+        rewardRolls.keySet().removeIf(k -> k.startsWith(prefix) && !owedTableMark(k));
+    }
+
+    /** Whether a reward-roll mark belongs to the pay-out of a table still listed as owed. */
+    private boolean owedTableMark(String mark) {
+        int sep = mark.indexOf('>');
+        return sep > 0 && pendingRewards.containsKey(mark.substring(0, sep));
     }
 
     /** Forgets a node's own progress and everything it still owes; used by resets (2026-10-22 review). */
     public void clearNode(String node) {
-        clearRound(node);
+        // pending first: once it is gone the table marks no longer count as owed and clearRound drops them too
         pendingRewards.keySet().removeIf(k -> k.startsWith(node + "#"));
+        clearRound(node);
     }
 
     /** Copies every shared value. Claims, recent and the book flag are per player and are left alone. */

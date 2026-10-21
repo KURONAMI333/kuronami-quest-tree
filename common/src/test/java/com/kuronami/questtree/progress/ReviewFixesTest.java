@@ -398,6 +398,47 @@ class ReviewFixesTest {
         }
     }
 
+    /**
+     * A repeat's round cleanup forgets this round's marks but keeps the marks of a table pay-out still owed, so the
+     * table resumes after the block lifts instead of paying its done entries again (B8, and B7 for team members).
+     */
+    @Test
+    void clearRoundKeepsTheMarksOfAPendingTable() {
+        PlayerProgress p = new PlayerProgress();
+        String pending = RewardLedger.pendingKey("s:c/q", RewardLedger.QUEST_RANK, 0);
+        p.pendingRewards.put(pending, 1);
+        p.rewardRolls.put(pending + ">paid>1", "1");
+        p.rewardRolls.put(pending + ">rolls", "[1]");
+        p.rewardRolls.put("s:c/q#-1#2>paid>0", "1");
+        p.claimedRewards.add("s:c/q#0");
+        p.completed.add("s:c/q");
+
+        p.clearRound("s:c/q");
+
+        assertTrue(p.rewardRolls.containsKey(pending + ">paid>1"), "the owed table still knows its paid entries");
+        assertTrue(p.rewardRolls.containsKey(pending + ">rolls"), "the owed table keeps its roll");
+        assertFalse(p.rewardRolls.containsKey("s:c/q#-1#2>paid>0"), "a table that is not owed loses its marks");
+        assertTrue(p.claimedRewards.isEmpty(), "this round's reward marks go");
+        assertFalse(p.completed.contains("s:c/q"));
+        assertEquals(1, p.pendingRewards.get(pending), "the debt survives the round");
+    }
+
+    /** A reset drops the debt first, so the table marks it was keeping go too (B8). */
+    @Test
+    void clearNodeDropsPendingBeforeItsTableMarks() {
+        PlayerProgress p = new PlayerProgress();
+        String pending = RewardLedger.pendingKey("s:c/q", RewardLedger.QUEST_RANK, 0);
+        p.pendingRewards.put(pending, 1);
+        p.rewardRolls.put(pending + ">paid>0", "1");
+        p.claimedRewards.add("s:c/q#0");
+
+        p.clearNode("s:c/q");
+
+        assertTrue(p.pendingRewards.isEmpty());
+        assertTrue(p.rewardRolls.isEmpty());
+        assertTrue(p.claimedRewards.isEmpty());
+    }
+
     private static String type(JsonObject rw) {
         return rw.has("type") ? rw.get("type").getAsString() : "";
     }
