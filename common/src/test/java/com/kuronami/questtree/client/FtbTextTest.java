@@ -89,6 +89,23 @@ class FtbTextTest {
     }
 
     @Test
+    void bracketedPlainTextIsNotAnArray() {
+        String raw = "[Optional]\n[{\"text\":\"array\"}]\nplain [brackets]";
+        String out = FtbText.resolveJsonLines(raw, line -> line.startsWith("[{") ? "<component>" : null);
+        assertEquals("[Optional]\n<component>\nplain [brackets]", out);
+    }
+
+    @Test
+    void aComponentFormattedOverLinesIsResolvedWhole() {
+        String array = "[\n  {\"text\": \"one\"},\n  {\"text\": \"two\"}\n]";
+        assertEquals("<component>", FtbText.resolveJsonLines(array,
+                text -> text.startsWith("[") && text.indexOf('\n') >= 0 ? "<component>" : null));
+        String object = "{\n  \"text\": \"one\",\n  \"color\": \"red\"\n}";
+        assertEquals("<component>", FtbText.resolveJsonLines(object,
+                text -> text.startsWith("{") && text.indexOf('\n') >= 0 ? "<component>" : null));
+    }
+
+    @Test
     void wrappingKeepsTheColourAndBreaksLongWords() {
         assertEquals(List.of("§aone ", "§atwo ", "§athree"),
                 FtbText.wrap("§aone two three", 5, 5, FtbTextTest::visibleWidth));

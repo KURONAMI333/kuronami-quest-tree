@@ -98,12 +98,17 @@ final class FtbText {
     }
 
     /**
-     * Reads each description line that is entirely a JSON text component as a component, and leaves every other line
-     * as written. FTB Quests keeps a description as an array of lines and the importer joins them with {@code \n}, so
-     * a pack may put plain text and JSON components in the same description. {@code resolver} returns null when a line
-     * is not JSON it can read, and the line then stays in the text as written.
+     * Reads a description that is entirely a JSON text component as a component, and otherwise reads each of its lines
+     * that is entirely a component. FTB Quests keeps a description as an array of lines and the importer joins them
+     * with {@code \n}, so a pack may put plain text and JSON components in the same description, and a pretty-printed
+     * component spans lines. {@code resolver} returns null when the text is not JSON it can read, and the text then
+     * stays as written.
      */
     static String resolveJsonLines(String raw, Function<String, String> resolver) {
+        String whole = resolveWholeJson(raw, resolver);
+        if (whole != null) {
+            return whole;
+        }
         StringBuilder out = new StringBuilder(raw.length());
         boolean first = true;
         int start = 0;
@@ -127,13 +132,27 @@ final class FtbText {
         return out.toString();
     }
 
+    /** A component formatted over several lines; single-line JSON is left to the line pass. */
+    private static String resolveWholeJson(String raw, Function<String, String> resolver) {
+        String trimmed = raw.strip();
+        if (trimmed.indexOf('\n') < 0 && trimmed.indexOf('\r') < 0) {
+            return null;
+        }
+        return resolveContainer(trimmed, resolver);
+    }
+
     private static String resolveJsonLine(String line, Function<String, String> resolver) {
-        String trimmed = line.strip();
+        return resolveContainer(line.strip(), resolver);
+    }
+
+    private static String resolveContainer(String trimmed, Function<String, String> resolver) {
         if (trimmed.length() < 2) {
             return null;
         }
-        boolean object = trimmed.charAt(0) == '{' && trimmed.endsWith("}");
-        boolean array = trimmed.charAt(0) == '[' && trimmed.endsWith("]");
+        char first = trimmed.charAt(0);
+        char last = trimmed.charAt(trimmed.length() - 1);
+        boolean object = first == '{' && last == '}' && startsWithKey(trimmed);
+        boolean array = first == '[' && last == ']' && startsWithElement(trimmed);
         if (!object && !array) {
             return null;
         }
@@ -142,6 +161,27 @@ final class FtbText {
         } catch (RuntimeException notJson) {
             return null;
         }
+    }
+
+    /** A {@code [} only opens JSON when an object, string or array follows; {@code [Optional]} is prose. */
+    private static boolean startsWithElement(String trimmed) {
+        char next = nextNonSpace(trimmed);
+        return next == '{' || next == '"' || next == '[';
+    }
+
+    /** A {@code {} only opens JSON when a key or the end follows, so prose in braces is not parsed. */
+    private static boolean startsWithKey(String trimmed) {
+        char next = nextNonSpace(trimmed);
+        return next == '"' || next == '}';
+    }
+
+    private static char nextNonSpace(String trimmed) {
+        for (int i = 1; i < trimmed.length(); i++) {
+            if (!Character.isWhitespace(trimmed.charAt(i))) {
+                return trimmed.charAt(i);
+            }
+        }
+        return 0;
     }
 
     static List<Line> descriptionLines(String raw) {
