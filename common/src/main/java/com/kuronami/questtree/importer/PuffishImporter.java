@@ -143,7 +143,7 @@ public final class PuffishImporter {
                                     JsonElement targetElement = conv.get("category");
                                     if (targetElement.isJsonPrimitive() && targetElement.getAsJsonPrimitive().isString()) {
                                         String target = targetElement.getAsString();
-                                        if (!target.substring(target.indexOf(':') + 1).equals(category)) {
+                                        if (!sameCategory(target, source)) {
                                             // another imported category: name the chapter id the importer writes
                                             conv.addProperty("chapter", out.namespace + ":" + chapterId(target));
                                             out.note("points_reward_chapter " + target);
@@ -262,6 +262,22 @@ public final class PuffishImporter {
         JsonArray list = n.has(key) ? n.getAsJsonArray(key) : new JsonArray();
         list.add(value);
         n.add(key, list);
+    }
+
+    /**
+     * Whether a points reward's category is the one being imported. A namespaced target has to match the namespace too,
+     * else {@code other:mining} would be mistaken for this {@code puffish:mining} (2026-10-22 review).
+     */
+    private static boolean sameCategory(String target, String source) {
+        int slash = source.indexOf('/');
+        String sourceNamespace = slash < 0 ? "" : source.substring(0, slash);
+        String sourceCategory = slash < 0 ? source : source.substring(slash + 1);
+        int colon = target.indexOf(':');
+        if (colon >= 0) {
+            return target.substring(0, colon).equals(sourceNamespace)
+                    && target.substring(colon + 1).equals(sourceCategory);
+        }
+        return target.equals(sourceCategory);
     }
 
     /** The chapter id PuffishImporter writes for a {@code namespace:category} pair. */

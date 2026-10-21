@@ -178,7 +178,7 @@ class ImporterTest {
         JsonObject points = new JsonObject();
         points.addProperty("type", "puffish_skills:points");
         JsonObject data = new JsonObject();
-        data.addProperty("category", "puffish_skills:mining");
+        data.addProperty("category", "puffish:mining");
         data.addProperty("points", 3);
         points.add("data", data);
         rewards.add(points);
@@ -359,5 +359,26 @@ class ImporterTest {
         assertEquals("test:skill_puffish_farming", reward.get("chapter").getAsString());
         assertFalse(reward.has("category"));
         assertTrue(out.notes.containsKey("points_reward_chapter puffish:farming"), out.notes.toString());
+    }
+
+    /** A same-named category in another namespace is not this chapter (2026-10-22 review). */
+    @Test
+    void puffishPointsRewardWithTheSameShortNameInAnotherNamespaceIsAnotherChapter() throws Exception {
+        Map<String, JsonElement> files = puffishFiles();
+        JsonArray rewards = files.get("definitions.json").getAsJsonObject().getAsJsonObject("s0").getAsJsonArray("rewards");
+        JsonObject points = new JsonObject();
+        points.addProperty("type", "puffish_skills:points");
+        JsonObject data = new JsonObject();
+        data.addProperty("category", "other:mining");
+        data.addProperty("points", 2);
+        points.add("data", data);
+        rewards.add(points);
+        ImportOutput out = new ImportOutput("test");
+        PuffishImporter.convert("puffish/mining", files, out);
+        JsonObject reward = out.chapters.get("skill_puffish_mining").getAsJsonObject("nodes").getAsJsonObject("s0")
+                .getAsJsonArray("rewards").get(rewards.size() - 1).getAsJsonObject();
+        assertEquals("test:skill_other_mining", reward.get("chapter").getAsString());
+        assertFalse(reward.has("category"));
+        assertTrue(out.notes.containsKey("points_reward_chapter other:mining"), out.notes.toString());
     }
 }
