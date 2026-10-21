@@ -27,8 +27,8 @@ import java.util.UUID;
  * <p>
  * Owns the two pieces of state that are not data: who has editing mode on, and whether a save still has to be
  * published. An op writes its chapter immediately (so a refusal costs nothing and an accepted one is not lost when the
- * server stops), then marks the book dirty. The actual rebuild and resync happen once per tick, so a drag that sends
- * many moves does not rebuild the model and re-send the whole bundle many times.
+ * server stops), then marks the book dirty. The actual rebuild and resync are collected for a few ticks, so a drag or
+ * a multi-node delete does not rebuild the model and re-send the whole bundle for every op.
  * <p>
  * Editing mode is a session convenience, not a permission: the command already requires permission level 2, and every
  * payload is checked against this set as well, so a client cannot keep editing after {@code /quest_tree edit off} or
@@ -41,6 +41,10 @@ public final class EditorService {
     private static Path worldRoot;
     private static ProgressionEditor editor;
     private static boolean dirty;
+    /** Tick at which a pending rebuild is published; -1 when nothing is waiting. */
+    private static long publishAt = -1;
+    /** Collect editor writes for this many ticks before rebuilding and resyncing (half a second). */
+    private static final int PUBLISH_INTERVAL_TICKS = 10;
 
     private EditorService() {
     }
@@ -52,6 +56,7 @@ public final class EditorService {
         editing.clear();
         assemblers.clear();
         dirty = false;
+        publishAt = -1;
         ProgressData.setOverlayRoot(worldRoot);
     }
 
@@ -60,6 +65,7 @@ public final class EditorService {
         editing.clear();
         assemblers.clear();
         dirty = false;
+        publishAt = -1;
         editor = null;
         worldRoot = null;
         ProgressData.clearOverlayRoot();
@@ -152,6 +158,9 @@ public final class EditorService {
 
         if (outcome.changed()) {
             dirty = true;
+            if (publishAt < 0) {
+                publishAt = player.server.getTickCount() + PUBLISH_INTERVAL_TICKS;
+            }
         }
         String replyChapter = chapterId;
         if (!outcome.createdId().isEmpty()
@@ -167,12 +176,16 @@ public final class EditorService {
         }
     }
 
-    /** End of a server tick: publish one rebuild for every edit made since the last tick. */
+    /** End of a server tick: publish one rebuild for every edit made in the last {@link #PUBLISH_INTERVAL_TICKS}. */
     public static void onServerTick(MinecraftServer server) {
         if (!dirty) {
             return;
         }
+        if (server.getTickCount() < publishAt) {
+            return;
+        }
         dirty = false;
+        publishAt = -1;
         try {
             ProgressData.rebuildOverlay();
         } catch (RuntimeException ex) {

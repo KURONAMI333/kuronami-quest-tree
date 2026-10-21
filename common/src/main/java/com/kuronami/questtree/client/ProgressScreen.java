@@ -1,5 +1,6 @@
 package com.kuronami.questtree.client;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.client.edit.EditorClipboard;
 import com.kuronami.questtree.client.edit.EditorSelection;
@@ -3106,11 +3107,16 @@ public class ProgressScreen extends Screen {
     }
 
     private void deleteSelection(ClientModel.Chapter ch) {
+        JsonArray ids = new JsonArray();
         for (String key : editSelection.ids()) {
-            String id = key.substring(ch.id.length() + 1);
+            if (key.startsWith(ch.id + "/")) {
+                ids.add(key.substring(ch.id.length() + 1));
+            }
+        }
+        if (!ids.isEmpty()) {
             JsonObject args = new JsonObject();
-            args.addProperty("id", id);
-            EditorSession.send(ch.id, "delete_node", args);
+            args.add("ids", ids);
+            EditorSession.send(ch.id, "delete_nodes", args);
         }
         editSelection.clear();
     }
@@ -3164,22 +3170,29 @@ public class ProgressScreen extends Screen {
         }
         MoveBatch batch = new MoveBatch(original, target);
         batch.apply(EditorSession.optimistic());
+        JsonArray moves = new JsonArray();
         for (Map.Entry<String, double[]> e : target.entrySet()) {
             String key = e.getKey();
             if (!key.startsWith(ch.id + "/")) {
                 continue;
             }
-            JsonObject args = new JsonObject();
-            args.addProperty("id", key.substring(ch.id.length() + 1));
-            args.addProperty("x", e.getValue()[0]);
-            args.addProperty("y", e.getValue()[1]);
-            EditorSession.send(ch.id, "move_node", args, reply -> {
-                if (!reply.ok()) {
-                    // only this node: the others in the batch are answered on their own
-                    batch.rollbackKey(key, EditorSession.optimistic());
-                }
-            });
+            JsonObject move = new JsonObject();
+            move.addProperty("id", key.substring(ch.id.length() + 1));
+            move.addProperty("x", e.getValue()[0]);
+            move.addProperty("y", e.getValue()[1]);
+            moves.add(move);
         }
+        if (moves.isEmpty()) {
+            return;
+        }
+        JsonObject args = new JsonObject();
+        args.add("nodes", moves);
+        // one op, one revision and one undo step for the whole drag; a refusal puts every node back
+        EditorSession.send(ch.id, "move_nodes", args, reply -> {
+            if (!reply.ok()) {
+                batch.rollback(EditorSession.optimistic());
+            }
+        });
     }
 
     private void finishMove(ClientModel.Chapter ch) {

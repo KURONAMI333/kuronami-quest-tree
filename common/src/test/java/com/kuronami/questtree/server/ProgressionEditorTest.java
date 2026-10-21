@@ -53,6 +53,7 @@ class ProgressionEditorTest {
         JsonObject nodes = new JsonObject();
         nodes.add("a", node("{\"type\":\"checkmark\"}"));
         nodes.add("b", node("{\"type\":\"checkmark\"}"));
+        nodes.add("c", node("{\"type\":\"checkmark\"}"));
         JsonObject chapters = new JsonObject();
         chapters.add(CHAPTER, chapter(nodes));
         JsonObject other = new JsonObject();
@@ -157,6 +158,60 @@ class ProgressionEditorTest {
 
         assertFalse(out.ok());
         assertTrue(out.messages().stream().anyMatch(m -> m.contains("basics/a")), out.messages().toString());
+        assertFalse(Files.exists(overlayFile(CHAPTER)));
+    }
+
+    @Test
+    void moveNodesIsOneRevisionAndOneUndoStep() {
+        ProgressionEditor editor = editor();
+        ProgressionEditor.Outcome out = apply(editor, CHAPTER, 0, "move_nodes",
+                "{\"nodes\":[{\"id\":\"a\",\"x\":1,\"y\":2},{\"id\":\"b\",\"x\":3,\"y\":4}]}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        assertEquals(1, out.revision());
+        JsonObject merged = pack();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(merged, new java.util.LinkedHashMap<>());
+        JsonObject nodes = merged.getAsJsonObject(CHAPTER).getAsJsonObject("nodes");
+        assertEquals(1, nodes.getAsJsonObject("a").get("x").getAsInt());
+        assertEquals(4, nodes.getAsJsonObject("b").get("y").getAsInt());
+
+        ProgressionEditor.Outcome undone = apply(editor, CHAPTER, 1, "undo", "{}");
+        assertTrue(undone.ok(), undone.messages().toString());
+        assertEquals(2, undone.revision());
+        assertEquals(0, mergedX());
+    }
+
+    @Test
+    void deleteNodesIsOneAtomicOp() {
+        ProgressionEditor editor = editor();
+        ProgressionEditor.Outcome out = apply(editor, CHAPTER, 0, "delete_nodes",
+                "{\"ids\":[\"b\",\"c\"]}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        assertEquals(1, out.revision());
+        JsonObject merged = pack();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(merged, new java.util.LinkedHashMap<>());
+        JsonObject nodes = merged.getAsJsonObject(CHAPTER).getAsJsonObject("nodes");
+        assertFalse(nodes.has("b"));
+        assertFalse(nodes.has("c"));
+        assertTrue(nodes.has("a"));
+
+        ProgressionEditor.Outcome undone = apply(editor, CHAPTER, 1, "undo", "{}");
+        assertTrue(undone.ok(), undone.messages().toString());
+        assertEquals(2, undone.revision());
+        JsonObject back = pack();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTo(back, new java.util.LinkedHashMap<>());
+        assertTrue(back.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").has("b"));
+        assertTrue(back.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").has("c"));
+    }
+
+    @Test
+    void aBrokenEntryRefusesTheWholeBatchAndWritesNothing() {
+        ProgressionEditor editor = editor();
+        ProgressionEditor.Outcome out = apply(editor, CHAPTER, 0, "delete_nodes",
+                "{\"ids\":[\"b\",\"a\"]}");
+
+        assertFalse(out.ok());
         assertFalse(Files.exists(overlayFile(CHAPTER)));
     }
 

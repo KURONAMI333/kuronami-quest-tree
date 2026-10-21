@@ -267,6 +267,81 @@ public final class ProgressionEditor {
                 overlayChapter.nodes.put(id, new ProgressionOverlay.NodeChange(
                         ProgressionOverlay.Action.REMOVE, existing.deepCopy(), edited));
             }
+            case "move_nodes" -> {
+                if (currentChapter == null) {
+                    return fail("chapter does not exist", current);
+                }
+                JsonElement list = args.get("nodes");
+                if (list == null || !list.isJsonArray()) {
+                    return fail("move_nodes needs a nodes array", current);
+                }
+                overlayChapter = ensure(overlay, chapterId, packHasChapter);
+                boolean moved = false;
+                for (JsonElement entry : list.getAsJsonArray()) {
+                    if (!entry.isJsonObject()) {
+                        return fail("move_nodes needs a node object in its array", current);
+                    }
+                    JsonObject move = entry.getAsJsonObject();
+                    String id = requiredText(move, "id");
+                    if (!validNodeId(id)) {
+                        return fail("node id must use only a-z, 0-9 and _", current);
+                    }
+                    JsonObject existing = node(currentChapter, id);
+                    if (existing == null) {
+                        ProgressionOverlay.NodeChange tomb = overlayChapter.nodes.get(id);
+                        if (tomb != null && tomb.action() == ProgressionOverlay.Action.REMOVE) {
+                            return fail("node " + id + " is deleted; restore it first", current);
+                        }
+                        return fail("node " + id + " does not exist", current);
+                    }
+                    Double x = number(move, "x");
+                    Double y = number(move, "y");
+                    if (x == null || y == null) {
+                        return fail("move_nodes needs numeric x and y", current);
+                    }
+                    JsonObject updated = existing.deepCopy();
+                    updated.addProperty("x", x);
+                    updated.addProperty("y", y);
+                    if (!updated.equals(existing)) {
+                        ProgressionOverlay.Action action = packNode(packChapters, chapterId, id) != null
+                                ? ProgressionOverlay.Action.REPLACE : ProgressionOverlay.Action.ADD;
+                        overlayChapter.nodes.put(id, new ProgressionOverlay.NodeChange(action, updated, false));
+                        moved = true;
+                    }
+                }
+                if (!moved) {
+                    return ok("", List.of(), current, false);
+                }
+            }
+            case "delete_nodes" -> {
+                if (currentChapter == null) {
+                    return fail("chapter does not exist", current);
+                }
+                JsonElement list = args.get("ids");
+                if (list == null || !list.isJsonArray()) {
+                    return fail("delete_nodes needs an ids array", current);
+                }
+                overlayChapter = ensure(overlay, chapterId, packHasChapter);
+                boolean removed = false;
+                for (JsonElement entry : list.getAsJsonArray()) {
+                    String id = entry.isJsonPrimitive() ? entry.getAsString() : "";
+                    if (!validNodeId(id)) {
+                        return fail("node id must use only a-z, 0-9 and _", current);
+                    }
+                    JsonObject existing = node(currentChapter, id);
+                    if (existing == null) {
+                        return fail("node " + id + " does not exist", current);
+                    }
+                    boolean edited = overlayChapter.nodes.containsKey(id)
+                            && overlayChapter.nodes.get(id).action() != ProgressionOverlay.Action.REMOVE;
+                    overlayChapter.nodes.put(id, new ProgressionOverlay.NodeChange(
+                            ProgressionOverlay.Action.REMOVE, existing.deepCopy(), edited));
+                    removed = true;
+                }
+                if (!removed) {
+                    return ok("", List.of(), current, false);
+                }
+            }
             case "restore_node" -> {
                 if (currentChapter == null) {
                     return fail("chapter does not exist", current);
