@@ -41,7 +41,7 @@ public final class Rewards {
     /** Hands out one reward. False when it could not be paid (a missing provider or a failed payment). */
     static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
                         String rollKey) {
-        if (!ProgressService.conditionsMet(player, p, rw) || blocked(p, rw)) {
+        if (!ProgressService.conditionsMet(player, p, n, rw, false) || blocked(p, rw)) {
             return false;
         }
         try {
@@ -197,7 +197,7 @@ public final class Rewards {
                 continue;
             }
             JsonObject rw = list.get(index);
-            if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, rw)) {
+            if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, n, rw, false)) {
                 continue;
             }
             int owed = p.pendingRewards.getOrDefault(key, 0);
@@ -280,7 +280,7 @@ public final class Rewards {
         List<JsonObject> list = rewardsOfRank(n, rank);
         int i = 0;
         for (JsonObject rw : list) {
-            if (!ProgressService.conditionsMet(player, p, rw)) {
+            if (!ProgressService.conditionsMet(player, p, n, rw, false)) {
                 i++;
                 continue;
             }

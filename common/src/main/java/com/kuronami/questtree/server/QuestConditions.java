@@ -3,10 +3,13 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.util.function.Predicate;
+
 /**
  * Gates on a task or reward (DATA_MODEL.md "条件"): every entry of {@code conditions} must hold before the task
- * counts or the reward is paid. One list is shared by tasks and rewards, so a pack author writes the same five types
- * in both places. The game-facing answers come from {@link Context}; this class stays testable without Minecraft.
+ * counts or the reward is paid. One list is shared by tasks and rewards, so a pack author writes the same types in
+ * both places. The five built-in types are judged here; a type they do not answer is handed to {@code addon}, which
+ * is where the public registry of {@code QuestTreeApi} comes in. This class stays testable without Minecraft.
  */
 public final class QuestConditions {
 
@@ -29,6 +32,14 @@ public final class QuestConditions {
 
     /** All conditions on the holder; a holder without a list is open. A malformed list fails closed. */
     public static boolean allMet(JsonObject holder, Context context) {
+        return allMet(holder, context, condition -> false);
+    }
+
+    /**
+     * All conditions on the holder. A type the five built-ins do not answer goes to {@code addon}; when that has no
+     * handler either, the entry fails closed.
+     */
+    public static boolean allMet(JsonObject holder, Context context, Predicate<JsonObject> addon) {
         if (holder == null || !holder.has("conditions")) {
             return true;
         }
@@ -37,7 +48,7 @@ public final class QuestConditions {
             return false;
         }
         for (JsonElement c : e.getAsJsonArray()) {
-            if (!c.isJsonObject() || !met(c.getAsJsonObject(), context)) {
+            if (!c.isJsonObject() || !met(c.getAsJsonObject(), context, addon)) {
                 return false;
             }
         }
@@ -46,10 +57,12 @@ public final class QuestConditions {
 
     /** One condition. Unknown kinds fail closed: a typo must not open a gate. */
     public static boolean met(JsonObject c, Context context) {
-        String type = str(c, "type");
-        if (type.contains(":")) {
-            type = type.substring(type.indexOf(':') + 1);
-        }
+        return met(c, context, condition -> false);
+    }
+
+    /** One condition; a kind the built-ins do not know is asked of {@code addon}. */
+    public static boolean met(JsonObject c, Context context, Predicate<JsonObject> addon) {
+        String type = builtInType(str(c, "type"));
         return switch (type) {
             case "stage" -> {
                 String stage = str(c, "stage");
@@ -68,8 +81,12 @@ public final class QuestConditions {
                 yield !advancement.isEmpty() && context.advancementDone(advancement, str(c, "criterion"));
             }
             case "party_size" -> context.partySize() >= Math.max(1, intOf(c, "min", 1));
-            default -> false;
+            default -> addon.test(c);
         };
+    }
+
+    private static String builtInType(String type) {
+        return type.contains(":") ? type.substring(type.indexOf(':') + 1) : type;
     }
 
     private static String str(JsonObject o, String k) {

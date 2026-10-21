@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.api.QuestConditionType;
 import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.api.QuestTaskType;
 import com.kuronami.questtree.config.ServerConfig;
@@ -250,7 +251,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (r.taskOpen(p, n, i) && conditionsMet(player, p, t)
+                if (r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
                         && type(t).equals("kill") && entityMatches(player, t, killed)) {
                     hits.add(new TaskRef(n, i));
                 }
@@ -278,7 +279,7 @@ public final class ProgressService {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
-            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, t)
+            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
                     && blockMatches(blockSpec(t), state)) {
                 hits.add(ref);
             }
@@ -385,7 +386,7 @@ public final class ProgressService {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
-            if (!working(r, p, n) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
+            if (!working(r, p, n) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
                 continue;
             }
             String wanted = type(t).equals("interaction") ? interactionKind(t) : type(t);
@@ -410,9 +411,35 @@ public final class ProgressService {
         }
     }
 
-    /** Whether every condition on a task or reward holds for this player now. */
-    static boolean conditionsMet(ServerPlayer player, PlayerProgress p, JsonObject holder) {
-        return QuestConditions.allMet(holder, new Conditions(player, p));
+    /**
+     * The one gauge for conditions: a built-in kind is judged by {@link QuestConditions}, a kind it does not know is
+     * looked up in {@link QuestTreeApi}'s registry, and a kind in neither fails closed. Tasks and rewards, and the
+     * public {@code QuestTreeApi.conditionsMet}, all come through here.
+     */
+    public static boolean conditionsMet(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject holder,
+                                        boolean task) {
+        return QuestConditions.allMet(holder, new Conditions(player, p),
+                condition -> addonCondition(player, n, condition, task));
+    }
+
+    private static boolean addonCondition(ServerPlayer player, ProgressModel.Node n, JsonObject condition, boolean task) {
+        String type = str(condition, "type");
+        QuestConditionType handler = QuestTreeApi.conditionType(type);
+        if (handler == null) {
+            // neither a built-in kind nor a registered addon type: the validator warns, and the gate stays shut
+            return false;
+        }
+        try {
+            return handler.test(new QuestConditionType.ConditionContext(player, n, condition, task));
+        } catch (RuntimeException ex) {
+            Constants.LOG.error("Condition '{}' of {} failed: {}", type, n == null ? "?" : n.key, ex.toString());
+            return false;
+        }
+    }
+
+    /** The API's own entry, kept for the observation scan until it calls the gauge above directly. */
+    private static boolean conditionsMet(ServerPlayer player, ProgressModel.Node n, JsonObject data, boolean task) {
+        return QuestTreeApi.conditionsMet(player, n, data, task);
     }
 
     private record Conditions(ServerPlayer player, PlayerProgress progress) implements QuestConditions.Context {
@@ -548,14 +575,14 @@ public final class ProgressService {
             }
             case "submit" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
-                        && conditionsMet(player, p, n.tasks.get(a.index()))
+                        && conditionsMet(player, p, n, n.tasks.get(a.index()), true)
                         && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
                     submit(player, p, n, a.index());
                 }
             }
             case "check" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
-                        && conditionsMet(player, p, n.tasks.get(a.index()))
+                        && conditionsMet(player, p, n, n.tasks.get(a.index()), true)
                         && manual(n.tasks.get(a.index()))) {
                     JsonObject task = n.tasks.get(a.index());
                     long max = ProgressRules.target(task);
@@ -647,7 +674,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
+                if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
                     continue;
                 }
                 String ty = type(t);
@@ -706,7 +733,7 @@ public final class ProgressService {
             if (!working(r, p, n)) {
                 continue;
             }
-            if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
+            if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
                 continue;
             }
             long target = ProgressRules.target(t);
@@ -813,7 +840,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
+                if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
                     continue;
                 }
                 long value = switch (type(t)) {
@@ -855,7 +882,7 @@ public final class ProgressService {
     /** Hands in items (or experience) for a task that consumes them. */
     private static void submit(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int i) {
         JsonObject t = n.tasks.get(i);
-        if (!conditionsMet(player, n, t, true)) {
+        if (!conditionsMet(player, p, n, t, true)) {
             return;
         }
         long target = ProgressRules.target(t);
@@ -905,13 +932,9 @@ public final class ProgressService {
         return sum + (long) (player.experienceProgress * player.getXpNeededForNextLevel());
     }
 
-    private static boolean conditionsMet(ServerPlayer player, ProgressModel.Node n, JsonObject data, boolean task) {
-        return QuestTreeApi.conditionsMet(player, n, data, task);
-    }
-
     private static void bump(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int i, long value) {
         JsonObject task = n.tasks.get(i);
-        if (!conditionsMet(player, n, task, true)) {
+        if (!conditionsMet(player, p, n, task, true)) {
             return;
         }
         long target = ProgressRules.target(task);
@@ -976,7 +999,7 @@ public final class ProgressService {
             }
             PlayerProgress pm = progress(member);
             giveAuto(member, pm, n, false);
-            if (ProgressRules.allRewardsClaimed(pm, n, i -> !conditionsMet(member, pm, n.rewards.get(i)))) {
+            if (ProgressRules.allRewardsClaimed(pm, n, i -> !conditionsMet(member, pm, n, n.rewards.get(i), false))) {
                 pm.claimed.add(n.key);
             }
             others.add(pm);
@@ -996,7 +1019,7 @@ public final class ProgressService {
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
             String key = n.key + "#" + i;
-            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
+            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, n, rw, false)) {
                 continue;
             }
             if (ProgressModel.boolOf(rw, "team") && !actor) {
@@ -1035,7 +1058,7 @@ public final class ProgressService {
         for (int i = 0; i < n.rewards.size(); i++) {
             String key = n.key + "#" + i;
             JsonObject rw = n.rewards.get(i);
-            if (p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
+            if (p.rewardClaimed(key) || !conditionsMet(player, p, n, rw, false)) {
                 continue;
             }
             int rewardIndex = i;
@@ -1064,7 +1087,7 @@ public final class ProgressService {
                     "This reward cannot be taken while rewards are blocked: its choice is not kept."));
             return;
         }
-        if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw)) {
+        if (choiceMissing(rw, choice) || !conditionsMet(player, p, n, rw, false)) {
             return;
         }
         boolean paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index,
@@ -1087,7 +1110,7 @@ public final class ProgressService {
     /** Marks the node claimed and starts a repeat once its last reward was taken. */
     private static void finishClaim(ServerPlayer player, PlayerProgress p, ProgressModel.Node n) {
         if (p.claimed.contains(n.key)
-                || !ProgressRules.allRewardsClaimed(p, n, i -> !conditionsMet(player, p, n.rewards.get(i)))) {
+                || !ProgressRules.allRewardsClaimed(p, n, i -> !conditionsMet(player, p, n, n.rewards.get(i), false))) {
             return;
         }
         p.claimed.add(n.key);

@@ -1,7 +1,5 @@
 package com.kuronami.questtree.api;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
@@ -177,37 +175,18 @@ public final class QuestTreeApi {
         return REWARDS.get(id);
     }
 
-    /** Whether every entry in {@code data.conditions} passes; a missing list means yes. */
+    /** The registered condition type, or null for a built-in kind or one whose addon is absent. */
+    public static QuestConditionType conditionType(String id) {
+        return CONDITIONS.get(id);
+    }
+
+    /**
+     * Whether every entry in {@code data.conditions} passes; a missing list means yes. This is the public face of the
+     * one gauge in {@code ProgressService}: built-in kinds and registered addon kinds are judged together.
+     */
     public static boolean conditionsMet(ServerPlayer player, ProgressModel.Node node, JsonObject data, boolean task) {
-        if (!data.has("conditions")) {
-            return true;
-        }
-        JsonElement value = data.get("conditions");
-        if (!value.isJsonArray()) {
-            return false;
-        }
-        JsonArray conditions = value.getAsJsonArray();
-        for (JsonElement entry : conditions) {
-            if (!entry.isJsonObject()) {
-                return false;
-            }
-            JsonObject condition = entry.getAsJsonObject();
-            String type = condition.has("type") && condition.get("type").isJsonPrimitive()
-                    ? condition.get("type").getAsString() : "";
-            QuestConditionType handler = CONDITIONS.get(type);
-            if (handler == null) {
-                return false;
-            }
-            try {
-                if (!handler.test(new QuestConditionType.ConditionContext(player, node, condition, task))) {
-                    return false;
-                }
-            } catch (RuntimeException ex) {
-                Constants.LOG.error("Condition '{}' of {} failed: {}", type, node.key, ex.toString());
-                return false;
-            }
-        }
-        return true;
+        return com.kuronami.questtree.server.ProgressService.conditionsMet(
+                player, com.kuronami.questtree.server.ProgressService.progress(player), node, data, task);
     }
 
     /** Server side: tells the listeners about one moment. */
