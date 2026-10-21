@@ -769,6 +769,59 @@ class ProgressionEditorTest {
         assertFalse(changed.ok(), "rewriting the command is escalation too");
     }
 
+    /** A skill node pays one rank's rewards on each take, so a rank reward can run a command too. */
+    private static JsonObject packWithRankReward(String rewardJson) {
+        JsonArray rankRewards = new JsonArray();
+        rankRewards.add(JsonParser.parseString(rewardJson));
+        JsonObject rank = new JsonObject();
+        rank.add("rewards", rankRewards);
+        JsonArray ranks = new JsonArray();
+        ranks.add(rank);
+        JsonObject pack = pack();
+        pack.getAsJsonObject(CHAPTER).getAsJsonObject("nodes").getAsJsonObject("a").add("ranks", ranks);
+        return pack;
+    }
+
+    @Test
+    void aLevelTwoEditorCannotAddACommandRewardToASkillRank() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"command\",\"unlock_command\":\"op @s\"}]}]}}");
+
+        assertFalse(out.ok());
+        assertTrue(out.messages().stream().anyMatch(m -> m.contains("permission level 4")), out.messages().toString());
+        assertFalse(Files.exists(overlayFile(CHAPTER)), "nothing was written");
+    }
+
+    @Test
+    void aLevelTwoEditorCannotChangeARankRewardsLockCommand() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, packWithRankReward(
+                        "{\"type\":\"command\",\"unlock_command\":\"say hi\",\"lock_command\":\"say bye\"}"),
+                "update_node", "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"command\",\"unlock_command\":\"say hi\",\"lock_command\":\"say bad\"}]}]}}");
+
+        assertFalse(out.ok(), "rewriting a rank's lock command is escalation too");
+        assertTrue(out.messages().stream().anyMatch(m -> m.contains("permission level 4")), out.messages().toString());
+    }
+
+    @Test
+    void aLevelFourEditorCanAddACommandRewardToASkillRank() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 4, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"command\",\"unlock_command\":\"say hi\"}]}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
+
+    @Test
+    void aLevelTwoEditorCanAddAnOrdinaryRewardToASkillRank() {
+        ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",
+                "{\"id\":\"a\",\"patch\":{\"ranks\":[{\"rewards\":["
+                        + "{\"type\":\"item\",\"item\":\"minecraft:apple\"}]}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+    }
+
     @Test
     void aLevelTwoEditorCanStillAddAnOrdinaryReward() {
         ProgressionEditor.Outcome out = applyAs(editor(), 2, pack(), "update_node",

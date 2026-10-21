@@ -971,7 +971,11 @@ public final class ProgressionEditor {
         return out;
     }
 
-    /** Every reward by a stable place, node rewards and reward-table entries alike. */
+    /**
+     * Every reward by a stable place: the node's own rewards, the rewards of each of its skill ranks, and the
+     * reward-table entries alike. A skill node pays one rank at a time and its rewards may run commands too, so a
+     * writer who cannot write a command must not write one there either (2026-10-22 release review).
+     */
     private static Map<String, JsonObject> rewards(JsonObject chapters, JsonObject tables) {
         Map<String, JsonObject> out = new LinkedHashMap<>();
         if (chapters != null) {
@@ -987,14 +991,15 @@ public final class ProgressionEditor {
                     if (!n.getValue().isJsonObject()) {
                         continue;
                     }
-                    JsonElement list = n.getValue().getAsJsonObject().get("rewards");
-                    if (list == null || !list.isJsonArray()) {
+                    String place = c.getKey() + "/" + n.getKey();
+                    rewardsOf(out, place, n.getValue().getAsJsonObject());
+                    JsonElement ranks = n.getValue().getAsJsonObject().get("ranks");
+                    if (ranks == null || !ranks.isJsonArray()) {
                         continue;
                     }
-                    JsonArray array = list.getAsJsonArray();
-                    for (int i = 0; i < array.size(); i++) {
-                        if (array.get(i).isJsonObject()) {
-                            out.put(c.getKey() + "/" + n.getKey() + "#" + i, array.get(i).getAsJsonObject());
+                    for (int r = 0; r < ranks.getAsJsonArray().size(); r++) {
+                        if (ranks.getAsJsonArray().get(r).isJsonObject()) {
+                            rewardsOf(out, place + "#rank" + r, ranks.getAsJsonArray().get(r).getAsJsonObject());
                         }
                     }
                 }
@@ -1022,6 +1027,20 @@ public final class ProgressionEditor {
             }
         }
         return out;
+    }
+
+    /** Puts one holder\'s rewards under {@code place} (a node, a rank or a table). */
+    private static void rewardsOf(Map<String, JsonObject> out, String place, JsonObject holder) {
+        JsonElement list = holder.get("rewards");
+        if (list == null || !list.isJsonArray()) {
+            return;
+        }
+        JsonArray array = list.getAsJsonArray();
+        for (int i = 0; i < array.size(); i++) {
+            if (array.get(i).isJsonObject()) {
+                out.put(place + "#" + i, array.get(i).getAsJsonObject());
+            }
+        }
     }
 
     /** The command-running part of a reward; empty for a reward that cannot run a command. */
