@@ -6,6 +6,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
+import com.kuronami.questtree.progress.SkillRewardPolicy;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.core.Holder;
@@ -66,27 +67,45 @@ public final class Rewards {
 
     /** Rewards of a skill node when it is taken: the node's own rewards, or the rewards of rank {@code rank}. */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
-        giveSkillOne(player, p, n, rank, true);
+        // A respec keeps this mark, so the one-off rewards of a rank cannot be farmed by taking it again. The mark
+        // uses the existing per-player reward store so it saves and copies like every other claim.
+        String mark = SkillRewardPolicy.mark(n, rank);
+        boolean firstTake = !p.rewardClaimed(mark);
+        giveSkillOne(player, p, n, rank, true, firstTake);
         // the skill belongs to the team: its per-player effects (attributes, commands, tags) reach every online member.
         // Shared values (points) and one-off pay-outs are applied once, by the player who took it
         for (ServerPlayer member : members(player)) {
             if (!member.getUUID().equals(player.getUUID())) {
-                giveSkillOne(member, p, n, rank, false);
+                giveSkillOne(member, p, n, rank, false, firstTake);
             }
+        }
+        if (firstTake) {
+            p.claimedRewards.add(mark);
         }
     }
 
+    /** Rewards that must not be paid twice for the same rank, even after a respec (DATA_MODEL "スキルの振り直し"). */
     private static List<ServerPlayer> members(ServerPlayer player) {
         return new ArrayList<>(com.kuronami.questtree.team.TeamResolver.onlineMembers(player.server, player.getUUID()));
     }
 
-    private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank, boolean full) {
+    private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank,
+                                     boolean full, boolean firstTake) {
         List<JsonObject> list = rewardsOfRank(n, rank);
         int i = 0;
         for (JsonObject rw : list) {
-            if (ProgressService.type(rw).equals("attribute")) {
+            String type = ProgressService.type(rw);
+            if (type.equals("attribute")) {
                 attribute(player, n.key, rank * 100 + i, rw);
-            } else if (full || ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag")) {
+            } else if (full) {
+                if (SkillRewardPolicy.pays(type, firstTake)) {
+                    give(player, p, n, rw, -1);
+                }
+            } else if (type.equals("command")) {
+                if (firstTake) {
+                    give(player, p, n, rw, -1);
+                }
+            } else if (type.equals("tag")) {
                 give(player, p, n, rw, -1);
             }
             i++;
