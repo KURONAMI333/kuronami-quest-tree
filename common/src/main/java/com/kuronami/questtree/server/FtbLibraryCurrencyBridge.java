@@ -9,10 +9,14 @@ import java.lang.reflect.Method;
  * compile-only artifact carries intermediary parameter names, which would not link against the mapped game. Called
  * only when FTB Library is loaded, so a pack without it never loads this class. Currency mods (FTB Money and others)
  * register the paying half with FTB Library; whichever one is installed is the coin a {@code currency} reward pays.
+ * <p>
+ * Methods are looked up on the {@code CurrencyProvider} interface, not on the implementation: an implementation may
+ * keep them non-public at class level, and calling those raises {@link IllegalAccessException} (2026-10-21 review).
  */
 final class FtbLibraryCurrencyBridge {
 
     private static final String HELPER = "dev.ftb.mods.ftblibrary.integration.currency.CurrencyHelper";
+    private static final String PROVIDER = "dev.ftb.mods.ftblibrary.integration.currency.CurrencyProvider";
 
     private FtbLibraryCurrencyBridge() {
     }
@@ -26,7 +30,7 @@ final class FtbLibraryCurrencyBridge {
             if (provider == null) {
                 return null;
             }
-            Method valid = provider.getClass().getMethod("isValidProvider");
+            Method valid = Class.forName(PROVIDER).getMethod("isValidProvider");
             return Boolean.TRUE.equals(valid.invoke(provider)) ? provider : null;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
             return null;
@@ -44,7 +48,7 @@ final class FtbLibraryCurrencyBridge {
             return "";
         }
         try {
-            return String.valueOf(provider.getClass().getMethod("getName").invoke(provider));
+            return String.valueOf(Class.forName(PROVIDER).getMethod("getName").invoke(provider));
         } catch (ReflectiveOperationException | RuntimeException ex) {
             return "";
         }
@@ -57,7 +61,8 @@ final class FtbLibraryCurrencyBridge {
             return false;
         }
         try {
-            provider.getClass().getMethod("giveCurrency", net.minecraft.world.entity.player.Player.class)
+            Class<?> type = Class.forName(PROVIDER);
+            type.getMethod("giveCurrency", net.minecraft.world.entity.player.Player.class, int.class)
                     .invoke(provider, player, amount);
             return true;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {

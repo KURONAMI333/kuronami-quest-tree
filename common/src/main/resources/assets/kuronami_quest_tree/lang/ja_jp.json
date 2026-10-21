@@ -230,5 +230,6 @@
   "commands.kuronami_quest_tree.rewards_state_open": "受け取り可",
   "block.kuronami_quest_tree.quest_task_block": "クエストボード",
   "block.kuronami_quest_tree.quest_barrier": "クエストの関所",
-  "commands.kuronami_quest_tree.block_given": "%s 人に %s のブロックを渡しました"
+  "commands.kuronami_quest_tree.block_given": "%s 人に %s のブロックを渡しました",
+  "message.kuronami_quest_tree.currency_failed": "通貨報酬を支払えませんでした。未受け取りのままです。"
 }

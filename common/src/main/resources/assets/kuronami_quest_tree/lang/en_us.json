@@ -230,5 +230,6 @@
   "commands.kuronami_quest_tree.rewards_state_open": "open",
   "block.kuronami_quest_tree.quest_task_block": "Quest Board",
   "block.kuronami_quest_tree.quest_barrier": "Quest Gate",
-  "commands.kuronami_quest_tree.block_given": "Gave %s block(s) for %s"
+  "commands.kuronami_quest_tree.block_given": "Gave %s block(s) for %s",
+  "message.kuronami_quest_tree.currency_failed": "The currency reward could not be paid; it stays unclaimed."
 }

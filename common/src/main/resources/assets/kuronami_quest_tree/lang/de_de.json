@@ -98,5 +98,6 @@
   "commands.kuronami_quest_tree.rewards_state_open": "offen",
   "block.kuronami_quest_tree.quest_task_block": "Questtafel",
   "block.kuronami_quest_tree.quest_barrier": "Questschranke",
-  "commands.kuronami_quest_tree.block_given": "%s Block/Blöcke für %s gegeben"
+  "commands.kuronami_quest_tree.block_given": "%s Block/Blöcke für %s gegeben",
+  "message.kuronami_quest_tree.currency_failed": "Die Währungsbelohnung konnte nicht ausgezahlt werden; sie bleibt unbeansprucht."
 }

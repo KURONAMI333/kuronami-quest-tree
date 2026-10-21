@@ -30,30 +30,32 @@ public final class Rewards {
     private Rewards() {
     }
 
-    static void give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+    /** Hands out one reward. False when it could not be paid (a missing provider or a failed payment). */
+    static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
         if (!ProgressService.conditionsMet(player, p, rw) || blocked(p, rw)) {
-            return;
+            return false;
         }
         try {
-            switch (ProgressService.type(rw)) {
+            return switch (ProgressService.type(rw)) {
                 case "currency" -> currency(player, rw);
                 case "dummy" -> {
                     // FTBQ's dummy reward: it exists to make a quest show a reward icon and does nothing
+                    yield true;
                 }
-                case "item" -> item(player, rw);
-                case "xp" -> player.giveExperiencePoints(intOf(rw, "amount", 0));
-                case "xp_levels" -> player.giveExperienceLevels(intOf(rw, "amount", 0));
-                case "command" -> command(player, rw);
-                case "table" -> table(player, p, n, rw, choice);
-                case "advancement" -> advancement(player, rw);
-                case "stage" -> stage(player, p, rw);
-                case "attribute" -> attribute(player, n.key, slotOf(n, rw), rw);
-                case "points" -> p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum);
-                case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
-                case "toast" -> ProgressService.event(player, p, "toast", n.key);
-                case "scoreboard" -> scoreboard(player, p, n, rw);
+                case "item" -> { item(player, rw); yield true; }
+                case "xp" -> { player.giveExperiencePoints(intOf(rw, "amount", 0)); yield true; }
+                case "xp_levels" -> { player.giveExperienceLevels(intOf(rw, "amount", 0)); yield true; }
+                case "command" -> { command(player, rw); yield true; }
+                case "table" -> { table(player, p, n, rw, choice); yield true; }
+                case "advancement" -> { advancement(player, rw); yield true; }
+                case "stage" -> { stage(player, p, rw); yield true; }
+                case "attribute" -> { attribute(player, n.key, slotOf(n, rw), rw); yield true; }
+                case "points" -> { p.bonus.merge(pointsChapter(n, rw), intOf(rw, "amount", 1), Integer::sum); yield true; }
+                case "tag" -> { player.addTag(ProgressService.str(rw, "tag")); yield true; }
+                case "toast" -> { ProgressService.event(player, p, "toast", n.key); yield true; }
+                case "scoreboard" -> { scoreboard(player, p, n, rw); yield true; }
                 // FTB Quests' custom reward: its effect is addon Java code; hand the claim to QuestEvents and do nothing else
-                case "custom" -> QuestEvents.fire(player, n, rw, false, -1);
+                case "custom" -> { QuestEvents.fire(player, n, rw, false, -1); yield true; }
                 // Kuronami's Trophies (mod-108): it gives each trophy once per player and engraves it; no dependency, only its command
                 case "trophy" -> {
                     // only a valid id reaches the command line
@@ -61,11 +63,16 @@ public final class Rewards {
                             && ResourceLocation.tryParse(ProgressService.str(rw, "trophy")) != null && ProgressService.str(rw, "trophy").contains(":")) {
                         ServerCommands.run(player, "trophy award @s " + ProgressService.str(rw, "trophy"), 2, true);
                     }
+                    yield true;
                 }
-                default -> Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
-            }
+                default -> {
+                    Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                    yield true;
+                }
+            };
         } catch (RuntimeException ex) {
             Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+            return false;
         }
     }
 
@@ -76,18 +83,23 @@ public final class Rewards {
      * Pays through FTB Library's currency hook, which every economy mod of that family registers with. Without FTB
      * Library or a registered provider the claim still completes and the log says once why nothing was paid.
      */
-    private static void currency(ServerPlayer player, JsonObject rw) {
+    private static boolean currency(ServerPlayer player, JsonObject rw) {
         int amount = intOf(rw, "amount", 1);
         if (amount <= 0) {
-            return;
+            return true;
         }
         if (com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")
                 && FtbLibraryCurrencyBridge.available() && FtbLibraryCurrencyBridge.give(player, amount)) {
-            return;
+            return true;
         }
         if (CURRENCY_WARNED.compareAndSet(false, true)) {
             Constants.LOG.warn("A currency reward paid nothing: no economy mod registered with FTB Library");
         }
+        // the claim stays open, so the player can try again once the economy mod is back
+        player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                "message.kuronami_quest_tree.currency_failed",
+                "The currency reward could not be paid; it stays unclaimed."));
+        return false;
     }
 
     /**
