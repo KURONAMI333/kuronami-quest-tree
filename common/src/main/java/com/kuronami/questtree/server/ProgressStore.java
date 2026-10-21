@@ -196,6 +196,11 @@ public final class ProgressStore extends SavedData {
                 migrations.addProperty(key, savedMigrations.getString(key));
             }
             root.add("migrations", migrations);
+            // personal_nodes was written to the JSON form but not to NBT, so a restart forgot the routing set and
+            // migrated personal/shared values again on every start (2026-10-22 release review).
+            if (tag.contains("personal_nodes")) {
+                root.add("personal_nodes", com.kuronami.questtree.progress.JsonTags.fromTag(tag.get("personal_nodes")));
+            }
             store.data = TeamStoreData.fromJson(root);
             int droppedSkillPending = 0;
             for (TeamProgress team : store.data.teams.values()) {
@@ -245,6 +250,11 @@ public final class ProgressStore extends SavedData {
         CompoundTag migrations = new CompoundTag();
         data.migrations.forEach(migrations::putString);
         tag.put("migrations", migrations);
+        if (!data.personalNodes.isEmpty()) {
+            net.minecraft.nbt.ListTag personal = new net.minecraft.nbt.ListTag();
+            data.personalNodes.forEach(node -> personal.add(net.minecraft.nbt.StringTag.valueOf(node)));
+            tag.put("personal_nodes", personal);
+        }
         return tag;
     }
 }

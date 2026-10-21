@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -90,5 +91,36 @@ class ProgressStoreFormatTest {
 
         ProgressStore loaded = ProgressStore.load(tag, null);
         assertEquals(1, loaded.team(solo).shared.completed.size());
+    }
+
+
+    /** The personal-node routing set is saved, so a restart does not migrate personal values again (2026-10-22). */
+    @Test
+    void personalNodesSurviveARestart() {
+        java.util.Set<String> personal = java.util.Set.of("test:book/personal", "test:book/other");
+        TeamStoreData data = new TeamStoreData();
+        data.personalNodes.addAll(personal);
+        ProgressStore store = new ProgressStore();
+        store.replaceData(data);
+
+        ProgressStore loaded = ProgressStore.load(store.save(new CompoundTag(), null), null);
+
+        assertFalse(loaded.migratePersonalNodes(personal, false),
+                "the loaded set already matches, so no personal/shared migration runs again");
+    }
+
+    /** An old save has no personal_nodes key: the first load migrates once and writes the set on the next save. */
+    @Test
+    void aSaveWithoutThePersonalKeyMigratesOnce() {
+        CompoundTag tag = new CompoundTag();
+        tag.putInt("version", TeamStoreData.VERSION);
+        tag.put("teams", new CompoundTag());
+        tag.put("owners", new CompoundTag());
+        tag.put("migrations", new CompoundTag());
+
+        ProgressStore loaded = ProgressStore.load(tag, null);
+
+        assertTrue(loaded.migratePersonalNodes(java.util.Set.of("test:book/personal"), false));
+        assertFalse(loaded.migratePersonalNodes(java.util.Set.of("test:book/personal"), false));
     }
 }
