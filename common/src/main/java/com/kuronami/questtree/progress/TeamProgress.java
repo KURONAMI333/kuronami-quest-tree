@@ -308,8 +308,8 @@ public final class TeamProgress {
                     // into the team, with closed winning so a member's lock is not lost
                     if (partJson.has("chapter_open") && partJson.get("chapter_open").isJsonObject()) {
                         for (Map.Entry<String, JsonElement> c : partJson.getAsJsonObject("chapter_open").entrySet()) {
-                            if (c.getValue().isJsonPrimitive() && c.getValue().getAsJsonPrimitive().isBoolean()) {
-                                boolean open = c.getValue().getAsBoolean();
+                            Boolean open = PackNumbers.booleanOrNull(c.getValue());
+                            if (open != null) {
                                 team.shared.chapterOpen.merge(c.getKey(), open,
                                         (teamOpen, memberOpen) -> teamOpen && memberOpen);
                             }

@@ -253,7 +253,7 @@ public final class PartyData {
                             ? UUID.fromString(one.get("from").getAsString())
                             : p == null ? party : p.owner;
                     data.invites.put(UUID.fromString(e.getKey()), new Invite(
-                            party, from, one.get("expires").getAsLong()));
+                            party, from, com.kuronami.questtree.progress.PackNumbers.savedLong(one.get("expires"), 0L)));
                 } catch (RuntimeException ignored) {
                     // ignore a malformed invite
                 }

@@ -106,18 +106,19 @@ public final class PlayerPart {
             part.completed.add(e.getAsString());
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
-            if (e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isNumber()) {
-                part.completedAt.put(e.getKey(), e.getValue().getAsLong());
+            long at = PackNumbers.savedLong(e.getValue(), Long.MIN_VALUE);
+            if (at >= 0) {
+                part.completedAt.put(e.getKey(), at);
             }
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
-            part.tasks.put(e.getKey(), e.getValue().getAsLong());
+            part.tasks.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "repeats").entrySet()) {
-            part.repeats.put(e.getKey(), e.getValue().getAsInt());
+            part.repeats.put(e.getKey(), PackNumbers.savedInt(e.getValue(), 0));
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
-            part.cooldown.put(e.getKey(), e.getValue().getAsLong());
+            part.cooldown.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
         for (JsonElement e : arr(o, "stages")) {
             part.stages.add(e.getAsString());
@@ -127,7 +128,7 @@ public final class PlayerPart {
         }
         if (o.has("pending_rewards") && o.get("pending_rewards").isJsonObject()) {
             for (Map.Entry<String, JsonElement> e : obj(o, "pending_rewards").entrySet()) {
-                part.pendingRewards.put(e.getKey(), e.getValue().getAsInt());
+                part.pendingRewards.put(e.getKey(), PackNumbers.savedInt(e.getValue(), 0));
             }
         } else {
             // saves before 2026-10-21 stored each pending reward once
@@ -146,13 +147,10 @@ public final class PlayerPart {
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
             part.rewardRolls.put(e.getKey(), e.getValue().getAsString());
         }
-        part.emergencyReadyAt = PackNumbers.longOr(o.get("emergency_ready_at"), 0L);
-        part.emergencyWaitNotice = o.has("emergency_wait_notice") && o.get("emergency_wait_notice").isJsonPrimitive()
-                && o.get("emergency_wait_notice").getAsBoolean();
-        part.rewardsBlocked = o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
-                && o.get("rewards_blocked").getAsBoolean();
-        part.bookGiven = o.has("book_given") && o.get("book_given").isJsonPrimitive()
-                && o.get("book_given").getAsBoolean();
+        part.emergencyReadyAt = PackNumbers.savedLong(o.get("emergency_ready_at"), 0L);
+        part.emergencyWaitNotice = PackNumbers.booleanOr(o.get("emergency_wait_notice"), false);
+        part.rewardsBlocked = PackNumbers.booleanOr(o.get("rewards_blocked"), false);
+        part.bookGiven = PackNumbers.booleanOr(o.get("book_given"), false);
         return part;
     }
 
