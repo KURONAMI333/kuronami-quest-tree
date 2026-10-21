@@ -159,6 +159,10 @@ public final class Rewards {
     /** Pays rewards that were taken while an admin had blocked pay-outs. Called when the block is lifted. */
     static void payPending(ServerPlayer player, PlayerProgress p) {
         var model = ProgressService.rules().model();
+        if (!com.kuronami.questtree.progress.RewardLedger.canResolve(model)) {
+            // an empty model must not read as "every node was removed" and forget the debt
+            return;
+        }
         boolean changed = false;
         for (String key : new ArrayList<>(p.pendingRewards.keySet())) {
             String node = com.kuronami.questtree.progress.RewardLedger.pendingNode(key);

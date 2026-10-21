@@ -74,6 +74,14 @@ public final class RewardLedger {
                 && "choice".equals(reward.has("mode") ? reward.get("mode").getAsString() : "");
     }
 
+    /**
+     * Whether pending rewards can be looked up at all. A model with no nodes is an unreadable or empty data pack, not
+     * proof that every node is gone; dropping the debt there would lose it (2026-10-22 review).
+     */
+    public static boolean canResolve(ProgressModel model) {
+        return model != null && !model.nodes.isEmpty();
+    }
+
     /** Records a reward as taken; a team reward settles once for the whole team. */
     public static void mark(PlayerProgress p, JsonObject reward, String node, int index) {
         String key = node + "#" + index;

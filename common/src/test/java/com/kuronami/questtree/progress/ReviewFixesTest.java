@@ -140,6 +140,17 @@ class ReviewFixesTest {
     }
 
     @Test
+    void pendingRewardsAreNotDroppedForAnEmptyModel() {
+        assertFalse(RewardLedger.canResolve(ProgressModel.of(new JsonObject())),
+                "an empty model is not proof that the pending node is gone");
+        assertFalse(RewardLedger.canResolve(null));
+        ProgressModel loaded = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"t:q": {"nodes": {"n": {}}}}}
+                """).getAsJsonObject());
+        assertTrue(RewardLedger.canResolve(loaded));
+    }
+
+    @Test
     void aBlockedChoiceTableIsRefusedInsteadOfPaidWithNoChoice() {
         PlayerProgress p = new PlayerProgress();
         JsonObject reward = reward("table");
