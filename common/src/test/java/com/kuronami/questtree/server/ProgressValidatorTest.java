@@ -157,6 +157,34 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void conditionsAreCheckedOnTasksAndRewards() {
+        ProgressValidator.Result ok = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": ["
+                        + "{\"type\": \"stage\", \"stage\": \"chapter_one\"},"
+                        + "{\"type\": \"score\", \"objective\": \"points\", \"min\": 2},"
+                        + "{\"type\": \"advancement\", \"advancement\": \"minecraft:story/root\"},"
+                        + "{\"type\": \"party_size\", \"min\": 2}]}",
+                "{\"type\": \"xp\", \"amount\": 1, \"conditions\": [{\"type\": \"item\", \"item\": \"minecraft:stone\"}]}"));
+        assertEquals(List.of(), ok.problems, ok.problems.toString());
+    }
+
+    @Test
+    void aConditionWithoutItsFieldIsAnError() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": [{\"type\": \"stage\"}]}", ""));
+        assertTrue(says(r, "has no stage"));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void anUnknownConditionOnlyWarns() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": [{\"type\": \"nope\"}]}", ""));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "unknown condition type"));
+    }
+
+    @Test
     void aZeroCountIsAWarning() {
         ProgressValidator.Result r = validate(chapter(
                 "{\"type\": \"item\", \"count\": 0, \"item\": {\"id\": \"minecraft:stone\"}}", ""));

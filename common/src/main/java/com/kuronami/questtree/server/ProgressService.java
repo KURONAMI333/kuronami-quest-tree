@@ -232,7 +232,8 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (r.taskOpen(p, n, i) && type(t).equals("kill") && entityMatches(player, t, killed)) {
+                if (r.taskOpen(p, n, i) && conditionsMet(player, p, t)
+                        && type(t).equals("kill") && entityMatches(player, t, killed)) {
                     hits.add(new TaskRef(n, i));
                 }
             }
@@ -259,7 +260,8 @@ public final class ProgressService {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
-            if (working(r, p, n) && r.taskOpen(p, n, i) && blockMatches(blockSpec(t), state)) {
+            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, t)
+                    && blockMatches(blockSpec(t), state)) {
                 hits.add(ref);
             }
         }
@@ -397,9 +399,43 @@ public final class ProgressService {
         }
     }
 
-    /** Conditions are added in the next step; a task without conditions always passes. */
+    /** Whether every condition on a task or reward holds for this player now. */
     static boolean conditionsMet(ServerPlayer player, PlayerProgress p, JsonObject holder) {
-        return true;
+        return QuestConditions.allMet(holder, new Conditions(player));
+    }
+
+    private record Conditions(ServerPlayer player) implements QuestConditions.Context {
+        @Override
+        public boolean hasStage(String stage) {
+            return ProgressService.hasStage(player, stage);
+        }
+
+        @Override
+        public long score(String objective) {
+            var obj = player.getScoreboard().getObjective(objective);
+            return obj == null ? 0 : player.getScoreboard().getOrCreatePlayerScore(player, obj).get();
+        }
+
+        @Override
+        public boolean hasItem(JsonObject condition) {
+            if (!condition.has("item")) {
+                return false;
+            }
+            ItemRequirement requirement = ItemRequirement.of(condition);
+            long need = Math.max(1, condition.has("count") && condition.get("count").isJsonPrimitive()
+                    ? condition.get("count").getAsLong() : 1);
+            return countItems(player, requirement) >= need;
+        }
+
+        @Override
+        public boolean advancementDone(String advancement, String criterion) {
+            return ProgressService.advancementDone(player, advancement, criterion);
+        }
+
+        @Override
+        public int partySize() {
+            return TeamResolver.onlineMembers(player.server, player.getUUID()).size();
+        }
     }
 
     private static String interactionKind(JsonObject t) {
@@ -494,12 +530,14 @@ public final class ProgressService {
             }
             case "submit" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
+                        && conditionsMet(player, p, n.tasks.get(a.index()))
                         && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
                     submit(player, p, n, a.index());
                 }
             }
             case "check" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
+                        && conditionsMet(player, p, n.tasks.get(a.index()))
                         && manual(n.tasks.get(a.index()))) {
                     JsonObject task = n.tasks.get(a.index());
                     long max = ProgressRules.target(task);
@@ -582,7 +620,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i)) {
+                if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
                     continue;
                 }
                 String ty = type(t);
@@ -641,7 +679,7 @@ public final class ProgressService {
             if (!working(r, p, n)) {
                 continue;
             }
-            if (!r.taskOpen(p, n, i)) {
+            if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
                 continue;
             }
             long target = ProgressRules.target(t);
@@ -743,7 +781,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (!r.taskOpen(p, n, i)) {
+                if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
                     continue;
                 }
                 long value = switch (type(t)) {
@@ -895,7 +933,7 @@ public final class ProgressService {
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
             String key = n.key + "#" + i;
-            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key)) {
+            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
                 continue;
             }
             if (ProgressModel.boolOf(rw, "team") && !actor) {
@@ -922,7 +960,7 @@ public final class ProgressService {
         }
         for (int i = 0; i < n.rewards.size(); i++) {
             String key = n.key + "#" + i;
-            if (p.rewardClaimed(key)) {
+            if (p.rewardClaimed(key) || !conditionsMet(player, p, n.rewards.get(i))) {
                 continue;
             }
             Rewards.give(player, p, n, n.rewards.get(i), choice);
@@ -942,7 +980,7 @@ public final class ProgressService {
             return;
         }
         JsonObject rw = n.rewards.get(index);
-        if (choiceMissing(rw, choice)) {
+        if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw)) {
             return;
         }
         Rewards.give(player, p, n, rw, choice);

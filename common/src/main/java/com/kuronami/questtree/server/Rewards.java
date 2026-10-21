@@ -30,6 +30,9 @@ public final class Rewards {
     }
 
     static void give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+        if (!ProgressService.conditionsMet(player, p, rw)) {
+            return;
+        }
         try {
             switch (ProgressService.type(rw)) {
                 case "item" -> item(player, rw);
@@ -82,6 +85,10 @@ public final class Rewards {
         List<JsonObject> list = rewardsOfRank(n, rank);
         int i = 0;
         for (JsonObject rw : list) {
+            if (!ProgressService.conditionsMet(player, p, rw)) {
+                i++;
+                continue;
+            }
             if (ProgressService.type(rw).equals("attribute")) {
                 attribute(player, n.key, rank * 100 + i, rw);
             } else if (full || ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag")) {
