@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.data.ProgressModel;
+import com.kuronami.questtree.progress.PackNumbers;
 import com.kuronami.questtree.progress.ProgressRules;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -55,7 +56,7 @@ public final class ClientModel {
         this.settings = obj(bundle, "settings");
         JsonObject emergency = settings.has("emergency") && settings.get("emergency").isJsonObject()
                 ? settings.getAsJsonObject("emergency") : settings;
-        this.emergencyCooldownMs = com.kuronami.questtree.progress.PackNumbers.cooldownMs(
+        this.emergencyCooldownMs = PackNumbers.cooldownMs(
                 emergency, "cooldown_seconds", 3600);
         for (JsonElement e : arr(emergency, "items")) {
             ItemStack stack = e.isJsonObject() ? stack(e.getAsJsonObject().has("item")
@@ -65,7 +66,7 @@ public final class ClientModel {
             }
             if (e.isJsonObject()) {
                 JsonObject o = e.getAsJsonObject();
-                int count = Math.max(1, com.kuronami.questtree.progress.PackNumbers.intOr(
+                int count = Math.max(1, PackNumbers.intOr(
                         o.get("count"), stack.getCount()));
                 stack.setCount(Math.min(count, Math.max(1, stack.getMaxStackSize())));
             }
@@ -81,7 +82,8 @@ public final class ClientModel {
         for (JsonElement g : arr(bundle, "groups")) {
             if (g.isJsonObject() && g.getAsJsonObject().has("id")) {
                 JsonObject go = g.getAsJsonObject();
-                groupOrder.put(go.get("id").getAsString(), go.has("order") ? go.get("order").getAsInt() : groupOrder.size());
+                groupOrder.put(go.get("id").getAsString(),
+                        PackNumbers.intOr(go.get("order"), groupOrder.size()));
             }
         }
         for (Map.Entry<String, JsonElement> e : obj(bundle, "chapters").entrySet()) {
@@ -242,7 +244,7 @@ public final class ClientModel {
             this.path = id.substring(colon + 1);
             this.iconTexture = textureIcon(o.get("icon"), namespace);
             this.icon = iconTexture != null ? ItemStack.EMPTY : stack(o.get("icon"));
-            this.order = o.has("order") ? o.get("order").getAsInt() : 0;
+            this.order = PackNumbers.intOr(o.get("order"), 0);
             // no group, or FTB Quests' default group (an empty id), comes first and has no header, as in FTB Quests'
             // own list. ATM10's "Welcome", "Bounty Board" and "Building Tips" sorted last until 2026-10-20 because the
             // empty id was looked up as a group that does not exist
@@ -263,7 +265,8 @@ public final class ClientModel {
             this.lockHint = hint.isBlank() ? null : m.component(hint, parseText(hint));
             JsonObject defaults = obj(o, "defaults");
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
-            this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive();
+            this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive()
+                    && defaults.get("size").getAsJsonPrimitive().isNumber();
             this.defaultSize = defaultSizeSet ? defaults.get("size").getAsDouble() : 1;
             this.hideDetailsByDefault = defaults.has("hide_details_until_startable") && defaults.get("hide_details_until_startable").isJsonPrimitive()
                     && defaults.get("hide_details_until_startable").getAsBoolean();
@@ -409,16 +412,17 @@ public final class ClientModel {
         Node(ClientModel m, Chapter ch, String id, JsonObject o) {
             this.id = id;
             this.key = ch.id + "/" + id;
-            this.x = o.has("x") ? o.get("x").getAsDouble() : 0;
-            this.y = o.has("y") ? o.get("y").getAsDouble() : 0;
+            this.x = num(o, "x");
+            this.y = num(o, "y");
             boolean milestone = ProgressModel.boolOf(o, "milestone");
             this.root = ProgressModel.boolOf(o, "root");
-            this.size = o.has("size") ? Math.max(0.3, o.get("size").getAsDouble())
+            this.size = o.has("size") && o.get("size").isJsonPrimitive()
+                    && o.get("size").getAsJsonPrimitive().isNumber() ? Math.max(0.3, o.get("size").getAsDouble())
                     : milestone && !ch.defaultSizeSet ? MILESTONE_SIZE : Math.max(0.3, ch.defaultSize);
             String sh = o.has("shape") ? o.get("shape").getAsString() : "";
             this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
-            this.cost = o.has("cost") ? o.get("cost").getAsInt() : 0;
+            this.cost = PackNumbers.intOr(o.get("cost"), 0);
             this.sequentialTasks = ProgressModel.boolOr(o, "sequential_tasks", ch.defaultSequentialTasks);
             this.repeatable = ProgressRules.repeatable(o);
             JsonObject ex = obj(o, "exclusive");
@@ -482,7 +486,8 @@ public final class ClientModel {
                         }
                     }
                     case "item" -> addReward(stack(ro.get("item")), ri);
-                    case "xp", "xp_levels" -> addReward(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64, ro.has("amount") ? ro.get("amount").getAsInt() : 1))), ri);
+                    case "xp", "xp_levels" -> addReward(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64,
+                            PackNumbers.intOr(ro.get("amount"), 1)))), ri);
                     case "table" -> addReward(new ItemStack(Items.CHEST), ri);
                     case "attribute" -> rewardLines.add(attributeLine(ro));
                     default -> { }
@@ -537,7 +542,7 @@ public final class ClientModel {
 
         private static String attributeLine(JsonObject ro) {
             String attr = ro.has("attribute") ? ro.get("attribute").getAsString() : "?";
-            double v = ro.has("value") ? ro.get("value").getAsDouble() : 0;
+            double v = num(ro, "value");
             String op = ro.has("operation") ? ro.get("operation").getAsString() : "addition";
             String name = attr.substring(attr.indexOf(':') + 1).replace('_', ' ').replace('.', ' ');
             boolean pct = !op.equals("addition") && !op.equals("add_value");
@@ -746,7 +751,7 @@ public final class ClientModel {
             this.w = o.has("w") ? num(o, "w") : 1;
             this.h = o.has("h") ? num(o, "h") : 1;
             this.rotation = num(o, "rotation");
-            this.order = o.has("order") ? o.get("order").getAsInt() : 0;
+            this.order = PackNumbers.intOr(o.get("order"), 0);
             this.dev = o.has("dev") && o.get("dev").getAsBoolean();
             this.visibleAfter = o.has("visible_after") ? ch.keyOf(o.get("visible_after").getAsString()) : null;
             JsonObject click = obj(o, "click");
@@ -754,8 +759,9 @@ public final class ClientModel {
             String target = click.has("target") ? click.get("target").getAsString() : "";
             this.clickNode = type.equals("node") && !target.isEmpty() ? ch.keyOf(target) : null;
             this.clickUrl = type.equals("url") && (target.startsWith("https://") || target.startsWith("http://")) ? target : null;
-            this.color = o.has("color") && o.get("color").isJsonPrimitive() ? o.get("color").getAsInt() & 0xFFFFFF : 0xFFFFFF;
-            this.alpha = o.has("alpha") && o.get("alpha").isJsonPrimitive() ? Math.max(0, Math.min(255, o.get("alpha").getAsInt())) / 255f : 1;
+            this.color = PackNumbers.intOr(o.get("color"), 0xFFFFFF) & 0xFFFFFF;
+            this.alpha = Math.max(0, Math.min(255,
+                PackNumbers.intOr(o.get("alpha"), 255))) / 255f;
             for (JsonElement e : arr(o, "hover")) {
                 if (e.isJsonPrimitive()) {
                     String text = e.getAsString();
@@ -832,7 +838,8 @@ public final class ClientModel {
         if (item == Items.AIR) {
             return ItemStack.EMPTY;
         }
-        int count = e.isJsonObject() && e.getAsJsonObject().has("count") ? e.getAsJsonObject().get("count").getAsInt() : 1;
+        int count = e.isJsonObject()
+                ? PackNumbers.intOr(e.getAsJsonObject().get("count"), 1) : 1;
         return new ItemStack(item, Math.max(1, count));
     }
 
@@ -845,6 +852,7 @@ public final class ClientModel {
     }
 
     private static double num(JsonObject o, String k) {
-        return o.has(k) && o.get(k).isJsonPrimitive() ? o.get(k).getAsDouble() : 0;
+        JsonElement e = o.get(k);
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() ? e.getAsDouble() : 0;
     }
 }
