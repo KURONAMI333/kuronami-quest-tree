@@ -79,13 +79,13 @@ public final class ClientModel {
         copyText(lang, "en_us", fallback);
         copyText(lang, locale, text);
         Map<String, Integer> groupOrder = new LinkedHashMap<>();
-        for (JsonElement g : arr(bundle, "groups")) {
+        SafeJson.each(arr(bundle, "groups"), g -> {
             if (g.isJsonObject() && g.getAsJsonObject().has("id")) {
                 JsonObject go = g.getAsJsonObject();
                 groupOrder.put(go.get("id").getAsString(),
                         PackNumbers.intOr(go.get("order"), groupOrder.size()));
             }
-        }
+        }, ex -> com.kuronami.questtree.Constants.LOG.warn("Skipping a progression group: {}", ex.toString()));
         for (Map.Entry<String, JsonElement> e : obj(bundle, "chapters").entrySet()) {
             if (!e.getValue().isJsonObject() || !e.getKey().contains(":")) {
                 continue;
@@ -287,16 +287,16 @@ public final class ClientModel {
                     com.kuronami.questtree.Constants.LOG.warn("Skipping node {} in {}: {}", n.getKey(), id, ex.toString());
                 }
             }
-            for (JsonElement d : arr(o, "decorations")) {
+            SafeJson.each(arr(o, "decorations"), d -> {
                 if (d.isJsonObject()) {
                     decorations.add(new Decoration(this, d.getAsJsonObject()));
                 }
-            }
-            for (JsonElement l : arr(o, "links")) {
+            }, ex -> com.kuronami.questtree.Constants.LOG.warn("Skipping a decoration in {}: {}", id, ex.toString()));
+            SafeJson.each(arr(o, "links"), l -> {
                 if (l.isJsonObject() && l.getAsJsonObject().has("node")) {
                     links.add(new Link(this, l.getAsJsonObject()));
                 }
-            }
+            }, ex -> com.kuronami.questtree.Constants.LOG.warn("Skipping a link in {}: {}", id, ex.toString()));
             decorations.sort(Comparator.comparingInt(d -> d.order));
         }
 
