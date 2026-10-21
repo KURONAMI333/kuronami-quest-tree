@@ -89,6 +89,13 @@ final class Ui {
     static int HUD_BACK = 0x66111214;
     static int HUD_TEXT = 0xFFE0E0E0;
     static int HUD_MUTED = 0xFFB0B0B0;
+    /** The task line's own text, its have/need count when unfinished, the dot and the quest name. */
+    static int HUD_TASK = 0xFFFFFFFF;
+    static int HUD_COUNT_DOT = 0xFF888888;
+    static int HUD_QUEST = 0xFFC8C8C8;
+    /** A toast's level line (yellow), and its title (white). */
+    static int TOAST_LEVEL = 0xFFFFFF55;
+    static int TOAST_TITLE = 0xFFFFFFFF;
     /** The empty part of the experience toast bar. */
     static int TOAST_TRACK = 0xFF2A2A2A;
 

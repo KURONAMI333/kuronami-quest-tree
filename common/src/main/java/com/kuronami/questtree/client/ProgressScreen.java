@@ -1,5 +1,6 @@
 package com.kuronami.questtree.client;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.client.edit.EditorClipboard;
 import com.kuronami.questtree.client.edit.EditorSelection;
@@ -232,15 +233,16 @@ public class ProgressScreen extends Screen {
     private PathFinder.Path path = PathFinder.Path.NONE;
     private java.util.Set<String> pathSet = java.util.Set.of();
     private String pathFor;
-    private Object pathProgress;
+    private String pathKey;
 
     private PathFinder.Path path() {
         if (selected == null || ClientProgress.rules() == null) {
             return PathFinder.Path.NONE;
         }
-        if (!selected.equals(pathFor) || ClientProgress.progress() != pathProgress) {
+        String key = CacheKey.of(selected, ClientProgress.progress(), ClientProgress.rules());
+        if (!selected.equals(pathFor) || !key.equals(pathKey)) {
             pathFor = selected;
-            pathProgress = ClientProgress.progress();
+            pathKey = key;
             path = PathFinder.find(ClientProgress.rules(), ClientProgress.progress(), selected);
             pathSet = new java.util.HashSet<>(path.nodes());
         }
@@ -3069,8 +3071,8 @@ public class ProgressScreen extends Screen {
     /** Copy the picked nodes from the raw bundle JSON, keeping their relative positions. */
     private void copySelection(ClientModel.Chapter ch) {
         List<EditorClipboard.Entry> entries = new ArrayList<>();
-        for (String key : editSelection.ids()) {
-            ClientModel.Node n = model() == null ? null : model().nodesByKey.get(key);
+        for (String id : SelectionKeys.idsIn(ch.id, editSelection.ids())) {
+            ClientModel.Node n = model() == null ? null : model().nodesByKey.get(ch.id + "/" + id);
             if (n == null) {
                 continue;
             }
@@ -3106,11 +3108,14 @@ public class ProgressScreen extends Screen {
     }
 
     private void deleteSelection(ClientModel.Chapter ch) {
-        for (String key : editSelection.ids()) {
-            String id = key.substring(ch.id.length() + 1);
+        JsonArray ids = new JsonArray();
+        for (String id : SelectionKeys.idsIn(ch.id, editSelection.ids())) {
+            ids.add(id);
+        }
+        if (!ids.isEmpty()) {
             JsonObject args = new JsonObject();
-            args.addProperty("id", id);
-            EditorSession.send(ch.id, "delete_node", args);
+            args.add("ids", ids);
+            EditorSession.send(ch.id, "delete_nodes", args);
         }
         editSelection.clear();
     }
@@ -3164,22 +3169,29 @@ public class ProgressScreen extends Screen {
         }
         MoveBatch batch = new MoveBatch(original, target);
         batch.apply(EditorSession.optimistic());
+        JsonArray moves = new JsonArray();
         for (Map.Entry<String, double[]> e : target.entrySet()) {
             String key = e.getKey();
             if (!key.startsWith(ch.id + "/")) {
                 continue;
             }
-            JsonObject args = new JsonObject();
-            args.addProperty("id", key.substring(ch.id.length() + 1));
-            args.addProperty("x", e.getValue()[0]);
-            args.addProperty("y", e.getValue()[1]);
-            EditorSession.send(ch.id, "move_node", args, reply -> {
-                if (!reply.ok()) {
-                    // only this node: the others in the batch are answered on their own
-                    batch.rollbackKey(key, EditorSession.optimistic());
-                }
-            });
+            JsonObject move = new JsonObject();
+            move.addProperty("id", key.substring(ch.id.length() + 1));
+            move.addProperty("x", e.getValue()[0]);
+            move.addProperty("y", e.getValue()[1]);
+            moves.add(move);
         }
+        if (moves.isEmpty()) {
+            return;
+        }
+        JsonObject args = new JsonObject();
+        args.add("nodes", moves);
+        // one op, one revision and one undo step for the whole drag; a refusal puts every node back
+        EditorSession.send(ch.id, "move_nodes", args, reply -> {
+            if (!reply.ok()) {
+                batch.rollback(EditorSession.optimistic());
+            }
+        });
     }
 
     private void finishMove(ClientModel.Chapter ch) {
@@ -4345,9 +4357,14 @@ public class ProgressScreen extends Screen {
     // ------------------------------------------------------------------ drawing helpers
 
     private final Map<String, Map<String, Integer>> depthCache = new HashMap<>();
+    private Object depthModel;
 
     /** Steps from the chapter's start (root nodes, else nodes needing nothing), walking links in either direction. */
     private Map<String, Integer> depths(ClientModel.Chapter ch) {
+        if (depthModel != ClientProgress.model()) {
+            depthCache.clear();
+            depthModel = ClientProgress.model();
+        }
         return depthCache.computeIfAbsent(ch.id, k -> {
             Map<String, java.util.List<String>> links = new HashMap<>();
             java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();

@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  */
 final class DevTour {
 
-    static final boolean ENABLED = System.getProperty("quest_tree.devTour") != null;
+    static final boolean ENABLED = Boolean.getBoolean("quest_tree.devTour");
 
     private record Step(int at, Runnable run) {
     }

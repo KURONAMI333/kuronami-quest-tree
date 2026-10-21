@@ -484,5 +484,7 @@
   "toast.kuronami_quest_tree.reward": "Récompense",
   "screen.kuronami_quest_tree.emergency": "Objets d'urgence",
   "message.kuronami_quest_tree.emergency_wait": "Objets d'urgence disponibles dans %s min",
-  "message.kuronami_quest_tree.emergency_none": "Ce pack ne contient pas d'objets d'urgence."
+  "message.kuronami_quest_tree.emergency_none": "Ce pack ne contient pas d'objets d'urgence.",
+  "screen.kuronami_quest_tree.editor.notice.reply_failed": "L’éditeur n’a pas pu appliquer la réponse du serveur : %s",
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "La modification n’a pas pu être envoyée"
 }

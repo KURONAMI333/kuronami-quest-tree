@@ -484,5 +484,7 @@
   "toast.kuronami_quest_tree.reward": "보상",
   "screen.kuronami_quest_tree.emergency": "긴급 아이템",
   "message.kuronami_quest_tree.emergency_wait": "긴급 아이템은 %s분 후 사용할 수 있습니다",
-  "message.kuronami_quest_tree.emergency_none": "이 팩에는 긴급 아이템이 없습니다."
+  "message.kuronami_quest_tree.emergency_none": "이 팩에는 긴급 아이템이 없습니다.",
+  "screen.kuronami_quest_tree.editor.notice.reply_failed": "편집기가 서버 응답을 적용하지 못했습니다: %s",
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "편집을 보낼 수 없습니다"
 }

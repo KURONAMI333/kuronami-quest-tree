@@ -484,5 +484,7 @@
   "toast.kuronami_quest_tree.reward": "報酬",
   "screen.kuronami_quest_tree.emergency": "緊急アイテム",
   "message.kuronami_quest_tree.emergency_wait": "緊急アイテムはあと%s分で使えます",
-  "message.kuronami_quest_tree.emergency_none": "このパックには緊急アイテムがありません。"
+  "message.kuronami_quest_tree.emergency_none": "このパックには緊急アイテムがありません。",
+  "screen.kuronami_quest_tree.editor.notice.reply_failed": "エディタがサーバーの応答を反映できませんでした: %s",
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "編集を送信できませんでした"
 }

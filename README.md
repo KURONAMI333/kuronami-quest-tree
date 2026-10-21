@@ -31,6 +31,14 @@ Most commands need permission level 2. `migrate` needs level 4 (or the server co
 | `/quest_tree migrate ftbquests [namespace] [dry_run|apply [force]]` | Copy FTB Quests progress into the team records; see `_docs/MIGRATION.md` |
 | `/quest_tree migrate puffish [namespace] [dry_run|apply [force]]` | Copy Pufferfish's Skills progress into the team records |
 | `/quest_tree party <create\|invite <player>\|accept\|leave\|kick <player>\|disband\|info>` | Built-in party, used when FTB Teams is not installed |
+| `/quest_tree block task <players> <node>` | Give a quest task block for that node |
+| `/quest_tree block barrier node <players> <node>` | Give a barrier that opens while that quest is done |
+| `/quest_tree block barrier stage <players> <stage>` | Give a barrier that opens while the stage is set |
+| `/quest_tree rewards block <players>` | Stop those players from claiming rewards |
+| `/quest_tree rewards unblock <players>` | Allow claims again |
+| `/quest_tree rewards status <players>` | Report whether rewards are blocked |
+| `/quest_tree team_stage add <players> <stage>` | Add a stage to the players' team progress |
+| `/quest_tree team_stage remove <players> <stage>` | Remove a stage from the team progress |
 
 Chapter ids are `<namespace>:<chapter>`, node ids `<namespace>:<chapter>/<node>`.
 

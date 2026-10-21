@@ -105,7 +105,7 @@ final class ExperienceToast implements Toast, OwnSoundToast {
         }
         var font = toasts.getMinecraft().font;
         Component top = levelled ? Component.translatable("toast.kuronami_quest_tree.level", level) : chapter.title;
-        g.drawString(font, font.plainSubstrByWidth(top.getString(), width() - 38), 32, 7, levelled ? 0xFFFF55 : 0xFFFFFF, false);
+        g.drawString(font, font.plainSubstrByWidth(top.getString(), width() - 38), 32, 7, levelled ? Ui.TOAST_LEVEL : Ui.TOAST_TITLE, false);
         int x0 = 32;
         int x1 = width() - 10;
         g.fill(x0, 20, x1, 23, Ui.TOAST_TRACK);

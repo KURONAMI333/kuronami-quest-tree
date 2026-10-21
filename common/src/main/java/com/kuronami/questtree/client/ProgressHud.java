@@ -32,7 +32,7 @@ public final class ProgressHud {
     private static boolean noticeHeld;
     /** Closest unfinished quests, recomputed only when new progress arrives (scanning every node per frame is too slow). */
     private static final List<ClientModel.Node> CLOSEST = new ArrayList<>();
-    private static Object closestFor;
+    private static String closestFor;
     /** The current chapter's next open quest, recomputed with the same cache as {@link #CLOSEST}. */
     private static ClientModel.Node AUTO;
     private static String autoFor;
@@ -157,13 +157,13 @@ public final class ProgressHud {
         }
         int a = (int) (alpha * 255) << 24;
         int tx = x + 20;
-        g.drawString(font, task, tx, y + 6, 0xFFFFFF | a, true);
+        g.drawString(font, task, tx, y + 6, Ui.HUD_TASK, true);
         tx += font.width(task) + 6;
-        g.drawString(font, count, tx, y + 6, (noticeHave >= noticeNeed ? Tiles.GREEN_TEXT & 0xFFFFFF : 0xE0E0E0) | a, true);
+        g.drawString(font, count, tx, y + 6, (noticeHave >= noticeNeed ? Tiles.GREEN_TEXT & 0xFFFFFF : Ui.HUD_TEXT) | a, true);
         tx += font.width(count) + 4;
-        g.fill(tx + 1, y + 9, tx + 3, y + 11, 0x888888 | a);
+        g.fill(tx + 1, y + 9, tx + 3, y + 11, Ui.HUD_COUNT_DOT | a);
         tx += 6;
-        g.drawString(font, quest, tx, y + 6, 0xC8C8C8 | a, true);
+        g.drawString(font, quest, tx, y + 6, Ui.HUD_QUEST | a, true);
         g.pose().popPose();
     }
 
@@ -174,7 +174,7 @@ public final class ProgressHud {
         List<ClientModel.Node> rows = new ArrayList<>();
         if (TrackerRules.autoPin(ClientConfig.autoPin(), ClientConfig.trackerMode() == ClientConfig.TrackerMode.ALL)) {
             String chapter = ProgressScreen.currentChapterId();
-            String cache = System.identityHashCode(ClientProgress.progress()) + "|" + chapter;
+            String cache = CacheKey.of(ClientProgress.progress(), ClientProgress.rules(), chapter);
             if (!cache.equals(autoFor)) {
                 autoFor = cache;
                 AUTO = autoQuest(m);
@@ -192,8 +192,9 @@ public final class ProgressHud {
             }
         }
         if (rows.isEmpty() && ClientConfig.trackerMode() == ClientConfig.TrackerMode.ALL) {
-            if (closestFor != ClientProgress.progress()) {
-                closestFor = ClientProgress.progress();
+            String closest = CacheKey.of(ClientProgress.progress(), ClientProgress.rules());
+            if (!closest.equals(closestFor)) {
+                closestFor = closest;
                 CLOSEST.clear();
                 m.nodesByKey.values().stream()
                         .filter(n -> !n.tasks.isEmpty() && ClientProgress.state(n.key) == State.PROGRESS && ClientProgress.visible(n.key))
@@ -249,7 +250,7 @@ public final class ProgressHud {
             Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
-            g.drawString(font, title, 26, y + 1, 0xFFFFFF, true);
+            g.drawString(font, title, 26, y + 1, Ui.MARK, true);
             g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT, true);
             g.pose().popPose();
             y += 22;

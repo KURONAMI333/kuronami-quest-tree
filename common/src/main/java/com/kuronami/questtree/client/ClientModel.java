@@ -79,13 +79,13 @@ public final class ClientModel {
         copyText(lang, "en_us", fallback);
         copyText(lang, locale, text);
         Map<String, Integer> groupOrder = new LinkedHashMap<>();
-        for (JsonElement g : arr(bundle, "groups")) {
+        SafeJson.each(arr(bundle, "groups"), g -> {
             if (g.isJsonObject() && g.getAsJsonObject().has("id")) {
                 JsonObject go = g.getAsJsonObject();
                 groupOrder.put(go.get("id").getAsString(),
                         PackNumbers.intOr(go.get("order"), groupOrder.size()));
             }
-        }
+        }, ex -> com.kuronami.questtree.Constants.LOG.warn("Skipping a progression group: {}", ex.toString()));
         for (Map.Entry<String, JsonElement> e : obj(bundle, "chapters").entrySet()) {
             if (!e.getValue().isJsonObject() || !e.getKey().contains(":")) {
                 continue;
@@ -267,7 +267,7 @@ public final class ClientModel {
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
             this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive()
                     && defaults.get("size").getAsJsonPrimitive().isNumber();
-            this.defaultSize = defaultSizeSet ? defaults.get("size").getAsDouble() : 1;
+            this.defaultSize = defaultSizeSet ? PackNumbers.coordinate(defaults.get("size").getAsDouble()) : 1;
             this.hideDetailsByDefault = defaults.has("hide_details_until_startable") && defaults.get("hide_details_until_startable").isJsonPrimitive()
                     && defaults.get("hide_details_until_startable").getAsBoolean();
             this.hideLines = defaults.has("hide_lines") && defaults.get("hide_lines").isJsonPrimitive() && defaults.get("hide_lines").getAsBoolean();
@@ -287,16 +287,16 @@ public final class ClientModel {
                     com.kuronami.questtree.Constants.LOG.warn("Skipping node {} in {}: {}", n.getKey(), id, ex.toString());
                 }
             }
-            for (JsonElement d : arr(o, "decorations")) {
+            SafeJson.each(arr(o, "decorations"), d -> {
                 if (d.isJsonObject()) {
                     decorations.add(new Decoration(this, d.getAsJsonObject()));
                 }
-            }
-            for (JsonElement l : arr(o, "links")) {
+            }, ex -> com.kuronami.questtree.Constants.LOG.warn("Skipping a decoration in {}: {}", id, ex.toString()));
+            SafeJson.each(arr(o, "links"), l -> {
                 if (l.isJsonObject() && l.getAsJsonObject().has("node")) {
                     links.add(new Link(this, l.getAsJsonObject()));
                 }
-            }
+            }, ex -> com.kuronami.questtree.Constants.LOG.warn("Skipping a link in {}: {}", id, ex.toString()));
             decorations.sort(Comparator.comparingInt(d -> d.order));
         }
 
@@ -417,7 +417,7 @@ public final class ClientModel {
             boolean milestone = ProgressModel.boolOf(o, "milestone");
             this.root = ProgressModel.boolOf(o, "root");
             this.size = o.has("size") && o.get("size").isJsonPrimitive()
-                    && o.get("size").getAsJsonPrimitive().isNumber() ? Math.max(0.3, o.get("size").getAsDouble())
+                    && o.get("size").getAsJsonPrimitive().isNumber() ? Math.max(0.3, PackNumbers.coordinate(o.get("size").getAsDouble()))
                     : milestone && !ch.defaultSizeSet ? MILESTONE_SIZE : Math.max(0.3, ch.defaultSize);
             String sh = o.has("shape") ? o.get("shape").getAsString() : "";
             this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
@@ -712,7 +712,8 @@ public final class ClientModel {
         }
 
         private static float num(JsonObject o, String key, float fallback) {
-            return o.has(key) && o.get(key).isJsonPrimitive() && o.get(key).getAsJsonPrimitive().isNumber() ? o.get(key).getAsFloat() : fallback;
+            return o.has(key) && o.get(key).isJsonPrimitive() && o.get(key).getAsJsonPrimitive().isNumber()
+                    ? (float) PackNumbers.coordinate(o.get(key).getAsFloat()) : fallback;
         }
     }
 
@@ -853,6 +854,7 @@ public final class ClientModel {
 
     private static double num(JsonObject o, String k) {
         JsonElement e = o.get(k);
-        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() ? e.getAsDouble() : 0;
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
+                ? PackNumbers.coordinate(e.getAsDouble()) : 0;
     }
 }

@@ -107,7 +107,12 @@ public final class EditorDoc {
             if (integer) {
                 set(root, path, new JsonPrimitive(Long.parseLong(value.trim())));
             } else {
-                set(root, path, new JsonPrimitive(Double.parseDouble(value.trim())));
+                double parsed = Double.parseDouble(value.trim());
+                // "NaN" and "Infinity" parse, but would blank the map once the server saved them
+                if (!Double.isFinite(parsed)) {
+                    return;
+                }
+                set(root, path, new JsonPrimitive(parsed));
             }
         } catch (NumberFormatException ignored) {
             // the field shows what was typed; the JSON keeps the last number that parsed
