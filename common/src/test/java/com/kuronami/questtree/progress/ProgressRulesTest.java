@@ -463,4 +463,17 @@ class ProgressRulesTest {
         assertEquals(ProgressRules.State.CLAIM, rules.state(p, n));
         assertTrue(rules.take(p, n));
     }
+
+    /** A malformed or non-finite experience formula falls back to the default instead of throwing or stalling (B6). */
+    @Test
+    void aBrokenExperienceCurveFallsBackToTheDefault() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {
+                  "s:a": {"points": {"per_level": {"type": "expression", "data": {"expression": "level +"}}}},
+                  "s:b": {"points": {"per_level": {"type": "expression", "data": {"expression": "1/0"}}}}}}
+                """).getAsJsonObject());
+        ProgressRules r = new ProgressRules(m);
+        assertEquals(100.0, r.experienceForLevel(m.chapters.get("s:a"), 3), "a syntax error uses the default");
+        assertEquals(100.0, r.experienceForLevel(m.chapters.get("s:b"), 3), "a non-finite curve uses the default");
+    }
 }

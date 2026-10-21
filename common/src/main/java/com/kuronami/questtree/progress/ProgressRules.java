@@ -972,9 +972,18 @@ public final class ProgressRules {
                 : per.isJsonObject() && per.getAsJsonObject().has("data") && per.getAsJsonObject().getAsJsonObject("data").has("expression")
                 ? per.getAsJsonObject().getAsJsonObject("data").get("expression").getAsString()
                 : "100";
-        Expression e = curves.computeIfAbsent(c.id + "|" + expr, k -> Expression.parse(expr));
-        double value = e.eval(Map.of("level", (double) level));
-        return Double.isFinite(value) ? Math.max(1, Math.round(value)) : value;
+        // a pack's formula is data, not code: a huge, deeply nested or broken one falls back to the default cost the
+        // same way the exchange curve does, instead of throwing or leaving the player stuck at their level
+        if (Expression.tooComplex(expr)) {
+            return 100;
+        }
+        try {
+            Expression e = curves.computeIfAbsent(c.id + "|" + expr, k -> Expression.parse(expr));
+            double value = e.eval(Map.of("level", (double) level));
+            return Double.isFinite(value) ? Math.max(1, Math.round(value)) : 100;
+        } catch (RuntimeException | StackOverflowError ex) {
+            return 100;
+        }
     }
 
     /**
@@ -992,7 +1001,7 @@ public final class ProgressRules {
         int gained = 0;
         while (lvl < limit) {
             double need = experienceForLevel(c, lvl);
-            // a curve that is not a finite number (pack data error) stops levelling instead of looping forever
+            // last guard: a non-finite curve must stop levelling instead of looping forever (the reader falls back)
             if (!Double.isFinite(need) || x < need) {
                 break;
             }
