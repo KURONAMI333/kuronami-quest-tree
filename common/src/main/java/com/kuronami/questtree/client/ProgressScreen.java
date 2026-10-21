@@ -934,7 +934,7 @@ public class ProgressScreen extends Screen {
         int sy = cy + RAIL_FOOT_ROW + 4;
         if (partyRow()) {
             int py = sy;
-            boolean invites = ClientTeam.view().hasInvites();
+            boolean invites = ClientTeam.view().hasActiveInvites(System.currentTimeMillis());
             boolean partyHover = mouseX >= left && mouseX < left + rowW && mouseY >= py && mouseY < py + RAIL_FOOT_ROW;
             if (!open) {
                 partyHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= py && mouseY < py + RAIL_FOOT_ROW;

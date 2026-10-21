@@ -197,6 +197,9 @@ public final class PartyActions {
         player.sendSystemMessage(message(outcome));
         if (outcome.ok()) {
             TeamSync.broadcast(player.server);
+        } else {
+            // the action failed because the client's party was stale; let it catch up
+            TeamSync.send(player);
         }
     }
 

@@ -84,6 +84,11 @@ public final class TeamView {
         return !invites.isEmpty();
     }
 
+    /** True when at least one invite has not expired at {@code now}; the rail's gold dot uses the synced expiry. */
+    public boolean hasActiveInvites(long now) {
+        return !activeInvites(now).isEmpty();
+    }
+
     /** The party row and the details labels are on when the player shares a team or has an invitation to answer. */
     public boolean active() {
         return inTeam() || hasInvites();

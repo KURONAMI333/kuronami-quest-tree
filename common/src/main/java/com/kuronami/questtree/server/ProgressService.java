@@ -866,7 +866,8 @@ public final class ProgressService {
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
         TeamSync.forget(player.getUUID());
-        TeamSync.broadcast(player.server);
+        // logout fires before the server removes the player, so they must be excluded from "online" explicitly
+        TeamSync.broadcast(player.server, player.getUUID());
     }
 
     /** Server stopping: the anti-farming windows are runtime state and must not outlive the server (2026-10-20). */

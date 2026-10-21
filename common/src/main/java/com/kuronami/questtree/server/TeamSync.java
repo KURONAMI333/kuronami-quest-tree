@@ -29,6 +29,14 @@ public final class TeamSync {
     }
 
     public static TeamView view(MinecraftServer server, UUID player) {
+        return view(server, player, null);
+    }
+
+    /**
+     * {@code leaving} is shown as offline even while the server still lists them: the logout event fires before the
+     * player is removed, so without this the view of a departing member would look unchanged and never be resent.
+     */
+    public static TeamView view(MinecraftServer server, UUID player, UUID leaving) {
         UUID teamId = TeamResolver.teamId(server, player);
         Set<UUID> ids = TeamResolver.members(server, teamId);
         if (ids.isEmpty()) {
@@ -41,12 +49,13 @@ public final class TeamSync {
             ownerId = player;
         }
         String ownerName = nameOf(server, ownerId);
-        String name = "";
+        String name = ftb ? TeamResolver.teamName(server, teamId) : "";
 
         List<TeamView.Member> members = new ArrayList<>();
         for (UUID id : ids) {
             members.add(new TeamView.Member(id.toString(), nameOf(server, id),
-                    server.getPlayerList().getPlayer(id) != null, id.equals(player), id.equals(ownerId)));
+                    server.getPlayerList().getPlayer(id) != null && !id.equals(leaving),
+                    id.equals(player), id.equals(ownerId)));
         }
         members.sort(Comparator.comparing((TeamView.Member m) -> !m.owner())
                 .thenComparing(m -> !m.self())
@@ -70,7 +79,11 @@ public final class TeamSync {
 
     /** Sends the view when it differs from the last one this player received. */
     public static void send(ServerPlayer player) {
-        TeamView view = view(player.server, player.getUUID());
+        send(player, null);
+    }
+
+    private static void send(ServerPlayer player, UUID leaving) {
+        TeamView view = view(player.server, player.getUUID(), leaving);
         String json = view.toJson().toString();
         if (json.equals(LAST.get(player.getUUID()))) {
             return;
@@ -81,8 +94,16 @@ public final class TeamSync {
 
     /** Sends to every online player; membership changes touch both the old and the new team. */
     public static void broadcast(MinecraftServer server) {
+        broadcast(server, null);
+    }
+
+    /** Broadcasts while treating {@code leaving} as offline; they are skipped too, since they are on their way out. */
+    public static void broadcast(MinecraftServer server, UUID leaving) {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            send(player);
+            if (player.getUUID().equals(leaving)) {
+                continue;
+            }
+            send(player, leaving);
         }
     }
 

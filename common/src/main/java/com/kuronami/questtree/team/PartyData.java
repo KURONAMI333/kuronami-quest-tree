@@ -151,6 +151,7 @@ public final class PartyData {
         invites.remove(player);
         if (p.members.isEmpty()) {
             parties.remove(p.id);
+            invites.entrySet().removeIf(e -> e.getValue().party.equals(p.id));
         } else if (p.owner.equals(player)) {
             p.owner = p.members.iterator().next();
         }

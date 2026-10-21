@@ -63,6 +63,8 @@ class TeamViewTest {
         assertTrue(invited.active());
         assertEquals(1, invited.activeInvites(999).size());
         assertEquals(0, invited.activeInvites(1000).size());
+        assertTrue(invited.hasActiveInvites(999));
+        assertFalse(invited.hasActiveInvites(1000));
     }
 
     @Test

@@ -74,6 +74,20 @@ class PartyDataTest {
     }
 
     @Test
+    void theLastMemberLeavingDropsInvitesToThatParty() {
+        PartyData data = new PartyData();
+        data.create(A, PARTY, 0);
+        data.invite(A, B, 0);
+        data.invite(A, C, 0);
+
+        assertEquals(PARTY, data.leave(A, 0));
+        assertNull(data.party(PARTY));
+        assertNull(data.invite(B));
+        assertNull(data.invite(C));
+        assertNull(data.accept(B, 0));
+    }
+
+    @Test
     void savedPartyComesBack() {
         PartyData data = new PartyData();
         data.create(A, PARTY, 0);
