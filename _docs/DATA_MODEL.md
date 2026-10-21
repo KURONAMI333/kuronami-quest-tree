@@ -139,7 +139,7 @@ Action tasks replace FTB Quests' Task Screen by counting the player's own action
 
 `kill` can narrow by `entity`, `entity_tag`, `name` (exact display name) and `nbt` (partial SNBT match).
 
-`fluid` takes `fluid` (an id or `#tag`) and `amount` (mB, default 1000, one bucket). It counts the total matching liquid in the inventory, with a bucket counting as 1000. `energy` takes `amount` (FE) and counts the single inventory stack holding the most energy, not the total. Fabric has no common energy API, so `energy` remains 0 on Fabric; only NeoForge supports it.
+`fluid` takes `fluid` (an id or `#tag`) and `amount` (mB, default 1000, one bucket). It counts the total matching liquid in the inventory, with a bucket counting as 1000. `energy` takes `amount` (FE) and counts the single inventory stack holding the most energy, not the total. It is counted only on NeoForge. Fabric has no common energy API, so an `energy` task there stays at 0, never completes, and the pack validator reports a `WARNING` for it.
 
 Quest Tree has no Task Screen block, so `energy` reads the fullest stack the player carries instead of energy poured into a block. A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
 
@@ -155,6 +155,7 @@ Item counting:
 - Once `count` is reached, the task stays complete (as in FTB Quests). The display shows the number currently held, not the highest number ever held.
 - Counting newly obtained items, or held plus crafted, is not supported: dropping and re-picking, chests, machines and recipes that can be run in both directions create loopholes that cannot be fully anticipated.
 - Use `consume` (delivery) when a quest should require collecting in several batches.
+- `only_from_crafting`: the inventory scan ignores the task, so merely holding the item does not count. A crafted result matching `item` counts the amount produced, up to `count`. This is FTB Quests' option of the same name.
 
 ## Rewards
 
@@ -167,9 +168,18 @@ Every reward also accepts `team`, `auto`, `exclude_from_claim_all`, `ignore_rewa
 - `stage` grants a Pack Stages stage. With `"team": true` the stage is recorded on the team and also given to every online member through Pack Stages; `"remove": true` takes it back. `/quest_tree team_stage add|remove <players> <stage>` does the same from a command.
 - `dummy` grants nothing and exists to show only an icon in the reward list (FTB Quests' dummy reward). An unknown arbitrary reward from an importer keeps its original kind in `original_type`.
 - `currency` takes `amount` and pays through FTB Library's currency hook. With no economy mod registered, it logs once and pays nothing; the quest still completes.
+- `command` runs `command` through the claiming player's command source at `permission_level` (default 2); `silent` is true unless it is set to `false`. At runtime the level is capped by `reward_command_permission_level` in `config/kuronami_quest_tree-server.json` (default 2; the highest is 4), so a pack's level 4 runs at level 2 unless the server owner raises the cap. In the in-game editor, adding a command reward, or changing its command fields or `permission_level`, needs permission level 4; ordinary rewards can be written at level 2.
 - `trophy` (`{"type": "trophy", "trophy": "<ns>:<id>"}`) grants a Kuronami's Trophies trophy by running `trophy award @s <id>`. It is paid once per player, and the imprint is set when received. The screen shows the real trophy in the reward slot before it is claimed. If Kuronami's Trophies is absent, nothing happens.
 - `icon` on any reward shows that icon in the reward list, including for rewards such as `command` that have nothing else to display.
 - `points` adds to the chapter's points (`amount`, default 1). A non-number or a value of 0 or less is treated as 0 both when granting and when revoking; neither side is allowed to go negative alone. Without `chapter` the points go to the node's chapter; with it, to the chapter id (`<ns>:<chapter>`).
+
+### Reward order and claims
+
+A claim is recorded by the reward's position in `rewards`, not by its contents, so changing that list changes which reward is already claimed.
+
+The in-game editor keeps the records in step. When a node's rewards are reordered, inserted or deleted, it matches the reward objects before and after, moves each claim to the new position of the same reward, and drops a claim whose reward was removed. Identical rewards are paired from the front in order. Pending rewards, reward rolls and skill records move with the same mapping.
+
+A hand edit gets no such guarantee. Append a new reward at the end and do not reorder existing ones; a reorder or an insert before an existing reward can make players' claims shift.
 
 ### One-time and revocable rewards
 
@@ -240,6 +250,8 @@ A chapter with a `points` object is a skill chapter.
 Experience and source conditions use Pufferfish's Skills' expression, variables and operations unchanged. The FTB official packs rely heavily on conditional expressions, and translating them into another shape would break during import.
 
 Chapters that write the same `pool` name share experience and points.
+
+`points.stop_when_maxed` (default false) stops the chapter at `level_limit`. Once the level reaches the limit, the chapter no longer reads its sources or accepts experience, and any experience that would have gone past the last level is discarded instead of being saved. Without it, the level still stops at the limit but experience earned at the cap keeps adding to the saved total, which cannot raise the level further.
 
 ### Exchange
 
