@@ -915,7 +915,7 @@ public final class ProgressService {
             }
             PlayerProgress pm = progress(member);
             giveAuto(member, pm, n, false);
-            if (ProgressRules.allRewardsClaimed(pm, n)) {
+            if (ProgressRules.allRewardsClaimed(pm, n, i -> !conditionsMet(member, pm, n.rewards.get(i)))) {
                 pm.claimed.add(n.key);
             }
             others.add(pm);
@@ -1013,7 +1013,8 @@ public final class ProgressService {
 
     /** Marks the node claimed and starts a repeat once its last reward was taken. */
     private static void finishClaim(ServerPlayer player, PlayerProgress p, ProgressModel.Node n) {
-        if (p.claimed.contains(n.key) || !ProgressRules.allRewardsClaimed(p, n)) {
+        if (p.claimed.contains(n.key)
+                || !ProgressRules.allRewardsClaimed(p, n, i -> !conditionsMet(player, p, n.rewards.get(i)))) {
             return;
         }
         p.claimed.add(n.key);
