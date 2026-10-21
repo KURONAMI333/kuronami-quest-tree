@@ -23,6 +23,7 @@ import net.minecraft.world.item.Items;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** Hands out rewards (DATA_MODEL.md "報酬"). Every reward is checked again here; nothing trusts the client. */
 public final class Rewards {
@@ -203,7 +204,10 @@ public final class Rewards {
      */
     static void applyTeamStages(ServerPlayer player, PlayerProgress p) {
         var plan = com.kuronami.questtree.progress.StageSync.plan(p.teamStagesApplied, p.teamStages);
-        for (String stage : plan.remove()) {
+        Set<String> removable = new java.util.HashSet<>(plan.remove());
+        // a stage this player was granted directly is in p.stages as well; losing the team's copy must not take it
+        removable.removeAll(p.stages);
+        for (String stage : removable) {
             ServerCommands.run(player, "pack_stages remove " + player.getGameProfile().getName() + " " + stage, 2, true);
         }
         for (String stage : plan.add()) {

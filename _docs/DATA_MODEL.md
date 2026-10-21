@@ -20,6 +20,14 @@ Pack authors who need more should use a `craft` or `consume` task instead.
   rewards are part of the skill effect and are always applied, even while pay-outs are blocked.
 - `ignore_reward_blocking` / `ignore_blocking` still exempt one reward.
 
+## Stages (review item 6)
+
+`teamStagesApplied` is the record of the team stages this player currently holds; the team's `teamStages` is the
+wanted set. On login the difference is removed or added, and then every stage in the player's own `stages` list is
+added again. That re-add is deliberate: `p.stages` records rewards this player was granted directly, and the stage mod
+may not report them back after a relog. Removing a team stage therefore skips keys that are still in `p.stages`, so a
+rewarded stage is not taken away with the team's copy.
+
 ## Personal-node routing (review item 5)
 
 The saved record keeps the set of node keys that were routed as personal. When the model cannot be read, or reads as
