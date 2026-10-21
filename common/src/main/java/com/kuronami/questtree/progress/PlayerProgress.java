@@ -54,8 +54,10 @@ public final class PlayerProgress {
     public Deque<String> recent = new ArrayDeque<>();
     /** The quest book was handed out on first join (server config, 2026-10-20). */
     private boolean bookGiven;
-    /** Set only on a view: writes of the book flag go to this player's part. */
+    /** Set only on a view: writes of the book flag and reward flag go to this player's part. */
     private PlayerPart part;
+    /** Set only when this is a shared record: an admin blocked every member's rewards. */
+    private boolean rewardsBlocked;
 
     public static final int RECENT_MAX = 20;
 
@@ -105,6 +107,7 @@ public final class PlayerProgress {
         p.teamClaimedRewards = teamClaimedRewards;
         p.recent = part.recent;
         p.bookGiven = part.bookGiven;
+        p.rewardsBlocked = part.rewardsBlocked;
         p.part = part;
         return p;
     }
@@ -119,6 +122,17 @@ public final class PlayerProgress {
 
     public boolean bookGiven() {
         return bookGiven;
+    }
+
+    public boolean rewardsBlocked() {
+        return rewardsBlocked;
+    }
+
+    public void setRewardsBlocked(boolean blocked) {
+        rewardsBlocked = blocked;
+        if (part != null) {
+            part.rewardsBlocked = blocked;
+        }
     }
 
     public void setBookGiven(boolean given) {

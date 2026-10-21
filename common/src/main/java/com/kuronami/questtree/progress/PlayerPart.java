@@ -26,6 +26,8 @@ public final class PlayerPart {
     public final Map<String, Integer> repeats = new HashMap<>();
     public final Map<String, Long> cooldown = new HashMap<>();
     public boolean bookGiven;
+    /** An admin stopped this player from taking rewards; tasks still count and completions still happen. */
+    public boolean rewardsBlocked;
 
     public void event(String kind, String node, long time) {
         recent.addFirst(kind + "|" + node + "|" + time);
@@ -44,6 +46,7 @@ public final class PlayerPart {
         repeats.putAll(other.repeats);
         cooldown.putAll(other.cooldown);
         bookGiven |= other.bookGiven;
+        rewardsBlocked |= other.rewardsBlocked;
     }
 
     public JsonObject toJson() {
@@ -56,6 +59,7 @@ public final class PlayerPart {
         o.add("repeats", ints(repeats));
         o.add("cooldown", longs(cooldown));
         o.addProperty("book_given", bookGiven);
+        o.addProperty("rewards_blocked", rewardsBlocked);
         return o;
     }
 
@@ -82,6 +86,8 @@ public final class PlayerPart {
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             part.cooldown.put(e.getKey(), e.getValue().getAsLong());
         }
+        part.rewardsBlocked = o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
+                && o.get("rewards_blocked").getAsBoolean();
         part.bookGiven = o.has("book_given") && o.get("book_given").isJsonPrimitive()
                 && o.get("book_given").getAsBoolean();
         return part;

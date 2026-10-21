@@ -37,6 +37,7 @@ import java.util.function.BiConsumer;
  * /quest_tree experience &lt;players&gt; &lt;chapter&gt; &lt;n&gt;  add experience to a skill chapter
  * /quest_tree lock|unlock &lt;players&gt; &lt;chapter&gt;    hide/show one chapter for those players
  * /quest_tree team_stage add|remove &lt;players&gt; &lt;stage&gt;  grant/revoke a shared team stage
+ * /quest_tree rewards block|unblock|status &lt;players&gt;  stop/allow taking rewards (tasks still count)
  * </pre>
  * Ids are {@code <namespace>:<chapter>} and {@code <namespace>:<chapter>/<node>}.
  */
@@ -93,6 +94,16 @@ final class PlayerCommands {
                                         .then(Commands.argument("amount", IntegerArgumentType.integer())
                                                 .executes(c -> each(c, (p, pr) -> pr.bonus.merge(ProgressRules.key(chapter(c)),
                                                         IntegerArgumentType.getInteger(c, "amount"), Integer::sum)))))))
+                .then(Commands.literal("rewards").requires(s -> s.hasPermission(2))
+                        .then(Commands.literal("block")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .executes(c -> rewardsBlocked(c, true))))
+                        .then(Commands.literal("unblock")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .executes(c -> rewardsBlocked(c, false))))
+                        .then(Commands.literal("status")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .executes(PlayerCommands::rewardsStatus))))
                 .then(Commands.literal("team_stage").requires(s -> s.hasPermission(2))
                         .then(Commands.literal("add")
                                 .then(Commands.argument("players", EntityArgument.players())
@@ -258,6 +269,35 @@ final class PlayerCommands {
             }
         }
         ProgressRules.eraseChapterData(pr, ProgressService.rules().model(), ch);
+    }
+
+    /** The reward flag belongs to one player, so this does not fold players of one team together like {@link #each}. */
+    private static int rewardsBlocked(CommandContext<CommandSourceStack> c, boolean blocked) throws CommandSyntaxException {
+        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
+        for (ServerPlayer p : players) {
+            PlayerProgress pr = ProgressService.progress(p);
+            pr.setRewardsBlocked(blocked);
+            ProgressStore.get(p.server).setDirty();
+            ProgressService.markDirty(p);
+            ProgressService.flush(p);
+        }
+        c.getSource().sendSuccess(() -> Component.translatableWithFallback(
+                blocked ? "commands.kuronami_quest_tree.rewards_blocked" : "commands.kuronami_quest_tree.rewards_unblocked",
+                blocked ? "Rewards blocked for %s players" : "Rewards allowed for %s players", players.size()), true);
+        return players.size();
+    }
+
+    private static int rewardsStatus(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
+        for (ServerPlayer p : players) {
+            boolean blocked = ProgressService.progress(p).rewardsBlocked();
+            Component state = Component.translatableWithFallback(blocked
+                            ? "commands.kuronami_quest_tree.rewards_state_blocked"
+                            : "commands.kuronami_quest_tree.rewards_state_open", blocked ? "blocked" : "open");
+            p.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.rewards_status",
+                    "%s: rewards %s", p.getGameProfile().getName(), state));
+        }
+        return players.size();
     }
 
     private static void teamStage(ServerPlayer p, PlayerProgress pr, String stage, boolean add) {

@@ -31,11 +31,14 @@ public final class Rewards {
     }
 
     static void give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
-        if (!ProgressService.conditionsMet(player, p, rw)) {
+        if (!ProgressService.conditionsMet(player, p, rw) || blocked(p, rw)) {
             return;
         }
         try {
             switch (ProgressService.type(rw)) {
+                case "dummy" -> {
+                    // FTBQ's dummy reward: it exists to make a quest show a reward icon and does nothing
+                }
                 case "item" -> item(player, rw);
                 case "xp" -> player.giveExperiencePoints(intOf(rw, "amount", 0));
                 case "xp_levels" -> player.giveExperienceLevels(intOf(rw, "amount", 0));
@@ -63,6 +66,29 @@ public final class Rewards {
         } catch (RuntimeException ex) {
             Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
         }
+    }
+
+    /**
+     * An admin can stop a player from taking rewards ({@code /quest_tree rewards block}); tasks still count. A reward
+     * with {@code "ignore_reward_blocking"} (or {@code "ignore_blocking"}) is exempt, so a pack can keep a story item
+     * or a command flowing while the player is being held.
+     */
+    static boolean blocked(PlayerProgress p, JsonObject rw) {
+        return p.rewardsBlocked() && !ProgressModel.boolOf(rw, "ignore_reward_blocking")
+                && !ProgressModel.boolOf(rw, "ignore_blocking");
+    }
+
+    /** Whether blocking keeps this node from being taken at all (any reward without the exemption). */
+    static boolean blockedForNode(PlayerProgress p, ProgressModel.Node n) {
+        if (!p.rewardsBlocked()) {
+            return false;
+        }
+        for (JsonObject rw : n.rewards) {
+            if (!blocked(p, rw)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

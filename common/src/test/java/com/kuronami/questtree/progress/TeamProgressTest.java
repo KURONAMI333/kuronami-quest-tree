@@ -115,6 +115,20 @@ class TeamProgressTest {
     }
 
     @Test
+    void rewardBlockingBelongsToOnePlayerAndSurvivesReload() {
+        TeamProgress team = new TeamProgress(TEAM);
+        team.view(A).setRewardsBlocked(true);
+
+        assertTrue(team.view(A).rewardsBlocked());
+        assertFalse(team.view(B).rewardsBlocked());
+        assertTrue(TeamProgress.parse(team.toJson().toString()).view(A).rewardsBlocked());
+        assertFalse(TeamProgress.parse(team.toJson().toString()).view(B).rewardsBlocked());
+
+        JsonObject synced = ProgressJson.write(team.view(A));
+        assertTrue(ProgressJson.read(synced).rewardsBlocked());
+    }
+
+    @Test
     void teamStagesAreSharedAndSurviveJoinLeaveAndReload() {
         TeamProgress team = new TeamProgress(TEAM);
         team.view(A).teamStages.add("chapter/two");

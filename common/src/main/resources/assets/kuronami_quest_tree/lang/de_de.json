@@ -90,5 +90,10 @@
   "task.kuronami_quest_tree.dim.minecraft.the_end": "das Ende",
   "screen.kuronami_quest_tree.search": "Suchen",
   "screen.kuronami_quest_tree.unlock_path": "%s freischalten (%s)",
-  "hud.kuronami_quest_tree.held": "Im Besitz %s"
+  "hud.kuronami_quest_tree.held": "Im Besitz %s",
+  "commands.kuronami_quest_tree.rewards_blocked": "Belohnungen für %s Spieler gesperrt",
+  "commands.kuronami_quest_tree.rewards_unblocked": "Belohnungen für %s Spieler freigegeben",
+  "commands.kuronami_quest_tree.rewards_status": "%s: Belohnungen %s",
+  "commands.kuronami_quest_tree.rewards_state_blocked": "gesperrt",
+  "commands.kuronami_quest_tree.rewards_state_open": "offen"
 }

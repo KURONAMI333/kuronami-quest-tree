@@ -222,5 +222,10 @@
   "screen.kuronami_quest_tree.team.completed": "Team completed",
   "toast.kuronami_quest_tree.complete_by": "%s completed",
   "commands.kuronami_quest_tree.party.declined": "Invitation declined",
-  "commands.kuronami_quest_tree.party.target_unknown": "That player is not online"
+  "commands.kuronami_quest_tree.party.target_unknown": "That player is not online",
+  "commands.kuronami_quest_tree.rewards_blocked": "Rewards blocked for %s players",
+  "commands.kuronami_quest_tree.rewards_unblocked": "Rewards allowed for %s players",
+  "commands.kuronami_quest_tree.rewards_status": "%s: rewards %s",
+  "commands.kuronami_quest_tree.rewards_state_blocked": "blocked",
+  "commands.kuronami_quest_tree.rewards_state_open": "open"
 }

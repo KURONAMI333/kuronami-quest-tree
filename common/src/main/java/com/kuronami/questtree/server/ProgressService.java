@@ -524,7 +524,7 @@ public final class ProgressService {
                 }
             }
             case "take" -> {
-                if (n != null && r.take(p, n)) {
+                if (n != null && !Rewards.blockedForNode(p, n) && r.take(p, n)) {
                     Rewards.giveSkill(player, p, n, p.taken.getOrDefault(n.key, 1) - 1);
                     event(player, p, "take", n.key);
                 }
@@ -935,7 +935,8 @@ public final class ProgressService {
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
             String key = n.key + "#" + i;
-            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
+            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, rw)
+                    || Rewards.blocked(p, rw)) {
                 continue;
             }
             if (ProgressModel.boolOf(rw, "team") && !actor) {
@@ -962,7 +963,8 @@ public final class ProgressService {
         }
         for (int i = 0; i < n.rewards.size(); i++) {
             String key = n.key + "#" + i;
-            if (p.rewardClaimed(key) || !conditionsMet(player, p, n.rewards.get(i))) {
+            if (p.rewardClaimed(key) || !conditionsMet(player, p, n.rewards.get(i))
+                    || Rewards.blocked(p, n.rewards.get(i))) {
                 continue;
             }
             Rewards.give(player, p, n, n.rewards.get(i), choice);
@@ -982,7 +984,7 @@ public final class ProgressService {
             return;
         }
         JsonObject rw = n.rewards.get(index);
-        if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw)) {
+        if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw) || Rewards.blocked(p, rw)) {
             return;
         }
         Rewards.give(player, p, n, rw, choice);

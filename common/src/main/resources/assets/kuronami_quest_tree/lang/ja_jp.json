@@ -222,5 +222,10 @@
   "screen.kuronami_quest_tree.team.completed": "チームで完了",
   "toast.kuronami_quest_tree.complete_by": "%s が完了",
   "commands.kuronami_quest_tree.party.declined": "招待を辞退しました",
-  "commands.kuronami_quest_tree.party.target_unknown": "そのプレイヤーはオンラインではありません"
+  "commands.kuronami_quest_tree.party.target_unknown": "そのプレイヤーはオンラインではありません",
+  "commands.kuronami_quest_tree.rewards_blocked": "%s 人の報酬受け取りを止めました",
+  "commands.kuronami_quest_tree.rewards_unblocked": "%s 人の報酬受け取りを再開しました",
+  "commands.kuronami_quest_tree.rewards_status": "%s: 報酬は %s",
+  "commands.kuronami_quest_tree.rewards_state_blocked": "停止中",
+  "commands.kuronami_quest_tree.rewards_state_open": "受け取り可"
 }
