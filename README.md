@@ -57,8 +57,8 @@ Team progress is saved in `<world>/data/kuronami_quest_tree.dat`.
 
 | Key | |
 |---|---|
-| **U** | Open or close the screen |
-| **Y** | Show or hide pinned quests at the side of the game screen |
+| **K** | Open or close the screen |
+| **J** | Show or hide pinned quests at the side of the game screen |
 
 Both can be rebound in Controls.
 
