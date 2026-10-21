@@ -107,6 +107,8 @@ public final class ProgressService {
         ProgressStore store = ProgressStore.get(player.server);
         // an empty model is an unreadable or empty pack; only a loaded one may move personal progress to shared
         store.migratePersonalNodes(PlayerProgress.personalNodesSnapshot(), ProgressData.model().nodes.isEmpty());
+        // an old save has no paid-skill record: fill it before any revoke, respec or re-application reads it
+        store.migratePaidSkillRewards(ProgressData.model());
         UUID before = store.teamIdOf(player.getUUID());
         UUID current = TeamResolver.teamId(player.server, player.getUUID());
         PlayerProgress p = store.view(player.server, player.getUUID());
@@ -600,15 +602,18 @@ public final class ProgressService {
             case "exchange" -> {
                 // the skills screen's buy button: spend vanilla levels for one point (DATA_MODEL points.exchange)
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
-                if (c != null && TeamResolver.isOwner(player.server, player.getUUID())) {
+                if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
+                    refuseSharedAction(player);
+                } else if (c != null) {
                     exchange(player, p, c);
                 }
             }
             case "respec" -> {
                 // the skills screen's respec button: give back every point taken in the chapter, for points.respec.cost
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
-                if (c != null && TeamResolver.isOwner(player.server, player.getUUID())
-                        && PlayerCommands.respec(player, p, c, true)) {
+                if (c != null && !TeamResolver.isOwner(player.server, player.getUUID())) {
+                    refuseSharedAction(player);
+                } else if (c != null && PlayerCommands.respec(player, p, c, true)) {
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
                 }
@@ -617,6 +622,20 @@ public final class ProgressService {
         }
         recheck(player, p);
         flush(player);
+    }
+
+    /**
+     * Tells the player why a shared skill action did nothing. The server refuses a non-owner silently, which on a solo
+     * world whose FTB Teams manager failed to load looks like a dead button and gives nothing to report (2026-10-22
+     * review).
+     */
+    private static void refuseSharedAction(ServerPlayer player) {
+        boolean known = !TeamResolver.managedByFtbTeams()
+                || TeamResolver.teamOwner(player.server, TeamResolver.teamId(player.server, player.getUUID())) != null;
+        player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                known ? "message.kuronami_quest_tree.team_owner_only" : "message.kuronami_quest_tree.owner_unknown",
+                known ? "Only the team owner can use this."
+                        : "The team owner could not be read, so this is refused."));
     }
 
     /**
@@ -1005,7 +1024,9 @@ public final class ProgressService {
             // the team's quest started over: the other members' marks for this round go with it
             for (PlayerProgress pm : others) {
                 pm.claimed.remove(n.key);
-                pm.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+                // also the other members' per-reward marks and table rolls, keeping the ones a pending table still
+                // needs (2026-10-22 review)
+                pm.clearRewardMarks(n.key);
             }
         }
     }

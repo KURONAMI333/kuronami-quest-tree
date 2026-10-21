@@ -451,5 +451,7 @@
   "block.kuronami_quest_tree.quest_barrier": "Puerta de misión",
   "commands.kuronami_quest_tree.block_given": "Entregados %s bloque(s) para %s",
   "message.kuronami_quest_tree.currency_failed": "No se pudo pagar la recompensa de moneda; queda sin reclamar.",
-  "message.kuronami_quest_tree.choice_blocked": "Esta recompensa no se puede recoger mientras las recompensas estén bloqueadas: su elección no se guarda."
+  "message.kuronami_quest_tree.choice_blocked": "Esta recompensa no se puede recoger mientras las recompensas estén bloqueadas: su elección no se guarda.",
+  "message.kuronami_quest_tree.team_owner_only": "Solo el propietario del equipo puede usar esto.",
+  "message.kuronami_quest_tree.owner_unknown": "No se pudo leer el propietario del equipo, así que se rechaza."
 }

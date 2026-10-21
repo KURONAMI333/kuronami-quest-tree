@@ -36,6 +36,8 @@ public final class PlayerPart {
     public boolean bookGiven;
     /** An admin stopped this player from taking rewards; tasks still count and completions still happen. */
     public boolean rewardsBlocked;
+    /** Skill pending keys dropped while loading an old save, for the loader to log (never saved). */
+    public int droppedSkillPending;
 
     public void event(String kind, String node, long time) {
         recent.addFirst(kind + "|" + node + "|" + time);
@@ -116,6 +118,14 @@ public final class PlayerPart {
             // saves before 2026-10-21 stored each pending reward once
             for (JsonElement e : arr(o, "pending_rewards")) {
                 part.pendingRewards.merge(e.getAsString(), 1, Integer::sum);
+            }
+        }
+        // skill rewards are never blocked any more; keys an older save kept are dropped instead of paid at login
+        var pendingKeys = part.pendingRewards.keySet().iterator();
+        while (pendingKeys.hasNext()) {
+            if (RewardLedger.isSkillPending(pendingKeys.next())) {
+                pendingKeys.remove();
+                part.droppedSkillPending++;
             }
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {

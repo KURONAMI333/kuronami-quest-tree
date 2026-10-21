@@ -451,5 +451,7 @@
   "block.kuronami_quest_tree.quest_barrier": "任务门",
   "commands.kuronami_quest_tree.block_given": "已给予%s个方块，用于%s",
   "message.kuronami_quest_tree.currency_failed": "无法发放货币奖励，奖励将保持未领取状态。",
-  "message.kuronami_quest_tree.choice_blocked": "奖励被禁止期间无法领取此奖励：所做的选择不会保留。"
+  "message.kuronami_quest_tree.choice_blocked": "奖励被禁止期间无法领取此奖励：所做的选择不会保留。",
+  "message.kuronami_quest_tree.team_owner_only": "只有队伍所有者才能使用。",
+  "message.kuronami_quest_tree.owner_unknown": "无法读取队伍所有者，因此已拒绝。"
 }

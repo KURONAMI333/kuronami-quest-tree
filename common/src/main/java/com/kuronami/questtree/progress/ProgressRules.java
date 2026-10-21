@@ -62,10 +62,12 @@ public final class ProgressRules {
             if (got >= max) {
                 return State.DONE;
             }
-            if (!unlocked(p, n)) {
+            if (!reachable(p, n)) {
                 return State.LOCKED;
             }
-            if (availablePoints(p, n.chapter) >= Math.max(0, n.cost)) {
+            // short of required_points or the node's cost: still a skill that can be aimed for, so it is shown as
+            // available; take() is what refuses it (2026-10-22 review)
+            if (unlocked(p, n) && availablePoints(p, n.chapter) >= Math.max(0, n.cost)) {
                 return State.CLAIM;
             }
             // partly ranked nodes are not finished: they still need points (and nothingLeft must not stop experience)
@@ -145,33 +147,42 @@ public final class ProgressRules {
      * spending must not lock the next rank (2026-10-22 review).
      */
     public boolean unlocked(PlayerProgress p, ProgressModel.Node n) {
-        if (!modsLoaded(n.requiredMods)) {
+        if (!reachable(p, n)) {
             return false;
         }
-        boolean reachable;
-        // Pufferfish's Skills roots are available from the start even though connections also point back at them
-        if (n.requires.isEmpty() || n.root) {
-            reachable = true;
-        } else {
-            boolean started = n.requireMode.endsWith("started");
-            int met = 0;
-            for (String r : n.requires) {
-                if (satisfied(p, r, started)) {
-                    met++;
-                }
-            }
-            if (n.requireMin > 0) {
-                reachable = met >= n.requireMin;
-            } else {
-                reachable = n.requireMode.startsWith("any") || n.requireMode.equals("one")
-                        ? met > 0 : met == n.requires.size();
-            }
-        }
-        if (!reachable || p.taken.getOrDefault(n.key, 0) > 0) {
-            return reachable;
+        if (p.taken.getOrDefault(n.key, 0) > 0) {
+            return true;
         }
         return availablePoints(p, n.chapter) >= Math.max(0, n.requiredPoints)
                 && p.spent.getOrDefault(key(n.chapter), 0) >= Math.max(0, n.requiredSpentPoints);
+    }
+
+    /**
+     * Whether the connection graph (and the installed mods) let the node be seen at all. The point gates of
+     * {@link #unlocked} are kept out: a skill short of {@code required_points} is drawn as available rather than
+     * locked, and only {@link #take} still refuses it (2026-10-22 review). Otherwise a skill that is merely waiting
+     * for points looks like one whose requirements are missing.
+     */
+    public boolean reachable(PlayerProgress p, ProgressModel.Node n) {
+        if (!modsLoaded(n.requiredMods)) {
+            return false;
+        }
+        // Pufferfish's Skills roots are available from the start even though connections also point back at them
+        if (n.requires.isEmpty() || n.root) {
+            return true;
+        }
+        boolean started = n.requireMode.endsWith("started");
+        int met = 0;
+        for (String r : n.requires) {
+            if (satisfied(p, r, started)) {
+                met++;
+            }
+        }
+        if (n.requireMin > 0) {
+            return met >= n.requireMin;
+        }
+        return n.requireMode.startsWith("any") || n.requireMode.equals("one")
+                ? met > 0 : met == n.requires.size();
     }
 
     /** Pufferfish's Skills drops a skill whose required mods are not all installed. */
@@ -562,11 +573,19 @@ public final class ProgressRules {
         return Math.max(0, amount.getAsInt());
     }
 
-    /** Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into). */
+    /**
+     * Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into).
+     * Only the rewards recorded as paid are taken back, and each record goes with them: a reward whose conditions did
+     * not hold at take time was never paid, and taking the rank again after a respec pays it then. Conditions are not
+     * judged here (2026-10-22 review).
+     */
     public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken) {
         for (int rank = 0; rank < Math.max(0, taken); rank++) {
-            for (JsonObject rw : rewardsOfRank(n, rank)) {
-                if (isPoints(rw)) {
+            java.util.List<JsonObject> list = rewardsOfRank(n, rank);
+            for (int index = 0; index < list.size(); index++) {
+                JsonObject rw = list.get(index);
+                if (isPoints(rw)
+                        && p.paidSkillRewards.remove(SkillRewardPolicy.paidKey(n, rank, index))) {
                     p.bonus.merge(pointsTarget(n, rw), -pointsAmount(rw), Integer::sum);
                 }
             }
@@ -587,7 +606,8 @@ public final class ProgressRules {
         return target == null ? c : key(target);
     }
 
-    private static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
+    /** The rewards of one rank, read the same way paying and revoking do. */
+    static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
         if (n.ranks > 0 && n.json.has("ranks") && n.json.get("ranks").isJsonArray()) {
             var ranks = n.json.getAsJsonArray("ranks");
             if (!ranks.isEmpty()) {
@@ -676,20 +696,26 @@ public final class ProgressRules {
         return new RespecPlan(RespecRefusal.ALLOWED, "");
     }
 
-    /** The screen's yes/no view of {@link #respecPlan}. */
+    /** The screen's and the server's yes/no view of {@link #respecPlan}. */
     public boolean canRespec(PlayerProgress p, ProgressModel.Chapter c) {
         return respecPlan(p, c).allowed();
     }
 
-    /** The points the taken ranks paid, grouped by the pool that received them. */
+    /**
+     * The points the taken ranks paid, grouped by the pool that received them. Only recorded rewards count: one that
+     * was never paid would otherwise refuse a respec with enough points, and then take back points it never paid
+     * (2026-10-22 review).
+     */
     private Map<String, Integer> pointsRewardsByPool(PlayerProgress p, ProgressModel.Chapter c) {
         Map<String, Integer> paid = new LinkedHashMap<>();
         for (ProgressModel.Node n : c.nodes.values()) {
             int taken = p.taken.getOrDefault(n.key, 0);
             for (int rank = 0; rank < taken; rank++) {
-                for (JsonObject rw : rewardsOfRank(n, rank)) {
-                    if (isPoints(rw)) {
-                        paid.merge(pointsTarget(n, rw), Math.max(0, intOf(rw, "amount", 1)), Integer::sum);
+                java.util.List<JsonObject> list = rewardsOfRank(n, rank);
+                for (int index = 0; index < list.size(); index++) {
+                    JsonObject rw = list.get(index);
+                    if (isPoints(rw) && p.paidSkillRewards.contains(SkillRewardPolicy.paidKey(n, rank, index))) {
+                        paid.merge(pointsTarget(n, rw), pointsAmount(rw), Integer::sum);
                     }
                 }
             }
@@ -936,9 +962,18 @@ public final class ProgressRules {
                 : per.isJsonObject() && per.getAsJsonObject().has("data") && per.getAsJsonObject().getAsJsonObject("data").has("expression")
                 ? per.getAsJsonObject().getAsJsonObject("data").get("expression").getAsString()
                 : "100";
-        Expression e = curves.computeIfAbsent(c.id + "|" + expr, k -> Expression.parse(expr));
-        double value = e.eval(Map.of("level", (double) level));
-        return Double.isFinite(value) ? Math.max(1, Math.round(value)) : value;
+        // a pack's formula is data, not code: a huge, deeply nested or broken one falls back to the default cost the
+        // same way the exchange curve does, instead of throwing or leaving the player stuck at their level
+        if (Expression.tooComplex(expr)) {
+            return 100;
+        }
+        try {
+            Expression e = curves.computeIfAbsent(c.id + "|" + expr, k -> Expression.parse(expr));
+            double value = e.eval(Map.of("level", (double) level));
+            return Double.isFinite(value) ? Math.max(1, Math.round(value)) : 100;
+        } catch (RuntimeException | StackOverflowError ex) {
+            return 100;
+        }
     }
 
     /**
@@ -956,7 +991,7 @@ public final class ProgressRules {
         int gained = 0;
         while (lvl < limit) {
             double need = experienceForLevel(c, lvl);
-            // a curve that is not a finite number (pack data error) stops levelling instead of looping forever
+            // last guard: a non-finite curve must stop levelling instead of looping forever (the reader falls back)
             if (!Double.isFinite(need) || x < need) {
                 break;
             }

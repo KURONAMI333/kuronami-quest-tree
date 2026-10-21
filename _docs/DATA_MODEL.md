@@ -1,6 +1,6 @@
 ---
 name: progression-data-model
-description: 汎用進行MODのデータの形（データパックの JSON）。FTB Quests と Pufferfish's Skills の両方を1つの型で表し、インポーターの変換先になる。実パック6本の使用実態（PACK_PORT_REPORT.md）から必要な項目を決めた。
+description: 汎用進行MODのデータの形（データパックの JSON）。FTB Quests と Pufferfish's Skills の両方を1つの型で表し、インポーターの変換先になる。実パック6本の使用実態から必要な項目を決めた。
 updated: 2026-10-22
 ---
 
@@ -8,7 +8,7 @@ updated: 2026-10-22
 
 置き場はデータパックの `data/<namespace>/progression/`。サーバーが読み、クライアントへ送る。文言は言語ファイル（`data/<namespace>/progression/lang/<locale>.json`）に置く。
 
-決め方: 6本のパック（ATM10・FTB Skies 2・FTB Evolution・Prominence II・DarkRPG・Mystic Horizons）の定義を全部数え、使われている項目はすべて表せるようにした。使用数は `PACK_PORT_REPORT.md`。
+決め方: 6本のパック（ATM10・FTB Skies 2・FTB Evolution・Prominence II・DarkRPG・Mystic Horizons）の定義を全部数え、使われている項目はすべて表せるようにした。
 
 ## 1つの型にまとめる
 
@@ -143,8 +143,6 @@ data/<ns>/progression/
 - 章にも `requires`（Pack Stages の段階など）を付けられる。条件を満たさない人には章ごと見えない。
 - `shared: false` は、そのノードの完了・タスクの数え上げ・繰り返し・クールダウンをチームではなくプレイヤーごとに持つ。報酬の受け取りは元からプレイヤーごと（`team` を書いた報酬だけチームで1回）。省略すると従来どおりチーム共有。
 
-採った要望の出所は `REQUESTS.md`。
-
 ## タスク（`tasks[].type`）
 
 `item`（count・consume・match_components・only_from_crafting）、`checkmark`、`kill`、`advancement`、`structure`、`biome`、`dimension`、`location`、`observation`、`stat`、`xp`、`fluid`、`energy`、`break`、`stage`、`custom`、`craft`、`use_item`、`right_click_block`、`interact_entity`、`tame`、`breed`、`ride`、`pickup`、`interaction`。どれも `optional`・`icon`・`title`・`conditions` を持てる。
@@ -171,7 +169,7 @@ data/<ns>/progression/
 
 `dummy` は何も渡さない。報酬欄にアイコンだけを出したいとき（FTB Quests の dummy 報酬）に使う。取り込み時に未知の任意報酬だった場合は、元の種類を `original_type` に残す。
 
-`points` の `amount` は章のポイントに足す（省略時 1）。数値でない・0 以下なら、付与でも取り消しでも 0 として扱う（片方だけ負をクランプしない）。`chapter` を書かなければそのノードの章、書けばその章の ID（`<ns>:<chapter>`）に入る。画面とコマンドの振り直しは、取った段の `points` 報酬を払い先の章のボーナスから一度だけ引く。`xp`・`xp_levels`・`item`・`table`・`advancement`・`command` は、同じ人には同じ段を一度しか渡さない（振り直して取り直しても二重にならない）。ただし `lock_command` を持つ `command` は例外で、取り直すたびに `command` を実行する（振り直しで `lock_command` が走った後、もう一度解錠する必要があるため）。
+`points` の `amount` は章のポイントに足す（省略時 1）。数値でない・0 以下なら、付与でも取り消しでも 0 として扱う（片方だけ負をクランプしない）。`chapter` を書かなければそのノードの章、書けばその章の ID（`<ns>:<chapter>`）に入る。画面とコマンドの振り直しは、取った段の `points` 報酬のうち、払った記録にあるものだけを払い先の章のボーナスから一度だけ引く。取得時に条件を満たさず払わなかった `points` は記録が無いので、振り直しの判定にも取り消しにも数えない。`xp`・`xp_levels`・`item`・`table`・`advancement`・`command`・`currency`・`custom` は、同じ人には同じ段を一度しか渡さない（振り直して取り直しても二重にならない。`custom` はアドオンのイベントも一度だけ）。ただし `lock_command` を持つ `command` は例外で、取り直すたびに `command` を実行する（振り直しで `lock_command` が走った後、もう一度解錠する必要があるため）。払った記録はチームに1つ、報酬ごとのキー `<node>#<rank>#<index>`（`paid_skill_rewards`）で持ち、チームのだれが取っても1つ。払えた時だけ記録し、条件未達・支払い失敗・受け取りを断った選択式テーブルでは記録しないので、次の取得で払える。振り直しで取り消せる報酬（`points`・`tag`・`attribute`・`lock_command` 付き `command`）は、この記録にあるものだけを1回ずつ取り消して記録を消す。一回限りの報酬は取り消さず記録も残す。旧セーブ（`paid_skill_rewards` キーが無いチーム）は初回の読み込みで一度だけ移行し、移行後は空でもキーを書くので、新しい版のセーブを再び「全部払った」扱いにしない。移行では旧形式の印（`<node>#skill<rank>`・`<node>#skill<rank>#<index>`）を記録に変えたうえで、取得済みのスキルノードのその段までの取り消せる報酬（`points`・`tag`・`attribute`・`lock_command` 付き `command`）を全部記録する（印が1つだけでもノード全体を対象にする）。記録が1つも無いノードは、その段までの報酬を全部「払った」として記録する（この版より前は条件が無く、当時は全部払われていた）。旧セーブの移行は印を「払った」と読むので、印はあるが実際には払われていなかった一回限りの報酬（当時の失敗や受け取り停止など）は、取り直しでもう一度払われ得る（既知の差、2026-10-22）。章ロック（`chapterOpen` を false）は効果だけを取り消し、`points`・`attribute`・`tag`・`lock_command` 付き `command` の記録は残す。アンロックは、その記録にある `attribute`・`tag`・`lock_command` 付き `command` を全メンバーへ戻す（記録の無い報酬は戻さない）。
 
 `currency` は `amount` を取り、FTB Library の通貨フックに登録された経済 MOD から支払う。FTB Library か経済 MOD が無ければログに1度だけ出して何も渡さない（クエストは完了する）。
 
@@ -182,6 +180,8 @@ data/<ns>/progression/
 タスクにも報酬にも `"conditions": [...]` を書ける。全部満たしたときだけ、タスクは数えられ、報酬は渡される。条件を満たさない報酬は未受取のまま残り、あとで満たせば受け取れる。
 
 判定は1つの入口だけを通る。組み込みの5種類と、他 MOD・KubeJS が登録した種類を同じ配列に混ぜて書ける。
+
+条件は取得時に1回だけ評価する。報酬の取り消し（振り直し・リセット）とログイン時の再付与は、その時に払った記録（`paid_skill_rewards`）に従い、条件を評価し直さない。取得時に満たさず渡していない報酬は記録が無いので、取り消しでも再付与でも触らない。スキルの `points` 報酬も、記録にある分だけを振り直しの判定と取り消しに数える（2026-10-22）。スキル報酬の条件は取った人で判定し、効果（`attribute`・`tag` など）はチームの全員に付く。記録はチーム共有（2026-10-22）。
 
 ```json
 {"type": "stage", "stage": "chapter/one"}
@@ -279,22 +279,27 @@ Pack authors who need more should use a `craft` or `consume` task instead.
 
 ### Reward blocking (review item 6)
 
-`/quest_tree rewards block` stops the **pay-out of rewards**, not the quest or skill itself.
+`/quest_tree rewards block` stops the **pay-out of quest rewards**, not the quest or skill itself.
 
 - Tasks, node completion, quest claims and taking a skill continue while rewards are blocked.
-- A blocked reward is recorded as taken for its node and kept in the player's pending list. When the block is lifted,
-  the pending rewards are paid in their original order.
+- Only quest rewards are affected. Skill node rewards (the take, a respec, a rank, and a member's own command or tag)
+  are never blocked and never enter the pending list; taking a skill is never stopped (2026-10-22).
+- A blocked quest reward is recorded as taken for its node and kept in the player's pending list. When the block is
+  lifted, the pending rewards are paid in their original order.
 - A repeatable quest starting its next round keeps the pending rewards of the round it just claimed, so a blocked
   pay-out is still owed afterwards. A reset of the node forgets them, together with the node's saved reward rolls.
-- The block is judged per reward, including the rewards of the rank being taken (`rewardsOfRank`). `attribute`
-  rewards are part of the skill effect and are always applied, even while pay-outs are blocked.
-- `ignore_reward_blocking` / `ignore_blocking` still exempt one reward.
+- The block is judged per quest reward. `attribute` rewards are part of the skill effect and are always applied, even
+  while quest pay-outs are blocked.
+- `ignore_reward_blocking` / `ignore_blocking` still exempt one quest reward.
+- Old saves may still hold skill pending keys (a rank of 0 or more). Loading drops them and logs the count instead of
+  paying them: a skill taken while blocked already had its effect, and login re-applies its attributes.
 
 ### Blocking rewards (review item 8)
 
 `/quest_tree rewards block|unblock` accepts a player who is offline (a name from the server's profile cache). The flag
-and the pending rewards live in that player's own record. Lifting the block pays immediately for an online player;
-for an offline player the pending rewards are paid at the next login, where a still-blocked flag keeps them waiting.
+and the pending quest rewards live in that player's own record. Lifting the block pays immediately for an online
+player; for an offline player the pending quest rewards are paid at the next login, where a still-blocked flag keeps
+them waiting.
 
 ### Stages (review item 6)
 

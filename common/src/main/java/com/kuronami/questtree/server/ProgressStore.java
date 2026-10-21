@@ -31,6 +31,8 @@ public final class ProgressStore extends SavedData {
     private TeamStoreData data = new TeamStoreData();
     /** The file was version 1 when it was read: save it as version 2 and leave a backup of the old one. */
     private boolean loadedLegacy;
+    /** The model the old-save paid-skill migration already ran for; a reload runs it again over that model. */
+    private com.kuronami.questtree.data.ProgressModel paidSkillModel;
 
     public static ProgressStore get(MinecraftServer server) {
         ProgressStore store = server.overworld().getDataStorage().computeIfAbsent(
@@ -45,6 +47,23 @@ public final class ProgressStore extends SavedData {
 
     public TeamProgress team(UUID id) {
         return data.team(id);
+    }
+
+    /**
+     * Fills the paid-skill record of old saves, once per team: a team loaded without the {@code paid_skill_rewards}
+     * key is migrated and the key is written by the next save, so a new save is never filled a second time
+     * (2026-10-22 review). A save from before the record existed has no way to say which reward was paid, so its taken
+     * skill nodes are filled as fully paid.
+     */
+    public void migratePaidSkillRewards(com.kuronami.questtree.data.ProgressModel model) {
+        if (model == paidSkillModel || model == null || model.nodes.isEmpty()) {
+            // an empty pack is not proof that no skill was taken; do not remember it as migrated
+            return;
+        }
+        paidSkillModel = model;
+        if (data.migratePaidSkillRewards(model)) {
+            setDirty();
+        }
     }
 
     /** Routes saved values if the data model changed which nodes are personal. */
@@ -171,6 +190,15 @@ public final class ProgressStore extends SavedData {
             }
             root.add("migrations", migrations);
             store.data = TeamStoreData.fromJson(root);
+            int droppedSkillPending = 0;
+            for (TeamProgress team : store.data.teams.values()) {
+                for (PlayerPart part : team.players.values()) {
+                    droppedSkillPending += part.droppedSkillPending;
+                }
+            }
+            if (droppedSkillPending > 0) {
+                Constants.LOG.info("Dropped {} pending skill rewards from an old save; skill rewards are paid on the spot", droppedSkillPending);
+            }
             return store;
         }
 

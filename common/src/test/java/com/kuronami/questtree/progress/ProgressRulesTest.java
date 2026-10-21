@@ -385,6 +385,7 @@ class ProgressRulesTest {
         p.spent.put(ProgressRules.key(a), 1);
         p.bonus.put(ProgressRules.key(m.chapters.get("s:b")), 2);
         p.spent.put(ProgressRules.key(m.chapters.get("s:b")), 4);
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(a.nodes.get("n"), 0, 0));
         ProgressRules.RespecPlan refused = rules.respecPlan(p, a);
         assertFalse(refused.allowed(), "the target pool cannot give the paid points back");
         assertEquals(ProgressRules.RespecRefusal.NOT_ENOUGH_POINTS, refused.refusal());
@@ -442,5 +443,38 @@ class ProgressRulesTest {
         assertEquals(p.claimedRewards, back.claimedRewards);
         assertTrue(back.bookGiven());
         assertFalse(ProgressJson.read(new JsonObject()).bookGiven(), "older saves start without the gift");
+    }
+
+    /**
+     * A skill that is reachable but short of required points is drawn as available rather than locked, because it is
+     * only waiting for points to be earned; taking it is still refused (2026-10-22 review).
+     */
+    @Test
+    void aSkillShortOfRequiredPointsIsOpenButCannotBeTaken() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {"start": 0}, "nodes": {
+                  "n": {"cost": 1, "requires": {"points": 3}}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = m.chapters.get("s:a").nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(ProgressRules.State.OPEN, rules.state(p, n));
+        assertFalse(rules.take(p, n), "the point gate still refuses the take");
+        p.bonus.put(ProgressRules.key(n.chapter), 3);
+        assertEquals(ProgressRules.State.CLAIM, rules.state(p, n));
+        assertTrue(rules.take(p, n));
+    }
+
+    /** A malformed or non-finite experience formula falls back to the default instead of throwing or stalling (B6). */
+    @Test
+    void aBrokenExperienceCurveFallsBackToTheDefault() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {
+                  "s:a": {"points": {"per_level": {"type": "expression", "data": {"expression": "level +"}}}},
+                  "s:b": {"points": {"per_level": {"type": "expression", "data": {"expression": "1/0"}}}}}}
+                """).getAsJsonObject());
+        ProgressRules r = new ProgressRules(m);
+        assertEquals(100.0, r.experienceForLevel(m.chapters.get("s:a"), 3), "a syntax error uses the default");
+        assertEquals(100.0, r.experienceForLevel(m.chapters.get("s:b"), 3), "a non-finite curve uses the default");
     }
 }

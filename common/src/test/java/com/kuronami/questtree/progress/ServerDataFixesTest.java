@@ -15,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Regression checks for the 2026-10-20 server data review (one per finding). */
 class ServerDataFixesTest {
 
+    private static final java.util.UUID A = java.util.UUID.fromString("00000000-0000-0000-0000-00000000000a");
+
     private static ProgressModel model(String json) {
         return ProgressModel.of(JsonParser.parseString(json).getAsJsonObject());
     }
@@ -331,6 +333,23 @@ class ServerDataFixesTest {
         assertEquals(Integer.MAX_VALUE, ProgressRules.exchangeOf(a).limit());
         assertEquals(0, ProgressRules.respecCost(a));
     }
+    /** A points amount that is not a number pays and takes back nothing, the same reading on both sides (A5). */
+    @Test
+    void aPointsAmountThatIsNotANumberIsNotOwedBack() {
+        ProgressModel m = model("""
+                {"chapters": {
+                  "s:a": {"points": {"start": 0}, "nodes": {"n": {"cost": 1,
+                          "rewards": [{"type": "points", "amount": "lots", "chapter": "s:b"}]}}},
+                  "s:b": {"points": {"start": 0}, "nodes": {}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(a.nodes.get("n").key, 1);
+        p.spent.put(ProgressRules.key(a), 1);
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(a.nodes.get("n"), 0, 0));
+        assertTrue(new ProgressRules(m).canRespec(p, a), "a malformed amount owes nothing back");
+    }
+
     /** 1. A respec takes back the points a skill paid out, and refuses when that would overdraw the pool. */
     @Test
     void respecRevokesPointsRewardsAndRefusesOverdraft() {
@@ -345,6 +364,7 @@ class ServerDataFixesTest {
         p.taken.put(n.key, 1);
         p.spent.put(ProgressRules.key(a), 3);
         p.bonus.put(ProgressRules.key(a), 2);
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(n, 0, 0));
         assertEquals(2, ProgressRules.chapterPointsReward(p, a));
         assertFalse(rules.canRespec(p, a), "the refund plus what is left does not cover the points the skill paid");
         p.spent.put(ProgressRules.key(a), 1);
@@ -354,5 +374,92 @@ class ServerDataFixesTest {
         assertEquals(0, rules.availablePoints(p, a));
         assertEquals(1, ProgressRules.refundChapterSpent(p, a));
         assertEquals(1, rules.availablePoints(p, a), "the cost comes back separately from the points reward");
+    }
+
+    /**
+     * A points reward that was never paid (its conditions did not hold at take time) has no record: the respec neither
+     * counts it nor takes it back (2026-10-22 review). Once it is recorded, the pool has to give it back.
+     */
+    @Test
+    void pointsWithoutAPaidRecordAreNotCountedOrRevoked() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"start": 0},
+                                      "nodes": {"n": {"cost": 1, "rewards": [
+                                        {"type": "points", "amount": 2,
+                                         "conditions": [{"type": "stage", "stage": "late"}]}]}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressModel.Node n = a.nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(a), 3);
+        p.bonus.put(ProgressRules.key(a), 0);
+
+        assertTrue(rules.canRespec(p, a),
+                "points that were never paid must not make the respec look overdrawn");
+
+        rules.revokePoints(p, n, 1);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "an unpaid reward is not taken back");
+
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(n, 0, 0));
+        assertFalse(rules.canRespec(p, a), "once the reward was paid, the pool has to give it back");
+        p.bonus.put(ProgressRules.key(a), 2);
+        rules.revokePoints(p, n, 1);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "a paid reward is still taken back");
+        assertTrue(p.paidSkillRewards.isEmpty(), "the record goes with the points it paid");
+    }
+
+    /**
+     * A condition that stops holding, then a respec and a retake, must not grow points: the revoke takes only what
+     * was recorded, and the retake pays nothing while the condition is false (2026-10-22 review).
+     */
+    @Test
+    void aRespecAndRetakeLoopDoesNotInflatePoints() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"start": 0},
+                                      "nodes": {"n": {"cost": 1, "rewards": [
+                                        {"type": "points", "amount": 2,
+                                         "conditions": [{"type": "stage", "stage": "late"}]}]}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressModel.Node n = a.nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.bonus.put(ProgressRules.key(a), 2);
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(n, 0, 0));
+
+        for (int round = 0; round < 3; round++) {
+            rules.revokePoints(p, n, 1);
+            // the condition no longer holds, so the retake records nothing and pays nothing
+            p.taken.put(n.key, 1);
+        }
+
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "the loop never added points");
+        assertTrue(p.paidSkillRewards.isEmpty());
+    }
+
+    /** An old save's filled record lets one revoke take the points back, and a second revoke has nothing left. */
+    @Test
+    void anOldSaveIsRevokedOnceAfterMigration() {
+        ProgressModel m = model("""
+                {"chapters": {"s:a": {"points": {"start": 0},
+                                      "nodes": {"n": {"cost": 1, "rewards": [{"type": "points", "amount": 2}]}}}}}
+                """);
+        ProgressModel.Chapter a = m.chapters.get("s:a");
+        ProgressModel.Node n = a.nodes.get("n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.needsPaidMigration = true;
+        team.shared.taken.put(n.key, 1);
+        team.view(A).bonus.put(ProgressRules.key(a), 2);
+
+        assertTrue(SkillRewardPolicy.migratePaidSkillRewards(team, m));
+        ProgressRules rules = new ProgressRules(m);
+        rules.revokePoints(team.view(A), n, 1);
+        assertEquals(0, team.view(A).bonus.getOrDefault(ProgressRules.key(a), 0));
+
+        rules.revokePoints(team.view(A), n, 1);
+        assertEquals(0, team.view(A).bonus.getOrDefault(ProgressRules.key(a), 0), "nothing is taken back twice");
     }
 }

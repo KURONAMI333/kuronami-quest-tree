@@ -451,5 +451,7 @@
   "block.kuronami_quest_tree.quest_barrier": "クエストの関所",
   "commands.kuronami_quest_tree.block_given": "%s 人に %s のブロックを渡しました",
   "message.kuronami_quest_tree.currency_failed": "通貨報酬を支払えませんでした。未受け取りのままです。",
-  "message.kuronami_quest_tree.choice_blocked": "報酬停止中はこの報酬を受け取れません（選択内容を保持できないため）。"
+  "message.kuronami_quest_tree.choice_blocked": "報酬停止中はこの報酬を受け取れません（選択内容を保持できないため）。",
+  "message.kuronami_quest_tree.team_owner_only": "チームの持ち主だけが使える",
+  "message.kuronami_quest_tree.owner_unknown": "チームの持ち主を読み取れないため実行できない"
 }

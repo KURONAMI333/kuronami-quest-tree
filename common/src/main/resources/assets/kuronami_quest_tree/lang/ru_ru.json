@@ -451,5 +451,7 @@
   "block.kuronami_quest_tree.quest_barrier": "Врата заданий",
   "commands.kuronami_quest_tree.block_given": "Выдано блоков: %s для %s",
   "message.kuronami_quest_tree.currency_failed": "Не удалось выплатить награду валютой; она остаётся неполученной.",
-  "message.kuronami_quest_tree.choice_blocked": "Эту награду нельзя получить, пока награды заблокированы: выбор не сохраняется."
+  "message.kuronami_quest_tree.choice_blocked": "Эту награду нельзя получить, пока награды заблокированы: выбор не сохраняется.",
+  "message.kuronami_quest_tree.team_owner_only": "Использовать это может только владелец команды.",
+  "message.kuronami_quest_tree.owner_unknown": "Не удалось прочитать владельца команды, поэтому отказано."
 }

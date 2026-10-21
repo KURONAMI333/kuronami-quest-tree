@@ -451,5 +451,7 @@
   "block.kuronami_quest_tree.quest_barrier": "Portail de quête",
   "commands.kuronami_quest_tree.block_given": "%s bloc(s) donné(s) pour %s",
   "message.kuronami_quest_tree.currency_failed": "La récompense en monnaie n'a pas pu être versée ; elle reste non récupérée.",
-  "message.kuronami_quest_tree.choice_blocked": "Cette récompense ne peut pas être prise tant que les récompenses sont bloquées : son choix n'est pas conservé."
+  "message.kuronami_quest_tree.choice_blocked": "Cette récompense ne peut pas être prise tant que les récompenses sont bloquées : son choix n'est pas conservé.",
+  "message.kuronami_quest_tree.team_owner_only": "Seul le propriétaire de l'équipe peut utiliser ceci.",
+  "message.kuronami_quest_tree.owner_unknown": "Le propriétaire de l'équipe n'a pas pu être lu, donc c'est refusé."
 }

@@ -451,5 +451,7 @@
   "block.kuronami_quest_tree.quest_barrier": "퀘스트 관문",
   "commands.kuronami_quest_tree.block_given": "%s개의 블록을 %s에게 지급했습니다",
   "message.kuronami_quest_tree.currency_failed": "화폐 보상을 지급하지 못했습니다. 미수령 상태로 남습니다.",
-  "message.kuronami_quest_tree.choice_blocked": "보상이 차단된 동안에는 이 보상을 받을 수 없습니다. 선택한 항목은 유지되지 않습니다."
+  "message.kuronami_quest_tree.choice_blocked": "보상이 차단된 동안에는 이 보상을 받을 수 없습니다. 선택한 항목은 유지되지 않습니다.",
+  "message.kuronami_quest_tree.team_owner_only": "팀 소유자만 사용할 수 있습니다.",
+  "message.kuronami_quest_tree.owner_unknown": "팀 소유자를 읽을 수 없어 거부합니다."
 }

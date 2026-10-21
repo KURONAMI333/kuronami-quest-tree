@@ -139,17 +139,6 @@ class ReviewFixesTest {
     }
 
     @Test
-    void aBlockedMemberSkillRewardIsOwedToThatMemberOnly() {
-        // Rewards.giveSkillOne writes a member's own command/tag pay-out into that member's progress
-        PlayerProgress taker = new PlayerProgress();
-        PlayerProgress member = new PlayerProgress();
-        JsonObject reward = reward("command");
-        assertTrue(RewardLedger.claim(member, reward, "s:q/skill", 0, 0, false, true, () -> true));
-        assertEquals(1, member.pendingRewards.get("s:q/skill#0#0"));
-        assertTrue(taker.pendingRewards.isEmpty(), "the taker is not owed another member's pay-out");
-    }
-
-    @Test
     void pendingRewardsAreNotDroppedForAnEmptyModel() {
         assertFalse(RewardLedger.canResolve(ProgressModel.of(new JsonObject())),
                 "an empty model is not proof that the pending node is gone");
@@ -186,6 +175,21 @@ class ReviewFixesTest {
         legacy.add("t:q/n#-1#0");
         old.add("pending_rewards", legacy);
         assertEquals(1, PlayerPart.fromJson(old).pendingRewards.get("t:q/n#-1#0"));
+    }
+
+    /** Skill rewards are never held back, so an old save's skill pending keys are dropped instead of paid at login. */
+    @Test
+    void oldSkillPendingKeysAreDroppedAndQuestKeysStay() {
+        PlayerPart part = new PlayerPart();
+        part.pendingRewards.put("s:a/n#0#0", 1);
+        part.pendingRewards.put("s:a/n#1#2", 2);
+        part.pendingRewards.put("t:q/n#-1#0", 3);
+        PlayerPart loaded = PlayerPart.fromJson(part.toJson());
+        assertEquals(3, loaded.pendingRewards.get("t:q/n#-1#0"));
+        assertFalse(loaded.pendingRewards.containsKey("s:a/n#0#0"));
+        assertFalse(loaded.pendingRewards.containsKey("s:a/n#1#2"));
+        assertEquals(1, loaded.pendingRewards.size());
+        assertEquals(2, loaded.droppedSkillPending);
     }
 
     @Test
@@ -310,6 +314,73 @@ class ReviewFixesTest {
         assertTrue(team.completedFor(A).contains("t:q/a"));
         assertFalse(team.completedFor(A).contains("t:q/b"));
         assertTrue(team.completedFor(A).contains("t:q/team"));
+    }
+
+    /** A paid points reward is taken back on respec. */
+    @Test
+    void pointsThatWerePaidAreStillTakenBackOnRespec() {
+        ProgressModel model = skillModel();
+        ProgressModel.Node n = model.chapters.get("s:a").nodes.get("n");
+        PlayerProgress p = new PlayerProgress();
+        p.bonus.put(ProgressRules.key(n.chapter), 2);
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(n, 0, 3));
+        new ProgressRules(model).revokePoints(p, n, 1);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(n.chapter), 0));
+    }
+
+    private static ProgressModel skillModel() {
+        return ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {"start": 1}, "nodes": {"n": {"cost": 1, "rewards": [
+                  {"type": "item", "item": "minecraft:stone"},
+                  {"type": "command", "command": "say hi"},
+                  {"type": "tag", "tag": "test"},
+                  {"type": "points", "amount": 2}]}}}}}
+                """).getAsJsonObject());
+    }
+
+    /**
+     * A repeat's round cleanup forgets this round's marks but keeps the marks of a table pay-out still owed, so the
+     * table resumes after the block lifts instead of paying its done entries again (B8, and B7 for team members).
+     */
+    @Test
+    void clearRoundKeepsTheMarksOfAPendingTable() {
+        PlayerProgress p = new PlayerProgress();
+        String pending = RewardLedger.pendingKey("s:c/q", RewardLedger.QUEST_RANK, 0);
+        p.pendingRewards.put(pending, 1);
+        p.rewardRolls.put(pending + ">paid>1", "1");
+        p.rewardRolls.put(pending + ">rolls", "[1]");
+        p.rewardRolls.put("s:c/q#-1#2>paid>0", "1");
+        p.claimedRewards.add("s:c/q#0");
+        p.completed.add("s:c/q");
+
+        p.clearRound("s:c/q");
+
+        assertTrue(p.rewardRolls.containsKey(pending + ">paid>1"), "the owed table still knows its paid entries");
+        assertTrue(p.rewardRolls.containsKey(pending + ">rolls"), "the owed table keeps its roll");
+        assertFalse(p.rewardRolls.containsKey("s:c/q#-1#2>paid>0"), "a table that is not owed loses its marks");
+        assertTrue(p.claimedRewards.isEmpty(), "this round's reward marks go");
+        assertFalse(p.completed.contains("s:c/q"));
+        assertEquals(1, p.pendingRewards.get(pending), "the debt survives the round");
+    }
+
+    /** A reset drops the debt first, so the table marks it was keeping go too (B8). */
+    @Test
+    void clearNodeDropsPendingBeforeItsTableMarks() {
+        PlayerProgress p = new PlayerProgress();
+        String pending = RewardLedger.pendingKey("s:c/q", RewardLedger.QUEST_RANK, 0);
+        p.pendingRewards.put(pending, 1);
+        p.rewardRolls.put(pending + ">paid>0", "1");
+        p.claimedRewards.add("s:c/q#0");
+
+        p.clearNode("s:c/q");
+
+        assertTrue(p.pendingRewards.isEmpty());
+        assertTrue(p.rewardRolls.isEmpty());
+        assertTrue(p.claimedRewards.isEmpty());
+    }
+
+    private static String type(JsonObject rw) {
+        return rw.has("type") ? rw.get("type").getAsString() : "";
     }
 
     private static JsonObject reward(String type) {

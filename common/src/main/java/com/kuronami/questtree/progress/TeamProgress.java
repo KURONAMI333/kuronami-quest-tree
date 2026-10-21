@@ -27,6 +27,17 @@ public final class TeamProgress {
     public final Map<UUID, PlayerPart> players = new LinkedHashMap<>();
     /** FTBQ's team_reward (NIL UUID): claimed once for the team. */
     public final Set<String> teamClaimedRewards = new HashSet<>();
+    /**
+     * Skill rewards the team actually paid, key {@code <node>#<rank>#<index>} (2026-10-22). One record for the team,
+     * whichever member took the skill. Revocation, re-application and the respec judgement read only this set.
+     */
+    public final Set<String> paidSkillRewards = new HashSet<>();
+    /**
+     * The saved form has no {@code paid_skill_rewards} key, so this team predates the record and its taken skills are
+     * filled once. A team still waiting for that migration does not write the key, because an empty one would make
+     * the next load look migrated; a record it already holds is used by the migration (2026-10-22 review).
+     */
+    public boolean needsPaidMigration;
     private final Map<UUID, PlayerProgress> views = new HashMap<>();
     private int viewsVersion = -1;
 
@@ -162,13 +173,16 @@ public final class TeamProgress {
             views.clear();
             viewsVersion = PlayerProgress.personalVersion();
         }
-        return views.computeIfAbsent(player, k -> PlayerProgress.view(shared, part(k), teamClaimedRewards));
+        return views.computeIfAbsent(player, k -> PlayerProgress.view(shared, part(k), teamClaimedRewards,
+                paidSkillRewards));
     }
 
     /** A solo record made from a player's old per-player save. All shared values and that player's claims are kept. */
     public static TeamProgress fromLegacy(UUID player, PlayerProgress old) {
         TeamProgress team = new TeamProgress(player);
         team.shared.copySharedFrom(old);
+        team.paidSkillRewards.addAll(old.paidSkillRewards);
+        team.needsPaidMigration = true;
         PlayerPart part = team.part(player);
         part.claimed.addAll(old.claimed);
         part.claimedRewards.addAll(old.claimedRewards);
@@ -185,6 +199,8 @@ public final class TeamProgress {
     public void mergeJoiner(UUID player, TeamProgress source) {
         mergeShared(source.shared);
         teamClaimedRewards.addAll(source.teamClaimedRewards);
+        paidSkillRewards.addAll(source.paidSkillRewards);
+        needsPaidMigration |= source.needsPaidMigration;
         PlayerPart from = source.players.get(player);
         if (from != null) {
             part(player).copyFrom(from);
@@ -206,9 +222,20 @@ public final class TeamProgress {
         solo.shared.copySharedFrom(shared);
         solo.teamClaimedRewards.addAll(teamClaimedRewards);
         solo.teamClaimedRewards.addAll(settledTeamRewards);
+        solo.paidSkillRewards.addAll(paidSkillRewards);
+        solo.needsPaidMigration = needsPaidMigration;
         PlayerPart own = players.get(player);
         if (own != null) {
             solo.part(player).copyFrom(own);
+        }
+        // a one-off skill mark belongs to the team, so a leaver keeps it: taking the same rank alone again must not
+        // hand out the item or command a second time (2026-10-22 review)
+        for (PlayerPart part : players.values()) {
+            for (String mark : part.claimedRewards) {
+                if (mark.contains("#skill")) {
+                    solo.part(player).claimedRewards.add(mark);
+                }
+            }
         }
         return solo;
     }
@@ -239,6 +266,13 @@ public final class TeamProgress {
         JsonArray team = new JsonArray();
         teamClaimedRewards.forEach(team::add);
         o.add("team_claimed_rewards", team);
+        // only a migrated team writes the key: a save made while the data pack was empty or broken (no migration yet)
+        // must not look migrated to the next load, or the old marks it still needs would be ignored (2026-10-22 review)
+        if (!needsPaidMigration) {
+            JsonArray paid = new JsonArray();
+            paidSkillRewards.forEach(paid::add);
+            o.add("paid_skill_rewards", paid);
+        }
         return o;
     }
 
@@ -260,6 +294,13 @@ public final class TeamProgress {
         if (o.has("team_claimed_rewards") && o.get("team_claimed_rewards").isJsonArray()) {
             for (JsonElement e : o.getAsJsonArray("team_claimed_rewards")) {
                 team.teamClaimedRewards.add(e.getAsString());
+            }
+        }
+        // the key is written on every save (even empty): a save without it predates the record and is migrated once
+        team.needsPaidMigration = !o.has("paid_skill_rewards");
+        if (o.has("paid_skill_rewards") && o.get("paid_skill_rewards").isJsonArray()) {
+            for (JsonElement e : o.getAsJsonArray("paid_skill_rewards")) {
+                team.paidSkillRewards.add(e.getAsString());
             }
         }
         return team;

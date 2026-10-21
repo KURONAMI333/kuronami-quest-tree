@@ -8,8 +8,9 @@ import java.util.function.BooleanSupplier;
 /**
  * Decides when a reward counts as taken. Kept free of the game so the claim rules can be tested without Minecraft.
  * <p>
- * A blocked reward (an admin stopped pay-outs) is still recorded as taken and kept in {@link PlayerProgress#pendingRewards},
- * so the node can finish and repeat and the reward is paid when the block is lifted (2026-10-21). A reward the
+ * A blocked quest reward (an admin stopped pay-outs) is still recorded as taken and kept in
+ * {@link PlayerProgress#pendingRewards}, so the node can finish and repeat and the reward is paid when the block is
+ * lifted (2026-10-21). Skill rewards never go through here: they are always paid on the spot (2026-10-22). A reward the
  * payment refused (for example a currency provider that failed) stays unclaimed, so the player can try again.
  */
 public final class RewardLedger {
@@ -42,8 +43,7 @@ public final class RewardLedger {
     }
 
     /**
-     * Takes one reward. {@code markClaimed} is false for a skill reward (skills are tracked by rank, not by reward
-     * keys). Returns false when the payment failed, in which case nothing is recorded.
+     * Takes one quest reward. Returns false when the payment failed, in which case nothing is recorded.
      */
     public static boolean claim(PlayerProgress p, JsonObject reward, String node, int index, int rank,
                                 boolean markClaimed, boolean blocked, BooleanSupplier pay) {
@@ -66,6 +66,15 @@ public final class RewardLedger {
             mark(p, reward, node, index);
         }
         return true;
+    }
+
+    /** Whether a pending key came from a skill reward (rank 0 or more); such keys are dropped when an old save loads. */
+    public static boolean isSkillPending(String key) {
+        try {
+            return pendingRank(key) >= 0;
+        } catch (RuntimeException ex) {
+            return false;
+        }
     }
 
     /** A blocked choice table cannot be taken: the pick is not part of the pending record. */

@@ -249,7 +249,7 @@ final class PlayerCommands {
         ProgressModel.Chapter ch = chapter(c);
         pr.chapterOpen.put(ch.id, open);
         if (open) {
-            Rewards.refreshTeamAttributes(p);
+            Rewards.reapplyChapter(p, pr, ch);
         } else {
             Rewards.revokeChapter(p, pr, ch);
         }

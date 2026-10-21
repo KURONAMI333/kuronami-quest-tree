@@ -451,5 +451,7 @@
   "block.kuronami_quest_tree.quest_barrier": "Portão de Missões",
   "commands.kuronami_quest_tree.block_given": "%s bloco(s) entregue(s) para %s",
   "message.kuronami_quest_tree.currency_failed": "Não foi possível pagar a recompensa em moeda; ela continua não resgatada.",
-  "message.kuronami_quest_tree.choice_blocked": "Esta recompensa não pode ser pega enquanto as recompensas estiverem bloqueadas: a escolha não é mantida."
+  "message.kuronami_quest_tree.choice_blocked": "Esta recompensa não pode ser pega enquanto as recompensas estiverem bloqueadas: a escolha não é mantida.",
+  "message.kuronami_quest_tree.team_owner_only": "Apenas o dono da equipe pode usar isto.",
+  "message.kuronami_quest_tree.owner_unknown": "Não foi possível ler o dono da equipe, então isto é recusado."
 }
