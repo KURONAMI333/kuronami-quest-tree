@@ -377,6 +377,8 @@
   "screen.kuronami_quest_tree.editor.deleted.tables": "報酬テーブル",
   "screen.kuronami_quest_tree.editor.deleted.nodes": "クエスト",
   "screen.kuronami_quest_tree.editor.export": "書き出し",
+  "screen.kuronami_quest_tree.editor.export.overwrite": "既にあるフォルダを置き換えますか？",
+  "screen.kuronami_quest_tree.editor.export.replace": "置き換える",
   "screen.kuronami_quest_tree.editor.test": "プレイヤーとして試す",
   "screen.kuronami_quest_tree.editor.test.yes": "試す",
   "screen.kuronami_quest_tree.editor.cancel": "キャンセル"

@@ -29,6 +29,30 @@ final class EditorOps {
         return valid == null ? null : "quest_tree export " + valid;
     }
 
+    /** The same command with {@code force}, which replaces a folder that is already there. */
+    static String exportCommand(String namespace, boolean force) {
+        String command = exportCommand(namespace);
+        return command != null && force ? command + " force" : command;
+    }
+
+    /** Whether the request asked to replace the folder. */
+    static boolean forceRequested(JsonObject args) {
+        return args != null && args.has("force") && args.get("force").isJsonPrimitive()
+                && args.getAsJsonPrimitive("force").isBoolean() && args.get("force").getAsBoolean();
+    }
+
+    /**
+     * Why an export must ask before running, or null when it may run. The client shows a confirmation for this reason
+     * and sends the same request again with {@code force}, so a second press of the button is not a silent replace.
+     */
+    static String exportRefusal(String namespace, boolean force, boolean folderExists) {
+        if (namespace == null || force || !folderExists) {
+            return null;
+        }
+        return com.kuronami.questtree.network.EditorReplies.EXPORT_FOLDER_EXISTS + ": "
+                + ProgressExport.packFolder(namespace);
+    }
+
     /** {@code /quest_tree reset @s <chapter>}, or null when the chapter id is not one the commands accept. */
     static String testCommand(String chapterId) {
         return ProgressionEditor.validChapterId(chapterId) ? "quest_tree reset @s " + chapterId : null;

@@ -5,6 +5,7 @@ import com.kuronami.questtree.client.edit.EditorClipboard;
 import com.kuronami.questtree.client.edit.EditorSelection;
 import com.kuronami.questtree.client.edit.GridSnap;
 import com.kuronami.questtree.client.edit.MoveBatch;
+import com.kuronami.questtree.network.EditorReplies;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
@@ -2568,10 +2569,38 @@ public class ProgressScreen extends Screen {
     }
 
     private void exportChapter(ClientModel.Chapter ch) {
+        exportChapter(ch, false);
+    }
+
+    private void exportChapter(ClientModel.Chapter ch, boolean force) {
         int colon = ch.id.indexOf(':');
         JsonObject args = new JsonObject();
         args.addProperty("namespace", colon < 0 ? ch.id : ch.id.substring(0, colon));
-        EditorSession.send(ch.id, "export", args);
+        if (force) {
+            args.addProperty("force", true);
+        }
+        EditorSession.send(ch.id, "export", args, reply -> {
+            if (!reply.ok() && reply.lines().stream()
+                    .anyMatch(line -> line.startsWith(EditorReplies.EXPORT_FOLDER_EXISTS))) {
+                confirmExportOverwrite(ch);
+            }
+        });
+    }
+
+    private void confirmExportOverwrite(ClientModel.Chapter ch) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc.screen != this) {
+            return;
+        }
+        mc.setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(confirmed -> {
+            mc.setScreen(this);
+            if (confirmed) {
+                exportChapter(ch, true);
+            }
+        }, Component.translatable("screen.kuronami_quest_tree.editor.export"),
+                Component.translatable("screen.kuronami_quest_tree.editor.export.overwrite"),
+                Component.translatable("screen.kuronami_quest_tree.editor.export.replace"),
+                Component.translatable("screen.kuronami_quest_tree.editor.cancel")));
     }
 
     private void confirmTest(ClientModel.Chapter ch) {

@@ -13,6 +13,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -196,6 +197,15 @@ public final class EditorService {
                 reply(player, request, chapterId, false, "", List.of("no namespace to export"), revision);
                 return;
             }
+            boolean force = EditorOps.forceRequested(args);
+            Path folder = player.server.getWorldPath(LevelResource.DATAPACK_DIR)
+                    .resolve(ProgressExport.packFolder(namespace));
+            String refusal = EditorOps.exportRefusal(namespace, force, Files.exists(folder));
+            if (refusal != null) {
+                reply(player, request, chapterId, false, "", List.of(refusal), revision);
+                return;
+            }
+            command = EditorOps.exportCommand(namespace, force);
             int result = ServerCommands.run(player, command, 2, false);
             // the reply carries the pack folder's name, not a path on the server: the author already knows their world
             EditorOps.ControlOutcome outcome = EditorOps.controlOutcome("export", result,

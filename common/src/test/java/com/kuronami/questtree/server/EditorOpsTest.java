@@ -1,6 +1,8 @@
 package com.kuronami.questtree.server;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.kuronami.questtree.network.EditorReplies;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,6 +35,21 @@ class EditorOpsTest {
         args.addProperty("namespace", "other");
         assertEquals("other", EditorOps.exportNamespace(args, "mypack:basics"));
         assertEquals("mypack", EditorOps.exportNamespace(new JsonObject(), "mypack:basics"));
+    }
+
+    @Test
+    void exportCanAskForTheExistingFolderToBeReplaced() {
+        assertEquals("quest_tree export mypack", EditorOps.exportCommand("mypack", false));
+        assertEquals("quest_tree export mypack force", EditorOps.exportCommand("mypack", true));
+        assertNull(EditorOps.exportCommand("my pack", true));
+
+        assertTrue(EditorOps.forceRequested(JsonParser.parseString("{\"force\":true}").getAsJsonObject()));
+        assertFalse(EditorOps.forceRequested(new JsonObject()));
+
+        assertNull(EditorOps.exportRefusal("mypack", false, false));
+        assertEquals(EditorReplies.EXPORT_FOLDER_EXISTS + ": quest_tree_export_mypack",
+                EditorOps.exportRefusal("mypack", false, true));
+        assertNull(EditorOps.exportRefusal("mypack", true, true));
     }
 
     @Test

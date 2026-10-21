@@ -377,6 +377,8 @@
   "screen.kuronami_quest_tree.editor.deleted.tables": "Reward tables",
   "screen.kuronami_quest_tree.editor.deleted.nodes": "Quests",
   "screen.kuronami_quest_tree.editor.export": "Export",
+  "screen.kuronami_quest_tree.editor.export.overwrite": "Replace the existing folder?",
+  "screen.kuronami_quest_tree.editor.export.replace": "Replace",
   "screen.kuronami_quest_tree.editor.test": "Test as player",
   "screen.kuronami_quest_tree.editor.test.yes": "Test",
   "screen.kuronami_quest_tree.editor.cancel": "Cancel"
