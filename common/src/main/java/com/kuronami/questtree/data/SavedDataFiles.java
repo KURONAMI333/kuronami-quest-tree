@@ -125,6 +125,15 @@ public final class SavedDataFiles {
         return deserializer.apply(root.getCompound("data"), registries);
     }
 
+    private static boolean readable(Path file) {
+        try {
+            readRoot(file);
+            return true;
+        } catch (IOException | RuntimeException ex) {
+            return false;
+        }
+    }
+
     private static CompoundTag readRoot(Path file) throws IOException {
         try (InputStream in = Files.newInputStream(file)) {
             return NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap());
@@ -180,8 +189,14 @@ public final class SavedDataFiles {
             NbtIo.writeCompressed(root, temp);
             forceFile(temp);
             if (Files.isRegularFile(target)) {
-                Files.copy(target, backup, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-                forceFile(backup);
+                // Keep the last file that reads: copying an unreadable main file over the backup would destroy the
+                // only copy of the previous save (2026-10-22 release review).
+                if (readable(target)) {
+                    Files.copy(target, backup, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                    forceFile(backup);
+                } else {
+                    Constants.LOG.warn("Not replacing {}: {} does not read", backup, target);
+                }
             }
             moveReplacing(temp, target);
             forceDirectory(dir);

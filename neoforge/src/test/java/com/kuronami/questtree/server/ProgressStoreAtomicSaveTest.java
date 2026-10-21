@@ -84,6 +84,20 @@ class ProgressStoreAtomicSaveTest {
     }
 
     @Test
+    void aCorruptMainFileIsNotCopiedOverTheBackup() throws IOException {
+        Path file = dir.resolve("progress.dat");
+        storeWith("test:book/first").save(file.toFile(), null);
+        storeWith("test:book/second").save(file.toFile(), null);
+        Files.write(file, new byte[] {1, 2, 3, 4});
+
+        storeWith("test:book/third").save(file.toFile(), null);
+
+        assertEquals(Set.of("test:book/first"), load(SavedDataFiles.backupPath(file)).team(TEAM).shared.completed,
+                "the unreadable main file must not replace the last save that reads");
+        assertEquals(Set.of("test:book/third"), load(file).team(TEAM).shared.completed);
+    }
+
+    @Test
     void aFailedWriteKeepsThePreviousFileAndTheDirtyFlag() throws IOException {
         Path file = dir.resolve("progress.dat");
         storeWith("test:book/first").save(file.toFile(), null);
