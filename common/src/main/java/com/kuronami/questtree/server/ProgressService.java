@@ -78,11 +78,8 @@ public final class ProgressService {
     /** Player progress already migrated for one loaded data model, so a save is not folded into its pool twice. */
     private static final Map<PlayerProgress, ProgressModel> MIGRATED = new java.util.WeakHashMap<>();
     /** Barrier answers for a few ticks, so walking against one does not rerun progress and team resolution every collision. */
-    private static final Map<UUID, BarrierVerdict> BARRIERS = new HashMap<>();
-    private static final int BARRIER_TTL = 4;
-
-    private record BarrierVerdict(String mode, String key, int tick, boolean allowed) {
-    }
+    private static final com.kuronami.questtree.progress.BarrierCache<Boolean> BARRIERS =
+            new com.kuronami.questtree.progress.BarrierCache<>(4, 8);
 
     private ProgressService() {
     }
@@ -1074,7 +1071,7 @@ public final class ProgressService {
     static void markDirty(ServerPlayer player) {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             DIRTY.put(member.getUUID(), true);
-            BARRIERS.remove(member.getUUID());
+            BARRIERS.clear(member.getUUID());
         }
     }
 
@@ -1119,7 +1116,7 @@ public final class ProgressService {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
-        BARRIERS.remove(player.getUUID());
+        BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
         TeamSync.broadcast(player.server, player.getUUID());
@@ -1362,10 +1359,9 @@ public final class ProgressService {
      */
     public static boolean barrierAllows(ServerPlayer player, String mode, String key) {
         int tick = player.server.getTickCount();
-        BarrierVerdict cached = BARRIERS.get(player.getUUID());
-        if (cached != null && cached.tick() + BARRIER_TTL >= tick
-                && cached.mode().equals(mode) && cached.key().equals(key)) {
-            return cached.allowed();
+        Boolean cached = BARRIERS.get(player.getUUID(), mode, key, tick);
+        if (cached != null) {
+            return cached;
         }
         PlayerProgress p = ProgressStore.get(player.server).viewReadOnly(player.server, player.getUUID());
         java.util.Set<String> stages = new java.util.HashSet<>(p.stages);
@@ -1374,7 +1370,7 @@ public final class ProgressService {
             stages.add(key);
         }
         boolean allowed = com.kuronami.questtree.progress.BarrierRule.allows(mode, key, p.completed, stages);
-        BARRIERS.put(player.getUUID(), new BarrierVerdict(mode, key, tick, allowed));
+        BARRIERS.put(player.getUUID(), mode, key, tick, allowed);
         return allowed;
     }
 

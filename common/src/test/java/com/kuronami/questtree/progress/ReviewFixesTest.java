@@ -114,6 +114,31 @@ class ReviewFixesTest {
     }
 
     @Test
+    void barrierAnswersAreKeptPerQuestionAndExpire() {
+        BarrierCache<Boolean> cache = new BarrierCache<>(4, 8);
+        java.util.UUID player = java.util.UUID.randomUUID();
+        cache.put(player, "stage", "a", 10, true);
+        cache.put(player, "stage", "b", 10, false);
+        assertEquals(true, cache.get(player, "stage", "a", 12));
+        assertEquals(false, cache.get(player, "stage", "b", 12));
+        assertEquals(null, cache.get(player, "stage", "a", 15));
+        assertEquals(null, cache.get(player, "node", "a", 10));
+    }
+
+    @Test
+    void barrierAnswersForOnePlayerAreBounded() {
+        BarrierCache<Boolean> cache = new BarrierCache<>(100, 2);
+        java.util.UUID player = java.util.UUID.randomUUID();
+        cache.put(player, "node", "a", 1, true);
+        cache.put(player, "node", "b", 1, true);
+        cache.put(player, "node", "c", 1, true);
+        assertEquals(null, cache.get(player, "node", "a", 1), "the oldest answer is dropped");
+        assertEquals(true, cache.get(player, "node", "c", 1));
+        cache.clear(player);
+        assertEquals(null, cache.get(player, "node", "c", 1));
+    }
+
+    @Test
     void anEmptyModelDoesNotMigratePersonalNodes() {
         TeamStoreData data = new TeamStoreData();
         data.personalNodes.add("t:q/n");
