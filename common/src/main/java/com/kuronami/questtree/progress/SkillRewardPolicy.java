@@ -29,11 +29,37 @@ public final class SkillRewardPolicy {
     }
 
     /**
-     * Whether this reward of the rank still owes its one-off pay-out to this player. An old per-rank mark means every
-     * one-off reward of that rank was paid already, so an upgraded save cannot pay it again (2026-10-22 review).
+     * Whether this reward of the rank still owes its one-off pay-out. {@code claimed} answers for the whole team: a
+     * mark on any member's record means the team already had it (2026-10-22 review).
+     */
+    public static boolean owed(java.util.function.Predicate<String> claimed, ProgressModel.Node n, int rank,
+                               int index) {
+        return !claimed.test(mark(n, rank, index)) && !claimed.test(mark(n, rank));
+    }
+
+    /**
+     * Whether this reward of the rank still owes its one-off pay-out to this player (a record on its own).
      */
     public static boolean owed(PlayerProgress p, ProgressModel.Node n, int rank, int index) {
-        return !p.rewardClaimed(mark(n, rank, index)) && !p.rewardClaimed(mark(n, rank));
+        return owed(p::rewardClaimed, n, rank, index);
+    }
+
+    /**
+     * The marks of every member of a team, saved or online. A one-off skill reward is judged team-wide: taking the
+     * same rank again as another member must not pay an item or command a second time (2026-10-22 review).
+     */
+    public static java.util.function.Predicate<String> teamClaimed(TeamProgress team) {
+        return mark -> {
+            if (team.teamClaimedRewards.contains(mark)) {
+                return true;
+            }
+            for (PlayerPart part : team.players.values()) {
+                if (part.claimedRewards.contains(mark)) {
+                    return true;
+                }
+            }
+            return false;
+        };
     }
 
     /**

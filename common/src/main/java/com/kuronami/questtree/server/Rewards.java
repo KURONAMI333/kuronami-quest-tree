@@ -244,13 +244,15 @@ public final class Rewards {
      */
     static void giveSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank) {
         // A respec keeps the marks, so the one-off rewards of a rank cannot be farmed by taking it again. They are
-        // recorded per reward once it was actually paid.
-        giveSkillOne(player, p, n, rank, true);
+        // recorded per reward once it was actually paid, and any member's record counts for the team (2026-10-22).
+        var claimed = SkillRewardPolicy.teamClaimed(ProgressStore.get(player.server)
+                .team(TeamResolver.teamId(player.server, player.getUUID())));
+        giveSkillOne(player, p, n, rank, true, claimed);
         // the skill belongs to the team: its per-player effects (attributes, commands, tags) reach every online member.
         // Shared values (points) and one-off pay-outs are applied once, by the player who took it
         for (ServerPlayer member : members(player)) {
             if (!member.getUUID().equals(player.getUUID())) {
-                giveSkillOne(member, ProgressService.progress(member), n, rank, false);
+                giveSkillOne(member, ProgressService.progress(member), n, rank, false, claimed);
             }
         }
     }
@@ -261,14 +263,14 @@ public final class Rewards {
     }
 
     private static void giveSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int rank,
-                                     boolean full) {
+                                     boolean full, java.util.function.Predicate<String> claimed) {
         List<JsonObject> list = rewardsOfRank(n, rank);
         for (int index = 0; index < list.size(); index++) {
             JsonObject rw = list.get(index);
             if (!ProgressService.conditionsMet(player, p, rw)) {
                 continue;
             }
-            boolean firstTake = SkillRewardPolicy.owed(p, n, rank, index);
+            boolean firstTake = SkillRewardPolicy.owed(claimed, n, rank, index);
             String rollKey = com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, rank, index);
             String type = ProgressService.type(rw);
             if (type.equals("attribute")) {
