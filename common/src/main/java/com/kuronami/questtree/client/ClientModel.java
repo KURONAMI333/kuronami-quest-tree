@@ -30,6 +30,14 @@ public final class ClientModel {
     public final List<Chapter> chapters = new ArrayList<>();
     /** Reward tables, used to show the options of a choice reward. */
     final JsonObject tables;
+    /** Pack-wide settings ({@code progression/settings.json}): links, emergency items, text. */
+    final JsonObject settings;
+    /** Items the pack hands out from the emergency button, and how long it rests between uses. */
+    public final List<ItemStack> emergencyItems = new ArrayList<>();
+    public final long emergencyCooldownMs;
+    /** Optional Wiki / Guide addresses from the pack; null when the pack sets none. */
+    public final String wikiUrl;
+    public final String guideUrl;
     /** Every node by global key. */
     public final Map<String, Node> nodesByKey = new LinkedHashMap<>();
     /** Chapter of every node, by node key. */
@@ -44,6 +52,27 @@ public final class ClientModel {
 
     public ClientModel(JsonObject bundle) {
         this.tables = obj(bundle, "reward_tables");
+        this.settings = obj(bundle, "settings");
+        JsonObject emergency = settings.has("emergency") && settings.get("emergency").isJsonObject()
+                ? settings.getAsJsonObject("emergency") : settings;
+        long cooldown = emergency.has("cooldown_seconds") && emergency.get("cooldown_seconds").isJsonPrimitive()
+                ? Math.max(0, emergency.get("cooldown_seconds").getAsLong()) : 3600;
+        this.emergencyCooldownMs = cooldown * 1000L;
+        for (JsonElement e : arr(emergency, "items")) {
+            ItemStack stack = e.isJsonObject() ? stack(e.getAsJsonObject().has("item")
+                    ? e.getAsJsonObject().get("item") : e.getAsJsonObject()) : stack(e);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            if (e.isJsonObject()) {
+                JsonObject o = e.getAsJsonObject();
+                int count = o.has("count") ? Math.max(1, o.get("count").getAsInt()) : stack.getCount();
+                stack.setCount(Math.min(count, Math.max(1, stack.getMaxStackSize())));
+            }
+            emergencyItems.add(stack);
+        }
+        this.wikiUrl = url(settings, "wiki_url");
+        this.guideUrl = url(settings, "guide_url");
         String locale = Minecraft.getInstance().getLanguageManager().getSelected().toLowerCase(Locale.ROOT);
         JsonObject lang = obj(bundle, "lang");
         copyText(lang, "en_us", fallback);
@@ -78,6 +107,14 @@ public final class ClientModel {
             }
         }
         chapters.sort(Comparator.comparingInt((Chapter c) -> c.groupOrder).thenComparingInt(c -> c.order).thenComparing(c -> c.id));
+    }
+
+    private static String url(JsonObject o, String key) {
+        if (!o.has(key) || !o.get(key).isJsonPrimitive()) {
+            return null;
+        }
+        String v = o.get(key).getAsString();
+        return v.startsWith("https://") || v.startsWith("http://") ? v : null;
     }
 
     private static void copyText(JsonObject lang, String locale, Map<String, String> into) {
@@ -166,6 +203,8 @@ public final class ClientModel {
         public final ItemStack icon;
         public final int order;
         public final int groupOrder;
+        /** A texture icon ({@code icon.type = "texture"}), or null when the chapter uses an item. */
+        public final ResourceLocation iconTexture;
         /** The chapter's group id (as written by the pack, lower-cased), or null when it has none. */
         public final String group;
         public final boolean skills;
@@ -201,7 +240,8 @@ public final class ClientModel {
             int colon = id.indexOf(':');
             this.namespace = id.substring(0, colon);
             this.path = id.substring(colon + 1);
-            this.icon = stack(o.get("icon"));
+            this.iconTexture = textureIcon(o.get("icon"), namespace);
+            this.icon = iconTexture != null ? ItemStack.EMPTY : stack(o.get("icon"));
             this.order = o.has("order") ? o.get("order").getAsInt() : 0;
             // no group, or FTB Quests' default group (an empty id), comes first and has no header, as in FTB Quests'
             // own list. ATM10's "Welcome", "Bounty Board" and "Building Tips" sorted last until 2026-10-20 because the
@@ -266,8 +306,53 @@ public final class ClientModel {
             if (!icon.isEmpty()) {
                 return icon;
             }
+            if (iconTexture != null) {
+                return ItemStack.EMPTY;
+            }
             return nodes.values().stream().map(n -> n.icon).filter(s -> !s.isEmpty()).findFirst().orElse(new ItemStack(Items.BOOK));
         }
+    }
+
+    /**
+     * A chapter icon written as a texture: FTB Quests' {@code {"type": "texture", "id": "ns:textures/..."}} or a plain
+     * path ending in {@code .png} (2026-10-22). Pack authors can then ship a drawn icon instead of an item.
+     */
+    static ResourceLocation textureIcon(JsonElement e, String namespace) {
+        String path = null;
+        if (e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+            String s = e.getAsString();
+            if (s.endsWith(".png") || s.startsWith("#")) {
+                path = s;
+            }
+        } else if (e != null && e.isJsonObject()) {
+            JsonObject o = e.getAsJsonObject();
+            String type = o.has("type") ? o.get("type").getAsString() : "";
+            if (type.equals("texture") || o.has("texture")) {
+                for (String key : List.of("texture", "id", "path")) {
+                    if (o.has(key) && o.get(key).isJsonPrimitive()) {
+                        path = o.get(key).getAsString();
+                        break;
+                    }
+                }
+            }
+        }
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        ResourceLocation rl = ResourceLocation.tryParse(path.contains(":") ? path
+                : namespace + ":" + path);
+        if (rl == null) {
+            return null;
+        }
+        String p = rl.getPath();
+        if (!p.endsWith(".png")) {
+            p = p + ".png";
+            rl = ResourceLocation.fromNamespaceAndPath(rl.getNamespace(), p);
+        }
+        if (!rl.getPath().startsWith("textures/")) {
+            rl = ResourceLocation.fromNamespaceAndPath(rl.getNamespace(), "textures/" + rl.getPath());
+        }
+        return rl;
     }
 
     /** Milestones are drawn larger unless the node or its chapter sets a size. */
@@ -671,7 +756,11 @@ public final class ClientModel {
             this.alpha = o.has("alpha") && o.get("alpha").isJsonPrimitive() ? Math.max(0, Math.min(255, o.get("alpha").getAsInt())) / 255f : 1;
             for (JsonElement e : arr(o, "hover")) {
                 if (e.isJsonPrimitive()) {
-                    hover.add(parseText(e.getAsString()));
+                    String text = e.getAsString();
+                    // a pack can put the hover text in its lang file: a key that exists is translated, anything else
+                    // stays exactly as written (2026-10-22)
+                    hover.add(net.minecraft.client.resources.language.I18n.exists(text)
+                            ? Component.translatable(text) : parseText(text));
                 }
             }
         }
