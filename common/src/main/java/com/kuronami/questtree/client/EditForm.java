@@ -30,6 +30,14 @@ final class EditForm {
     static final int ROW = 18;
     private static final int LABEL_FRACTION = 38;
 
+    /** Boxes are built 40 wide, so a value set before layout scrolls to its tail; show the start until focused. */
+    private static void fitBox(EditBox box, int width) {
+        box.setWidth(width);
+        if (!box.isFocused()) {
+            box.setHighlightPos(0);
+        }
+    }
+
     /** A row of the form. Positions are handed in at draw time and remembered for the clicks that follow. */
     interface Line {
         int height();
@@ -411,7 +419,7 @@ final class EditForm {
             int bx = boxLeft(cx) + 4;
             box.setX(bx);
             box.setY(y + 3);
-            box.setWidth(Math.max(8, cx + fieldW - bx - 4));
+            fitBox(box, Math.max(8, cx + fieldW - bx - 4));
             box.render(g, mx, my, 0);
             int bxr = right - bw;
             if (spec.picker() || pick != null) {
@@ -621,7 +629,7 @@ final class EditForm {
                 }
                 b.setX(x + lw + 4);
                 b.setY(ry + 3);
-                b.setWidth(Math.max(8, fieldW - 8));
+                fitBox(b, Math.max(8, fieldW - 8));
                 b.render(g, mouseX, mouseY, 0);
                 if (boxes.size() > 1) {
                     boolean over = inside(mouseX, mouseY, x + lw + fieldW, ry + 1, 18, ROW - 2);
