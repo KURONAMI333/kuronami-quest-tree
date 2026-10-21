@@ -280,7 +280,6 @@ public final class ProgressService {
 
     // ------------------------------------------------------------------ interaction tasks (2026-10-21)
 
-    private static final Map<Animal, UUID> BREEDERS = new WeakHashMap<>();
     private static final Map<String, Optional<CompoundTag>> NBT_FILTERS = new HashMap<>();
 
     /** A crafted result was taken out of a crafting grid. Counts the result's size, so one recipe can finish "4 planks". */
@@ -322,23 +321,12 @@ public final class ProgressService {
         }
     }
 
-    /** Remember who last fed an animal, so the breeding event can credit that player. */
-    public static void rememberBreeder(Animal animal, ServerPlayer player) {
-        if (animal != null && player != null) {
-            BREEDERS.put(animal, player.getUUID());
-        }
-    }
-
-    /** Two animals bred; the player who fed either one gets the credit. */
+    /** Two animals bred; vanilla's love cause (the player who fed one) gets the credit. */
     public static void onBreed(ServerLevel level, Animal first, Animal second) {
-        UUID id = BREEDERS.get(first);
-        if (id == null) {
-            id = BREEDERS.get(second);
+        ServerPlayer player = first.getLoveCause();
+        if (player == null) {
+            player = second.getLoveCause();
         }
-        if (id == null) {
-            return;
-        }
-        ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
         if (player != null) {
             interaction(player, "breed", null, null, first, second, 1, "");
         }
