@@ -73,7 +73,7 @@ public final class ItemTooltips {
             long need = n.tasks.get(w.task).count;
             long have = Math.min(p.task(w.node, w.task), need);
             lines.add(Component.empty()
-                    .append(Component.literal(n.title.getString()).withColor(0xF2C230))
+                    .append(Component.literal(n.title.getString()).withColor(Ui.BADGE & 0xFFFFFF))
                     .append(Component.literal(" " + have + "/" + need).withStyle(net.minecraft.ChatFormatting.GRAY)));
             shown++;
         }
