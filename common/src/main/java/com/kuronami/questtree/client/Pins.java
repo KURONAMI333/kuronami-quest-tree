@@ -45,12 +45,21 @@ public final class Pins {
     static void load() {
         world = worldKey();
         PINNED.clear();
-        JsonObject all = readAll();
-        if (all.has(world) && all.get(world).isJsonArray()) {
-            for (JsonElement e : all.getAsJsonArray(world)) {
-                PINNED.add(e.getAsString());
+        PINNED.addAll(keysOf(readAll(), world));
+    }
+
+    /** The string entries of one world's pin list; numbers and objects from a hand-edited file are skipped. */
+    static java.util.List<String> keysOf(JsonObject all, String world) {
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        JsonElement list = all.get(world);
+        if (list != null && list.isJsonArray()) {
+            for (JsonElement e : list.getAsJsonArray()) {
+                if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                    keys.add(e.getAsString());
+                }
             }
         }
+        return keys;
     }
 
     private static int version;
