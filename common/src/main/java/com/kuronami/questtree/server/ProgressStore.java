@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.progress.PlayerPart;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.TeamProgress;
 import com.kuronami.questtree.progress.TeamStoreData;
@@ -75,7 +76,11 @@ public final class ProgressStore extends SavedData {
     private static java.util.Set<String> settledTeamRewards(TeamProgress team) {
         var nodes = ProgressService.rules().model().nodes;
         java.util.Set<String> out = new java.util.HashSet<>();
-        for (String key : team.shared.completed) {
+        java.util.Set<String> completed = new java.util.HashSet<>(team.shared.completed);
+        for (PlayerPart part : team.players.values()) {
+            completed.addAll(part.completed);
+        }
+        for (String key : completed) {
             var n = nodes.get(key);
             if (n == null) {
                 continue;

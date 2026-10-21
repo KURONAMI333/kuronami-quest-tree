@@ -17,6 +17,10 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.item.ItemStack;
+import java.util.List;
 
 /**
  * A block that opens one quest, so a pack can put a quest on a wall, in a shop, or at the end of a corridor. The node
@@ -52,6 +56,25 @@ public class QuestTaskBlock extends BaseEntityBlock {
             Services.PLATFORM.openProgressionScreen(node);
         }
         return InteractionResult.SUCCESS;
+    }
+
+    @Override
+    protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+        List<ItemStack> drops = super.getDrops(state, params);
+        if (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) instanceof QuestTaskBlockEntity be) {
+            for (ItemStack drop : drops) {
+                if (drop.is(asItem())) {
+                    drop.set(DataComponents.CUSTOM_DATA, CustomData.of(keyTag("quest_node", be.node())));
+                }
+            }
+        }
+        return drops;
+    }
+
+    private static net.minecraft.nbt.CompoundTag keyTag(String name, String value) {
+        net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+        tag.putString(name, value);
+        return tag;
     }
 
     @Override
