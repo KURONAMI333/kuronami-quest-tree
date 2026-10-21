@@ -38,7 +38,8 @@ public abstract class ServerPlayerGameModeUseItemOnMixin {
                                          BlockHitResult hit, CallbackInfoReturnable<InteractionResult> cir) {
         BlockState state = QUEST_TREE_CLICKED_STATE.get();
         QUEST_TREE_CLICKED_STATE.remove();
-        if (state != null && cir.getReturnValue().consumesAction()) {
+        // a spectator does not really use a block, so their clicks must not count for right_click_block tasks
+        if (state != null && !player.isSpectator() && cir.getReturnValue().consumesAction()) {
             ProgressService.onRightClickBlock(player, state);
         }
     }
