@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Game-independent rules: the state of every node for one player, and the skill point arithmetic.
@@ -23,7 +24,7 @@ public final class ProgressRules {
     private final ProgressModel model;
     private final Map<String, Expression> curves = new HashMap<>();
     /** Parsed exchange cost expressions, shared because the screen asks for the next cost every frame. */
-    private static final Map<String, Expression> EXCHANGE_CURVES = new HashMap<>();
+    private static final Map<String, Expression> EXCHANGE_CURVES = new ConcurrentHashMap<>();
 
     public ProgressRules(ProgressModel model) {
         this.model = model;
