@@ -29,7 +29,7 @@ unclaimed forever is withdrawn; the reward is simply not offered to that player 
 ## Personal stages and team stages (review items 3 and 10)
 
 `stages` is the player's copy of the stages the quest tree granted to them. Stage barriers open when the key is in
-`stages` or in the shared `teamStages`; the server also asks Pack Stages for a stage that is in neither, so a stage
-granted by another mod still opens the gate. A team stage this player was given is tracked in `teamStagesApplied`; on
-login only the stages the team no longer holds are removed, so an offline removal is followed without stripping stages
-another mod granted.
+`stages` or in the shared `teamStages`. If it is in neither, both sides ask Pack Stages: the server checks the player's
+saved stages, and the client reads the copy Pack Stages syncs to it. A stage granted by another mod therefore opens the
+gate on both sides. A team stage this player was given is tracked in `teamStagesApplied`; on login only the stages the
+team no longer holds are removed, so an offline removal is followed without stripping stages another mod granted.

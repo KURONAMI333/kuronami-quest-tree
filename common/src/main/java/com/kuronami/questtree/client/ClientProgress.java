@@ -167,6 +167,10 @@ public final class ClientProgress {
         }
         java.util.Set<String> stages = new java.util.HashSet<>(progress.stages);
         stages.addAll(progress.teamStages);
+        if ("stage".equals(mode) && !stages.contains(key)
+                && com.kuronami.questtree.progress.PackStagesClient.has(key)) {
+            stages.add(key);
+        }
         return com.kuronami.questtree.progress.BarrierRule.allows(mode, key, progress.completed, stages);
     }
 
