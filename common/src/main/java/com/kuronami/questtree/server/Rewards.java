@@ -535,7 +535,7 @@ public final class Rewards {
         return n.rewards;
     }
 
-    private static void item(ServerPlayer player, JsonObject rw) {
+    static void item(ServerPlayer player, JsonObject rw) {
         JsonElement it = rw.get("item");
         String id;
         int count = 1;

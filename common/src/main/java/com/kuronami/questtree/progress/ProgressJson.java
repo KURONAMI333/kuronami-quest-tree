@@ -15,6 +15,9 @@ public final class ProgressJson {
     public static JsonObject write(PlayerProgress p) {
         JsonObject o = new JsonObject();
         o.add("completed", strings(p.completed));
+        JsonObject completedAt = new JsonObject();
+        p.completedAt.forEach(completedAt::addProperty);
+        o.add("completed_at", completedAt);
         o.add("claimed", strings(p.claimed));
         // the client sees a team reward settled once by any member as claimed too, and the separate list lets the
         // details sheet say whether this player or a teammate took it (2026-10-21)
@@ -54,6 +57,11 @@ public final class ProgressJson {
         PlayerProgress p = new PlayerProgress();
         for (JsonElement e : arr(o, "completed")) {
             p.completed.add(e.getAsString());
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
+            if (e.getValue().isJsonPrimitive()) {
+                p.completedAt.put(e.getKey(), e.getValue().getAsLong());
+            }
         }
         for (JsonElement e : arr(o, "claimed")) {
             p.claimed.add(e.getAsString());

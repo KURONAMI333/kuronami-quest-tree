@@ -215,6 +215,7 @@ public final class TeamProgress {
 
     private void mergeShared(PlayerProgress other) {
         shared.completed.addAll(other.completed);
+        other.completedAt.forEach((k, v) -> shared.completedAt.merge(k, v, Math::max));
         other.tasks.forEach((k, v) -> shared.tasks.merge(k, v, Math::max));
         other.taken.forEach((k, v) -> shared.taken.merge(k, v, Math::max));
         other.xp.forEach((k, v) -> shared.xp.merge(k, v, Math::max));

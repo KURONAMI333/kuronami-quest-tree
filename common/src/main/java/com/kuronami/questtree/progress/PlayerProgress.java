@@ -20,6 +20,8 @@ public final class PlayerProgress {
 
     /** Nodes whose tasks are all done (quests) — rewards may still be unclaimed. */
     public Set<String> completed = new HashSet<>();
+    /** When each completed node was finished (epoch millis), for the debug details sheet (2026-10-22). */
+    public Map<String, Long> completedAt = new HashMap<>();
     /** Nodes whose rewards were claimed (all of them; kept for data from before per-reward claims). */
     public Set<String> claimed = new HashSet<>();
     /**
@@ -68,6 +70,8 @@ public final class PlayerProgress {
     private boolean rewardsBlocked;
 
     public static final int RECENT_MAX = 20;
+    /** Cooldown key of the pack's emergency items (not a node, so no chapter key can collide with it). */
+    public static final String EMERGENCY_COOLDOWN = "#emergency";
 
     /** Node keys of {@code shared:false} nodes; their progress lives in each player's part. */
     private static volatile Set<String> personalNodes = Set.of();
@@ -210,6 +214,7 @@ public final class PlayerProgress {
      */
     public void clearRound(String node) {
         completed.remove(node);
+        completedAt.remove(node);
         claimed.remove(node);
         tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
         claimedRewards.removeIf(k -> k.startsWith(node + "#"));
@@ -227,6 +232,8 @@ public final class PlayerProgress {
     public void copySharedFrom(PlayerProgress other) {
         completed.clear();
         completed.addAll(other.completed);
+        completedAt.clear();
+        completedAt.putAll(other.completedAt);
         tasks.clear();
         tasks.putAll(other.tasks);
         taken.clear();

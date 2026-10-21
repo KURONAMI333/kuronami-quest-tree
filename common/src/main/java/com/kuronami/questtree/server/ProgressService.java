@@ -186,6 +186,14 @@ public final class ProgressService {
         markDirty(player);
     }
 
+    /** Drops the quest book for a dead player when the server config asks for it (2026-10-22). */
+    public static void onDeath(ServerPlayer player) {
+        if (!ServerConfig.dropBookOnDeath() || ModItems.questBook() == null) {
+            return;
+        }
+        player.drop(new ItemStack(ModItems.questBook()), true);
+    }
+
     /** Respawning copies only base attribute values, so skill and quest attribute modifiers are put back. */
     public static void onRespawn(ServerPlayer player, boolean died) {
         PlayerProgress p = progress(player);
@@ -551,6 +559,7 @@ public final class ProgressService {
                     claimOne(player, p, n, a.index(), a.choice());
                 }
             }
+            case "emergency" -> emergency(player, p);
             case "claim_all", "claim_chapter" -> {
                 // claim_chapter names a chapter in the node field: the header's button claims that chapter only
                 // (2026-10-20); claim_all takes every chapter
@@ -961,11 +970,13 @@ public final class ProgressService {
                     continue;
                 }
                 if (r.tasksDone(p, n)) {
+                    long doneAt = System.currentTimeMillis();
                     p.completed.add(n.key);
+                    p.completedAt.put(n.key, doneAt);
                     event(player, p, "complete", n.key);
                     autoRewards(player, p, n);
                     // nothing to claim means no claim click: the completion itself starts the quest over
-                    r.repeatAfterCompletion(p, n, System.currentTimeMillis());
+                    r.repeatAfterCompletion(p, n, doneAt);
                     changed = true;
                 }
             }
@@ -1057,10 +1068,13 @@ public final class ProgressService {
                 continue;
             }
             int rewardIndex = i;
-            com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, rewardIndex,
+            boolean rewardPaid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, rewardIndex,
                     com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, Rewards.blocked(p, rw),
                     () -> Rewards.give(player, p, n, rw, choice,
                             com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, rewardIndex)));
+            if (rewardPaid) {
+                event(player, p, "reward", n.key, String.valueOf(rewardIndex));
+            }
         }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
@@ -1092,6 +1106,7 @@ public final class ProgressService {
         if (!paid) {
             return;
         }
+        event(player, p, "reward", n.key, String.valueOf(index));
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
     }
@@ -1121,6 +1136,11 @@ public final class ProgressService {
      * The event also goes into each member's recent list (stored by UUID, so an offline member keeps it).
      */
     static void event(ServerPlayer player, PlayerProgress p, String kind, String node) {
+        event(player, p, kind, node, null);
+    }
+
+    /** {@code detail} goes in the event's third field instead of the actor (a reward index, 2026-10-22). */
+    static void event(ServerPlayer player, PlayerProgress p, String kind, String node, String detail) {
         MinecraftServer server = player.server;
         UUID teamId = TeamResolver.teamId(server, player.getUUID());
         TeamProgress team = ProgressStore.get(server).team(teamId);
@@ -1128,10 +1148,14 @@ public final class ProgressService {
         Set<UUID> members = new LinkedHashSet<>(TeamResolver.members(server, teamId));
         members.add(player.getUUID());
         for (UUID id : members) {
-            team.part(id).event(kind, node, now);
+            // reward events drive a toast, not the Recent list: one entry per reward would push out the quests
+            if (!kind.equals("reward")) {
+                team.part(id).event(kind, node, now);
+            }
             ServerPlayer online = server.getPlayerList().getPlayer(id);
             if (online != null) {
-                PENDING.computeIfAbsent(id, k -> new ArrayList<>()).add(kind + "|" + node + "|" + player.getUUID());
+                String third = detail != null ? detail : player.getUUID().toString();
+                PENDING.computeIfAbsent(id, k -> new ArrayList<>()).add(kind + "|" + node + "|" + third);
                 DIRTY.put(id, true);
             }
         }
@@ -1145,6 +1169,34 @@ public final class ProgressService {
                 }
             }
         }
+    }
+
+    /**
+     * The pack's emergency items: one use per cooldown, paid from {@code progression/settings.json} (2026-10-22).
+     * No node and no conditions: it exists for a player who is stuck without the means to continue.
+     */
+    private static void emergency(ServerPlayer player, PlayerProgress p) {
+        long now = System.currentTimeMillis();
+        long until = p.cooldown.getOrDefault(PlayerProgress.EMERGENCY_COOLDOWN, 0L);
+        if (until > now) {
+            long minutes = Math.max(1, (until - now + 59_999) / 60_000);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                    "message.kuronami_quest_tree.emergency_wait", "Emergency items are ready in %s min", minutes));
+            return;
+        }
+        java.util.List<JsonObject> items = ProgressData.emergencyItems();
+        if (items.isEmpty()) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                    "message.kuronami_quest_tree.emergency_none", "This pack has no emergency items."));
+            return;
+        }
+        for (JsonObject rw : items) {
+            Rewards.item(player, rw);
+        }
+        p.cooldown.put(PlayerProgress.EMERGENCY_COOLDOWN, now + ProgressData.emergencyCooldownMs());
+        ProgressStore.get(player.server).setDirty();
+        markDirty(player);
+        flush(player);
     }
 
     /** Marks every online member of the player's team, because the change was to shared progress. */

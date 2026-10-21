@@ -46,6 +46,49 @@ public final class ProgressData {
     private static final Map<String, byte[]> COMPRESSED = new java.util.concurrent.ConcurrentHashMap<>();
     private static int generation;
     private static int chapterCount;
+    /** Pack-wide settings from {@code progression/settings.json}; empty when the pack has none. */
+    public static JsonObject settings() {
+        return base.has("settings") && base.get("settings").isJsonObject()
+                ? base.getAsJsonObject("settings") : new JsonObject();
+    }
+
+    /** Emergency item definitions, normalised to the reward shape the item payout reads. */
+    public static List<JsonObject> emergencyItems() {
+        JsonObject settings = settings();
+        JsonObject emergency = settings.has("emergency") && settings.get("emergency").isJsonObject()
+                ? settings.getAsJsonObject("emergency") : settings;
+        List<JsonObject> out = new ArrayList<>();
+        for (JsonElement e : arr(emergency, "items")) {
+            if (e.isJsonPrimitive()) {
+                JsonObject rw = new JsonObject();
+                rw.addProperty("item", e.getAsString());
+                out.add(rw);
+            } else if (e.isJsonObject()) {
+                JsonObject rw = e.getAsJsonObject().deepCopy();
+                if (!rw.has("item") && rw.has("id")) {
+                    rw.add("item", rw.get("id"));
+                }
+                if (rw.has("item")) {
+                    out.add(rw);
+                }
+            }
+        }
+        return out;
+    }
+
+    public static long emergencyCooldownMs() {
+        JsonObject settings = settings();
+        JsonObject emergency = settings.has("emergency") && settings.get("emergency").isJsonObject()
+                ? settings.getAsJsonObject("emergency") : settings;
+        long seconds = emergency.has("cooldown_seconds") && emergency.get("cooldown_seconds").isJsonPrimitive()
+                ? Math.max(0, emergency.get("cooldown_seconds").getAsLong()) : 3600;
+        return seconds * 1000L;
+    }
+
+    private static JsonArray arr(JsonObject o, String key) {
+        return o.has(key) && o.get(key).isJsonArray() ? o.getAsJsonArray(key) : new JsonArray();
+    }
+
     /** What the last rebuild found wrong (DATA_MODEL.md "検査"), for the log, {@code /quest_tree validate} and the join hint. */
     private static List<ProgressValidator.Problem> problems = List.of();
     private static int errorCount;
@@ -75,6 +118,7 @@ public final class ProgressData {
         JsonObject tables = new JsonObject();
         JsonObject patches = new JsonObject();
         JsonArray groups = new JsonArray();
+        JsonObject settings = new JsonObject();
 
         Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>();
         readProblems.clear();
@@ -84,6 +128,15 @@ public final class ProgressData {
         readAll(rm, ROOT + "/chapters", chapters, sources, unreadable);
         readAll(rm, ROOT + "/reward_tables", tables, sources, null);
         readAll(rm, ROOT + "/patches", patches, null, null);
+        // one settings file: the first namespace that ships one wins, as with a single pack's config
+        for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(ROOT,
+                id -> id.getPath().equals(ROOT + "/settings.json")).entrySet()) {
+            JsonElement el = read(e.getKey(), e.getValue());
+            if (el != null && el.isJsonObject()) {
+                settings = el.getAsJsonObject();
+                break;
+            }
+        }
         for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(ROOT, id -> id.getPath().equals(ROOT + "/groups.json")).entrySet()) {
             JsonElement g = read(e.getKey(), e.getValue());
             if (g != null && g.isJsonArray()) {
@@ -113,6 +166,7 @@ public final class ProgressData {
         pack.add("chapters", chapters);
         pack.add("reward_tables", tables);
         pack.add("groups", groups);
+        pack.add("settings", settings);
 
         packBundle = pack;
         packSources = sources;
