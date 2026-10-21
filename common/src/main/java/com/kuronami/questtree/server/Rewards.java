@@ -401,9 +401,28 @@ public final class Rewards {
      */
     static void revokeSkill(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
         // points are shared, and giveSkill paid them only for the taker: take them back once, before the member
-        // loop can run the per-player effects (a respec before this point is refused when they were already spent)
+        // loop can run the per-player effects (a respec before this point is refused when they were already spent).
+        // A points reward still pending was never paid, so its debt is cancelled instead (2026-10-22 review).
+        Map<String, PlayerProgress> owners = new HashMap<>();
+        Map<String, Integer> pending = new HashMap<>();
+        for (ServerPlayer member : members(player)) {
+            PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
+            mp.pendingRewards.forEach((key, owed) -> {
+                pending.merge(key, owed, Integer::sum);
+                owners.putIfAbsent(key, mp);
+            });
+        }
         Map<String, Integer> before = new HashMap<>(p.bonus);
-        ProgressService.rules().revokePoints(p, n, taken);
+        ProgressService.rules().revokePoints(p, n, taken, pending);
+        // write the cancellations back into the records that owed them
+        for (Map.Entry<String, PlayerProgress> e : owners.entrySet()) {
+            int left = pending.getOrDefault(e.getKey(), 0);
+            if (left > 0) {
+                e.getValue().pendingRewards.put(e.getKey(), left);
+            } else {
+                e.getValue().pendingRewards.remove(e.getKey());
+            }
+        }
         // an admin respec/reset does not go through the screen's affordability check, so an overdraft must at least
         // leave a trace instead of quietly showing 0 points (2026-10-22 review)
         for (Map.Entry<String, Integer> e : p.bonus.entrySet()) {
@@ -413,14 +432,26 @@ public final class Rewards {
             }
         }
         for (ServerPlayer member : members(player)) {
-            revokeSkillOne(member, p, n, taken);
+            PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
+            revokeSkillOne(member, mp, n, taken);
         }
     }
 
     private static void revokeSkillOne(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int taken) {
         removeAttributesOne(player, n);
-        for (int rank = 0; rank < Math.max(1, Math.min(taken, Math.max(1, n.ranks))); rank++) {
-            for (JsonObject rw : rewardsOfRank(n, rank)) {
+        int ranks = Math.max(1, Math.min(taken, Math.max(1, n.ranks)));
+        for (int rank = 0; rank < ranks; rank++) {
+            List<JsonObject> list = rewardsOfRank(n, rank);
+            for (int index = 0; index < list.size(); index++) {
+                JsonObject rw = list.get(index);
+                if (ProgressService.type(rw).equals("points")) {
+                    // revokePoints took the shared points back once for the team and cancelled a pending copy there
+                    continue;
+                }
+                if (SkillRewardPolicy.cancelPending(p, n, rank, index)) {
+                    // the pay-out was still owed, not made: the debt goes with the skill and nothing is undone
+                    continue;
+                }
                 try {
                     switch (ProgressService.type(rw)) {
                         case "command" -> run(player, rw, ProgressService.str(rw, "lock_command"));
@@ -443,7 +474,9 @@ public final class Rewards {
      */
     static void revokeChapter(ServerPlayer player, PlayerProgress p, ProgressModel.Chapter c) {
         for (ServerPlayer member : members(player)) {
-            revokeChapterOne(member, p, c);
+            // each member's own claims and pending rewards decide what that member had and is still owed
+            PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
+            revokeChapterOne(member, mp, c);
         }
     }
 

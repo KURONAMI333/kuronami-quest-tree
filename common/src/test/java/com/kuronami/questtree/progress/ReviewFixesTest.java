@@ -312,6 +312,96 @@ class ReviewFixesTest {
         assertTrue(team.completedFor(A).contains("t:q/team"));
     }
 
+    /**
+     * Taking a skill while pay-outs are blocked owes every reward to the player. A respec then cancels that debt
+     * instead of revoking what was never paid, so lifting the block hands out nothing and the points stay at zero
+     * (2026-10-22 review).
+     */
+    @Test
+    void aRespecCancelsABlockedSkillPayOutInsteadOfPayingItLater() {
+        ProgressModel model = skillModel();
+        ProgressModel.Node n = model.chapters.get("s:a").nodes.get("n");
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(n.chapter), 1);
+
+        takeSkillBlocked(p, n, 0);
+        assertEquals(4, p.pendingRewards.size(), "every reward of the rank waits for the block to lift");
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(n.chapter), 0), "the points were never paid");
+
+        respecSkill(model, p, n, 1);
+        assertTrue(p.pendingRewards.isEmpty(), "lifting the block afterwards must pay nothing");
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(n.chapter), 0), "revoking unpaid points must not go negative");
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 0), "a cancelled pay-out can be earned again on a later take");
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 1), "the mark went with the cancelled debt");
+    }
+
+    /** The same, for a reset: the node's pending rewards and marks go without touching the pool. */
+    @Test
+    void aResetCancelsABlockedSkillPayOutInsteadOfLosingThePoints() {
+        ProgressModel model = skillModel();
+        ProgressModel.Node n = model.chapters.get("s:a").nodes.get("n");
+        PlayerProgress p = new PlayerProgress();
+        p.taken.put(n.key, 1);
+        p.spent.put(ProgressRules.key(n.chapter), 1);
+
+        takeSkillBlocked(p, n, 0);
+        respecSkill(model, p, n, 1);
+        p.clearNode(n.key);
+
+        assertTrue(p.pendingRewards.isEmpty());
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(n.chapter), 0));
+        assertTrue(p.claimedRewards.isEmpty(), "a reset forgets the node's marks");
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 0));
+    }
+
+    /** A paid points reward is still taken back, so the pending rule only skips the ones that were never paid. */
+    @Test
+    void pointsThatWerePaidAreStillTakenBackOnRespec() {
+        ProgressModel model = skillModel();
+        ProgressModel.Node n = model.chapters.get("s:a").nodes.get("n");
+        PlayerProgress p = new PlayerProgress();
+        p.bonus.put(ProgressRules.key(n.chapter), 2);
+        new ProgressRules(model).revokePoints(p, n, 1, p.pendingRewards);
+        assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(n.chapter), 0));
+    }
+
+    private static ProgressModel skillModel() {
+        return ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {"start": 1}, "nodes": {"n": {"cost": 1, "rewards": [
+                  {"type": "item", "item": "minecraft:stone"},
+                  {"type": "command", "command": "say hi"},
+                  {"type": "tag", "tag": "test"},
+                  {"type": "points", "amount": 2}]}}}}}
+                """).getAsJsonObject());
+    }
+
+    /** The taker's side of {@code Rewards.giveSkillOne} while every pay-out is blocked. */
+    private static void takeSkillBlocked(PlayerProgress p, ProgressModel.Node n, int rank) {
+        java.util.List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
+        for (int i = 0; i < list.size(); i++) {
+            boolean paid = RewardLedger.claim(p, list.get(i), n.key, i, rank, false, true, () -> true);
+            SkillRewardPolicy.recordPaid(p, n, rank, i, paid);
+        }
+    }
+
+    /** The shared side of {@code Rewards.revokeSkill} / {@code revokeSkillOne}: points first, then the other rewards. */
+    private static void respecSkill(ProgressModel model, PlayerProgress p, ProgressModel.Node n, int taken) {
+        new ProgressRules(model).revokePoints(p, n, taken, p.pendingRewards);
+        for (int rank = 0; rank < taken; rank++) {
+            java.util.List<JsonObject> list = ProgressRules.rewardsOfRank(n, rank);
+            for (int i = 0; i < list.size(); i++) {
+                if (!type(list.get(i)).equals("points")) {
+                    SkillRewardPolicy.cancelPending(p, n, rank, i);
+                }
+            }
+        }
+    }
+
+    private static String type(JsonObject rw) {
+        return rw.has("type") ? rw.get("type").getAsString() : "";
+    }
+
     private static JsonObject reward(String type) {
         JsonObject r = new JsonObject();
         r.addProperty("type", type);

@@ -68,6 +68,24 @@ public final class RewardLedger {
         return true;
     }
 
+    /**
+     * Takes one owed pay-out back off the pending list. Returns true when it was still pending, so the caller must not
+     * undo it either: nothing was handed out (2026-10-22 review). False means it was paid, so the caller undoes it.
+     */
+    public static boolean takePendingBack(PlayerProgress p, String node, int rank, int index) {
+        String key = pendingKey(node, rank, index);
+        int owed = p.pendingRewards.getOrDefault(key, 0);
+        if (owed <= 0) {
+            return false;
+        }
+        if (owed == 1) {
+            p.pendingRewards.remove(key);
+        } else {
+            p.pendingRewards.put(key, owed - 1);
+        }
+        return true;
+    }
+
     /** A blocked choice table cannot be taken: the pick is not part of the pending record. */
     public static boolean blockedChoice(boolean blocked, JsonObject reward) {
         return blocked && "table".equals(reward.has("type") ? reward.get("type").getAsString() : "")

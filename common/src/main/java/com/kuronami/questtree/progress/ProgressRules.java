@@ -562,13 +562,31 @@ public final class ProgressRules {
         return Math.max(0, amount.getAsInt());
     }
 
-    /** Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into). */
-    public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken) {
+    /**
+     * Takes a skill's points rewards back out of the pool that received them (the same key {@code Rewards} paid into).
+     * A points reward that is still pending was never paid, so its debt is cancelled instead of being taken back: else
+     * a respec while pay-outs are blocked would leave the pool negative and the pending would add it again later
+     * (2026-10-22 review). {@code pending} is the pending list that owes it (the player's, or the team's merged).
+     */
+    public void revokePoints(PlayerProgress p, ProgressModel.Node n, int taken, Map<String, Integer> pending) {
         for (int rank = 0; rank < Math.max(0, taken); rank++) {
-            for (JsonObject rw : rewardsOfRank(n, rank)) {
-                if (isPoints(rw)) {
-                    p.bonus.merge(pointsTarget(n, rw), -pointsAmount(rw), Integer::sum);
+            List<JsonObject> list = rewardsOfRank(n, rank);
+            for (int index = 0; index < list.size(); index++) {
+                JsonObject rw = list.get(index);
+                if (!isPoints(rw)) {
+                    continue;
                 }
+                String key = RewardLedger.pendingKey(n.key, rank, index);
+                int owed = pending.getOrDefault(key, 0);
+                if (owed > 0) {
+                    if (owed == 1) {
+                        pending.remove(key);
+                    } else {
+                        pending.put(key, owed - 1);
+                    }
+                    continue;
+                }
+                p.bonus.merge(pointsTarget(n, rw), -pointsAmount(rw), Integer::sum);
             }
         }
     }
@@ -587,7 +605,8 @@ public final class ProgressRules {
         return target == null ? c : key(target);
     }
 
-    private static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
+    /** The rewards of one rank, read the same way paying and revoking do. */
+    static List<JsonObject> rewardsOfRank(ProgressModel.Node n, int rank) {
         if (n.ranks > 0 && n.json.has("ranks") && n.json.get("ranks").isJsonArray()) {
             var ranks = n.json.getAsJsonArray("ranks");
             if (!ranks.isEmpty()) {

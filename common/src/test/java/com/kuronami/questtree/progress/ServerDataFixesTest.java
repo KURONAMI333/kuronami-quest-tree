@@ -349,7 +349,7 @@ class ServerDataFixesTest {
         assertFalse(rules.canRespec(p, a), "the refund plus what is left does not cover the points the skill paid");
         p.spent.put(ProgressRules.key(a), 1);
         assertTrue(rules.canRespec(p, a));
-        rules.revokePoints(p, n, 1);
+        rules.revokePoints(p, n, 1, p.pendingRewards);
         assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(a), 0), "the paid points came back out once");
         assertEquals(0, rules.availablePoints(p, a));
         assertEquals(1, ProgressRules.refundChapterSpent(p, a));
