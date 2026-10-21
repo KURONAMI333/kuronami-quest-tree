@@ -107,8 +107,14 @@ public final class ProgressData {
     private static Set<String> droppedNodes = Set.of();
     /** The open world's root; null before a server has told us which world it is. */
     private static Path overlayRoot;
-    /** Reward indices that moved in the last rebuild, for the store to move saved claims once (2026-10-22). */
+    /** Reward indices that moved in the last edit, for the store to move saved claims once (2026-10-22). */
     private static Map<String, Map<Integer, Integer>> rewardRemap = Map.of();
+    /**
+     * The registry the data is checked against. It is a field so that a unit test can use
+     * {@link ProgressValidator.Registry#NONE}: the game-side one asks the platform for loaded mods, and a test has
+     * none.
+     */
+    static ProgressValidator.Registry registry = GameRegistry.INSTANCE;
 
     private ProgressData() {
     }
@@ -162,17 +168,31 @@ public final class ProgressData {
         }
 
         applyPatches(chapters, patches);
+        installPack(packOf(chapters, tables, groups, settings), sources, unreadable,
+                List.copyOf(readProblems), byLocale);
+    }
+
+    /**
+     * The pack side of a bundle, in the shape {@link #rebuild()} reads. Shared with {@link #installPack}, so a test
+     * can hand in exactly what a reload would have kept.
+     */
+    static JsonObject packOf(JsonObject chapters, JsonObject tables, JsonArray groups, JsonObject settings) {
         JsonObject pack = new JsonObject();
         pack.add("chapters", chapters);
         pack.add("reward_tables", tables);
         pack.add("groups", groups);
         pack.add("settings", settings);
+        return pack;
+    }
 
+    /** Keeps a pack as if {@link #reload} had read it, then rebuilds. A test needs this: it has no resource manager. */
+    static void installPack(JsonObject pack, Map<String, ProgressValidator.Source> sources, Set<String> unreadable,
+                            List<ProgressValidator.Problem> problems, Map<String, JsonObject> locales) {
         packBundle = pack;
         packSources = sources;
         packUnreadable = unreadable;
-        packProblems = List.copyOf(readProblems);
-        langs = byLocale;
+        packProblems = problems;
+        langs = locales;
         rebuild();
     }
 
@@ -181,8 +201,10 @@ public final class ProgressData {
      * <p>
      * This is the only path an edit takes to the clients. It reads no resource manager: the pack side is kept from the
      * last reload, so a save costs one read of the overlay chapters and one validation, not a Minecraft reload.
+     *
+     * @return whether a new bundle was published (validation can reject it and leave the loaded one in place)
      */
-    private static void rebuild() {
+    private static boolean rebuild() {
         JsonObject bundle = packBundle.deepCopy();
         if (!bundle.has("chapters") || !bundle.get("chapters").isJsonObject()) {
             bundle.add("chapters", new JsonObject());
@@ -224,7 +246,7 @@ public final class ProgressData {
         // check the data before it becomes a model: a broken node is dropped, the rest of the pack keeps working
         ProgressValidator.Result result;
         try {
-            result = ProgressValidator.validate(bundle, sources, GameRegistry.INSTANCE, unreadable);
+            result = ProgressValidator.validate(bundle, sources, registry, unreadable);
         } catch (RuntimeException ex) {
             // the check must never take a rebuild down with it: keep the data as it is and report that it happened
             Constants.LOG.error("Could not check the progression data", ex);
@@ -266,16 +288,9 @@ public final class ProgressData {
             }
         }
         if (built == null) {
-            return;
+            return false;
         }
 
-        JsonObject oldChapters = base.has("chapters") && base.get("chapters").isJsonObject()
-                ? base.getAsJsonObject("chapters") : new JsonObject();
-        Map<String, Map<Integer, Integer>> moved =
-                com.kuronami.questtree.progress.RewardIndexRemap.between(oldChapters, chapters);
-        if (!moved.isEmpty()) {
-            rewardRemap = moved;
-        }
         base = bundle;
         COMPRESSED.clear();
         model = built;
@@ -283,6 +298,7 @@ public final class ProgressData {
         chapterCount = chapters.size();
         Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount,
                 bundleFor("en_us").length / 1024, langs.size());
+        return true;
     }
 
     /** Called once the server knows which world is open; the overlay lives inside it. */
@@ -291,9 +307,14 @@ public final class ProgressData {
         rebuild();
     }
 
-    /** The server stopped: the next world must not keep reading this one's overlay. */
+    /**
+     * The server stopped: the next world must not keep reading this one's overlay, or compare its chapters with this
+     * one's when it computes a reward move (2026-10-22 review).
+     */
     public static void clearOverlayRoot() {
         overlayRoot = null;
+        base = new JsonObject();
+        rewardRemap = Map.of();
     }
 
     /** The reward moves of the last rebuild, cleared once the store has applied them. */
@@ -303,9 +324,24 @@ public final class ProgressData {
         return out;
     }
 
-    /** Rebuilds after an edit (the editor asks for this at most once per server tick). */
+    /**
+     * Rebuilds after an edit (the editor asks for this at most once per server tick).
+     * <p>
+     * Only this rebuild may move a saved reward index (2026-10-22 review). A pack reload or a world change also
+     * rebuilds, but it is not an edit: charging its difference to the saved claims would shift them onto a different
+     * reward, and a reward the overlay deleted would become claimable again.
+     */
     public static void rebuildOverlay() {
-        rebuild();
+        JsonObject oldChapters = chaptersOf(base);
+        if (!rebuild()) {
+            return;
+        }
+        rewardRemap = com.kuronami.questtree.progress.RewardIndexRemap.between(oldChapters, chaptersOf(base));
+    }
+
+    private static JsonObject chaptersOf(JsonObject bundle) {
+        return bundle.has("chapters") && bundle.get("chapters").isJsonObject()
+                ? bundle.getAsJsonObject("chapters") : new JsonObject();
     }
 
     /** The bundle's restore list: no deleted chapters, no deleted nodes. */
