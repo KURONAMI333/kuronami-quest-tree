@@ -1,8 +1,8 @@
-# 他 MOD 向け API
+# API for other mods
 
-Quest Tree の API は `common` の `com.kuronami.questtree.api` にあり、NeoForge と Fabric の両方で同じ形で使える。API を使う MOD は Quest Tree を `compileOnly` で参照し、実行時は任意依存にできる（Quest Tree が無ければ登録も呼ばれない）。
+The Quest Tree API lives in `com.kuronami.questtree.api` in `common` and has the same shape on NeoForge and Fabric. A mod that uses it references Quest Tree as `compileOnly` and can keep it optional at runtime (when Quest Tree is absent, the registration calls are simply never made).
 
-## 種類を登録する
+## Registering a type
 
 ```java
 ResourceLocation id = ResourceLocation.fromNamespaceAndPath("example", "level");
@@ -11,11 +11,11 @@ QuestTreeApi.registerRewardType(id, context -> context.player().giveExperienceLe
 QuestTreeApi.registerConditionType(id, context -> context.player().experienceLevel >= 30);
 ```
 
-同じ id の再登録は置き換え（Java 登録）。`unregisterTaskType` / `unregisterRewardType` / `unregisterConditionType` もある（スクリプト再読み込み用）。
+Registering the same id again replaces the previous handler (a Java registration). `unregisterTaskType` / `unregisterRewardType` / `unregisterConditionType` also exist, for script reloads.
 
-説明文の色・リンク・画像の書き方は [_docs/DESCRIPTION_TEXT.md](DESCRIPTION_TEXT.md) を参照。
+For description colours, links and images, see [_docs/DESCRIPTION_TEXT.md](DESCRIPTION_TEXT.md).
 
-データ側は登録した id をそのまま書く。
+On the data side, write the registered id as-is.
 
 ```json
 {
@@ -29,12 +29,12 @@ QuestTreeApi.registerConditionType(id, context -> context.player().experienceLev
 }
 ```
 
-- **タスク**: サーバーの tick で `QuestTaskType.progress(TaskContext)` を呼び、返した値を進捗として保存する。`count` / `amount` は `maxProgress()` で読める。`currentProgress()` はこのタスクの現在値。
-- **報酬**: 受取が確定した時に `QuestRewardType.give(RewardContext)` を呼ぶ。例外は Quest Tree が捕まえてログする。権限・距離などの検証はハンドラ側の責任。
-- **条件**: `conditions` の全項目が true の時だけ、タスクは進み、報酬は渡される。組み込みの5種類（`stage`・`score`・`item`・`advancement`・`party_size`）と登録した種類は同じ1つの判定器で評価される。組み込みとして扱うのは名前空間なし（`item`）か `kuronami_quest_tree:item` だけで、他の名前空間（`example:item`）は id が組み込みと同じでも必ず登録表を引く。登録した種類は名前空間込みの id で照合し、どちらにも無い種類は false（fail closed）。`QuestTreeApi.conditionsMet(player, node, data, task)` はこの同じ判定を呼ぶ公開の入口。
-- 登録した type は `ProgressValidator` の未知 type 警告/エラーから除外される。条件は組み込みと登録済みを既知として扱い、それ以外は警告（ノードは落とさない）。
+- **Tasks**: on each server tick, `QuestTaskType.progress(TaskContext)` is called and the returned value is saved as progress. `count` / `amount` can be read through `maxProgress()`. `currentProgress()` is this task's current value.
+- **Rewards**: `QuestRewardType.give(RewardContext)` is called when a claim is confirmed. Quest Tree catches and logs exceptions. Permission, distance and similar checks are the handler's responsibility.
+- **Conditions**: a task advances and a reward is given only when every entry in `conditions` is true. The five built-in types (`stage`, `score`, `item`, `advancement`, `party_size`) and registered types are evaluated by the same check. A type counts as built-in only when it has no namespace (`item`) or uses `kuronami_quest_tree:item`; any other namespace (`example:item`) always looks in the registry even when the id matches a built-in. Registered types are matched by their full namespaced id, and a type found in neither place is false (fail closed). `QuestTreeApi.conditionsMet(player, node, data, task)` is the public entry point that runs the same check.
+- Registered types are excluded from `ProgressValidator`'s unknown-type warnings and errors. Conditions treat built-ins and registered types as known; anything else is a warning (the node is not dropped).
 
-## 進行イベント
+## Progression events
 
 ```java
 QuestTreeApi.addListener(event -> {
@@ -44,17 +44,17 @@ QuestTreeApi.addListener(event -> {
 });
 ```
 
-| `Kind` | いつ |
+| `Kind` | When |
 |---|---|
-| `COMPLETE` | クエストのタスクが揃った時 |
-| `CLAIM` | 最後の報酬を受け取った時 |
-| `TASK` | タスクの進捗が目標に届いた時（`task` はその位置） |
+| `COMPLETE` | All of a quest's tasks are done |
+| `CLAIM` | The last reward has been claimed |
+| `TASK` | A task's progress reaches its target (`task` is that task's position) |
 
-リスナーはサーバースレッドで、その瞬間に 1 回だけ呼ばれる。`player` はその行動をしたメンバー。例外はログして次のリスナーへ進む。
+Listeners run on the server thread and are called once at that moment. `player` is the member who performed the action. An exception is logged and the next listener still runs.
 
-## KubeJS（NeoForge のみ）
+## KubeJS (NeoForge only)
 
-KubeJS 7 は 1.21.1 では NeoForge 専用なので、連携クラスは `:neoforge` にだけ入っている。jar の `kubejs.plugins.txt` を KubeJS が読み、KubeJS が無ければクラスはロードされない。
+KubeJS 7 is NeoForge-only on 1.21.1, so the integration class lives only in `:neoforge`. KubeJS reads `kubejs.plugins.txt` from the jar; without KubeJS the classes are never loaded.
 
 ```js
 QuestTreeEvents.questCompleted(event => console.info(event.quest))
@@ -64,10 +64,10 @@ QuestTree.registerTask('example:held_level', context => context.player().experie
 QuestTree.registerCondition('example:level_30', context => context.player().experienceLevel >= 30)
 ```
 
-`QuestTree.registerCondition` で登録した種類は、組み込みの5種類（`stage`・`score`・`item`・`advancement`・`party_size`）と同じ `conditions` 配列に名前空間込みの id で書く。組み込みの種類はスクリプトから登録しなくてもそのまま使える。
+A type registered with `QuestTree.registerCondition` is written in the same `conditions` array as the five built-in types (`stage`, `score`, `item`, `advancement`, `party_size`), using its namespaced id. Built-in types work without any script registration.
 
-再読み込みで外れるのは、そのスクリプト種別（startup / server / client）が登録した id だけ。既にある id へのスクリプトの登録は拒否され false を返す。登録はスクリプトのトップレベルで行う。
+A reload removes only the ids registered by that script kind (startup / server / client). Registering an id that already exists from a script is refused and returns false. Register at the top level of the script.
 
-## レシピビューア
+## Recipe viewers
 
-JEI / REI / EMI はすべて任意。それぞれのプラグインが `RecipeViewer` を差し替え、クエスト画面の「レシピを開く」と、ビューア側のアイテムからクエストを開く操作を同じ経路にする。3 つとも `compileOnly` で、jar には依存を書かない。
+JEI / REI / EMI are all optional. Each viewer's plugin swaps in `RecipeViewer`, so "open the recipe" from the quest screen and opening a quest from an item in the viewer use the same path. All three are `compileOnly` and no dependency is written into the jar.

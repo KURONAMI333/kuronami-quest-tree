@@ -1,8 +1,8 @@
-# ゲーム内エディタの上書き層（Phase 1）
+# In-game editor overlay
 
-サーバー側の保存形式と操作。UI はまだ無く、クライアントは `EditorOpPayload` を送り `EditorReplyPayload` を受け取る。
+The server-side storage format and operations. The client sends `EditorOpPayload` and receives `EditorReplyPayload`; the editor screens are described under Phase 2–4 below.
 
-## 保存先と優先順
+## Location and precedence
 
 ```
 <world>/kuronami_quest_tree/progression/
@@ -10,9 +10,9 @@
   revisions.json
 ```
 
-読み込みは低い順に、data pack の章・報酬テーブル・グループ → data pack の `patches/*.json` → この上書き層。上書き層は章単位で、pack の章を消すこともできる。`/reload` は要らない。保存のたびに `ProgressData` が層を適用し、検証してから generation を上げて全員へ送り直す（1 tick に最大1回）。
+Loading applies, from lowest to highest precedence: data pack chapters, reward tables and groups → data pack `patches/*.json` → this overlay. The overlay is per chapter and can also remove a pack chapter. `/reload` is not needed. Each save applies the layers through `ProgressData`, validates the result, then raises the generation and resends it to everyone (at most once per ten ticks).
 
-## 章ファイル
+## Chapter file
 
 ```json
 {
@@ -25,89 +25,91 @@
   "removed": ["subtitle"],
   "nodes": {
     "a": { "action": "replace", "node": { "x": 1, "y": 2 } },
-    "b": { "action": "remove", "node": { "...": "削除時の内容" }, "edited": true },
-    "c": { "action": "add", "node": { "...": "新しいノード" } }
+    "b": { "action": "remove", "node": { "...": "contents at deletion" }, "edited": true },
+    "c": { "action": "add", "node": { "...": "a new node" } }
   }
 }
 ```
 
-- `revision`: 章ごとの版番号。クライアントは最後に見た版を送り、古ければ拒否される。
-- `base`: 最初に編集した時、pack に章があったか。
-- `replace`: `chapter` を pack の章に重ねず、そのまま使う。`create_chapter` は true。
-- `remove`: 章の墓石。`chapter` に削除時の内容を残す。
-- `edited`: 墓石にした時、それ以前に上書き層で変更していたか。復元時に「pack の元の章」と「作者の版」を選ぶために使う。
-- `chapter`: 編集で変わったトップレベルのキーだけを、**変更後の値ごと**持つ。`replace` が false なら pack の章へキー単位で重なり、`nodes` は下のノード指定だけが効く。入れ子の一部だけを変えても兄弟は消えない（例: `display.title` を変えても pack の `display.icon` は残る）。
-- `removed`: RFC 7396 の `null` で pack の項目を消した時の、トップレベルのキー名。`replace` が false の時、`chapter` を重ねる前にこのキーを pack から外す。`create_chapter` のように `replace` が true の章では使わない。
-- `nodes`: `action` は `add` / `replace` / `remove`。`remove` は内容を残すので復元できる。`edited` は削除前に変更があったか。
-- `revisions.json`: 章ファイルを消した取り消しでも版番号を巻き戻さないための小さな控え（`{"<chapter id>": 版}`）。章ファイルの `revision` と控えの大きい方を使う。クライアントは同期バンドルの `revisions`（章 id → 版）で現在の版を知る。
+- `revision`: the chapter's version number. Clients send the last version they saw; an older one is refused.
+- `base`: whether the pack had this chapter when it was first edited.
+- `replace`: use `chapter` as-is instead of layering it over the pack chapter. `create_chapter` sets this to true.
+- `remove`: the chapter's tombstone. `chapter` keeps the contents at deletion.
+- `edited`: whether the overlay had changed this chapter before it became a tombstone. Used when restoring, to choose between "the pack's original chapter" and "the author's version".
+- `chapter`: only the top-level keys the edit changed, each with its **new value**. When `replace` is false the keys are layered over the pack chapter one by one, and `nodes` only applies the node entries below. Changing one nested value does not remove its siblings (for example, changing `display.title` keeps the pack's `display.icon`).
+- `removed`: the top-level key names whose pack entries were deleted with RFC 7396 `null`. When `replace` is false these keys are removed from the pack chapter before `chapter` is layered on. Not used for a chapter with `replace` true, such as `create_chapter`.
+- `nodes`: `action` is `add` / `replace` / `remove`. `remove` keeps the contents so the node can be restored. `edited` says whether the node had been changed before it was deleted.
+- `revisions.json`: a small record so an undo that deletes the chapter file does not roll the version number back (`{"<chapter id>": version}`). The larger of the chapter file's `revision` and this record is used. Clients learn the current versions from the sync bundle's `revisions` (chapter id → version).
 
-手書きする場合、`action` を省くと `add` として読む。読めないファイルは ERROR として報告し、その章への書き込みは拒否する。
+When writing a file by hand, an omitted `action` is read as `add`. An unreadable file is reported as an ERROR and writes to that chapter are refused.
 
-## 操作（`EditorOpPayload.op`）
+## Operations (`EditorOpPayload.op`)
 
-`chapterId` は `<namespace>:<chapter path>`。`create_chapter` だけは章がまだ無いので空文字を送り、`args.namespace` で名前空間を指定する。新 ID はサーバーが発番し、返答の `createdId` に入る。
+`chapterId` is `<namespace>:<chapter path>`. Only `create_chapter` sends an empty chapter id, because the chapter does not exist yet; `args.namespace` names the namespace. The server mints the new id and returns it as `createdId`.
 
 | op | args |
 |---|---|
 | `create_node` | `{"node": {...}}` |
-| `update_node` | `{"id": "...", "patch": {...}}`（RFC 7386。`null` はキー削除） |
+| `update_node` | `{"id": "...", "patch": {...}}` (RFC 7386; `null` deletes the key) |
 | `move_node` | `{"id": "...", "x": 0, "y": 0}` |
+| `move_nodes` | `{"nodes": [{"id": "...", "x": 0, "y": 0}, ...]}` (one revision and one undo step) |
 | `delete_node` / `restore_node` | `{"id": "..."}` |
-| `create_chapter` | `{"namespace": "...", "chapter": {...}}`（初期ノードの id はサーバーが振り直し、初期ノード同士の `requires` / `exclusive_with` も書き換える） |
-| `update_chapter` | `{"patch": {...}}`（`nodes` は不可。今の章全体に対する RFC 7396 で、`null` は pack の項目も消す） |
+| `delete_nodes` | `{"ids": ["...", ...]}` (one revision and one undo step) |
+| `create_chapter` | `{"namespace": "...", "chapter": {...}}` (the server reassigns the initial node ids and rewrites `requires` / `exclusive_with` between them) |
+| `update_chapter` | `{"patch": {...}}` (not `nodes`; an RFC 7396 patch on the whole current chapter, where `null` also deletes pack entries) |
 | `delete_chapter` / `restore_chapter` | `{}` |
-| `update_table` | `{"id": "...", "create": true?, "table": {...}}`（丸ごと。`patch` も可） |
+| `update_table` | `{"id": "...", "create": true?, "table": {...}}` (whole table; `patch` is also accepted) |
 | `delete_table` / `restore_table` | `{"id": "..."}` |
-| `link` / `unlink` | `{"from": "...", "to": "..."}`（`to` は同じ章ならノード名、別章なら `chapter/node`） |
+| `link` / `unlink` | `{"from": "...", "to": "..."}` (`to` is a node name in the same chapter, or `chapter/node` for another chapter) |
 | `undo` / `redo` | `{}` |
 
-ノード id は `[a-z0-9_]` のみ。それ以外を含む id は受け付けない。ID の改名は無い（参照・排他・翻訳キー・プレイヤーの進行を一度に壊すため）。
+Node ids use `[a-z0-9_]` only; an id containing anything else is refused. There is no rename (it would break references, exclusions, translation keys and player progress at once).
 
-## 検証と取り消し
+## Validation and undo
 
-- 書き込み前に候補の章を `ProgressValidator` に通す。本全体の ERROR 集合を前後で比べ、**新しい ERROR** が1つでも出たら書かない（他章の前提を壊す削除もここで止まる）。既存の ERROR は編集を妨げない。
-- 拒否時は返答に検証メッセージが入り、ファイルは変わらない。
-- 取り消しは章ごと・テーブルごとのスナップショット、直近50手（同じ端から積み、同じ端から戻す）。テーブルの履歴は章の履歴と別で、同じ id でも混ざらない。サーバー再起動では消える。ディスクに残るのは墓石、`.bak`（書き込み直前の版）、`revisions.json` / `table_revisions.json`。
-- 書き込みは同じフォルダの一時ファイルに書いてから置き換える（`ATOMIC_MOVE`、無い環境では `REPLACE_EXISTING`）。途中で落ちても半端な章ファイルは残らない。
+- Before writing, the candidate chapter is run through `ProgressValidator`. The whole book's set of ERRORs is compared before and after, and the write is refused if even one **new ERROR** appears (this also stops a deletion that breaks another chapter's prerequisite). Existing ERRORs do not block an edit.
+- On refusal, the reply carries the validation messages and no file changes.
+- Undo uses per-chapter and per-table snapshots, for the last 50 steps (pushed and popped on the same end). Table history is separate from chapter history, so the same id cannot mix them. It is lost when the server restarts. What stays on disk is the tombstone, `.bak` (the version just before a write), and `revisions.json` / `table_revisions.json`.
+- Writes go to a temporary file in the same folder and are then moved into place (`ATOMIC_MOVE`, or `REPLACE_EXISTING` where that is unavailable). A crash halfway leaves no partial chapter file.
 
-## 通信の大きさ
+## Payload size
 
-バニラのサーバー行きカスタムペイロードは 32767 バイトまでで、Fabric は C2S を分割しない。超えたペイロードはクライアント側のエンコードで落ち、返答も残らない。そのため `EditorOpPayload` は 7000 文字ずつのチャンクに分けて送り、サーバーの `EditorOpAssembler` がプレイヤーごと・`requestId` ごとに組み立ててから操作を実行する。分割位置は 1 個の int `chunk` に `(parts << 8) | (part + 1)` として詰める（0 は分割なし。`part()` / `parts()` が読み出す）。1個で収まる要求は今まで通り `part=0, parts=1`。262144 文字を超える要求は送る前に拒否する。
+A vanilla custom payload to the server is at most 32767 bytes, and Fabric does not split C2S packets. A larger payload fails during client-side encoding and no reply follows. `EditorOpPayload` therefore splits writes into chunks of 7000 characters, and the server's `EditorOpAssembler` rebuilds them per player and per `requestId` before running the operation. The split position is packed into one int `chunk` as `(parts << 8) | (part + 1)` (0 means unsplit; `part()` / `parts()` read it back). A request that fits in one chunk stays `part=0, parts=1`. A request larger than 262144 characters is refused before sending.
 
-## コマンド
+## Commands
 
-- `/quest_tree edit on|off`（引数なしで切り替え）: OP レベル2 かつ編集モードがオンの時だけ操作を受け付ける。ログアウト・サーバー停止で解除。
-- `/quest_tree export <namespace> [force]`: 検証済みの本を `datapacks/quest_tree_export_<namespace>` に通常の data pack として書き出す。有効化も `/reload` もしない。名前空間は `[a-z0-9_.-]` のまま章の照合に使い、フォルダ名だけを安全な文字に直す（`-` や `.` を含む名前空間でも 0 章にならない）。その名前空間の翻訳（`progression.<ns>.` で始まるキー）も `lang/` に入れる。検証で落としたノードの数はチャットに出す。既にあるフォルダは消さずに拒否し、`force` を付けた時だけ書き換える（`ImportOutput.writeTo` は `data/<ns>/progression` を先に消すため）。
+- `/quest_tree edit on|off` (no argument toggles): operations are accepted only with permission level 2 and edit mode on. Logout and server shutdown turn it off.
+- `/quest_tree export <namespace> [force]`: writes the validated book to `datapacks/quest_tree_export_<namespace>` as an ordinary data pack. It does not enable it or run `/reload`. The namespace keeps `[a-z0-9_.-]` for chapter matching, and only the folder name is made safe (a namespace containing `-` or `.` does not produce zero chapters). Translations for that namespace (keys starting with `progression.<ns>.`) go into `lang/` as well. The number of nodes dropped by validation is reported in chat. An existing folder is refused rather than deleted; `force` rewrites it (`ImportOutput.writeTo` deletes `data/<ns>/progression` first).
 
-## Phase 2: マップ上の編集（2026-10-20）
+## Phase 2: editing on the map (2026-10-20)
 
-- サーバーが `EditorStatePayload` で「編集してよいか」（権限2 かつ `/quest_tree edit on`）を参加時と切替時に送る。許可があるとタイトル行のピン横に歯車が出て、E でも切り替わる。
-- 選択（クリック・Ctrl+クリック・Shift+ドラッグの矩形・Ctrl+A）、ドラッグ移動（半グリッド、Alt で無効）、矢印キー（Shift で5）、右クリックのメニュー、Ctrl+C/V/D、Delete、L を押しながらのドラッグかメニューの「ここからリンク」、Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y。EditBox にフォーカスがある間はキーを奪わない。
-- 操作は `EditorSession` が1件ずつ送り、前の返答の revision を次に使う。移動は返答前から仮の位置で描き、拒否されたら元に戻す。拒否の文面は検証メッセージをそのまま短く出す。古い revision はサーバーが bundle を再送する。
-- 貼り付けはサーバーが新しい id を付ける。作成の返答で旧 id と新 id を対応させ、コピー内のリンクを後から張る。
-- ネットワークのプロトコル版は 3（編集状態の payload が増えたため）。
+- The server sends `EditorStatePayload` with "may edit" (permission 2 and `/quest_tree edit on`) on join and on every change. When allowed, a gear appears next to the pin in the title row, and E also toggles it.
+- Selection (click, Ctrl+click, Shift+drag box, Ctrl+A), drag to move (half grid, disabled with Alt), arrow keys (Shift for 5), right-click menu, Ctrl+C/V/D, Delete, drag while holding L or the menu's "Link from here", Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y. Keys are not captured while an EditBox has focus.
+- `EditorSession` sends operations one at a time and uses the previous reply's revision for the next. A move is drawn at its provisional position before the reply and is put back if refused. A refusal shows the validation message, shortened as-is. For an old revision the server resends the bundle.
+- Paste is given new ids by the server. The create replies pair the old and new ids, and the links inside the copy are made afterwards.
+- The network protocol version is 3 (the editor state payload was added).
 
-## Phase 3: 中身の編集画面（2026-10-21）
+## Phase 3: content edit screens (2026-10-21)
 
-- 右クリックの「編集」、ノードのダブルクリック、選択が1件の時の Enter で `NodeEditScreen` が開く。ノードの題名・説明・形・大きさ・アイコン・可視条件・前提条件・繰り返しを1枚に並べ、タスクと報酬はカードで追加・並べ替え・削除する。カードを開くと `ContentEditScreen` が型ごとの欄を出す。
-- 型は `ContentSchema` が唯一の定義で、画面と往復テストが同じ表を読む。型を変えると、その型だけのキーを消し、共通の欄と未知のキーは残す（`retypeTask` / `retypeReward`）。
-- アイテム・エンティティ・進捗・テーブルなどは `EditPickerScreen` で検索して選ぶ。一覧に無い id も入力できる（タグや、クライアントが持たない MOD の id のため）。
-- 画面は JSON の作業コピーを持ち、閉じる時に `update_node` / `update_chapter` の RFC 7396 patch を1回だけ送る。保存と削除は画面を開いた時点の revision で送り、その間に別の操作が入っていれば拒否される。打鍵ごとの書き込みはしない。拒否された時は検証メッセージを該当の欄の下に出し、画面は閉じない（もう一度 Esc か × を押すと破棄して閉じる）。古い revision はサーバーが bundle を送り直し、画面は地図の短い通知に文面を残して閉じる。
-- 章の設定は `ChapterEditScreen`（題名・アイコン・既定値・可視性・スキルポイント・章の削除）、章の新規作成は `NewChapterScreen`（名前空間と任意の題名。id はサーバーが発番）。
-- 報酬テーブルは `TableEditScreen` で丸ごと編集する（`update_table`、テーブル専用の revision）。存在しない id を報酬の `table` に書いて開くと、保存時に `create: true` で作る。削除は墓石（`remove: true` と最後の内容）を書き、`RestoreScreen` の `restore_table` で戻す（pack の複製が無変更なら overlay を消して pack に戻す）。取り消しは直前のテーブルファイルを戻す。
-- 削除した章・テーブル・ノードは、同期バンドルの `deleted` に入る。`deletedJson()` は墓石の章 id、テーブル id、生きている章ごとの削除ノード id を返す。`RestoreScreen` はこの一覧から `restore_chapter` / `restore_table` / `restore_node` を送る。
-- 画面の見た目は `Ui` / `Tiles` / `EditForm` の既存の面と行だけを使い、色を直書きしない。文字はラベル・値・状態・失敗理由だけで、説明文は置かない。
+- The right-click "Edit", a double-click on a node, or Enter with a single selection opens `NodeEditScreen`. It puts the node's title, description, shape, size, icon, visibility conditions, prerequisites and repeat on one screen, and tasks and rewards are added, reordered and deleted as cards. Opening a card shows that type's fields in `ContentEditScreen`.
+- `ContentSchema` is the single definition of the types; the screens and the round-trip tests read the same table. Changing the type deletes the keys belonging only to the old type and keeps common fields and unknown keys (`retypeTask` / `retypeReward`).
+- Items, entities, advancements, tables and similar are searched and picked in `EditPickerScreen`. An id not in the list can still be typed (for tags, or for a mod id the client does not have).
+- A screen holds a working copy of the JSON and, when it closes, sends one `update_node` / `update_chapter` RFC 7396 patch. Save and delete use the revision from when the screen opened, so another operation in between causes a refusal. Nothing is written per keystroke. A refusal shows the validation message under the field and does not close the screen (a second Esc or × discards and closes). For an old revision the server resends the bundle, and the screen closes after leaving the message in the map's short notices.
+- Chapter settings are in `ChapterEditScreen` (title, icon, defaults, visibility, skill points, delete chapter); a new chapter is made in `NewChapterScreen` (namespace and an optional title; the server mints the id).
+- Reward tables are edited whole in `TableEditScreen` (`update_table`, with a table-only revision). Opening a reward whose `table` names a missing id creates it with `create: true` on save. Delete writes a tombstone (`remove: true` and the last contents), and `RestoreScreen` brings it back with `restore_table` (when the pack copy is unchanged, the overlay is removed and the pack version returns). Undo restores the previous table file.
+- Deleted chapters, tables and nodes appear in the sync bundle's `deleted`. `deletedJson()` returns the tombstone chapter ids, table ids, and deleted node ids for each live chapter. `RestoreScreen` sends `restore_chapter` / `restore_table` / `restore_node` from that list.
+- Screens use only the existing `Ui` / `Tiles` / `EditForm` surfaces and rows, and never hard-code colours. Text is limited to labels, values, states and failure reasons; there is no explanatory copy.
 
-## Phase 4: 操作ボタン（2026-10-21）
+## Phase 4: action buttons (2026-10-21)
 
-- 地図の右クリックメニューに「章」「新しい章」「削除済み」「書き出し」「プレイヤーとして試す」を足した。どれも `EditorSession` の1件ずつの列に乗る。
-- `export`（`args.namespace`、無ければ章の名前空間）は `/quest_tree export <namespace>` を実行し、書き出し先のフォルダ名（`quest_tree_export_<namespace>`）だけを返答の行に返す。サーバーの絶対パスは出さない。コマンドが失敗したら成功にせず、理由を返す。
-- `test_chapter`（`chapterId`）は `/quest_tree reset @s <chapter>` を実行してから、成功した時だけ編集モードを切る。章が本に無い時、パーティに入っている時（進行が共有で、他のメンバーの章まで消えるため）、コマンドが失敗した時は何もせず拒否する。返答は要求の revision をそのまま返す（章を書かないため、クライアントの版を動かさない）。
-- どちらも名前空間・章 id を `ProgressExport.validNamespace` / `ProgressionEditor.validChapterId` で確認してからコマンド文字列にする（`EditorOps`）。
+- The map's right-click menu gained "Chapters", "New chapter", "Deleted", "Export" and "Test as player". All of them ride `EditorSession`'s one-at-a-time queue.
+- `export` (`args.namespace`, or the chapter's namespace when absent) runs `/quest_tree export <namespace>` and returns only the output folder name (`quest_tree_export_<namespace>`) in the reply lines. It never exposes a server absolute path. A failed command does not report success; it returns the reason.
+- `test_chapter` (`chapterId`) runs `/quest_tree reset @s <chapter>` and only on success turns edit mode off. It refuses without doing anything when the chapter is not in the book, when the player is in a party (progress is shared, so other members' chapter progress would be erased too), or when the command fails. The reply repeats the request's revision, since no chapter is written and the client's version must not move.
+- Both check the namespace / chapter id with `ProgressExport.validNamespace` / `ProgressionEditor.validChapterId` before building the command string (`EditorOps`).
 
-## まだ無いもの
+## Still missing
 
-- 実機（runClient）での確認。
-- 章をまたぐリンクの作成 UI。
-- 翻訳ファイルそのものの編集（表示文字の上書きまで）。
-- 章の `revision` を跨いだ自動併合（古い版は拒否して再取得）。
+- Confirmation in the real client (runClient).
+- A UI for creating cross-chapter links.
+- Editing translation files themselves (beyond overriding the displayed text).
+- Automatic merging across a chapter's `revision` (an old version is refused and fetched again).

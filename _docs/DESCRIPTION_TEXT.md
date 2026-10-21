@@ -1,44 +1,44 @@
-# 説明文の書き方
+# Writing quest descriptions
 
-クエストの説明文は、ノード JSON の `description` か、言語ファイルの `progression.<namespace>.<chapter>.<node>.desc` に書く。画面の幅に合わせて自動で折り返すので、改行位置を自分で合わせる必要はない。
+A quest description goes in the node JSON's `description` or in the language file key `progression.<namespace>.<chapter>.<node>.desc`. Lines wrap to the screen width, so there is no need to line-break by hand.
 
-## 行と色
+## Lines and colours
 
-- `\n` で行を分ける。FTB Quests の説明文（行の配列）を取り込んだ場合も、行ごとに改行として扱う。
-- `{@pagebreak}` は段落の切れ目。前後に余白が入る。
-- `&0`〜`&f` で色、`&l` `&o` `&n` `&m` `&k` `&r` で書式。`&` 自体を出したい時は `\&`。
-- 折り返した行にも色と書式は引き継がれる。幅より長い語は文字の途中で折る。
+- `\n` starts a new line. Imported FTB Quests descriptions (an array of lines) are also treated as one line each.
+- `{@pagebreak}` is a paragraph break, with space before and after.
+- `&0` to `&f` set the colour; `&l` `&o` `&n` `&m` `&k` `&r` set formatting. Write `\&` for a literal `&`.
+- Colour and formatting carry over to wrapped lines. A word longer than the width is broken mid-word.
 
 ```json
-"description": "&6旅の始まり\n&7村を出る前に、&e鉄の剣&7を用意しよう。"
+"description": "&6The journey begins\n&7Before leaving the village, bring an &eiron sword&7."
 ```
 
-## リンク
+## Links
 
-`{種類:対象 表示文字}` の形。表示文字を省くと対象がそのまま出る。リンクはアクセント色で描かれ、クリックで開く。
+The form is `{kind:target display text}`. Without display text, the target is shown as-is. Links are drawn in the accent colour and open when clicked.
 
-| 書き方 | クリックした時 |
+| Form | What a click does |
 |---|---|
-| `{open_url:https://example.com 配布ページ}` | 確認画面を出してからブラウザで開く（`http` / `https` のみ） |
-| `{quest:two/iron 鉄の時代}` | そのクエストを開く。ノード名だけなら同じ章のノードとして探す |
-| `{recipe:minecraft:iron_ingot 鉄インゴット}` | レシピビューアでそのアイテムのレシピを開く（JEI / REI / EMI のどれかが入っている時だけ） |
+| `{open_url:https://example.com Download page}` | Shows a confirmation, then opens the browser (`http` / `https` only) |
+| `{quest:two/iron The Iron Age}` | Opens that quest. A bare node name is looked up in the same chapter |
+| `{recipe:minecraft:iron_ingot Iron ingot}` | Opens that item's recipes in the recipe viewer (only when JEI / REI / EMI is installed) |
 
-対象に空白は使えない。表示文字には空白を含められる。
+The target cannot contain spaces; the display text can.
 
 ```json
-"description": "材料は{recipe:minecraft:iron_ingot 鉄インゴット}。次は{quest:two/iron 鉄の時代}へ。"
+"description": "Materials: {recipe:minecraft:iron_ingot Iron ingot}. Next: {quest:two/iron The Iron Age}."
 ```
 
-## 画像
+## Images
 
 ```json
 "description": "{image:example:textures/gui/map.png width:180 height:120}"
 ```
 
-- 対象は `<namespace>:<path>` のテクスチャパスだけ。`https://...` やファイルパス、先頭が `/` のパス、大文字を含むパスは画像にならず、そのまま文字として出る。
-- `width` と `height` は省略可（既定 64）。描画時に画面幅へ収める。
-- `width` / `height` 以外の属性は無視される。
+- The target must be a `<namespace>:<path>` texture path. `https://...`, file paths, paths starting with `/`, and paths containing capitals are not images and are shown as written.
+- `width` and `height` are optional (default 64). The image is fitted to the screen width when drawn.
+- Attributes other than `width` / `height` are ignored.
 
-## JSON テキストコンポーネント
+## JSON text components
 
-FTB Quests や Pufferfish's Skills が書く JSON の説明文も読める。**1 行がまるごと** `{...}` または `[...]` の時だけテキストコンポーネントとして解釈し、その行の `clickEvent`（`open_url` / `change_page`）は上のリンクとして扱う。平文と JSON が同じ説明文に混ざっていてもよい。行の一部だけが JSON の時は、その行は書かれたまま表示する。
+JSON descriptions written by FTB Quests or Pufferfish's Skills are also read. A line is interpreted as a text component only when the **whole line** is `{...}` or `[...]`; that line's `clickEvent` (`open_url` / `change_page`) is treated like the links above. Plain text and JSON may be mixed in one description. When only part of a line is JSON, the line is shown as written.

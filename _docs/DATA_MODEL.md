@@ -160,7 +160,7 @@ Item counting:
 
 `rewards[].type` can be:
 
-`item` (`random_bonus`), `xp`, `xp_levels`, `table` (`mode`: `random`, `choice`, `all`, `loot`), `command` (`permission_level`, `silent`, `elevate`), `advancement`, `stage`, `toast`, `attribute`, `points`, `tag`, `scoreboard`, `custom`, `dummy`, `currency`.
+`item` (`random_bonus`), `xp`, `xp_levels`, `table` (`mode`: `random`, `choice`, `all`, `loot`), `command` (`permission_level`, `silent`), `advancement`, `stage`, `toast`, `attribute`, `points`, `tag`, `scoreboard`, `custom`, `dummy`, `currency`.
 
 Every reward also accepts `team`, `auto`, `exclude_from_claim_all`, `ignore_reward_blocking` (alias `ignore_blocking`), `conditions`, `icon` and `title`.
 
