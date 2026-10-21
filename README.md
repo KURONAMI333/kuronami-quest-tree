@@ -5,6 +5,10 @@ Quest books and skill trees in one screen, defined by data packs. Imports existi
 - Minecraft 1.21.1, NeoForge and Fabric
 - Status: early development. Progress is tracked per player and saved with the world; rewards are claimed on the screen.
 
+## Addons
+
+Task, reward and condition types can be registered from another mod, and progression events are available. See [_docs/API.md](_docs/API.md). KubeJS scripts can register the same handlers on NeoForge.
+
 ## Commands
 
 Permission level 2.
