@@ -121,6 +121,9 @@ public class QuestTree {
             if (e.getEntity().level().isClientSide()) {
                 return;
             }
+            if (e.isCanceled()) {
+                return;
+            }
             if (e.getEntity() instanceof ServerPlayer dead) {
                 CommonClass.onDeath(dead);
             }

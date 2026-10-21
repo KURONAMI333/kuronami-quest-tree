@@ -186,9 +186,13 @@ public final class ProgressService {
         markDirty(player);
     }
 
-    /** Drops the quest book for a dead player when the server config asks for it (2026-10-22). */
+    /**
+     * Drops the quest book for a dead player when the server config asks for it (2026-10-22). Keep-inventory means
+     * the player keeps the book, so dropping another one would leave them with two.
+     */
     public static void onDeath(ServerPlayer player) {
-        if (!ServerConfig.dropBookOnDeath() || ModItems.questBook() == null) {
+        boolean keep = player.level().getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_KEEPINVENTORY);
+        if (!DeathRules.dropBook(ServerConfig.dropBookOnDeath(), keep, false) || ModItems.questBook() == null) {
             return;
         }
         player.drop(new ItemStack(ModItems.questBook()), true);
