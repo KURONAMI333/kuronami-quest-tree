@@ -424,13 +424,11 @@ final class Ui {
 
     private static void scaled(GuiGraphics g, int x, int y, Runnable draw) {
         float scale = ClientConfig.textScale();
-        if (scale == 1f) {
-            draw.run();
-            return;
-        }
         g.pose().pushPose();
         g.pose().translate(x, y, 0);
-        g.pose().scale(scale, scale, 1);
+        if (scale != 1f) {
+            g.pose().scale(scale, scale, 1);
+        }
         draw.run();
         g.pose().popPose();
     }
