@@ -14,7 +14,8 @@ class SkillRewardPolicyTest {
 
     @Test
     void oneOffRewardsPayOnlyOnTheFirstTake() {
-        for (String type : new String[]{"xp", "xp_levels", "item", "table", "advancement", "command"}) {
+        for (String type : new String[]{"xp", "xp_levels", "item", "table", "advancement", "command",
+                "currency", "custom"}) {
             assertFalse(SkillRewardPolicy.pays(type, false), type + " paid again after a respec");
             assertTrue(SkillRewardPolicy.pays(type, true), type + " was skipped on the first take");
         }

@@ -12,7 +12,8 @@ import java.util.Set;
  */
 public final class SkillRewardPolicy {
 
-    private static final Set<String> ONE_OFF = Set.of("xp", "xp_levels", "item", "table", "advancement", "command");
+    private static final Set<String> ONE_OFF = Set.of("xp", "xp_levels", "item", "table", "advancement", "command",
+            "currency", "custom");
 
     private SkillRewardPolicy() {
     }
