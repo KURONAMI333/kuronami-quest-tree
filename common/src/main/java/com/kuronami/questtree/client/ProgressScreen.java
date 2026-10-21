@@ -34,7 +34,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The progression screen (layout of the accepted v12-v14 mocks, see _research/progression_ui/).
+ * The progression screen (layout of the accepted v12-v14 design mocks).
  * <ul>
  *   <li>It opens on a chapter: the "Now" overview was dropped on 2026-10-20 (the player: all of it was wrong).</li>
  *   <li>A chapter gives the tree the whole screen. The chapter list becomes a rail that opens on hover; node details

@@ -20,8 +20,8 @@ import java.util.stream.Stream;
  * Converts an FTB Quests quest book ({@code config/ftbquests/quests}) into Kuronami's Quest Tree chapters (DATA_MODEL.md).
  * <p>
  * Key tables: a source key maps to a target path, {@code null} means dropped on purpose (ids, editor-only data);
- * anything not listed is counted in the report as unmapped. Tested on six public packs with the Python prototype
- * (_research/progression_ui/importer/convert.py): every quest and skill converted, only a few image settings unmapped.
+ * anything not listed is counted in the report as unmapped. Tested on six public packs with an earlier prototype:
+ * every quest and skill converted, only a few image settings unmapped.
  */
 public final class FtbQuestsImporter {
 
