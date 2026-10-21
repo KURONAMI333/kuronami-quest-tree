@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.client.editor.ContentSchema;
 import com.kuronami.questtree.client.editor.EditorDoc;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -57,6 +58,10 @@ final class TableEditScreen extends EditorScreen {
         }
         lines.add(new EditForm.AddLine(Component.translatable(PREFIX + "add.entry"),
                 () -> addEntry(entriesOrCreate())));
+        if (!create) {
+            lines.add(new EditForm.CardLine(Component.translatable(PREFIX + "table.delete"), null,
+                    List.of(new EditForm.Action("cross", null, this::confirmDelete, true))));
+        }
         form.set(lines);
     }
 
@@ -109,6 +114,36 @@ final class TableEditScreen extends EditorScreen {
         build();
         form.scrollToEnd();
         openEntry(entry);
+    }
+
+    private void confirmDelete() {
+        if (minecraft == null) {
+            return;
+        }
+        minecraft.setScreen(new ConfirmScreen(confirmed -> {
+            minecraft.setScreen(this);
+            if (confirmed) {
+                delete();
+            }
+        }, Component.translatable(PREFIX + "table.delete"), Component.literal(tableId),
+                Component.translatable(PREFIX + "delete"), Component.translatable(PREFIX + "cancel")));
+    }
+
+    private void delete() {
+        if (sending) {
+            return;
+        }
+        sending = true;
+        JsonObject args = new JsonObject();
+        args.addProperty("id", tableId);
+        EditorSession.sendTable(tableId, "delete_table", args, revision, reply -> {
+            if (reply.ok()) {
+                closeNow();
+            } else {
+                sending = false;
+                showReply(reply, tableId, null);
+            }
+        });
     }
 
     @Override

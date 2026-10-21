@@ -204,6 +204,12 @@ public final class ProgressionOverlay {
             JsonObject out = new JsonObject();
             JsonArray deletedChapters = new JsonArray();
             JsonObject deletedNodes = new JsonObject();
+            JsonArray deletedTables = new JsonArray();
+            for (TableOverlay table : tables.values()) {
+                if (table.remove) {
+                    deletedTables.add(table.id);
+                }
+            }
             for (ChapterOverlay chapter : chapters.values()) {
                 if (chapter.remove) {
                     deletedChapters.add(chapter.id);
@@ -220,6 +226,7 @@ public final class ProgressionOverlay {
                 }
             }
             out.add("chapters", deletedChapters);
+            out.add("tables", deletedTables);
             out.add("nodes", deletedNodes);
             return out;
         }

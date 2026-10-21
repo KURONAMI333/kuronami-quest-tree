@@ -16,6 +16,7 @@ import java.util.List;
 final class RestoreScreen extends EditorScreen {
 
     private final List<String> chapters = new ArrayList<>();
+    private final List<String> tables = new ArrayList<>();
     private final List<String[]> nodes = new ArrayList<>();
 
     RestoreScreen(Screen parent) {
@@ -26,6 +27,14 @@ final class RestoreScreen extends EditorScreen {
             for (JsonElement e : chapterList.getAsJsonArray()) {
                 if (e.isJsonPrimitive()) {
                     chapters.add(e.getAsString());
+                }
+            }
+        }
+        JsonElement tableList = deleted.get("tables");
+        if (tableList != null && tableList.isJsonArray()) {
+            for (JsonElement e : tableList.getAsJsonArray()) {
+                if (e.isJsonPrimitive()) {
+                    tables.add(e.getAsString());
                 }
             }
         }
@@ -47,7 +56,7 @@ final class RestoreScreen extends EditorScreen {
     @Override
     protected void build() {
         List<EditForm.Line> lines = new ArrayList<>();
-        if (chapters.isEmpty() && nodes.isEmpty()) {
+        if (chapters.isEmpty() && tables.isEmpty() && nodes.isEmpty()) {
             lines.add(new EditForm.HeadLine(Component.literal("-")));
         }
         if (!chapters.isEmpty()) {
@@ -55,6 +64,13 @@ final class RestoreScreen extends EditorScreen {
             for (String chapter : new ArrayList<>(chapters)) {
                 lines.add(new EditForm.CardLine(Component.literal(chapter), null,
                         List.of(new EditForm.Action("tick", null, () -> restoreChapter(chapter), true))));
+            }
+        }
+        if (!tables.isEmpty()) {
+            lines.add(new EditForm.HeadLine(Component.translatable(PREFIX + "deleted.tables")));
+            for (String table : new ArrayList<>(tables)) {
+                lines.add(new EditForm.CardLine(Component.literal(table), null,
+                        List.of(new EditForm.Action("tick", null, () -> restoreTable(table), true))));
             }
         }
         if (!nodes.isEmpty()) {
@@ -74,6 +90,19 @@ final class RestoreScreen extends EditorScreen {
                 build();
             } else {
                 showReply(reply, chapterId, null);
+            }
+        });
+    }
+
+    private void restoreTable(String tableId) {
+        JsonObject args = new JsonObject();
+        args.addProperty("id", tableId);
+        EditorSession.sendTable(tableId, "restore_table", args, EditorSession.tableRevision(tableId), reply -> {
+            if (reply.ok()) {
+                tables.remove(tableId);
+                build();
+            } else {
+                showReply(reply, tableId, null);
             }
         });
     }

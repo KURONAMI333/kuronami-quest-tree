@@ -543,4 +543,72 @@ class ProgressionEditorTest {
         assertEquals(2, packTables.getAsJsonObject("t:loot").get("rolls").getAsInt());
     }
 
+    private ProgressionEditor.Outcome tableOp(ProgressionEditor editor, JsonObject packTables, String id,
+                                              long revision, String op, String args) {
+        return editor.apply(pack(), packTables, Map.of(), id, revision, op,
+                JsonParser.parseString(args).getAsJsonObject(), Set.of());
+    }
+
+    @Test
+    void aTableUndoPutsBackTheWriteItReplacedAndRedoPutsItBackAgain() {
+        ProgressionEditor editor = editor();
+        table(editor, new JsonObject(), "t:loot", 0, "{\"create\":true,\"id\":\"t:loot\",\"table\":" + LOOT + "}");
+        assertTrue(table(editor, tablesWithOverlay(), "t:loot", 1, "{\"patch\":{\"rolls\":5}}").ok());
+        assertEquals(5, tablesWithOverlay().getAsJsonObject("t:loot").get("rolls").getAsInt());
+
+        ProgressionEditor.Outcome undone = tableOp(editor, tablesWithOverlay(), "t:loot", 2, "undo", "{}");
+        assertTrue(undone.ok(), undone.messages().toString());
+        assertEquals(3, undone.revision());
+        assertEquals(2, tablesWithOverlay().getAsJsonObject("t:loot").get("rolls").getAsInt());
+
+        ProgressionEditor.Outcome redone = tableOp(editor, tablesWithOverlay(), "t:loot", 3, "redo", "{}");
+        assertTrue(redone.ok(), redone.messages().toString());
+        assertEquals(4, redone.revision());
+        assertEquals(5, tablesWithOverlay().getAsJsonObject("t:loot").get("rolls").getAsInt());
+    }
+
+    @Test
+    void deletingATableLeavesATombstoneForRestoreAndDoesNotTouchTheChapter() {
+        ProgressionEditor editor = editor();
+        table(editor, new JsonObject(), "t:loot", 0, "{\"create\":true,\"id\":\"t:loot\",\"table\":" + LOOT + "}");
+
+        ProgressionEditor.Outcome deleted = tableOp(editor, tablesWithOverlay(), "t:loot", 1, "delete_table",
+                "{\"id\":\"t:loot\"}");
+
+        assertTrue(deleted.ok(), deleted.messages().toString());
+        assertEquals(2, deleted.revision());
+        assertFalse(tablesWithOverlay().has("t:loot"));
+        JsonObject deletedJson = ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).deletedJson();
+        assertEquals(1, deletedJson.getAsJsonArray("tables").size());
+        assertEquals("t:loot", deletedJson.getAsJsonArray("tables").get(0).getAsString());
+
+        ProgressionEditor.Outcome restored = tableOp(editor, tablesWithOverlay(), "t:loot", 2, "restore_table",
+                "{\"id\":\"t:loot\"}");
+
+        assertTrue(restored.ok(), restored.messages().toString());
+        assertEquals(3, restored.revision());
+        assertEquals(2, tablesWithOverlay().getAsJsonObject("t:loot").get("rolls").getAsInt());
+        assertTrue(ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).deletedJson()
+                .getAsJsonArray("tables").isEmpty());
+        assertEquals(0, ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).revision(CHAPTER));
+    }
+
+    @Test
+    void restoringADeletedPackTableLetsThePackCopyComeBack() {
+        ProgressionEditor editor = editor();
+        JsonObject packTables = JsonParser.parseString("{\"t:loot\":" + LOOT + "}").getAsJsonObject();
+        assertTrue(tableOp(editor, packTables, "t:loot", 0, "delete_table", "{\"id\":\"t:loot\"}").ok());
+        assertFalse(tablesWithOverlay().has("t:loot"));
+
+        ProgressionEditor.Outcome restored = tableOp(editor, packTables.deepCopy(), "t:loot", 1, "restore_table",
+                "{\"id\":\"t:loot\"}");
+
+        assertTrue(restored.ok(), restored.messages().toString());
+        assertEquals(2, restored.revision());
+        JsonObject merged = packTables.deepCopy();
+        ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).applyTablesTo(merged, new java.util.LinkedHashMap<>());
+        assertEquals(2, merged.getAsJsonObject("t:loot").get("rolls").getAsInt());
+        assertFalse(ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR)).tables.containsKey("t:loot"));
+    }
+
 }
