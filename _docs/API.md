@@ -11,7 +11,7 @@ QuestTreeApi.registerRewardType(id, context -> context.player().giveExperienceLe
 QuestTreeApi.registerConditionType(id, context -> context.player().experienceLevel >= 30);
 ```
 
-同じ id の再登録は置き換え。`unregisterTaskType` / `unregisterRewardType` / `unregisterConditionType` もある（スクリプト再読み込み用）。
+同じ id の再登録は置き換え（Java 登録）。`unregisterTaskType` / `unregisterRewardType` / `unregisterConditionType` もある（スクリプト再読み込み用）。
 
 説明文の色・リンク・画像の書き方は [_docs/DESCRIPTION_TEXT.md](DESCRIPTION_TEXT.md) を参照。
 
@@ -64,7 +64,7 @@ QuestTree.registerTask('example:held_level', context => context.player().experie
 QuestTree.registerCondition('example:level_30', context => context.player().experienceLevel >= 30)
 ```
 
-サーバースクリプトの再読み込み時は、スクリプトが登録した id だけを外す。Java の MOD が登録したものは残る。
+再読み込みで外れるのは、そのスクリプト種別（startup / server / client）が登録した id だけ。既にある id へのスクリプトの登録は拒否され false を返す。登録はスクリプトのトップレベルで行う。
 
 ## レシピビューア
 
