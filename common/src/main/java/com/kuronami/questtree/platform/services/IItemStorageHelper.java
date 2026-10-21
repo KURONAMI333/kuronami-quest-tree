@@ -14,6 +14,11 @@ public interface IItemStorageHelper {
      */
     long fluidAmount(ItemStack stack, String spec);
 
+    /** Whether this loader can read energy at all; a task that can never count deserves a warning. */
+    default boolean supportsEnergy() {
+        return true;
+    }
+
     /** Energy in FE stored in this stack; 0 when it stores none, or when the loader has no energy API. */
     long energyStored(ItemStack stack);
 }

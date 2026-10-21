@@ -69,6 +69,11 @@ public final class ProgressValidator {
             return true;
         }
 
+        /** Whether this loader has an energy API; false makes every energy task a warning (Fabric, 2026-10-22). */
+        default boolean energyAvailable() {
+            return true;
+        }
+
         Registry NONE = (kind, id) -> true;
     }
 
@@ -781,6 +786,12 @@ public final class ProgressValidator {
                 } else {
                     // an empty spec matches any block (ProgressService.blockMatches), so it is only worth saying so
                     id(out, ref, path + ".block", "block", s.text(), registry);
+                }
+            }
+            case "energy" -> {
+                if (!registry.energyAvailable()) {
+                    problem(out, Severity.WARNING, ref, path + ".type",
+                            "energy tasks are counted only on NeoForge; this loader has no energy API, so the task never counts");
                 }
             }
             case "stage" -> required(out, ref, path, t, "stage");

@@ -52,6 +52,27 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void anEnergyTaskWarnsOnALoaderWithoutEnergy() {
+        String json = chapter("{\"type\": \"energy\", \"count\": 1000}", "{\"type\": \"xp\", \"amount\": 10}");
+        ProgressValidator.Result neo = validate(json, ProgressValidator.Registry.NONE);
+        assertFalse(says(neo, "energy tasks are counted only on NeoForge"));
+        ProgressValidator.Registry fabric = new ProgressValidator.Registry() {
+            @Override
+            public boolean known(String kind, String id) {
+                return true;
+            }
+
+            @Override
+            public boolean energyAvailable() {
+                return false;
+            }
+        };
+        ProgressValidator.Result r = validate(json, fabric);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "energy tasks are counted only on NeoForge"));
+    }
+
+    @Test
     void aWellFormedNodeHasNoProblems() {
         ProgressValidator.Result r = validate(chapter(
                 "{\"type\": \"item\", \"count\": 1, \"item\": {\"id\": \"minecraft:stone\"}}",

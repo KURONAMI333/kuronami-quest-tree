@@ -32,6 +32,11 @@ public final class GameRegistry implements ProgressValidator.Registry {
     }
 
     @Override
+    public boolean energyAvailable() {
+        return Services.ITEM_STORAGE.supportsEnergy();
+    }
+
+    @Override
     public boolean known(String kind, String id) {
         ResourceLocation rl = ResourceLocation.tryParse(id);
         if (rl == null) {
