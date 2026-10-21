@@ -202,6 +202,7 @@ final class PlayerCommands {
     private static void clearOwnClaims(ServerPlayer p, PlayerProgress pr) {
         pr.claimed.clear();
         pr.claimedRewards.clear();
+        pr.pendingRewards.clear();
         pr.recent.clear();
     }
 
@@ -213,11 +214,13 @@ final class PlayerCommands {
             for (ProgressModel.Node n : ch.nodes.values()) {
                 pr.claimed.remove(n.key);
                 pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+                pr.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
             }
         } else if (model.nodes.containsKey(id)) {
             ProgressModel.Node n = model.nodes.get(id);
             pr.claimed.remove(n.key);
             pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+            pr.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
         }
     }
 

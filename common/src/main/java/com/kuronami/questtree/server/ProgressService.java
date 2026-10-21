@@ -937,6 +937,7 @@ public final class ProgressService {
             for (PlayerProgress pm : others) {
                 pm.claimed.remove(n.key);
                 pm.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+                pm.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
             }
         }
     }
@@ -971,6 +972,12 @@ public final class ProgressService {
             return;
         }
         for (JsonObject rw : n.rewards) {
+            if (Rewards.blocked(p, rw) && com.kuronami.questtree.progress.RewardLedger.blockedChoice(true, rw)) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                        "message.kuronami_quest_tree.choice_blocked",
+                        "This reward cannot be taken while rewards are blocked: its choice is not kept."));
+                return;
+            }
             if (choiceMissing(rw, choice)) {
                 return;
             }
@@ -1001,6 +1008,12 @@ public final class ProgressService {
             return;
         }
         JsonObject rw = n.rewards.get(index);
+        if (Rewards.blocked(p, rw) && com.kuronami.questtree.progress.RewardLedger.blockedChoice(true, rw)) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                    "message.kuronami_quest_tree.choice_blocked",
+                    "This reward cannot be taken while rewards are blocked: its choice is not kept."));
+            return;
+        }
         if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw)) {
             return;
         }

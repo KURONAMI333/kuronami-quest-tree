@@ -49,7 +49,11 @@ public final class RewardLedger {
                                 boolean markClaimed, boolean blocked, BooleanSupplier pay) {
         String pending = pendingKey(node, rank, index);
         if (blocked) {
-            p.pendingRewards.add(pending);
+            if (blockedChoice(blocked, reward)) {
+                // a choice table needs its pick to pay, and a pick is not stored; refuse instead of paying nothing later
+                return false;
+            }
+            p.pendingRewards.merge(pending, 1, Integer::sum);
             if (markClaimed) {
                 mark(p, reward, node, index);
             }
@@ -62,6 +66,12 @@ public final class RewardLedger {
             mark(p, reward, node, index);
         }
         return true;
+    }
+
+    /** A blocked choice table cannot be taken: the pick is not part of the pending record. */
+    public static boolean blockedChoice(boolean blocked, JsonObject reward) {
+        return blocked && "table".equals(reward.has("type") ? reward.get("type").getAsString() : "")
+                && "choice".equals(reward.has("mode") ? reward.get("mode").getAsString() : "");
     }
 
     /** Records a reward as taken; a team reward settles once for the whole team. */

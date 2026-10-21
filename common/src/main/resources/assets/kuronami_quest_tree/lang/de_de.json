@@ -99,5 +99,6 @@
   "block.kuronami_quest_tree.quest_task_block": "Questtafel",
   "block.kuronami_quest_tree.quest_barrier": "Questschranke",
   "commands.kuronami_quest_tree.block_given": "%s Block/Blöcke für %s gegeben",
-  "message.kuronami_quest_tree.currency_failed": "Die Währungsbelohnung konnte nicht ausgezahlt werden; sie bleibt unbeansprucht."
+  "message.kuronami_quest_tree.currency_failed": "Die Währungsbelohnung konnte nicht ausgezahlt werden; sie bleibt unbeansprucht.",
+  "message.kuronami_quest_tree.choice_blocked": "Diese Belohnung kann nicht angenommen werden, solange Belohnungen gesperrt sind: die Auswahl wird nicht gespeichert."
 }

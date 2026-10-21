@@ -54,8 +54,8 @@ public final class PlayerProgress {
     public Set<String> stages = new HashSet<>();
     /** Team stages this player's Pack Stages were last synced with, so a removal while offline is followed on login. */
     public Set<String> teamStagesApplied = new HashSet<>();
-    /** Rewards whose pay-out was blocked; paid when the block is lifted (2026-10-21). */
-    public Set<String> pendingRewards = new HashSet<>();
+    /** Rewards whose pay-out was blocked, with counts; paid when the block is lifted (2026-10-21). */
+    public Map<String, Integer> pendingRewards = new HashMap<>();
     /** Rolls already made for a reward table, kept until its pay-out succeeds (2026-10-21 review). */
     public Map<String, String> rewardRolls = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
@@ -211,6 +211,7 @@ public final class PlayerProgress {
         tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
         claimedRewards.removeIf(k -> k.startsWith(node + "#"));
         teamClaimedRewards.removeIf(k -> k.startsWith(node + "#"));
+        pendingRewards.keySet().removeIf(k -> k.startsWith(node + "#"));
     }
 
     /** Copies every shared value. Claims, recent and the book flag are per player and are left alone. */

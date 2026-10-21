@@ -159,7 +159,7 @@ public final class Rewards {
     static void payPending(ServerPlayer player, PlayerProgress p) {
         var model = ProgressService.rules().model();
         boolean changed = false;
-        for (String key : new ArrayList<>(p.pendingRewards)) {
+        for (String key : new ArrayList<>(p.pendingRewards.keySet())) {
             String node = com.kuronami.questtree.progress.RewardLedger.pendingNode(key);
             int rank = com.kuronami.questtree.progress.RewardLedger.pendingRank(key);
             int index = com.kuronami.questtree.progress.RewardLedger.pendingIndex(key);
@@ -179,8 +179,16 @@ public final class Rewards {
             if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, rw)) {
                 continue;
             }
-            if (give(player, p, n, rw, -1, key)) {
-                p.pendingRewards.remove(key);
+            int owed = p.pendingRewards.getOrDefault(key, 0);
+            for (int paid = 0; paid < owed; paid++) {
+                if (!give(player, p, n, rw, -1, key)) {
+                    break;
+                }
+                if (owed - paid - 1 <= 0) {
+                    p.pendingRewards.remove(key);
+                } else {
+                    p.pendingRewards.put(key, owed - paid - 1);
+                }
                 changed = true;
             }
         }
@@ -239,9 +247,14 @@ public final class Rewards {
             } else if (full) {
                 com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false,
                         blocked(p, rw), () -> give(player, p, n, rw, -1, rollKey));
-            } else if ((ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag"))
-                    && !blocked(p, rw)) {
-                give(player, p, n, rw, -1, rollKey);
+            } else if (ProgressService.type(rw).equals("command") || ProgressService.type(rw).equals("tag")) {
+                if (blocked(p, rw)) {
+                    // a member's own pay-out is owed to them, not paid and forgotten
+                    com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false, true,
+                            () -> true);
+                } else {
+                    give(player, p, n, rw, -1, rollKey);
+                }
             }
             i++;
         }

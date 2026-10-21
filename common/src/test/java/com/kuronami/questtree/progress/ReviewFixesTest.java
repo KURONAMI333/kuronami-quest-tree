@@ -72,7 +72,45 @@ class ReviewFixesTest {
             throw new AssertionError("a blocked reward must not be paid");
         }));
         assertTrue(p.rewardClaimed("t:q/n#0"));
-        assertTrue(p.pendingRewards.contains("t:q/n#-1#0"));
+        assertEquals(1, p.pendingRewards.get("t:q/n#-1#0"));
+    }
+
+    @Test
+    void aRewardClaimedTwiceWhileBlockedIsOwedTwice() {
+        PlayerProgress p = new PlayerProgress();
+        JsonObject reward = reward("item");
+        RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, true, () -> true);
+        p.claimedRewards.clear();
+        RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, true, () -> true);
+        assertEquals(2, p.pendingRewards.get("t:q/n#-1#0"));
+        p.clearNode("t:q/n");
+        assertTrue(p.pendingRewards.isEmpty(), "a reset node must not pay a reward from the old round");
+    }
+
+    @Test
+    void aBlockedChoiceTableIsRefusedInsteadOfPaidWithNoChoice() {
+        PlayerProgress p = new PlayerProgress();
+        JsonObject reward = reward("table");
+        reward.addProperty("mode", "choice");
+        assertFalse(RewardLedger.claim(p, reward, "t:q/n", 0, RewardLedger.QUEST_RANK, true, true, () -> true));
+        assertFalse(p.rewardClaimed("t:q/n#0"));
+        assertTrue(p.pendingRewards.isEmpty());
+    }
+
+    @Test
+    void pendingCountsSurviveASaveAndOldSavesStillLoad() {
+        PlayerPart part = new PlayerPart();
+        part.pendingRewards.put("t:q/n#-1#0", 3);
+        part.pendingRewards.put("t:q/m#-1#1", 1);
+        PlayerPart loaded = PlayerPart.fromJson(part.toJson());
+        assertEquals(3, loaded.pendingRewards.get("t:q/n#-1#0"));
+        assertEquals(1, loaded.pendingRewards.get("t:q/m#-1#1"));
+
+        com.google.gson.JsonObject old = part.toJson();
+        com.google.gson.JsonArray legacy = new com.google.gson.JsonArray();
+        legacy.add("t:q/n#-1#0");
+        old.add("pending_rewards", legacy);
+        assertEquals(1, PlayerPart.fromJson(old).pendingRewards.get("t:q/n#-1#0"));
     }
 
     @Test

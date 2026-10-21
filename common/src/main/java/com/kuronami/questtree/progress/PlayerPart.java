@@ -29,8 +29,8 @@ public final class PlayerPart {
     public final Set<String> stages = new HashSet<>();
     /** Team stages already mirrored into this player's Pack Stages. */
     public final Set<String> teamStagesApplied = new HashSet<>();
-    /** Rewards blocked by an admin; paid when the block is lifted. */
-    public final Set<String> pendingRewards = new HashSet<>();
+    /** Rewards blocked by an admin, with how many times each is owed; paid when the block is lifted. */
+    public final Map<String, Integer> pendingRewards = new HashMap<>();
     /** Rolls already made for a reward table, so a failed pay-out does not roll again: reward key → picked indexes. */
     public final Map<String, String> rewardRolls = new HashMap<>();
     public boolean bookGiven;
@@ -55,7 +55,7 @@ public final class PlayerPart {
         cooldown.putAll(other.cooldown);
         stages.addAll(other.stages);
         teamStagesApplied.addAll(other.teamStagesApplied);
-        pendingRewards.addAll(other.pendingRewards);
+        other.pendingRewards.forEach((k, v) -> pendingRewards.merge(k, v, Integer::sum));
         rewardRolls.putAll(other.rewardRolls);
         bookGiven |= other.bookGiven;
         rewardsBlocked |= other.rewardsBlocked;
@@ -72,7 +72,7 @@ public final class PlayerPart {
         o.add("cooldown", longs(cooldown));
         o.add("stages", strings(stages));
         o.add("team_stages_applied", strings(teamStagesApplied));
-        o.add("pending_rewards", strings(pendingRewards));
+        o.add("pending_rewards", ints(pendingRewards));
         o.add("reward_rolls", textMap(rewardRolls));
         o.addProperty("book_given", bookGiven);
         o.addProperty("rewards_blocked", rewardsBlocked);
@@ -108,8 +108,15 @@ public final class PlayerPart {
         for (JsonElement e : arr(o, "team_stages_applied")) {
             part.teamStagesApplied.add(e.getAsString());
         }
-        for (JsonElement e : arr(o, "pending_rewards")) {
-            part.pendingRewards.add(e.getAsString());
+        if (o.has("pending_rewards") && o.get("pending_rewards").isJsonObject()) {
+            for (Map.Entry<String, JsonElement> e : obj(o, "pending_rewards").entrySet()) {
+                part.pendingRewards.put(e.getKey(), e.getValue().getAsInt());
+            }
+        } else {
+            // saves before 2026-10-21 stored each pending reward once
+            for (JsonElement e : arr(o, "pending_rewards")) {
+                part.pendingRewards.merge(e.getAsString(), 1, Integer::sum);
+            }
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
             part.rewardRolls.put(e.getKey(), e.getValue().getAsString());
