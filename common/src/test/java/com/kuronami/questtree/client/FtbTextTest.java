@@ -72,4 +72,16 @@ class FtbTextTest {
         String raw = "before {\"text\":\"json\"} after";
         assertEquals(raw, FtbText.resolveJsonLines(raw, line -> "<component>"));
     }
+
+    @Test
+    void wrappingKeepsTheColourAndBreaksLongWords() {
+        assertEquals(List.of("§aone ", "§atwo ", "§athree"),
+                FtbText.wrap("§aone two three", 5, 5, FtbTextTest::visibleWidth));
+        assertEquals(List.of("§labcd", "§lefgh", "§lij"),
+                FtbText.wrap("§labcdefghij", 4, 4, FtbTextTest::visibleWidth));
+    }
+
+    private static int visibleWidth(String s) {
+        return s.replaceAll("§.", "").length();
+    }
 }

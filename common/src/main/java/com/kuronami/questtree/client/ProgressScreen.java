@@ -3218,6 +3218,7 @@ public class ProgressScreen extends Screen {
                 continue;
             }
             int cx = x;
+            boolean lastImage = false;
             for (FtbText.Token token : line.tokens()) {
                 if (token.kind() == FtbText.Token.Kind.IMAGE) {
                     if (cx > x) {
@@ -3232,39 +3233,55 @@ public class ProgressScreen extends Screen {
                     if (tex != null) {
                         g.blit(tex, x + (w - iw) / 2, y, iw, ih, 0, 0, iw, ih, iw, ih);
                     }
+                    // the image's own (+4) margin is the gap under it: adding the line's 12 would leave a blank line
                     y += ih + 4;
                     cx = x;
+                    lastImage = true;
                     continue;
                 }
                 boolean link = token.kind() != FtbText.Token.Kind.TEXT;
                 String text = token.text();
                 int color = link ? Ui.ACCENT : Ui.TEXT;
-                for (String word : text.split("(?<= )")) {
-                    if (word.isEmpty()) {
-                        continue;
-                    }
-                    int ww = font.width(word);
-                    if (cx > x && cx + ww > x + w) {
+                // a word that does not fit at all moves to the next line first, so the old word wrap keeps its shape
+                int room = Math.max(1, x + w - cx);
+                String firstWord = text;
+                int space = text.indexOf(' ');
+                if (space >= 0) {
+                    firstWord = text.substring(0, space + 1);
+                }
+                if (cx > x && font.width(firstWord) > room) {
+                    cx = x;
+                    y += 12;
+                    room = w;
+                }
+                List<String> parts = FtbText.wrap(text, room, w, font::width);
+                for (int part = 0; part < parts.size(); part++) {
+                    if (part > 0) {
                         cx = x;
                         y += 12;
                     }
-                    Ui.text(g, font, word, cx, y, color);
+                    String words = parts.get(part);
+                    int partW = font.width(words);
+                    Ui.text(g, font, words, cx, y, color);
                     if (link) {
                         String target = token.target();
                         FtbText.Token.Kind kind = token.kind();
                         int bx = cx;
                         int by = y;
-                        int bw = Math.max(1, ww);
+                        int bw = Math.max(1, partW);
                         if (by + 10 > contentBottom || by < contentTop) {
                             // the same rule as a requirement row: only a visible line catches a click
                         } else {
                             buttons.add(new Button(bx, by - 1, bw, 11, () -> descriptionLink(kind, target)));
                         }
                     }
-                    cx += ww;
+                    cx += partW;
                 }
+                lastImage = false;
             }
-            y += 12;
+            if (!lastImage) {
+                y += 12;
+            }
         }
         return y;
     }

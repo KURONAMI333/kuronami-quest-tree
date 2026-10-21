@@ -191,6 +191,95 @@ final class FtbText {
         return out;
     }
 
+    /**
+     * Splits one token's text into lines at {@code width}, keeping the legacy colour and style codes that were active
+     * when a line starts, so a word carried to the next line keeps the colour it had. {@code firstWidth} is the room
+     * left on the current line and later lines get {@code width}. A word wider than the line is broken between
+     * characters instead of running past it.
+     */
+    static List<String> wrap(String text, int firstWidth, int width, java.util.function.ToIntFunction<String> measure) {
+        List<String> out = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        StringBuilder style = new StringBuilder();
+        int used = 0;
+        int limit = Math.max(1, firstWidth);
+        int full = Math.max(1, width);
+        int i = 0;
+        while (i < text.length()) {
+            int start = i;
+            i = endOfWord(text, i);
+            String word = text.substring(start, i);
+            int wordWidth = measure.applyAsInt(word);
+            if (used > 0 && used + wordWidth > limit) {
+                out.add(line.toString());
+                line = new StringBuilder(style);
+                used = 0;
+                limit = full;
+            }
+            if (wordWidth <= limit - used) {
+                line.append(word);
+                updateStyle(style, word);
+                used += wordWidth;
+                continue;
+            }
+            for (int j = 0; j < word.length(); ) {
+                if (word.charAt(j) == '\u00a7' && j + 1 < word.length()) {
+                    line.append(word, j, j + 2);
+                    updateStyle(style, word.substring(j, j + 2));
+                    j += 2;
+                    continue;
+                }
+                int chars = Character.charCount(word.codePointAt(j));
+                String point = word.substring(j, j + chars);
+                int pointWidth = measure.applyAsInt(point);
+                if (used > 0 && used + pointWidth > limit) {
+                    out.add(line.toString());
+                    line = new StringBuilder(style);
+                    used = 0;
+                    limit = full;
+                }
+                line.append(point);
+                used += pointWidth;
+                j += chars;
+            }
+        }
+        if (line.length() > 0) {
+            out.add(line.toString());
+        }
+        if (out.isEmpty()) {
+            out.add(text);
+        }
+        return out;
+    }
+
+    /** A word with the space after it, or the rest of the text. */
+    private static int endOfWord(String text, int start) {
+        int i = start;
+        while (i < text.length() && text.charAt(i) != ' ') {
+            i++;
+        }
+        return i < text.length() ? i + 1 : i;
+    }
+
+    /** Keeps the § colour and style codes a line carries, so the next line can start in the same state. */
+    private static void updateStyle(StringBuilder style, String segment) {
+        for (int i = 0; i + 1 < segment.length(); i++) {
+            if (segment.charAt(i) != '\u00a7') {
+                continue;
+            }
+            char code = Character.toLowerCase(segment.charAt(i + 1));
+            if (code == 'r') {
+                style.setLength(0);
+            } else if ("0123456789abcdef".indexOf(code) >= 0) {
+                style.setLength(0);
+                style.append('\u00a7').append(code);
+            } else if ("klmno".indexOf(code) >= 0) {
+                style.append('\u00a7').append(code);
+            }
+            i++;
+        }
+    }
+
     private static void flush(StringBuilder text, List<Token> line) {
         if (text.isEmpty()) {
             return;
