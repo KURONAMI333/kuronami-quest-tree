@@ -8,7 +8,8 @@
         "${mod_author}"
     ],
     "contact": {
-        "homepage": "https://www.curseforge.com/minecraft/mc-mods/pack-progress"
+        "homepage": "https://www.curseforge.com/minecraft/mc-mods/kuronamis-quest-tree",
+        "issues": "https://www.curseforge.com/minecraft/mc-mods/kuronamis-quest-tree/comments"
     },
     "license": "${license}",
     "icon": "${mod_id}.png",
