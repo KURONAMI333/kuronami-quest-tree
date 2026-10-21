@@ -63,6 +63,7 @@
   "screen.kuronami_quest_tree.skill.exchange_left": "交換（残り%s）",
   "screen.kuronami_quest_tree.skill.cost_points": "費用: %s ポイント",
   "screen.kuronami_quest_tree.skill.cost_levels": "費用: %s レベル",
+  "screen.kuronami_quest_tree.skill.team_owner_only": "チームの持ち主だけが使える",
   "screen.kuronami_quest_tree.skill.not_enough_points": "ポイントが足りない",
   "screen.kuronami_quest_tree.skill.nothing_spent": "使用中のポイントなし",
   "screen.kuronami_quest_tree.skill.not_enough_levels": "レベルが足りない",

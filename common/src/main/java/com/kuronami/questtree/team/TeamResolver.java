@@ -52,6 +52,24 @@ public final class TeamResolver {
         return managedByFtbTeams() ? FtbTeamsBridge.owner(server, teamId) : null;
     }
 
+    /**
+     * Whether this player owns their current team, or is solo: the FTB Teams owner, the built-in party's owner, or
+     * the player themselves when there is no party. Shared skill actions (respec, exchange) are the owner's.
+     */
+    public static boolean isOwner(MinecraftServer server, UUID player) {
+        UUID teamId = teamId(server, player);
+        if (managedByFtbTeams()) {
+            return owns(player, FtbTeamsBridge.owner(server, teamId));
+        }
+        PartyData.Party party = PartyStore.get(server).data().party(teamId);
+        return owns(player, party == null ? null : party.owner);
+    }
+
+    /** Solo (no team record) is the player's own; otherwise only the recorded owner may act. */
+    static boolean owns(UUID player, UUID owner) {
+        return owner == null || owner.equals(player);
+    }
+
     /** The FTB team's friendly name; empty for the built-in party, which the client names after its owner. */
     public static String teamName(MinecraftServer server, UUID teamId) {
         return managedByFtbTeams() ? FtbTeamsBridge.name(server, teamId) : "";

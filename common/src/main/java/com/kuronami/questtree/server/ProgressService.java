@@ -335,14 +335,15 @@ public final class ProgressService {
             case "exchange" -> {
                 // the skills screen's buy button: spend vanilla levels for one point (DATA_MODEL points.exchange)
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
-                if (c != null) {
+                if (c != null && TeamResolver.isOwner(player.server, player.getUUID())) {
                     exchange(player, p, c);
                 }
             }
             case "respec" -> {
                 // the skills screen's respec button: give back every point taken in the chapter, for points.respec.cost
                 ProgressModel.Chapter c = r.model().chapters.get(a.node());
-                if (c != null && PlayerCommands.respec(player, p, c, true)) {
+                if (c != null && TeamResolver.isOwner(player.server, player.getUUID())
+                        && PlayerCommands.respec(player, p, c, true)) {
                     ProgressStore.get(player.server).setDirty();
                     markDirty(player);
                 }

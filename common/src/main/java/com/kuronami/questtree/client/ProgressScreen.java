@@ -1848,16 +1848,19 @@ public class ProgressScreen extends Screen {
         if (rules == null) {
             return;
         }
+        boolean owner = ClientTeam.view().isOwner();
         Component respec = respecLabel(ch);
         int rw = font.width(respec) + 2 * Ui.S1;
-        boolean canRespec = rules.canRespec(p, mc);
+        boolean canRespec = owner && rules.canRespec(p, mc);
         List<Component> respecTip = new ArrayList<>();
         respecTip.add(respec);
         if (ch.respecCost > 0) {
             respecTip.add(Component.translatable("screen.kuronami_quest_tree.skill.cost_points", ch.respecCost));
         }
         if (!canRespec) {
-            respecTip.add(Component.translatable(ProgressRules.chapterRefund(p, mc) > 0
+            respecTip.add(Component.translatable(!owner
+                    ? "screen.kuronami_quest_tree.skill.team_owner_only"
+                    : ProgressRules.chapterRefund(p, mc) > 0
                     ? "screen.kuronami_quest_tree.skill.not_enough_points"
                     : "screen.kuronami_quest_tree.skill.nothing_spent"));
         }
@@ -1870,13 +1873,15 @@ public class ProgressScreen extends Screen {
         }
         int ew = font.width(exchange) + 2 * Ui.S1;
         int playerLevel = minecraft == null || minecraft.player == null ? 0 : minecraft.player.experienceLevel;
-        boolean canExchange = ProgressRules.canExchange(p, mc, playerLevel);
+        boolean canExchange = owner && ProgressRules.canExchange(p, mc, playerLevel);
         List<Component> exchangeTip = new ArrayList<>();
         exchangeTip.add(exchange);
         exchangeTip.add(Component.translatable("screen.kuronami_quest_tree.skill.cost_levels", ch.exchangeCost));
         if (!canExchange) {
             int used = ClientProgress.exchangeUsed(ch);
-            exchangeTip.add(Component.translatable(ch.exchangeLimit != Integer.MAX_VALUE && used >= ch.exchangeLimit
+            exchangeTip.add(Component.translatable(!owner
+                    ? "screen.kuronami_quest_tree.skill.team_owner_only"
+                    : ch.exchangeLimit != Integer.MAX_VALUE && used >= ch.exchangeLimit
                     ? "screen.kuronami_quest_tree.skill.exchange_limit"
                     : "screen.kuronami_quest_tree.skill.not_enough_levels"));
         }
