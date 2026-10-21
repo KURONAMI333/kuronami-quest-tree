@@ -327,10 +327,14 @@ final class DevTour {
             ProgressScreen.tourPointerClear();
             Minecraft.getInstance().setScreen(null);
         });
-        at(et + 97, () -> RewardToast.show(
-                List.of(new ItemStack(Items.DIAMOND, 4), new ItemStack(Items.EMERALD, 4)),
-                List.of(Component.literal("Diamond x4"), Component.literal("Emerald x4"))));
-        shot(et + 100, "38_reward_toast");
+        at(et + 97, () -> {
+            RewardToast.show(
+                    List.of(new ItemStack(Items.DIAMOND, 4), new ItemStack(Items.EMERALD, 4)),
+                    List.of(Component.literal("Diamond x4"), Component.literal("Emerald x4")));
+            // take the photo a few ticks later, relative to the toast: a death just before this point delays steps,
+            // and a fixed tick would then grab the frame from before the toast was drawn (2026-10-22 review)
+            shot(ticks + 4, "38_reward_toast");
+        });
         // a description with a picture and both link kinds (the dev pack)
         at(et + 102, () -> openId("aa_devtour:showcase"));
         at(et + 104, () -> screen.tourSelect("aa_devtour:showcase/rich"));
