@@ -180,6 +180,12 @@ public final class EditorService {
 
     /** End of a server tick: publish one rebuild for every edit made since the last tick. */
     public static void onServerTick(MinecraftServer server) {
+        // A rebuild may have moved reward indices (an editor reorder, insert or delete): move the saved claim records
+        // once, before the new book is sent (2026-10-22 release review).
+        java.util.Map<String, java.util.Map<Integer, Integer>> rewardRemap = ProgressData.takeRewardRemap();
+        if (!rewardRemap.isEmpty()) {
+            ProgressStore.get(server).remapRewardIndices(rewardRemap);
+        }
         if (!dirty) {
             return;
         }
