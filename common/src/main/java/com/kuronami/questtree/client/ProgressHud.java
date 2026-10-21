@@ -32,7 +32,7 @@ public final class ProgressHud {
     private static boolean noticeHeld;
     /** Closest unfinished quests, recomputed only when new progress arrives (scanning every node per frame is too slow). */
     private static final List<ClientModel.Node> CLOSEST = new ArrayList<>();
-    private static Object closestFor;
+    private static String closestFor;
     /** The current chapter's next open quest, recomputed with the same cache as {@link #CLOSEST}. */
     private static ClientModel.Node AUTO;
     private static String autoFor;
@@ -174,7 +174,7 @@ public final class ProgressHud {
         List<ClientModel.Node> rows = new ArrayList<>();
         if (TrackerRules.autoPin(ClientConfig.autoPin(), ClientConfig.trackerMode() == ClientConfig.TrackerMode.ALL)) {
             String chapter = ProgressScreen.currentChapterId();
-            String cache = System.identityHashCode(ClientProgress.progress()) + "|" + chapter;
+            String cache = CacheKey.of(ClientProgress.progress(), ClientProgress.rules(), chapter);
             if (!cache.equals(autoFor)) {
                 autoFor = cache;
                 AUTO = autoQuest(m);
@@ -192,8 +192,9 @@ public final class ProgressHud {
             }
         }
         if (rows.isEmpty() && ClientConfig.trackerMode() == ClientConfig.TrackerMode.ALL) {
-            if (closestFor != ClientProgress.progress()) {
-                closestFor = ClientProgress.progress();
+            String closest = CacheKey.of(ClientProgress.progress(), ClientProgress.rules());
+            if (!closest.equals(closestFor)) {
+                closestFor = closest;
                 CLOSEST.clear();
                 m.nodesByKey.values().stream()
                         .filter(n -> !n.tasks.isEmpty() && ClientProgress.state(n.key) == State.PROGRESS && ClientProgress.visible(n.key))

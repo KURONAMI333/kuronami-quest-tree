@@ -44,10 +44,11 @@ final class Tiles {
      */
     /** Pixel size of a texture, read once from its file ({0, 0} = missing or unreadable). */
     static int[] textureSize(ResourceLocation id) {
-        return TEXTURE_SIZES.computeIfAbsent(id, k -> {
-            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(k);
+        String cache = CacheKey.of(ClientProgress.model(), id);
+        return TEXTURE_SIZES.computeIfAbsent(cache, k -> {
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(id);
             if (res.isEmpty()) {
-                Constants.LOG.warn("Texture {} does not exist", k);
+                Constants.LOG.warn("Texture {} does not exist", id);
                 return new int[]{0, 0};
             }
             try (var in = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(in)) {
@@ -71,7 +72,7 @@ final class Tiles {
         g.pose().popPose();
     }
 
-    private static final Map<ResourceLocation, int[]> TEXTURE_SIZES = new HashMap<>();
+    private static final Map<String, int[]> TEXTURE_SIZES = new HashMap<>();
 
     static String shapeOf(String shape) {
         return SHAPES.contains(shape) ? shape : "square";

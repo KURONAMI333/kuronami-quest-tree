@@ -233,15 +233,16 @@ public class ProgressScreen extends Screen {
     private PathFinder.Path path = PathFinder.Path.NONE;
     private java.util.Set<String> pathSet = java.util.Set.of();
     private String pathFor;
-    private Object pathProgress;
+    private String pathKey;
 
     private PathFinder.Path path() {
         if (selected == null || ClientProgress.rules() == null) {
             return PathFinder.Path.NONE;
         }
-        if (!selected.equals(pathFor) || ClientProgress.progress() != pathProgress) {
+        String key = CacheKey.of(selected, ClientProgress.progress(), ClientProgress.rules());
+        if (!selected.equals(pathFor) || !key.equals(pathKey)) {
             pathFor = selected;
-            pathProgress = ClientProgress.progress();
+            pathKey = key;
             path = PathFinder.find(ClientProgress.rules(), ClientProgress.progress(), selected);
             pathSet = new java.util.HashSet<>(path.nodes());
         }
@@ -4356,9 +4357,14 @@ public class ProgressScreen extends Screen {
     // ------------------------------------------------------------------ drawing helpers
 
     private final Map<String, Map<String, Integer>> depthCache = new HashMap<>();
+    private Object depthModel;
 
     /** Steps from the chapter's start (root nodes, else nodes needing nothing), walking links in either direction. */
     private Map<String, Integer> depths(ClientModel.Chapter ch) {
+        if (depthModel != ClientProgress.model()) {
+            depthCache.clear();
+            depthModel = ClientProgress.model();
+        }
         return depthCache.computeIfAbsent(ch.id, k -> {
             Map<String, java.util.List<String>> links = new HashMap<>();
             java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
