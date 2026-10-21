@@ -29,6 +29,12 @@ public final class PlayerProgress {
     public Set<String> claimedRewards = new HashSet<>();
     /** Rewards with {@code "team": true} already claimed by anyone in the team (FTBQ's team_reward, NIL UUID). */
     public Set<String> teamClaimedRewards = new HashSet<>();
+    /**
+     * Skill rewards the team actually paid, key {@code <node>#<rank>#<index>} (2026-10-22). Revocation, re-application
+     * and the respec judgement read only this record, so a condition that stops holding later cannot undo or repay
+     * something. In a team view this is the team's shared set.
+     */
+    public Set<String> paidSkillRewards = new HashSet<>();
     /** Task counters, key {@code <node key>#<task index>}. */
     public Map<String, Long> tasks = new HashMap<>();
     /** Skill nodes taken, with the number of ranks taken (1 for nodes without ranks). */
@@ -106,7 +112,8 @@ public final class PlayerProgress {
      * A member's view of a team record. Shared collections are the team's (writes reach every member); claims,
      * recent and the book flag are the member's own.
      */
-    public static PlayerProgress view(PlayerProgress shared, PlayerPart part, Set<String> teamClaimedRewards) {
+    public static PlayerProgress view(PlayerProgress shared, PlayerPart part, Set<String> teamClaimedRewards,
+                                      Set<String> paidSkillRewards) {
         PlayerProgress p = new PlayerProgress();
         p.completed = personalNodes.isEmpty() ? shared.completed : new RoutedSet(shared.completed, part.completed);
         p.tasks = personalNodes.isEmpty() ? shared.tasks : new RoutedMap<>(shared.tasks, part.tasks);
@@ -127,6 +134,7 @@ public final class PlayerProgress {
         p.claimed = part.claimed;
         p.claimedRewards = part.claimedRewards;
         p.teamClaimedRewards = teamClaimedRewards;
+        p.paidSkillRewards = paidSkillRewards;
         p.recent = part.recent;
         p.bookGiven = part.bookGiven;
         p.rewardsBlocked = part.rewardsBlocked;
@@ -238,6 +246,7 @@ public final class PlayerProgress {
     public void clearNode(String node) {
         // pending first: once it is gone the table marks no longer count as owed and clearRound drops them too
         pendingRewards.keySet().removeIf(k -> k.startsWith(node + "#"));
+        paidSkillRewards.removeIf(k -> k.startsWith(node + "#"));
         clearRound(node);
     }
 
@@ -267,6 +276,8 @@ public final class PlayerProgress {
         chapterOpen.putAll(other.chapterOpen);
         teamStages.clear();
         teamStages.addAll(other.teamStages);
+        paidSkillRewards.clear();
+        paidSkillRewards.addAll(other.paidSkillRewards);
     }
 
     public void event(String kind, String node, long time) {

@@ -85,6 +85,22 @@ public final class TeamStoreData {
         return true;
     }
 
+    /**
+     * Fills the paid-skill record of saves made before it existed, for the loaded data. Idempotent: a node that
+     * already has a record is left alone. Returns whether anything changed.
+     */
+    public boolean migratePaidSkillRewards(com.kuronami.questtree.data.ProgressModel model) {
+        if (model == null || model.nodes.isEmpty()) {
+            // an unreadable or empty pack is not proof that no skill was taken
+            return false;
+        }
+        boolean changed = false;
+        for (TeamProgress team : teams.values()) {
+            changed |= SkillRewardPolicy.migratePaidSkillRewards(team, model);
+        }
+        return changed;
+    }
+
     /** Version 1: {@code players} maps a UUID string to that player's saved progress object. */
     public static TeamStoreData fromLegacy(JsonObject players) {
         TeamStoreData data = new TeamStoreData();

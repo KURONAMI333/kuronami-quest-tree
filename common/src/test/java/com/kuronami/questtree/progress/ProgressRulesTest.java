@@ -385,6 +385,7 @@ class ProgressRulesTest {
         p.spent.put(ProgressRules.key(a), 1);
         p.bonus.put(ProgressRules.key(m.chapters.get("s:b")), 2);
         p.spent.put(ProgressRules.key(m.chapters.get("s:b")), 4);
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(a.nodes.get("n"), 0, 0));
         ProgressRules.RespecPlan refused = rules.respecPlan(p, a);
         assertFalse(refused.allowed(), "the target pool cannot give the paid points back");
         assertEquals(ProgressRules.RespecRefusal.NOT_ENOUGH_POINTS, refused.refusal());

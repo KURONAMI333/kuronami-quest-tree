@@ -107,6 +107,8 @@ public final class ProgressService {
         ProgressStore store = ProgressStore.get(player.server);
         // an empty model is an unreadable or empty pack; only a loaded one may move personal progress to shared
         store.migratePersonalNodes(PlayerProgress.personalNodesSnapshot(), ProgressData.model().nodes.isEmpty());
+        // an old save has no paid-skill record: fill it before any revoke, respec or re-application reads it
+        store.migratePaidSkillRewards(ProgressData.model());
         UUID before = store.teamIdOf(player.getUUID());
         UUID current = TeamResolver.teamId(player.server, player.getUUID());
         PlayerProgress p = store.view(player.server, player.getUUID());

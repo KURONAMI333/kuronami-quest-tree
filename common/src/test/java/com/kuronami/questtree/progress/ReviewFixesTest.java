@@ -323,6 +323,7 @@ class ReviewFixesTest {
         ProgressModel.Node n = model.chapters.get("s:a").nodes.get("n");
         PlayerProgress p = new PlayerProgress();
         p.bonus.put(ProgressRules.key(n.chapter), 2);
+        p.paidSkillRewards.add(SkillRewardPolicy.paidKey(n, 0, 3));
         new ProgressRules(model).revokePoints(p, n, 1);
         assertEquals(0, p.bonus.getOrDefault(ProgressRules.key(n.chapter), 0));
     }

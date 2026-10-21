@@ -31,6 +31,8 @@ public final class ProgressStore extends SavedData {
     private TeamStoreData data = new TeamStoreData();
     /** The file was version 1 when it was read: save it as version 2 and leave a backup of the old one. */
     private boolean loadedLegacy;
+    /** The model the old-save paid-skill migration already ran for; a reload runs it again over that model. */
+    private com.kuronami.questtree.data.ProgressModel paidSkillModel;
 
     public static ProgressStore get(MinecraftServer server) {
         ProgressStore store = server.overworld().getDataStorage().computeIfAbsent(
@@ -45,6 +47,21 @@ public final class ProgressStore extends SavedData {
 
     public TeamProgress team(UUID id) {
         return data.team(id);
+    }
+
+    /**
+     * Fills the paid-skill record of an old save once per loaded data model. A save from before the record existed has
+     * no way to say which reward was paid, so its taken skill nodes are filled as fully paid (2026-10-22 review).
+     */
+    public void migratePaidSkillRewards(com.kuronami.questtree.data.ProgressModel model) {
+        if (model == paidSkillModel || model == null || model.nodes.isEmpty()) {
+            // an empty pack is not proof that no skill was taken; do not remember it as migrated
+            return;
+        }
+        paidSkillModel = model;
+        if (data.migratePaidSkillRewards(model)) {
+            setDirty();
+        }
     }
 
     /** Routes saved values if the data model changed which nodes are personal. */

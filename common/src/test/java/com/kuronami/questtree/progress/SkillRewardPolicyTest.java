@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Skill rewards that must not be farmed by respec and taking the same rank again (2026-10-21 review). */
+/** Skill rewards that must not be farmed by respec and taking the same rank again (2026-10-22 review). */
 class SkillRewardPolicyTest {
 
     private static final java.util.UUID A = java.util.UUID.fromString("00000000-0000-0000-0000-00000000000a");
@@ -47,18 +47,17 @@ class SkillRewardPolicyTest {
     }
 
     @Test
-    void theMarkIsPerNodeAndRank() {
+    void thePaidRecordIsPerNodeRankAndReward() {
         ProgressModel model = ProgressModel.of(JsonParser.parseString("""
                 {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [{}, {}]}}}}}
                 """).getAsJsonObject());
         ProgressModel.Node n = model.nodes.get("s:a/n");
-        assertEquals("s:a/n#skill0", SkillRewardPolicy.mark(n, 0));
-        assertNotEquals(SkillRewardPolicy.mark(n, 0), SkillRewardPolicy.mark(n, 1));
-        assertEquals("s:a/n#skill0#1", SkillRewardPolicy.mark(n, 0, 1));
-        assertNotEquals(SkillRewardPolicy.mark(n, 0, 0), SkillRewardPolicy.mark(n, 0, 1));
+        assertEquals("s:a/n#0#0", SkillRewardPolicy.paidKey(n, 0, 0));
+        assertNotEquals(SkillRewardPolicy.paidKey(n, 0, 0), SkillRewardPolicy.paidKey(n, 1, 0));
+        assertNotEquals(SkillRewardPolicy.paidKey(n, 0, 0), SkillRewardPolicy.paidKey(n, 0, 1));
     }
 
-    /** A reward is marked only when it was paid, so a failed or skipped one can still pay on the next take. */
+    /** A reward is recorded only when it was paid, so a failed or skipped one can still pay on the next take. */
     @Test
     void onlyPaidRewardsAreRecorded() {
         ProgressModel model = modelWithRewards();
@@ -69,60 +68,33 @@ class SkillRewardPolicyTest {
 
         SkillRewardPolicy.recordPaid(p, n, 0, 0, false);
         assertTrue(SkillRewardPolicy.owed(p, n, 0, 0), "a failed pay-out must stay owed");
-        assertTrue(SkillRewardPolicy.owed(p, n, 0, 1), "another reward is not marked with it");
+        assertTrue(SkillRewardPolicy.owed(p, n, 0, 1), "another reward is not recorded with it");
 
         SkillRewardPolicy.recordPaid(p, n, 0, 0, true);
         assertFalse(SkillRewardPolicy.owed(p, n, 0, 0));
         assertTrue(SkillRewardPolicy.owed(p, n, 0, 1));
     }
 
-    /** Saves from before per-reward marks kept one mark per rank; it means every one-off reward of the rank was paid. */
-    @Test
-    void anOldPerRankMarkCountsEveryRewardOfThatRankAsPaid() {
-        ProgressModel model = modelWithRewards();
-        ProgressModel.Node n = model.nodes.get("s:a/n");
-        PlayerProgress p = new PlayerProgress();
-        p.claimedRewards.add("s:a/n#skill0");
-        assertFalse(SkillRewardPolicy.owed(p, n, 0, 0));
-        assertFalse(SkillRewardPolicy.owed(p, n, 0, 1), "the old mark paid the whole rank");
-        assertTrue(SkillRewardPolicy.owed(p, n, 1, 0), "another rank is not covered");
-    }
-
     /** A one-off skill reward paid to any member is settled for the whole team (2026-10-22 review). */
     @Test
-    void aMarkOnAnyMemberCountsForTheWholeTeam() {
+    void aRecordOnAnyMemberCountsForTheWholeTeam() {
         ProgressModel model = modelWithRewards();
         ProgressModel.Node n = model.nodes.get("s:a/n");
         TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
         PlayerProgress a = team.view(A);
         PlayerProgress b = team.view(B);
-        java.util.function.Predicate<String> claimed = SkillRewardPolicy.teamClaimed(team);
 
-        assertTrue(SkillRewardPolicy.owed(claimed, n, 0, 0));
+        assertTrue(SkillRewardPolicy.owed(a, n, 0, 0));
         SkillRewardPolicy.recordPaid(a, n, 0, 0, true);
 
-        assertFalse(SkillRewardPolicy.owed(claimed, n, 0, 0), "another member's mark already paid the item");
-        assertTrue(SkillRewardPolicy.owed(claimed, n, 0, 1), "only the reward that was paid is settled");
-        assertFalse(SkillRewardPolicy.owed(SkillRewardPolicy.teamClaimed(team), n, 0, 0));
-        assertTrue(SkillRewardPolicy.owed(b, n, 0, 0), "without the team predicate this record alone is unpaid");
-    }
-
-    /** An old per-rank mark on any member also covers the whole team, so an upgraded save cannot pay twice. */
-    @Test
-    void anOldPerRankMarkOnAnyMemberCoversTheTeam() {
-        ProgressModel model = modelWithRewards();
-        ProgressModel.Node n = model.nodes.get("s:a/n");
-        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
-        team.part(A).claimedRewards.add("s:a/n#skill0");
-        java.util.function.Predicate<String> claimed = SkillRewardPolicy.teamClaimed(team);
-        assertFalse(SkillRewardPolicy.owed(claimed, n, 0, 0));
-        assertFalse(SkillRewardPolicy.owed(claimed, n, 0, 1), "the old rank mark paid the whole rank for the team");
-        assertTrue(SkillRewardPolicy.owed(claimed, n, 1, 0), "another rank is not covered");
+        assertFalse(SkillRewardPolicy.owed(b, n, 0, 0), "another member's record already paid the item");
+        assertTrue(SkillRewardPolicy.owed(b, n, 0, 1), "only the reward that was paid is settled");
+        assertTrue(team.paidSkillRewards.contains("s:a/n#0#0"));
     }
 
     /**
-     * Skill rewards are paid on the spot, even while quest rewards are blocked: only a mark is written, never a
-     * pending entry (2026-10-22 review).
+     * Skill rewards are paid on the spot, even while quest rewards are blocked: only the paid record is written,
+     * never a pending entry (2026-10-22 review).
      */
     @Test
     void aSkillRewardLeavesNoPendingEntryWhenQuestRewardsAreBlocked() {
@@ -133,25 +105,90 @@ class SkillRewardPolicyTest {
 
         SkillRewardPolicy.recordPaid(p, n, 0, 0, true);
 
-        assertTrue(p.rewardClaimed(SkillRewardPolicy.mark(n, 0, 0)));
+        assertTrue(p.paidSkillRewards.contains(SkillRewardPolicy.paidKey(n, 0, 0)));
         assertTrue(p.pendingRewards.isEmpty(), "skill rewards never go to the pending ledger");
     }
 
-    /**
-     * A reward whose conditions did not hold was never handed out, so a respec must not undo it and a login must not
-     * re-apply it (2026-10-22 review).
-     */
+    /** Only the revocable rewards lose their record, so a respec pays them again but keeps one-off gifts settled. */
     @Test
-    void onlyRewardsWhoseConditionsHeldAreUndoneOrReapplied() {
+    void takingBackForgetsOnlyRevocableRewards() {
         ProgressModel model = ProgressModel.of(JsonParser.parseString("""
                 {"chapters": {"s:a": {"points": {}, "nodes": {"n": {"ranks": [
-                  {"rewards": [{"type": "attribute"}, {"type": "command"}, {"type": "attribute"}]}]}}}}}
+                  {"rewards": [{"type": "points", "amount": 2}, {"type": "item"},
+                               {"type": "tag", "tag": "x"}, {"type": "command", "command": "say hi",
+                                "lock_command": "say bye"}]}]}}}}}
                 """).getAsJsonObject());
         ProgressModel.Node n = model.nodes.get("s:a/n");
-        assertEquals(java.util.List.of(0, 2), SkillRewardPolicy.grantedIndexes(n, 0,
-                rw -> !"command".equals(rw.get("type").getAsString())));
-        assertEquals(java.util.List.of(0, 1, 2), SkillRewardPolicy.grantedIndexes(n, 0, rw -> true));
-        assertEquals(java.util.List.of(), SkillRewardPolicy.grantedIndexes(n, 0, rw -> false));
+        PlayerProgress p = new PlayerProgress();
+        for (int i = 0; i < 4; i++) {
+            SkillRewardPolicy.recordPaid(p, n, 0, i, true);
+        }
+
+        SkillRewardPolicy.clearRevoked(p, n, 1);
+
+        assertEquals(java.util.Set.of("s:a/n#0#1"), p.paidSkillRewards, "the item stays settled");
+    }
+
+    /** A save from before the record has only old marks: they say which rank was paid, and every reward of it. */
+    @Test
+    void oldMarksBecomePaidRecords() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.part(A).claimedRewards.add("s:a/n#skill0");
+        team.part(A).claimedRewards.add("s:a/n#skill1#0");
+
+        assertTrue(SkillRewardPolicy.migratePaidSkillRewards(team, model));
+
+        assertTrue(team.paidSkillRewards.contains("s:a/n#0#0"));
+        assertTrue(team.paidSkillRewards.contains("s:a/n#0#1"), "the old rank mark paid the whole rank");
+        assertTrue(team.paidSkillRewards.contains("s:a/n#1#0"));
+        assertFalse(team.paidSkillRewards.contains("s:a/n#1#1"));
+        assertFalse(SkillRewardPolicy.migratePaidSkillRewards(team, model), "running it again changes nothing");
+    }
+
+    /** Without any old mark, a taken skill node is filled as fully paid: conditions were not judged back then. */
+    @Test
+    void aTakenSkillNodeWithNoMarkIsFilledIn() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        team.shared.taken.put(n.key, 1);
+
+        assertTrue(SkillRewardPolicy.migratePaidSkillRewards(team, model));
+
+        assertTrue(team.paidSkillRewards.contains("s:a/n#0#0"));
+        assertTrue(team.paidSkillRewards.contains("s:a/n#0#1"));
+        assertFalse(team.paidSkillRewards.contains("s:a/n#1#0"), "a rank that was not taken is not paid");
+    }
+
+    /** A leaver keeps the team's one-off marks and paid records: taking the rank alone again must not pay again. */
+    @Test
+    void aLeaverKeepsTheTeamsOneOffRecords() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        SkillRewardPolicy.recordPaid(team.view(A), n, 0, 0, true);
+        team.part(A).claimedRewards.add("s:a/n#skill0#1");
+
+        TeamProgress solo = team.leaveCopy(B);
+
+        assertTrue(solo.paidSkillRewards.contains("s:a/n#0#0"));
+        assertTrue(solo.part(B).claimedRewards.contains("s:a/n#skill0#1"));
+        assertFalse(SkillRewardPolicy.owed(solo.view(B), n, 0, 0), "the item was already paid for the team");
+    }
+
+    @Test
+    void thePaidRecordSurvivesASaveRoundTrip() {
+        ProgressModel model = modelWithRewards();
+        ProgressModel.Node n = model.nodes.get("s:a/n");
+        TeamProgress team = new TeamProgress(java.util.UUID.randomUUID());
+        SkillRewardPolicy.recordPaid(team.view(A), n, 0, 0, true);
+
+        TeamProgress back = TeamProgress.fromJson(team.toJson());
+
+        assertEquals(java.util.Set.of("s:a/n#0#0"), back.paidSkillRewards);
+        assertFalse(SkillRewardPolicy.owed(back.view(B), n, 0, 0));
     }
 
     private static ProgressModel modelWithRewards() {
