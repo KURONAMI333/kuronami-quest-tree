@@ -62,10 +62,12 @@ public final class ProgressRules {
             if (got >= max) {
                 return State.DONE;
             }
-            if (!unlocked(p, n)) {
+            if (!reachable(p, n)) {
                 return State.LOCKED;
             }
-            if (availablePoints(p, n.chapter) >= Math.max(0, n.cost)) {
+            // short of required_points or the node's cost: still a skill that can be aimed for, so it is shown as
+            // available; take() is what refuses it (2026-10-22 review)
+            if (unlocked(p, n) && availablePoints(p, n.chapter) >= Math.max(0, n.cost)) {
                 return State.CLAIM;
             }
             // partly ranked nodes are not finished: they still need points (and nothingLeft must not stop experience)
@@ -145,33 +147,42 @@ public final class ProgressRules {
      * spending must not lock the next rank (2026-10-22 review).
      */
     public boolean unlocked(PlayerProgress p, ProgressModel.Node n) {
-        if (!modsLoaded(n.requiredMods)) {
+        if (!reachable(p, n)) {
             return false;
         }
-        boolean reachable;
-        // Pufferfish's Skills roots are available from the start even though connections also point back at them
-        if (n.requires.isEmpty() || n.root) {
-            reachable = true;
-        } else {
-            boolean started = n.requireMode.endsWith("started");
-            int met = 0;
-            for (String r : n.requires) {
-                if (satisfied(p, r, started)) {
-                    met++;
-                }
-            }
-            if (n.requireMin > 0) {
-                reachable = met >= n.requireMin;
-            } else {
-                reachable = n.requireMode.startsWith("any") || n.requireMode.equals("one")
-                        ? met > 0 : met == n.requires.size();
-            }
-        }
-        if (!reachable || p.taken.getOrDefault(n.key, 0) > 0) {
-            return reachable;
+        if (p.taken.getOrDefault(n.key, 0) > 0) {
+            return true;
         }
         return availablePoints(p, n.chapter) >= Math.max(0, n.requiredPoints)
                 && p.spent.getOrDefault(key(n.chapter), 0) >= Math.max(0, n.requiredSpentPoints);
+    }
+
+    /**
+     * Whether the connection graph (and the installed mods) let the node be seen at all. The point gates of
+     * {@link #unlocked} are kept out: a skill short of {@code required_points} is drawn as available rather than
+     * locked, and only {@link #take} still refuses it (2026-10-22 review). Otherwise a skill that is merely waiting
+     * for points looks like one whose requirements are missing.
+     */
+    public boolean reachable(PlayerProgress p, ProgressModel.Node n) {
+        if (!modsLoaded(n.requiredMods)) {
+            return false;
+        }
+        // Pufferfish's Skills roots are available from the start even though connections also point back at them
+        if (n.requires.isEmpty() || n.root) {
+            return true;
+        }
+        boolean started = n.requireMode.endsWith("started");
+        int met = 0;
+        for (String r : n.requires) {
+            if (satisfied(p, r, started)) {
+                met++;
+            }
+        }
+        if (n.requireMin > 0) {
+            return met >= n.requireMin;
+        }
+        return n.requireMode.startsWith("any") || n.requireMode.equals("one")
+                ? met > 0 : met == n.requires.size();
     }
 
     /** Pufferfish's Skills drops a skill whose required mods are not all installed. */

@@ -443,4 +443,24 @@ class ProgressRulesTest {
         assertTrue(back.bookGiven());
         assertFalse(ProgressJson.read(new JsonObject()).bookGiven(), "older saves start without the gift");
     }
+
+    /**
+     * A skill that is reachable but short of required points is drawn as available rather than locked, because it is
+     * only waiting for points to be earned; taking it is still refused (2026-10-22 review).
+     */
+    @Test
+    void aSkillShortOfRequiredPointsIsOpenButCannotBeTaken() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"s:a": {"points": {"start": 0}, "nodes": {
+                  "n": {"cost": 1, "requires": {"points": 3}}}}}}
+                """).getAsJsonObject());
+        ProgressModel.Node n = m.chapters.get("s:a").nodes.get("n");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(ProgressRules.State.OPEN, rules.state(p, n));
+        assertFalse(rules.take(p, n), "the point gate still refuses the take");
+        p.bonus.put(ProgressRules.key(n.chapter), 3);
+        assertEquals(ProgressRules.State.CLAIM, rules.state(p, n));
+        assertTrue(rules.take(p, n));
+    }
 }
