@@ -78,7 +78,7 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
         }
 
         public boolean registerTask(String id, QuestTaskType handler) {
-            if (QuestTreeApi.registerTaskType(id, handler)) {
+            if (QuestTreeApi.registerTaskTypeById(id, handler)) {
                 TYPES.task(scriptType, id);
                 return true;
             }
@@ -86,7 +86,7 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
         }
 
         public boolean registerReward(String id, QuestRewardType handler) {
-            if (QuestTreeApi.registerRewardType(id, handler)) {
+            if (QuestTreeApi.registerRewardTypeById(id, handler)) {
                 TYPES.reward(scriptType, id);
                 return true;
             }
@@ -94,7 +94,7 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
         }
 
         public boolean registerCondition(String id, QuestConditionType handler) {
-            if (QuestTreeApi.registerConditionType(id, handler)) {
+            if (QuestTreeApi.registerConditionTypeById(id, handler)) {
                 TYPES.condition(scriptType, id);
                 return true;
             }

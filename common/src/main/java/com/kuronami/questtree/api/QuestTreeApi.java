@@ -56,14 +56,26 @@ public final class QuestTreeApi {
     }
 
     public static void registerTaskType(ResourceLocation id, QuestTaskType type) {
+        if (id == null || type == null) {
+            Constants.LOG.warn("Task type registration needs an id and a handler (id {}, handler {})", id, type);
+            return;
+        }
         TASKS.put(key(id), type);
     }
 
     public static void registerRewardType(ResourceLocation id, QuestRewardType type) {
+        if (id == null || type == null) {
+            Constants.LOG.warn("Reward type registration needs an id and a handler (id {}, handler {})", id, type);
+            return;
+        }
         REWARDS.put(key(id), type);
     }
 
     public static void registerConditionType(ResourceLocation id, QuestConditionType type) {
+        if (id == null || type == null) {
+            Constants.LOG.warn("Condition type registration needs an id and a handler (id {}, handler {})", id, type);
+            return;
+        }
         CONDITIONS.put(key(id), type);
     }
 
@@ -72,11 +84,12 @@ public final class QuestTreeApi {
     }
 
     /**
-     * String form, for a script bridge. An id that is not a resource location is ignored and logged. A script never
-     * replaces an existing type: that would overwrite a Java addon's handler, and the next script reload would remove
-     * both. The existing handler is kept and false is returned.
+     * String form, for a script bridge. The name carries {@code ById} so a null first argument cannot make the call
+     * ambiguous with the {@link ResourceLocation} form. An id that is not a resource location is ignored and logged. A
+     * script never replaces an existing type: that would overwrite a Java addon's handler, and the next script reload
+     * would remove both. The existing handler is kept and false is returned.
      */
-    public static boolean registerTaskType(String id, QuestTaskType type) {
+    public static boolean registerTaskTypeById(String id, QuestTaskType type) {
         String key = key(id);
         if (key == null) {
             Constants.LOG.warn("Not a task type id: '{}'", id);
@@ -93,7 +106,7 @@ public final class QuestTreeApi {
         return true;
     }
 
-    public static boolean registerRewardType(String id, QuestRewardType type) {
+    public static boolean registerRewardTypeById(String id, QuestRewardType type) {
         String key = key(id);
         if (key == null) {
             Constants.LOG.warn("Not a reward type id: '{}'", id);
@@ -110,7 +123,7 @@ public final class QuestTreeApi {
         return true;
     }
 
-    public static boolean registerConditionType(String id, QuestConditionType type) {
+    public static boolean registerConditionTypeById(String id, QuestConditionType type) {
         String key = key(id);
         if (key == null) {
             Constants.LOG.warn("Not a condition type id: '{}'", id);

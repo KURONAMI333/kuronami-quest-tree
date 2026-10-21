@@ -49,7 +49,7 @@ class QuestTreeApiTest {
         QuestTaskType javaHandler = context -> 7;
         QuestTreeApi.registerTaskType(id, javaHandler);
 
-        assertFalse(QuestTreeApi.registerTaskType(id.toString(), context -> 8),
+        assertFalse(QuestTreeApi.registerTaskTypeById(id.toString(), context -> 8),
                 "a script registration is refused instead of replacing Java's handler");
         assertSame(javaHandler, QuestTreeApi.taskType(id.toString()));
         assertTrue(QuestTreeApi.unregisterTaskType(id.toString()), "the script reload can still forget its own id");

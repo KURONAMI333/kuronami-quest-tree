@@ -73,6 +73,8 @@ public final class ProgressService {
     private static final Map<UUID, Map<String, Integer>> OBSERVED = new HashMap<>();
     /** Player progress already migrated for one loaded data model, so a save is not folded into its pool twice. */
     private static final Map<PlayerProgress, ProgressModel> MIGRATED = new java.util.WeakHashMap<>();
+    /** Addon task types that already threw: a task is scanned every tick, so log one line per type, not per tick. */
+    private static final Set<String> FAILED_ADDON_TASKS = new java.util.HashSet<>();
 
     private ProgressService() {
     }
@@ -583,7 +585,9 @@ public final class ProgressService {
                             yield addon.progress(new QuestTaskType.TaskContext(
                                     player, n, t, i, p.task(n.key, i), ProgressRules.target(t)));
                         } catch (RuntimeException ex) {
-                            Constants.LOG.error("Task '{}' of {} failed: {}", type(t), n.key, ex.toString());
+                            if (FAILED_ADDON_TASKS.add(type(t))) {
+                                Constants.LOG.error("Task '{}' of {} failed: {}", type(t), n.key, ex.toString());
+                            }
                             yield -1;
                         }
                     }
