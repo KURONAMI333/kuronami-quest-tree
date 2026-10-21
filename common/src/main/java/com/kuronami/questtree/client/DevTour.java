@@ -268,9 +268,11 @@ final class DevTour {
         boolean contrastBefore = ClientConfig.highContrast();
         boolean editorAllowedBefore = EditorSession.allowed();
         int et = pt + 130;
-        // the client preferences: the list from its top, then from its bottom, then the keys
+        // the client preferences at 120% text: the list from its top, then from its bottom, then the keys
         at(et, () -> {
             screen = null;
+            ClientConfig.textScale = 1.2f;
+            Ui.textScale = 1.2f;
             Minecraft.getInstance().setScreen(new SettingsScreen(null));
         });
         shot(et + 3, "26_settings_top");
@@ -280,7 +282,11 @@ final class DevTour {
             }
         });
         shot(et + 9, "27_settings_bottom");
-        at(et + 11, () -> Minecraft.getInstance().setScreen(new KeyReferenceScreen(null)));
+        at(et + 11, () -> {
+            ClientConfig.textScale = textScaleBefore;
+            Ui.textScale = textScaleBefore;
+            Minecraft.getInstance().setScreen(new KeyReferenceScreen(null));
+        });
         shot(et + 15, "28_key_reference");
         // editing: the mode on, a node selected, then the screens a player reaches from it
         at(et + 17, () -> {
