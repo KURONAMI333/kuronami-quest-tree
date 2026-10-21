@@ -196,11 +196,11 @@ public final class EditorService {
                 reply(player, request, chapterId, false, "", List.of("no namespace to export"), revision);
                 return;
             }
-            player.server.getCommands().performPrefixedCommand(
-                    player.createCommandSourceStack().withPermission(2), command);
+            int result = ServerCommands.run(player, command, 2, false);
             Path folder = player.server.getWorldPath(LevelResource.DATAPACK_DIR)
                     .resolve(ProgressExport.packFolder(namespace));
-            reply(player, request, chapterId, true, "", List.of(folder.toString()), revision);
+            EditorOps.ControlOutcome outcome = EditorOps.controlOutcome("export", result, folder.toString());
+            reply(player, request, chapterId, outcome.ok(), "", messages(outcome), revision);
             return;
         }
         String command = EditorOps.testCommand(chapterId);
@@ -215,11 +215,17 @@ public final class EditorService {
             reply(player, request, chapterId, false, "", List.of(partyRefusal), revision);
             return;
         }
-        player.server.getCommands().performPrefixedCommand(
-                player.createCommandSourceStack().withPermission(2), command);
-        // the point of the button is to see the chapter as a player: the map must stop offering editing at once
-        setEditing(player, false);
-        reply(player, request, chapterId, true, "", List.of(), revision);
+        int result = ServerCommands.run(player, command, 2, false);
+        EditorOps.ControlOutcome outcome = EditorOps.controlOutcome("test_chapter", result, "");
+        if (outcome.leaveEditing()) {
+            // the point of the button is to see the chapter as a player: the map must stop offering editing at once
+            setEditing(player, false);
+        }
+        reply(player, request, chapterId, outcome.ok(), "", messages(outcome), revision);
+    }
+
+    private static List<String> messages(EditorOps.ControlOutcome outcome) {
+        return outcome.message().isEmpty() ? List.of() : List.of(outcome.message());
     }
 
     private static void reply(ServerPlayer player, EditorOpPayload request, String chapterId, boolean ok,

@@ -50,4 +50,19 @@ final class EditorOps {
         return ProgressExport.validNamespace(named) != null ? ProgressExport.validNamespace(named) : namespaceOf(chapterId);
     }
 
+    /**
+     * What a control button answers once its command ran. A command that returned 0 did nothing (the command itself
+     * said why in chat), so the reply is a refusal and the editing mode stays on; testing a chapter ends the mode only
+     * when the reset happened.
+     */
+    static ControlOutcome controlOutcome(String op, int commandResult, String folder) {
+        boolean ok = commandResult > 0;
+        if (op.equals("export")) {
+            return new ControlOutcome(ok, false, ok ? folder : "the export command failed");
+        }
+        return new ControlOutcome(ok, ok, ok ? "" : "the test command failed");
+    }
+
+    record ControlOutcome(boolean ok, boolean leaveEditing, String message) {
+    }
 }

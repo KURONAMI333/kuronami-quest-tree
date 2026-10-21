@@ -7,7 +7,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The control buttons' one dangerous step: turning a request into a command line (2026-10-21). */
 class EditorOpsTest {
@@ -48,5 +50,28 @@ class EditorOpsTest {
         assertEquals("leave your party before testing a chapter",
                 EditorOps.testRefusal(List.of(self, UUID.randomUUID())));
         assertEquals("leave your party before testing a chapter", EditorOps.testRefusal(List.of()));
+    }
+
+    @Test
+    void aFailedCommandIsARefusalAndKeepsEditingOn() {
+        EditorOps.ControlOutcome export = EditorOps.controlOutcome("export", 3, "quest_tree_export_t");
+        assertTrue(export.ok());
+        assertFalse(export.leaveEditing());
+        assertEquals("quest_tree_export_t", export.message());
+
+        EditorOps.ControlOutcome failedExport = EditorOps.controlOutcome("export", 0, "quest_tree_export_t");
+        assertFalse(failedExport.ok());
+        assertFalse(failedExport.leaveEditing());
+        assertEquals("the export command failed", failedExport.message());
+
+        EditorOps.ControlOutcome test = EditorOps.controlOutcome("test_chapter", 1, "");
+        assertTrue(test.ok());
+        assertTrue(test.leaveEditing());
+        assertEquals("", test.message());
+
+        EditorOps.ControlOutcome failedTest = EditorOps.controlOutcome("test_chapter", 0, "");
+        assertFalse(failedTest.ok());
+        assertFalse(failedTest.leaveEditing());
+        assertEquals("the test command failed", failedTest.message());
     }
 }
