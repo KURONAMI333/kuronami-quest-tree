@@ -965,7 +965,9 @@ public final class ProgressService {
             // the team's quest started over: the other members' marks for this round go with it
             for (PlayerProgress pm : others) {
                 pm.claimed.remove(n.key);
-                pm.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+                // also the other members' per-reward marks and table rolls, keeping the ones a pending table still
+                // needs (2026-10-22 review)
+                pm.clearRewardMarks(n.key);
             }
         }
     }
