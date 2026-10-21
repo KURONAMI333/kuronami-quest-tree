@@ -7,6 +7,7 @@ import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.SkillRewardPolicy;
+import com.kuronami.questtree.team.TeamResolver;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.core.Holder;
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /** Hands out rewards (DATA_MODEL.md "報酬"). Every reward is checked again here; nothing trusts the client. */
 public final class Rewards {
@@ -32,26 +34,33 @@ public final class Rewards {
     private Rewards() {
     }
 
-    static void give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+    /** Hands out one reward. False when it could not be paid (a missing provider or a failed payment). */
+    static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
+                        String rollKey) {
+        if (!ProgressService.conditionsMet(player, p, rw) || blocked(p, rw)) {
+            return false;
+        }
         try {
-            switch (ProgressService.type(rw)) {
-                case "item" -> item(player, rw);
-                case "xp" -> player.giveExperiencePoints(intOf(rw, "amount", 0));
-                case "xp_levels" -> player.giveExperienceLevels(intOf(rw, "amount", 0));
-                case "command" -> command(player, rw);
-                case "table" -> table(player, p, n, rw, choice);
-                case "advancement" -> advancement(player, rw);
-                case "stage" -> ServerCommands.run(player, "pack_stages " + (ProgressModel.boolOf(rw, "remove") ? "remove " : "add ")
-                        + player.getGameProfile().getName() + " " + ProgressService.str(rw, "stage"), 2, true);
-                case "attribute" -> attribute(player, n.key, slotOf(n, rw), rw);
-                case "points" -> p.bonus.merge(pointsChapter(n, rw), ProgressRules.pointsAmount(rw), Integer::sum);
-                case "tag" -> player.addTag(ProgressService.str(rw, "tag"));
-                case "toast" -> ProgressService.event(player, p, "toast", n.key);
-                case "scoreboard" -> scoreboard(player, p, n, rw);
-                // a placeholder a pack can keep where a reward type may not be installed (Pufferfish's Skills' dummy)
-                case "dummy" -> { }
+            return switch (ProgressService.type(rw)) {
+                case "currency" -> currency(player, rw);
+                case "dummy" -> {
+                    // FTBQ's dummy reward: it exists to make a quest show a reward icon and does nothing
+                    yield true;
+                }
+                case "item" -> { item(player, rw); yield true; }
+                case "xp" -> { player.giveExperiencePoints(intOf(rw, "amount", 0)); yield true; }
+                case "xp_levels" -> { player.giveExperienceLevels(intOf(rw, "amount", 0)); yield true; }
+                case "command" -> { command(player, rw); yield true; }
+                case "table" -> table(player, p, n, rw, choice, rollKey);
+                case "advancement" -> { advancement(player, rw); yield true; }
+                case "stage" -> { stage(player, p, rw); yield true; }
+                case "attribute" -> { attribute(player, n.key, slotOf(n, rw), rw); yield true; }
+                case "points" -> { p.bonus.merge(pointsChapter(n, rw), ProgressRules.pointsAmount(rw), Integer::sum); yield true; }
+                case "tag" -> { player.addTag(ProgressService.str(rw, "tag")); yield true; }
+                case "toast" -> { ProgressService.event(player, p, "toast", n.key); yield true; }
+                case "scoreboard" -> { scoreboard(player, p, n, rw); yield true; }
                 // FTB Quests' custom reward: its effect is addon Java code; hand the claim to QuestEvents and do nothing else
-                case "custom" -> QuestEvents.fire(player, n, rw, false, -1);
+                case "custom" -> { QuestEvents.fire(player, n, rw, false, -1); yield true; }
                 // Kuronami's Trophies (mod-108): it gives each trophy once per player and engraves it; no dependency, only its command
                 case "trophy" -> {
                     // only a valid id reaches the command line
@@ -59,11 +68,162 @@ public final class Rewards {
                             && ResourceLocation.tryParse(ProgressService.str(rw, "trophy")) != null && ProgressService.str(rw, "trophy").contains(":")) {
                         ServerCommands.run(player, "trophy award @s " + ProgressService.str(rw, "trophy"), 2, true);
                     }
+                    yield true;
                 }
-                default -> Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
-            }
+                default -> {
+                    Constants.LOG.warn("Reward type '{}' of {} is not supported yet", ProgressService.type(rw), n.key);
+                    yield true;
+                }
+            };
         } catch (RuntimeException ex) {
             Constants.LOG.error("Reward of {} failed: {}", n.key, ex.toString());
+            return false;
+        }
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean CURRENCY_WARNED =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * Pays through FTB Library's currency hook, which every economy mod of that family registers with. Without an
+     * economy mod the reward is taken and pays nothing (the log says why once); only a provider that fails keeps the
+     * reward unclaimed, so the player can try again (2026-10-21 review).
+     */
+    private static boolean currency(ServerPlayer player, JsonObject rw) {
+        int amount = intOf(rw, "amount", 1);
+        if (amount <= 0) {
+            return true;
+        }
+        boolean provider = com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")
+                && FtbLibraryCurrencyBridge.available();
+        boolean paid = provider && FtbLibraryCurrencyBridge.give(player, amount);
+        var outcome = com.kuronami.questtree.progress.CurrencyClaim.resolve(provider, paid);
+        if (outcome == com.kuronami.questtree.progress.CurrencyClaim.Outcome.NO_PROVIDER) {
+            if (CURRENCY_WARNED.compareAndSet(false, true)) {
+                Constants.LOG.warn("A currency reward paid nothing: no economy mod registered with FTB Library");
+            }
+            return true;
+        }
+        if (outcome == com.kuronami.questtree.progress.CurrencyClaim.Outcome.PAID) {
+            return true;
+        }
+        Constants.LOG.warn("A currency reward of {} failed to pay", amount);
+        // the claim stays open, so the player can try again once the economy mod is back
+        player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                "message.kuronami_quest_tree.currency_failed",
+                "The currency reward could not be paid; it stays unclaimed."));
+        return false;
+    }
+
+    /**
+     * An admin can stop a player from taking rewards ({@code /quest_tree rewards block}); tasks still count. A reward
+     * with {@code "ignore_reward_blocking"} (or {@code "ignore_blocking"}) is exempt, so a pack can keep a story item
+     * or a command flowing while the player is being held.
+     */
+    static boolean blocked(PlayerProgress p, JsonObject rw) {
+        return p.rewardsBlocked() && !ProgressModel.boolOf(rw, "ignore_reward_blocking")
+                && !ProgressModel.boolOf(rw, "ignore_blocking");
+    }
+
+    /**
+     * A stage reward. With {@code "team": true} the stage belongs to the team record and is mirrored into Pack Stages
+     * for every online member, so content outside the quest tree can keep using its command.
+     */
+    private static void stage(ServerPlayer player, PlayerProgress p, JsonObject rw) {
+        String stage = ProgressService.str(rw, "stage");
+        boolean add = !ProgressModel.boolOf(rw, "remove");
+        if (!ProgressModel.boolOf(rw, "team")) {
+            if (add) {
+                p.stages.add(stage);
+            } else {
+                p.stages.remove(stage);
+            }
+            ServerCommands.run(player, "pack_stages " + (add ? "add " : "remove ")
+                    + player.getGameProfile().getName() + " " + stage, 2, true);
+            return;
+        }
+        if (add) {
+            p.teamStages.add(stage);
+        } else {
+            p.teamStages.remove(stage);
+        }
+        for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
+            ServerCommands.run(member, "pack_stages " + (add ? "add " : "remove ")
+                    + member.getGameProfile().getName() + " " + stage, 2, true);
+            PlayerProgress mp = member.getUUID().equals(player.getUUID()) ? p : ProgressService.progress(member);
+            if (add) {
+                mp.teamStagesApplied.add(stage);
+            } else {
+                mp.teamStagesApplied.remove(stage);
+            }
+        }
+    }
+
+    /** Pays rewards that were taken while an admin had blocked pay-outs. Called when the block is lifted. */
+    static void payPending(ServerPlayer player, PlayerProgress p) {
+        var model = ProgressService.rules().model();
+        if (!com.kuronami.questtree.progress.RewardLedger.canResolve(model)) {
+            // an empty model must not read as "every node was removed" and forget the debt
+            return;
+        }
+        boolean changed = false;
+        for (String key : new ArrayList<>(p.pendingRewards.keySet())) {
+            String node = com.kuronami.questtree.progress.RewardLedger.pendingNode(key);
+            int rank = com.kuronami.questtree.progress.RewardLedger.pendingRank(key);
+            int index = com.kuronami.questtree.progress.RewardLedger.pendingIndex(key);
+            ProgressModel.Node n = model.nodes.get(node);
+            if (n == null) {
+                p.pendingRewards.remove(key);
+                changed = true;
+                continue;
+            }
+            List<JsonObject> list = rank >= 0 ? rewardsOfRank(n, rank) : n.rewards;
+            if (index < 0 || index >= list.size()) {
+                p.pendingRewards.remove(key);
+                changed = true;
+                continue;
+            }
+            JsonObject rw = list.get(index);
+            if (blocked(p, rw) || !ProgressService.conditionsMet(player, p, rw)) {
+                continue;
+            }
+            int owed = p.pendingRewards.getOrDefault(key, 0);
+            for (int paid = 0; paid < owed; paid++) {
+                if (!give(player, p, n, rw, -1, key)) {
+                    break;
+                }
+                if (owed - paid - 1 <= 0) {
+                    p.pendingRewards.remove(key);
+                } else {
+                    p.pendingRewards.put(key, owed - paid - 1);
+                }
+                changed = true;
+            }
+        }
+        if (changed) {
+            ProgressStore.get(player.server).setDirty();
+        }
+    }
+
+    /**
+     * Re-applies shared team stages after a login, for members who were offline when the stage was granted, and
+     * removes the ones this player was given while the team no longer holds them (2026-10-21 review).
+     */
+    static void applyTeamStages(ServerPlayer player, PlayerProgress p) {
+        var plan = com.kuronami.questtree.progress.StageSync.plan(p.teamStagesApplied, p.teamStages);
+        Set<String> removable = new java.util.HashSet<>(plan.remove());
+        // a stage this player was granted directly is in p.stages as well; losing the team's copy must not take it
+        removable.removeAll(p.stages);
+        for (String stage : removable) {
+            ServerCommands.run(player, "pack_stages remove " + player.getGameProfile().getName() + " " + stage, 2, true);
+        }
+        for (String stage : plan.add()) {
+            ServerCommands.run(player, "pack_stages add " + player.getGameProfile().getName() + " " + stage, 2, true);
+        }
+        p.teamStagesApplied.clear();
+        p.teamStagesApplied.addAll(p.teamStages);
+        for (String stage : p.stages) {
+            ServerCommands.run(player, "pack_stages add " + player.getGameProfile().getName() + " " + stage, 2, true);
         }
     }
 
@@ -78,7 +238,8 @@ public final class Rewards {
         // Shared values (points) and one-off pay-outs are applied once, by the player who took it
         for (ServerPlayer member : members(player)) {
             if (!member.getUUID().equals(player.getUUID())) {
-                giveSkillOne(member, p, n, rank, false, firstTake);
+                // a member's own pay-out (a blocked command or tag) is owed to that member, not to the taker
+                giveSkillOne(member, ProgressService.progress(member), n, rank, false, firstTake);
             }
         }
         if (firstTake) {
@@ -96,19 +257,29 @@ public final class Rewards {
         List<JsonObject> list = rewardsOfRank(n, rank);
         int i = 0;
         for (JsonObject rw : list) {
+            if (!ProgressService.conditionsMet(player, p, rw)) {
+                i++;
+                continue;
+            }
+            int index = i;
+            String rollKey = com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, rank, index);
             String type = ProgressService.type(rw);
             if (type.equals("attribute")) {
-                attribute(player, n.key, rank * 100 + i, rw);
+                attribute(player, n.key, rank * 100 + index, rw);
             } else if (full) {
                 if (SkillRewardPolicy.pays(rw, firstTake)) {
-                    give(player, p, n, rw, -1);
+                    com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false,
+                            blocked(p, rw), () -> give(player, p, n, rw, -1, rollKey));
                 }
-            } else if (type.equals("command")) {
-                if (firstTake || SkillRewardPolicy.hasLockCommand(rw)) {
-                    give(player, p, n, rw, -1);
+            } else if ((type.equals("command") && (firstTake || SkillRewardPolicy.hasLockCommand(rw)))
+                    || type.equals("tag")) {
+                if (blocked(p, rw)) {
+                    // a member's own pay-out is owed to them, not paid and forgotten
+                    com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index, rank, false, true,
+                            () -> true);
+                } else {
+                    give(player, p, n, rw, -1, rollKey);
                 }
-            } else if (type.equals("tag")) {
-                give(player, p, n, rw, -1);
             }
             i++;
         }
@@ -397,11 +568,12 @@ public final class Rewards {
      * once, so the roll result is granted here at claim time (2026-10-20). KQT has no crate item to carry and open
      * later, so the contents arrive directly instead of the box.
      */
-    private static void table(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice) {
+    private static boolean table(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw,
+                                 int choice, String rollKey) {
         JsonObject table = ProgressService.rules().model().rewardTables.get(ProgressService.str(rw, "table"));
         if (table == null || !table.has("entries")) {
             Constants.LOG.warn("Reward table '{}' of {} does not exist", ProgressService.str(rw, "table"), n.key);
-            return;
+            return true;
         }
         List<JsonObject> entries = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
@@ -410,24 +582,44 @@ public final class Rewards {
             entries.add(o.getAsJsonObject("reward"));
             weights.add(o.has("weight") ? o.get("weight").getAsDouble() : 1.0);
         }
+        String key = rollKey == null || rollKey.isEmpty() ? n.key : rollKey;
         String mode = rw.has("mode") ? rw.get("mode").getAsString() : "random";
         switch (mode) {
-            case "all" -> entries.forEach(e -> give(player, p, n, e, -1));
-            case "choice" -> {
-                if (choice >= 0 && choice < entries.size()) {
-                    give(player, p, n, entries.get(choice), -1);
+            case "all" -> {
+                // every entry is paid once; a retry after a failure skips the entries already paid
+                List<Integer> all = new ArrayList<>();
+                for (int i = 0; i < entries.size(); i++) {
+                    all.add(i);
                 }
+                return com.kuronami.questtree.progress.RewardPayout.pay(p, key + ">all", all,
+                        (index, position) -> give(player, p, n, entries.get(index), -1, key + ">all>" + position));
+            }
+            case "choice" -> {
+                if (choice < 0 || choice >= entries.size()) {
+                    return false;
+                }
+                return give(player, p, n, entries.get(choice), -1, key + ">choice");
             }
             default -> {
                 // FTB Quests: a random reward never rolls "empty" (only a loot crate's table uses empty_weight), and
                 // entries with weight 0 are always granted outside the rolls (2026-10-20 review)
                 boolean loot = mode.equals("loot");
                 double empty = loot && table.has("empty_weight") ? table.get("empty_weight").getAsDouble() : 0;
-                List<Integer> picks = com.kuronami.questtree.progress.RewardRoll.roll(weights, empty, loot,
-                        intOf(table, "rolls", 1), () -> player.getRandom().nextDouble());
-                for (int index : picks) {
-                    give(player, p, n, entries.get(index), -1);
+                String picksKey = key + ">rolls";
+                List<Integer> picks = com.kuronami.questtree.progress.RewardRoll.decode(p.rewardRolls.get(picksKey));
+                if (picks == null) {
+                    picks = com.kuronami.questtree.progress.RewardRoll.roll(weights, empty, loot,
+                            intOf(table, "rolls", 1), () -> player.getRandom().nextDouble());
+                    // decide and record before paying, so a failed entry does not make the next attempt roll again
+                    p.rewardRolls.put(picksKey, com.kuronami.questtree.progress.RewardRoll.encode(picks));
                 }
+                boolean paid = com.kuronami.questtree.progress.RewardPayout.pay(p, key, picks,
+                        (index, position) -> index < 0 || index >= entries.size()
+                                || give(player, p, n, entries.get(index), -1, key + ">" + position));
+                if (paid) {
+                    p.rewardRolls.remove(picksKey);
+                }
+                return paid;
             }
         }
     }

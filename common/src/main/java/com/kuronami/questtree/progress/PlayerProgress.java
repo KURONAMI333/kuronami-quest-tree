@@ -48,14 +48,56 @@ public final class PlayerProgress {
      * {@code points.unlocked_by_default}; storing only the override keeps the pack's default in charge.
      */
     public Map<String, Boolean> chapterOpen = new HashMap<>();
+    /** Stages granted to the whole team ({@code "team": true} on a stage task or reward). */
+    public Set<String> teamStages = new HashSet<>();
+    /** Stages the quest tree granted to this player, as opposed to the shared {@link #teamStages}. */
+    public Set<String> stages = new HashSet<>();
+    /** Team stages this player's Pack Stages were last synced with, so a removal while offline is followed on login. */
+    public Set<String> teamStagesApplied = new HashSet<>();
+    /** Rewards whose pay-out was blocked, with counts; paid when the block is lifted (2026-10-21). */
+    public Map<String, Integer> pendingRewards = new HashMap<>();
+    /** Rolls already made for a reward table, kept until its pay-out succeeds (2026-10-21 review). */
+    public Map<String, String> rewardRolls = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public Deque<String> recent = new ArrayDeque<>();
     /** The quest book was handed out on first join (server config, 2026-10-20). */
     private boolean bookGiven;
-    /** Set only on a view: writes of the book flag go to this player's part. */
+    /** Set only on a view: writes of the book flag and reward flag go to this player's part. */
     private PlayerPart part;
+    /** Set only when this is a shared record: an admin blocked every member's rewards. */
+    private boolean rewardsBlocked;
 
     public static final int RECENT_MAX = 20;
+
+    /** Node keys of {@code shared:false} nodes; their progress lives in each player's part. */
+    private static volatile Set<String> personalNodes = Set.of();
+    private static volatile int personalVersion;
+
+    public static void setPersonalNodes(Set<String> keys) {
+        Set<String> next = Set.copyOf(keys);
+        if (!next.equals(personalNodes)) {
+            personalNodes = next;
+            personalVersion++;
+        }
+    }
+
+    public static int personalVersion() {
+        return personalVersion;
+    }
+
+    /** The node keys that are personal now, for migrating saved progress after {@code shared} changes. */
+    public static Set<String> personalNodesSnapshot() {
+        return personalNodes;
+    }
+
+    private static String nodeOf(String key) {
+        int hash = key.lastIndexOf('#');
+        return hash < 0 ? key : key.substring(0, hash);
+    }
+
+    static boolean isPersonal(String key) {
+        return personalNodes.contains(key);
+    }
 
     public PlayerProgress() {
     }
@@ -66,22 +108,28 @@ public final class PlayerProgress {
      */
     public static PlayerProgress view(PlayerProgress shared, PlayerPart part, Set<String> teamClaimedRewards) {
         PlayerProgress p = new PlayerProgress();
-        p.completed = shared.completed;
-        p.tasks = shared.tasks;
+        p.completed = personalNodes.isEmpty() ? shared.completed : new RoutedSet(shared.completed, part.completed);
+        p.tasks = personalNodes.isEmpty() ? shared.tasks : new RoutedMap<>(shared.tasks, part.tasks);
         p.taken = shared.taken;
         p.xp = shared.xp;
         p.level = shared.level;
         p.spent = shared.spent;
         p.bonus = shared.bonus;
         p.exchange = shared.exchange;
-        p.repeats = shared.repeats;
-        p.cooldown = shared.cooldown;
+        p.repeats = personalNodes.isEmpty() ? shared.repeats : new RoutedMap<>(shared.repeats, part.repeats);
+        p.cooldown = personalNodes.isEmpty() ? shared.cooldown : new RoutedMap<>(shared.cooldown, part.cooldown);
         p.chapterOpen = shared.chapterOpen;
+        p.teamStages = shared.teamStages;
+        p.stages = part.stages;
+        p.teamStagesApplied = part.teamStagesApplied;
+        p.pendingRewards = part.pendingRewards;
+        p.rewardRolls = part.rewardRolls;
         p.claimed = part.claimed;
         p.claimedRewards = part.claimedRewards;
         p.teamClaimedRewards = teamClaimedRewards;
         p.recent = part.recent;
         p.bookGiven = part.bookGiven;
+        p.rewardsBlocked = part.rewardsBlocked;
         p.part = part;
         return p;
     }
@@ -96,6 +144,17 @@ public final class PlayerProgress {
 
     public boolean bookGiven() {
         return bookGiven;
+    }
+
+    public boolean rewardsBlocked() {
+        return rewardsBlocked;
+    }
+
+    public void setRewardsBlocked(boolean blocked) {
+        rewardsBlocked = blocked;
+        if (part != null) {
+            part.rewardsBlocked = blocked;
+        }
     }
 
     public void setBookGiven(boolean given) {
@@ -123,13 +182,45 @@ public final class PlayerProgress {
         return true;
     }
 
-    /** Forgets a node's own progress (tasks, completion, claim); used by repeats and resets. */
-    public void clearNode(String node) {
+    /** Forgets this member's {@code shared:false} progress; a shared reset runs once per team, so each part is cleared. */
+    public void clearPersonalAll() {
+        if (part != null) {
+            part.completed.clear();
+            part.tasks.clear();
+            part.repeats.clear();
+            part.cooldown.clear();
+        }
+    }
+
+    /** Forgets this member's {@code shared:false} progress for one chapter or node. */
+    public void clearPersonalNode(String id) {
+        if (part == null) {
+            return;
+        }
+        String prefix = id + "/";
+        part.completed.removeIf(k -> k.equals(id) || k.startsWith(prefix));
+        part.tasks.keySet().removeIf(k -> k.startsWith(id + "/") || k.startsWith(id + "#"));
+        part.repeats.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
+        part.cooldown.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
+    }
+
+    /**
+     * Forgets a node's own progress for its next round. Rewards already taken while pay-outs were blocked stay in
+     * {@link #pendingRewards}: they are owed from the round that was claimed (2026-10-22 review).
+     */
+    public void clearRound(String node) {
         completed.remove(node);
         claimed.remove(node);
         tasks.keySet().removeIf(k -> k.startsWith(node + "#"));
         claimedRewards.removeIf(k -> k.startsWith(node + "#"));
         teamClaimedRewards.removeIf(k -> k.startsWith(node + "#"));
+        rewardRolls.keySet().removeIf(k -> k.startsWith(node + "#"));
+    }
+
+    /** Forgets a node's own progress and everything it still owes; used by resets (2026-10-22 review). */
+    public void clearNode(String node) {
+        clearRound(node);
+        pendingRewards.keySet().removeIf(k -> k.startsWith(node + "#"));
     }
 
     /** Copies every shared value. Claims, recent and the book flag are per player and are left alone. */
@@ -156,6 +247,8 @@ public final class PlayerProgress {
         cooldown.putAll(other.cooldown);
         chapterOpen.clear();
         chapterOpen.putAll(other.chapterOpen);
+        teamStages.clear();
+        teamStages.addAll(other.teamStages);
     }
 
     public void event(String kind, String node, long time) {

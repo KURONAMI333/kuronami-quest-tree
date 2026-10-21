@@ -22,6 +22,11 @@ public interface IPlatformHelper {
     /** Opens the progression screen. Called from the quest book on the client only. */
     void openProgressionScreen();
 
+    /** Opens the progression screen on one quest; an empty key opens the usual last-viewed place. */
+    default void openProgressionScreen(String node) {
+        openProgressionScreen();
+    }
+
     default String getEnvironmentName() {
         return isDevelopmentEnvironment() ? "development" : "production";
     }

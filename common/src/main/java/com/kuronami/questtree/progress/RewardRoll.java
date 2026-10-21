@@ -59,4 +59,35 @@ public final class RewardRoll {
         }
         return result;
     }
+
+    /** The saved form of a roll ({@code "1,0,-1"} marks an empty pick as -1), so a retry uses the same entries. */
+    public static String encode(List<Integer> picks) {
+        StringBuilder b = new StringBuilder();
+        for (Integer pick : picks) {
+            if (!b.isEmpty()) {
+                b.append(',');
+            }
+            b.append(pick == null ? -1 : pick);
+        }
+        return b.toString();
+    }
+
+    /** Reads a saved roll, or null when it is absent or unreadable (the caller rolls and records again). */
+    public static List<Integer> decode(String saved) {
+        if (saved == null) {
+            return null;
+        }
+        List<Integer> picks = new ArrayList<>();
+        if (saved.isEmpty()) {
+            return picks;
+        }
+        try {
+            for (String part : saved.split(",")) {
+                picks.add(Integer.parseInt(part.trim()));
+            }
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+        return picks;
+    }
 }

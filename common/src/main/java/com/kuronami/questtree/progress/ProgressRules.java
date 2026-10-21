@@ -36,6 +36,13 @@ public final class ProgressRules {
 
     public ProgressRules(ProgressModel model) {
         this.model = model;
+        java.util.Set<String> personal = new java.util.HashSet<>();
+        for (ProgressModel.Node n : model.nodes.values()) {
+            if (!n.shared) {
+                personal.add(n.key);
+            }
+        }
+        PlayerProgress.setPersonalNodes(personal);
     }
 
     public ProgressModel model() {
@@ -78,8 +85,17 @@ public final class ProgressRules {
 
     /** Whether every reward of a node was claimed one by one (2026-10-20). */
     public static boolean allRewardsClaimed(PlayerProgress p, ProgressModel.Node n) {
+        return allRewardsClaimed(p, n, i -> false);
+    }
+
+    /**
+     * As above, but rewards the caller marks as skipped (a reward whose conditions this player does not meet) do not
+     * hold the node open (2026-10-21 review).
+     */
+    public static boolean allRewardsClaimed(PlayerProgress p, ProgressModel.Node n,
+                                            java.util.function.IntPredicate skip) {
         for (int i = 0; i < n.rewards.size(); i++) {
-            if (!p.rewardClaimed(n.key + "#" + i)) {
+            if (!skip.test(i) && !p.rewardClaimed(n.key + "#" + i)) {
                 return false;
             }
         }
@@ -988,7 +1004,7 @@ public final class ProgressRules {
             return false;
         }
         p.repeats.put(n.key, done + 1);
-        p.clearNode(n.key);
+        p.clearRound(n.key);
         if (cooldown > 0) {
             p.cooldown.put(n.key, now + cooldown * 1000);
         }

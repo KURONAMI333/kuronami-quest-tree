@@ -185,6 +185,20 @@ public final class ClientProgress {
         return n == null || rules.unlocked(progress, n);
     }
 
+    /** The client's copy of a quest barrier: the same rule the server uses, from synced progress. */
+    public static boolean barrierAllows(String mode, String key) {
+        if (key == null || key.isEmpty()) {
+            return false;
+        }
+        java.util.Set<String> stages = new java.util.HashSet<>(progress.stages);
+        stages.addAll(progress.teamStages);
+        if ("stage".equals(mode) && !stages.contains(key)
+                && com.kuronami.questtree.progress.PackStagesClient.has(key)) {
+            stages.add(key);
+        }
+        return com.kuronami.questtree.progress.BarrierRule.allows(mode, key, progress.completed, stages);
+    }
+
     public static ProgressRules.State state(String key) {
         ProgressModel.Node n = rules == null ? null : rules.model().nodes.get(key);
         return n == null ? ProgressRules.State.OPEN : rules.state(progress, n);

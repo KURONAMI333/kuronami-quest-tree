@@ -5,13 +5,22 @@
     "refmap": "${mod_id}.refmap.json",
     "compatibilityLevel": "JAVA_18",
     "mixins": [
+        "AbstractHorseTameMixin",
+        "AnimalBreedingMixin",
+        "EnchantedItemCriterionMixin",
+        "EntityStartRidingMixin",
         "FishingTriggerMixin",
         "FurnaceResultSlotMixin",
+        "ItemEntityPickupMixin",
+        "ItemStackUseMixin",
+        "ItemStackUseOnMixin",
         "LivingHealMixin",
         "PlayerEatMixin",
+        "PlayerInteractEntityMixin",
         "ResultSlotMixin",
+        "ServerPlayerGameModeUseItemOnMixin",
         "StatsCounterMixin",
-        "EnchantedItemCriterionMixin"
+        "TamableAnimalTameMixin"
     ],
     "client": [
         "AbstractContainerScreenAccessor",

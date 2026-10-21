@@ -8,15 +8,19 @@ import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
@@ -35,6 +39,10 @@ import java.util.function.BiConsumer;
  * /quest_tree points &lt;players&gt; &lt;chapter&gt; &lt;n&gt;      add (or remove) spendable points
  * /quest_tree experience &lt;players&gt; &lt;chapter&gt; &lt;n&gt;  add experience to a skill chapter
  * /quest_tree lock|unlock &lt;players&gt; &lt;chapter&gt;    hide/show one chapter for those players
+ * /quest_tree team_stage add|remove &lt;players&gt; &lt;stage&gt;  grant/revoke a shared team stage
+ * /quest_tree rewards block|unblock|status &lt;players&gt;  stop/allow taking rewards (tasks still count)
+ * /quest_tree block task &lt;players&gt; &lt;node&gt;          give a block that opens that quest
+ * /quest_tree block barrier &lt;players&gt; node|stage &lt;key&gt;  give a gate that opens for that quest/stage
  * </pre>
  * Ids are {@code <namespace>:<chapter>} and {@code <namespace>:<chapter>/<node>}.
  */
@@ -59,10 +67,16 @@ final class PlayerCommands {
         d.register(Commands.literal(Constants.COMMAND)
                 .then(Commands.literal("reset").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
-                                .executes(c -> each(c, (p, pr) -> resetAll(p, pr), PlayerCommands::clearOwnClaims))
+                                .executes(c -> each(c, (p, pr) -> resetAll(p, pr), (p, pr) -> {
+                                    clearOwnClaims(p, pr);
+                                    pr.clearPersonalAll();
+                                }))
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(ANY)
                                         .executes(c -> each(c, (p, pr) -> reset(p, pr, id(c)),
-                                        (p, pr) -> clearOwnClaims(p, pr, id(c)))))))
+                                        (p, pr) -> {
+                                            clearOwnClaims(p, pr, id(c));
+                                            pr.clearPersonalNode(id(c));
+                                        })))))
                 .then(Commands.literal("complete").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(NODES)
@@ -85,6 +99,40 @@ final class PlayerCommands {
                                         .then(Commands.argument("amount", IntegerArgumentType.integer())
                                                 .executes(c -> each(c, (p, pr) -> pr.bonus.merge(ProgressRules.key(chapter(c)),
                                                         IntegerArgumentType.getInteger(c, "amount"), Integer::sum)))))))
+                .then(Commands.literal("block").requires(s -> s.hasPermission(2))
+                        .then(Commands.literal("task")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("node", StringArgumentType.word()).suggests(NODES)
+                                                .executes(c -> giveBlock(c, true)))))
+                        .then(Commands.literal("barrier")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.literal("node")
+                                                .then(Commands.argument("node", StringArgumentType.word()).suggests(NODES)
+                                                        .executes(c -> giveBlock(c, false))))
+                                        .then(Commands.literal("stage")
+                                                .then(Commands.argument("stage", StringArgumentType.word())
+                                                        .executes(c -> giveBlock(c, false)))))))
+                .then(Commands.literal("rewards").requires(s -> s.hasPermission(2))
+                        .then(Commands.literal("block")
+                                .then(Commands.argument("players", GameProfileArgument.gameProfile())
+                                        .executes(c -> rewardsBlocked(c, true))))
+                        .then(Commands.literal("unblock")
+                                .then(Commands.argument("players", GameProfileArgument.gameProfile())
+                                        .executes(c -> rewardsBlocked(c, false))))
+                        .then(Commands.literal("status")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .executes(PlayerCommands::rewardsStatus))))
+                .then(Commands.literal("team_stage").requires(s -> s.hasPermission(2))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("stage", StringArgumentType.word())
+                                                .executes(c -> each(c, (p, pr) -> teamStage(p, pr,
+                                                        StringArgumentType.getString(c, "stage"), true))))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("stage", StringArgumentType.word())
+                                                .executes(c -> each(c, (p, pr) -> teamStage(p, pr,
+                                                        StringArgumentType.getString(c, "stage"), false)))))))
                 .then(Commands.literal("experience").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
@@ -157,6 +205,8 @@ final class PlayerCommands {
     private static void clearOwnClaims(ServerPlayer p, PlayerProgress pr) {
         pr.claimed.clear();
         pr.claimedRewards.clear();
+        pr.pendingRewards.clear();
+        pr.rewardRolls.clear();
         pr.recent.clear();
     }
 
@@ -168,11 +218,15 @@ final class PlayerCommands {
             for (ProgressModel.Node n : ch.nodes.values()) {
                 pr.claimed.remove(n.key);
                 pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+                pr.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
+                pr.rewardRolls.keySet().removeIf(k -> k.startsWith(n.key + "#"));
             }
         } else if (model.nodes.containsKey(id)) {
             ProgressModel.Node n = model.nodes.get(id);
             pr.claimed.remove(n.key);
             pr.claimedRewards.removeIf(k -> k.startsWith(n.key + "#"));
+            pr.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
+            pr.rewardRolls.keySet().removeIf(k -> k.startsWith(n.key + "#"));
         }
     }
 
@@ -239,6 +293,85 @@ final class PlayerCommands {
             }
         }
         ProgressRules.eraseChapterData(pr, ProgressService.rules().model(), ch);
+    }
+
+    private static int giveBlock(CommandContext<CommandSourceStack> c, boolean task) throws CommandSyntaxException {
+        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
+        String key = StringArgumentType.getString(c, task ? "node" : c.getNodes().stream()
+                .anyMatch(n -> "node".equals(n.getNode().getName())) ? "node" : "stage");
+        if (task && !ProgressService.rules().model().nodes.containsKey(key)) {
+            c.getSource().sendFailure(Component.literal("Unknown quest " + key));
+            return 0;
+        }
+        var stack = task ? com.kuronami.questtree.block.ModBlocks.taskItem(key)
+                : com.kuronami.questtree.block.ModBlocks.barrierItem(
+                        c.getNodes().stream().anyMatch(n -> "stage".equals(n.getNode().getName())) ? "stage" : "node", key);
+        for (ServerPlayer p : players) {
+            var copy = stack.copy();
+            if (!p.getInventory().add(copy)) {
+                p.drop(copy, false);
+            }
+        }
+        c.getSource().sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.block_given",
+                "Gave %s block(s) for %s", players.size(), key), true);
+        return players.size();
+    }
+
+    /** The reward flag belongs to one player, so this does not fold players of one team together like {@link #each}. */
+    private static int rewardsBlocked(CommandContext<CommandSourceStack> c, boolean blocked) throws CommandSyntaxException {
+        // offline players too: an admin may block someone who is not logged in, and the block must hold at their login
+        Collection<GameProfile> players = GameProfileArgument.getGameProfiles(c, "players");
+        MinecraftServer server = c.getSource().getServer();
+        for (GameProfile profile : players) {
+            ServerPlayer online = server.getPlayerList().getPlayer(profile.getId());
+            PlayerProgress pr;
+            if (online != null) {
+                pr = ProgressService.progress(online);
+            } else if (profile.getId() != null) {
+                // for an offline player the record is still theirs alone; the team fold happens at login as usual
+                pr = ProgressStore.get(server).view(server, profile.getId());
+            } else {
+                continue;
+            }
+            pr.setRewardsBlocked(blocked);
+            if (!blocked && online != null) {
+                Rewards.payPending(online, pr);
+            }
+            ProgressStore.get(server).setDirty();
+            if (online != null) {
+                ProgressService.markDirty(online);
+                ProgressService.flush(online);
+            }
+        }
+        c.getSource().sendSuccess(() -> Component.translatableWithFallback(
+                blocked ? "commands.kuronami_quest_tree.rewards_blocked" : "commands.kuronami_quest_tree.rewards_unblocked",
+                blocked ? "Rewards blocked for %s players" : "Rewards allowed for %s players", players.size()), true);
+        return players.size();
+    }
+
+    private static int rewardsStatus(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
+        for (ServerPlayer p : players) {
+            boolean blocked = ProgressService.progress(p).rewardsBlocked();
+            Component state = Component.translatableWithFallback(blocked
+                            ? "commands.kuronami_quest_tree.rewards_state_blocked"
+                            : "commands.kuronami_quest_tree.rewards_state_open", blocked ? "blocked" : "open");
+            p.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.rewards_status",
+                    "%s: rewards %s", p.getGameProfile().getName(), state));
+        }
+        return players.size();
+    }
+
+    private static void teamStage(ServerPlayer p, PlayerProgress pr, String stage, boolean add) {
+        if (add) {
+            pr.teamStages.add(stage);
+        } else {
+            pr.teamStages.remove(stage);
+        }
+        for (ServerPlayer member : TeamResolver.onlineMembers(p.server, p.getUUID())) {
+            ServerCommands.run(member, "pack_stages " + (add ? "add " : "remove ")
+                    + member.getGameProfile().getName() + " " + stage, 2, true);
+        }
     }
 
     private static void resetNode(ServerPlayer p, PlayerProgress pr, ProgressModel.Node n) {

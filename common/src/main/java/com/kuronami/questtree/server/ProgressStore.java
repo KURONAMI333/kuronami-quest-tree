@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.progress.PlayerPart;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.TeamProgress;
 import com.kuronami.questtree.progress.TeamStoreData;
@@ -46,6 +47,15 @@ public final class ProgressStore extends SavedData {
         return data.team(id);
     }
 
+    /** Routes saved values if the data model changed which nodes are personal. */
+    public boolean migratePersonalNodes(java.util.Set<String> current, boolean modelEmpty) {
+        if (data.migratePersonalNodes(current, modelEmpty)) {
+            setDirty();
+            return true;
+        }
+        return false;
+    }
+
     /**
      * The record the player currently acts on. A change of team is detected here: joining folds the player's own
      * record into the team, leaving copies the team back to a new solo record.
@@ -56,6 +66,14 @@ public final class ProgressStore extends SavedData {
             setDirty();
         }
         return data.team(teamId).view(player);
+    }
+
+    /**
+     * A read-only view for a path that must not change teams (barrier collision): no fold, no migration. The answer
+     * can be one team change behind for a few seconds until the ordinary {@link #view} runs.
+     */
+    public PlayerProgress viewReadOnly(MinecraftServer server, UUID player) {
+        return data.team(TeamResolver.teamId(server, player)).view(player);
     }
 
     /**
@@ -72,10 +90,11 @@ public final class ProgressStore extends SavedData {
     }
 
     /** Team rewards ({@code "team": true}) of the nodes this team completed. */
-    private static java.util.Set<String> settledTeamRewards(TeamProgress team) {
+    private static java.util.Set<String> settledTeamRewards(TeamProgress team, UUID player) {
         var nodes = ProgressService.rules().model().nodes;
         java.util.Set<String> out = new java.util.HashSet<>();
-        for (String key : team.shared.completed) {
+        java.util.Set<String> completed = new java.util.HashSet<>(team.completedFor(player));
+        for (String key : completed) {
             var n = nodes.get(key);
             if (n == null) {
                 continue;

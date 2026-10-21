@@ -112,13 +112,38 @@ class ProgressValidatorTest {
     }
 
     @Test
-    void anUnknownTaskOrRewardTypeEmitsAWarningNotAnError() {
+    void interactionAndDummyAreImplementedNow() {
         ProgressValidator.Result r = validate(chapter(
-                "{\"type\": \"interaction\", \"count\": 1}",
+                "{\"type\": \"interaction\", \"action\": \"pickup\", \"item\": \"minecraft:stone\"}",
                 "{\"type\": \"dummy\"}"));
-        assertEquals(0, errors(r));
-        assertTrue(says(r, "is not implemented yet"));
+        assertEquals(List.of(), r.problems);
         assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
+    void anInteractionWithoutAnActionIsAnError() {
+        ProgressValidator.Result r = validate(chapter("{\"type\": \"interaction\", \"count\": 1}", ""));
+        assertTrue(says(r, "has no \"action\""));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void interactionTasksCheckTheirMatchingField() {
+        assertEquals(List.of(), validate(chapter(
+                "{\"type\": \"craft\", \"item\": \"minecraft:stone\"}", "")).problems);
+        assertEquals(List.of(), validate(chapter(
+                "{\"type\": \"right_click_block\", \"block\": \"minecraft:lever\"}", "")).problems);
+        assertEquals(List.of(), validate(chapter(
+                "{\"type\": \"tame\", \"entity\": \"minecraft:wolf\"}", "")).problems);
+        assertTrue(says(validate(chapter(
+                "{\"type\": \"interaction\", \"action\": \"nope\"}", "")), "unknown interaction action"));
+    }
+
+    @Test
+    void killFiltersAreShapedText() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"kill\", \"entity\": \"minecraft:zombie\", \"name\": \"Bob\", \"nbt\": \"{HasOnGround:1b}\"}", ""));
+        assertEquals(List.of(), r.problems);
     }
 
     @Test
@@ -129,6 +154,49 @@ class ProgressValidatorTest {
         ProgressValidator.Result manual = validate(chapter(
                 "{\"type\": \"custom\", \"count\": 1, \"enable_button\": true}", "{\"type\": \"scoreboard\", \"objective\": \"points\"}"));
         assertEquals(List.of(), manual.problems);
+    }
+
+    @Test
+    void aCraftTaskCanNameItsRecipe() {
+        ProgressValidator.Result ok = validate(chapter(
+                "{\"type\": \"craft\", \"item\": \"minecraft:stick\", \"recipe\": \"minecraft:stick\"}", ""));
+        assertEquals(0, errors(ok), ok.problems.toString());
+    }
+
+    @Test
+    void aCurrencyRewardNeedsAPositiveAmount() {
+        ProgressValidator.Result ok = validate(chapter("", "{\"type\": \"currency\", \"amount\": 50}"));
+        assertEquals(0, errors(ok), ok.problems.toString());
+        ProgressValidator.Result bad = validate(chapter("", "{\"type\": \"currency\"}"));
+        assertTrue(says(bad, "amount"));
+    }
+
+    @Test
+    void conditionsAreCheckedOnTasksAndRewards() {
+        ProgressValidator.Result ok = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": ["
+                        + "{\"type\": \"stage\", \"stage\": \"chapter_one\"},"
+                        + "{\"type\": \"score\", \"objective\": \"points\", \"min\": 2},"
+                        + "{\"type\": \"advancement\", \"advancement\": \"minecraft:story/root\"},"
+                        + "{\"type\": \"party_size\", \"min\": 2}]}",
+                "{\"type\": \"xp\", \"amount\": 1, \"conditions\": [{\"type\": \"item\", \"item\": \"minecraft:stone\"}]}"));
+        assertEquals(List.of(), ok.problems, ok.problems.toString());
+    }
+
+    @Test
+    void aConditionWithoutItsFieldIsAnError() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": [{\"type\": \"stage\"}]}", ""));
+        assertTrue(says(r, "has no stage"));
+        assertTrue(r.droppedNodes.contains("t:basics/a"));
+    }
+
+    @Test
+    void anUnknownConditionOnlyWarns() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": [{\"type\": \"nope\"}]}", ""));
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "unknown condition type"));
     }
 
     @Test

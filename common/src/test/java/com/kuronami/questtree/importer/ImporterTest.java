@@ -65,11 +65,31 @@ class ImporterTest {
         // an image that appears after a quest keeps that link
         JsonObject api = out.chapters.get("apiculture");
         assertTrue(api.getAsJsonArray("decorations").get(1).getAsJsonObject().has("visible_after"));
+        // no FTB Quests condition block survives anywhere in the converted output
+        out.chapters.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        out.patches.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        out.tables.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        out.groups.forEach(ch -> assertNoKey(ch, "conditions"));
+        out.lang.values().forEach(ch -> assertNoKey(ch, "conditions"));
+        assertNoKey(out.settings, "conditions");
         // random reward points at the converted table
         out.writeTo(tmp);
         assertTrue(Files.exists(tmp.resolve("data/test/progression/chapters/apiculture.json")));
         assertTrue(Files.exists(tmp.resolve("data/test/progression/lang/ja_jp.json")));
         assertTrue(Files.exists(tmp.resolve("pack.mcmeta")));
+    }
+
+    private static void assertNoKey(JsonElement e, String key) {
+        if (e == null) {
+            return;
+        }
+        if (e.isJsonObject()) {
+            JsonObject o = e.getAsJsonObject();
+            assertFalse(o.has(key), "converted output still has '" + key + "': " + o);
+            o.entrySet().forEach(en -> assertNoKey(en.getValue(), key));
+        } else if (e.isJsonArray()) {
+            e.getAsJsonArray().forEach(v -> assertNoKey(v, key));
+        }
     }
 
     @Test
@@ -115,6 +135,21 @@ class ImporterTest {
         FtbQuestsImporter.convert(Path.of(dir), out);
         out.writeTo(Path.of("build/import-pack"));
         System.out.println("IMPORT counts=" + out.counts + " unmapped=" + out.unmapped);
+    }
+
+    @Test
+    void foreignConditionsKeyIsReportedAndNotWritten(@TempDir Path tmp) throws Exception {
+        Path chapters = tmp.resolve("quests/chapters");
+        Files.createDirectories(chapters);
+        Files.writeString(chapters.resolve("x.snbt"), """
+                { id: "1000000000000001" filename: "x" quests: [ {
+                  id: "1000000000000002" conditions: { fake: true } } ] }
+                """);
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(tmp.resolve("quests"), out);
+        JsonObject node = out.chapters.get("x").getAsJsonObject("nodes").getAsJsonObject("1000000000000002");
+        assertFalse(node.has("conditions"));
+        assertTrue(out.unmapped.containsKey("quest.conditions"), out.unmapped.toString());
     }
 
     @Test

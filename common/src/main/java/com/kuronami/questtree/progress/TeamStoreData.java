@@ -4,8 +4,10 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -28,6 +30,8 @@ public final class TeamStoreData {
      * skills that were erased, so the command refuses it unless forced.
      */
     public final Map<String, String> migrations = new LinkedHashMap<>();
+    /** The set of personal node keys the saved values were routed with; a change is migrated on the next view. */
+    public final Set<String> personalNodes = new HashSet<>();
 
     public TeamProgress team(UUID id) {
         return teams.computeIfAbsent(id, TeamProgress::new);
@@ -42,12 +46,12 @@ public final class TeamStoreData {
      * (join) or copying the team out to a new solo record (leave). A player who was never seen starts solo.
      */
     public boolean changedTeam(UUID player, UUID current) {
-        return changedTeam(player, current, t -> java.util.Set.of());
+        return changedTeam(player, current, (t, p) -> java.util.Set.of());
     }
 
     /** As above; {@code settled} names the team rewards of completed nodes, which a leaver's copy keeps as claimed. */
     public boolean changedTeam(UUID player, UUID current,
-                               java.util.function.Function<TeamProgress, java.util.Set<String>> settled) {
+                               java.util.function.BiFunction<TeamProgress, UUID, java.util.Set<String>> settled) {
         UUID old = owners.get(player);
         owners.put(player, current);
         if (old == null) {
@@ -65,7 +69,7 @@ public final class TeamStoreData {
             // left (or was kicked from) a team: take a copy of the team's progress as a new solo record
             TeamProgress source = teams.get(old);
             if (source != null) {
-                teams.put(player, source.leaveCopy(player, settled.apply(source)));
+                teams.put(player, source.leaveCopy(player, settled.apply(source, player)));
             }
         } else {
             // joined (or moved to) a team: fold the old record into it
@@ -111,6 +115,9 @@ public final class TeamStoreData {
         JsonObject migrationJson = new JsonObject();
         migrations.forEach(migrationJson::addProperty);
         root.add("migrations", migrationJson);
+        com.google.gson.JsonArray personal = new com.google.gson.JsonArray();
+        personalNodes.forEach(personal::add);
+        root.add("personal_nodes", personal);
         return root;
     }
 
@@ -140,6 +147,34 @@ public final class TeamStoreData {
                 data.migrations.put(e.getKey(), e.getValue().getAsString());
             }
         }
+        if (root.has("personal_nodes") && root.get("personal_nodes").isJsonArray()) {
+            for (JsonElement e : root.getAsJsonArray("personal_nodes")) {
+                data.personalNodes.add(e.getAsString());
+            }
+        }
         return data;
+    }
+
+    /**
+     * Routes saved values after the set of personal nodes changed, and remembers the new set.
+     *
+     * @param modelEmpty the loaded model has no nodes at all. An unreadable or empty pack must not turn saved personal
+     *                   progress into shared progress (2026-10-22 review). An empty {@code current} with a loaded
+     *                   model is a real change: the pack made every node shared, so the values do migrate.
+     */
+    public boolean migratePersonalNodes(Set<String> current, boolean modelEmpty) {
+        if (modelEmpty) {
+            return false;
+        }
+        if (personalNodes.equals(current)) {
+            return false;
+        }
+        Set<String> old = new HashSet<>(personalNodes);
+        for (TeamProgress team : teams.values()) {
+            team.migratePersonal(old, current);
+        }
+        personalNodes.clear();
+        personalNodes.addAll(current);
+        return true;
     }
 }

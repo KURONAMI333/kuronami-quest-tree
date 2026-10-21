@@ -39,11 +39,14 @@ public final class ProgressJson {
         p.chapterOpen.forEach(chapterOpen::addProperty);
         o.add("chapter_open", chapterOpen);
         o.add("recent", strings(p.recent));
+        o.add("team_stages", strings(p.teamStages));
+        o.add("stages", strings(p.stages));
         o.add("repeats", ints(p.repeats));
         JsonObject cd = new JsonObject();
         p.cooldown.forEach(cd::addProperty);
         o.add("cooldown", cd);
         o.addProperty("book_given", p.bookGiven());
+        o.addProperty("rewards_blocked", p.rewardsBlocked());
         return o;
     }
 
@@ -77,6 +80,12 @@ public final class ProgressJson {
         for (Map.Entry<String, JsonElement> e : obj(o, "chapter_open").entrySet()) {
             p.chapterOpen.put(e.getKey(), e.getValue().getAsBoolean());
         }
+        for (JsonElement e : arr(o, "team_stages")) {
+            p.teamStages.add(e.getAsString());
+        }
+        for (JsonElement e : arr(o, "stages")) {
+            p.stages.add(e.getAsString());
+        }
         readInts(obj(o, "repeats"), p.repeats);
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             p.cooldown.put(e.getKey(), e.getValue().getAsLong());
@@ -84,6 +93,8 @@ public final class ProgressJson {
         for (JsonElement e : arr(o, "recent")) {
             p.recent.addLast(e.getAsString());
         }
+        p.setRewardsBlocked(o.has("rewards_blocked") && o.get("rewards_blocked").isJsonPrimitive()
+                && o.get("rewards_blocked").getAsBoolean());
         p.setBookGiven(o.has("book_given") && o.get("book_given").isJsonPrimitive() && o.get("book_given").getAsBoolean());
         return p;
     }

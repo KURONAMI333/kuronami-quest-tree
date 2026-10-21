@@ -21,6 +21,9 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -32,6 +35,7 @@ import net.minecraft.stats.Stats;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ItemStack;
@@ -46,6 +50,8 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Optional;
+import java.util.WeakHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +77,9 @@ public final class ProgressService {
     private static final Map<UUID, Map<String, Integer>> OBSERVED = new HashMap<>();
     /** Player progress already migrated for one loaded data model, so a save is not folded into its pool twice. */
     private static final Map<PlayerProgress, ProgressModel> MIGRATED = new java.util.WeakHashMap<>();
+    /** Barrier answers for a few ticks, so walking against one does not rerun progress and team resolution every collision. */
+    private static final com.kuronami.questtree.progress.BarrierCache<Boolean> BARRIERS =
+            new com.kuronami.questtree.progress.BarrierCache<>(4, 8);
 
     private ProgressService() {
     }
@@ -86,8 +95,13 @@ public final class ProgressService {
     }
 
     public static PlayerProgress progress(ServerPlayer player) {
+        // build the rule index before any view is made, so personal-node keys are current for the first joiner
+        // after a data reload (2026-10-21 review)
+        rules();
         // the store resolves the player's current team (solo = their UUID) and folds a join/leave in on the way
         ProgressStore store = ProgressStore.get(player.server);
+        // an empty model is an unreadable or empty pack; only a loaded one may move personal progress to shared
+        store.migratePersonalNodes(PlayerProgress.personalNodesSnapshot(), ProgressData.model().nodes.isEmpty());
         UUID before = store.teamIdOf(player.getUUID());
         UUID current = TeamResolver.teamId(player.server, player.getUUID());
         PlayerProgress p = store.view(player.server, player.getUUID());
@@ -137,9 +151,14 @@ public final class ProgressService {
         // the client starts with no team: never skip the first view because a previous session had the same one
         TeamSync.forget(player.getUUID());
         PlayerProgress p = progress(player);
+        Rewards.applyTeamStages(player, p);
         // drop every modifier first: ones left from a skill the team no longer has must not survive the login
         Rewards.refreshAttributes(player, p);
         recheck(player, p);
+        if (!p.rewardsBlocked()) {
+            // a block lifted while this player was offline is paid at their next login
+            Rewards.payPending(player, p);
+        }
         giveBookOnce(player, p);
         markDirty(player);
         flush(player);
@@ -227,7 +246,8 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (r.taskOpen(p, n, i) && type(t).equals("kill") && entityMatches(str(t, "entity"), killed.getType())) {
+                if (r.taskOpen(p, n, i) && conditionsMet(player, p, t)
+                        && type(t).equals("kill") && entityMatches(player, t, killed)) {
                     hits.add(new TaskRef(n, i));
                 }
             }
@@ -254,7 +274,8 @@ public final class ProgressService {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
-            if (working(r, p, n) && r.taskOpen(p, n, i) && blockMatches(blockSpec(t), state)) {
+            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, t)
+                    && blockMatches(blockSpec(t), state)) {
                 hits.add(ref);
             }
         }
@@ -268,6 +289,221 @@ public final class ProgressService {
             }
         }
         recheck(player, p);
+    }
+
+    // ------------------------------------------------------------------ interaction tasks (2026-10-21)
+
+    private static final Map<String, Optional<CompoundTag>> NBT_FILTERS = new HashMap<>();
+
+    /** A crafted result was taken out of a crafting grid. Counts the result's size, so one recipe can finish "4 planks". */
+    public static void onCraft(ServerPlayer player, ItemStack stack) {
+        onCraft(player, stack, "");
+    }
+
+    /** A crafted result and the recipe that produced it (empty when the menu did not expose one). */
+    public static void onCraft(ServerPlayer player, ItemStack stack, String recipe) {
+        if (stack != null && !stack.isEmpty()) {
+            interaction(player, "craft", stack, null, null, null, stack.getCount(), recipe);
+        }
+    }
+
+    /** An item was used (food, potion, bucket, bow, ...). Counts the action once, not the stack size. */
+    public static void onUseItem(ServerPlayer player, ItemStack stack) {
+        if (stack != null && !stack.isEmpty()) {
+            interaction(player, "use_item", stack, null, null, null, 1, "");
+        }
+    }
+
+    /** A block was right-clicked (placed against, opened, or used). */
+    public static void onRightClickBlock(ServerPlayer player, BlockState state) {
+        if (state != null) {
+            interaction(player, "right_click_block", null, state, null, null, 1, "");
+        }
+    }
+
+    /** A player interacted with an entity (right-click, including feeding and mounting). */
+    public static void onInteractEntity(ServerPlayer player, Entity target) {
+        if (target != null) {
+            interaction(player, "interact_entity", null, null, target, null, 1, "");
+        }
+    }
+
+    public static void onTame(ServerPlayer player, Entity target) {
+        if (target != null) {
+            interaction(player, "tame", null, null, target, null, 1, "");
+        }
+    }
+
+    /** Two animals bred; vanilla's love cause (the player who fed one) gets the credit. */
+    public static void onBreed(ServerLevel level, Animal first, Animal second) {
+        ServerPlayer player = first.getLoveCause();
+        if (player == null) {
+            player = second.getLoveCause();
+        }
+        if (player != null) {
+            interaction(player, "breed", null, null, first, second, 1, "");
+        }
+    }
+
+    /** A player mounted an entity. */
+    public static void onRide(ServerPlayer player, Entity vehicle) {
+        if (vehicle != null) {
+            interaction(player, "ride", null, null, vehicle, null, 1, "");
+        }
+    }
+
+    /** An item entity was picked up. Counts the picked-up size. */
+    public static void onPickup(ServerPlayer player, ItemStack stack) {
+        if (stack != null && !stack.isEmpty()) {
+            interaction(player, "pickup", stack, null, null, null, stack.getCount(), "");
+        }
+    }
+
+    /**
+     * Counts one interaction task. {@code kind} is the concrete type (craft, use_item, ...); the generic
+     * {@code interaction} type is included when its {@code action} matches. Every field is optional: an empty item,
+     * block or entity matches any of them, as in the other task types.
+     */
+    private static void interaction(ServerPlayer player, String kind, ItemStack stack, BlockState state,
+                                    Entity entity, Entity other, int amount, String recipe) {
+        if (amount <= 0) {
+            return;
+        }
+        ProgressRules r = rules();
+        List<TaskRef> refs = new ArrayList<>(tasksOfType(r, kind));
+        refs.addAll(tasksOfType(r, "interaction"));
+        if (refs.isEmpty()) {
+            return;
+        }
+        PlayerProgress p = progress(player);
+        List<TaskRef> hits = new ArrayList<>();
+        for (TaskRef ref : refs) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
+            if (!working(r, p, n) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
+                continue;
+            }
+            String wanted = type(t).equals("interaction") ? interactionKind(t) : type(t);
+            if (!kind.equals(wanted)) {
+                continue;
+            }
+            if (interactionMatches(player, t, kind, stack, state, entity, other, recipe)) {
+                hits.add(ref);
+            }
+        }
+        for (TaskRef ref : hits) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            long target = ProgressRules.target(n.tasks.get(i));
+            long had = p.task(n.key, i);
+            if (had < target) {
+                bump(player, p, n, i, Math.min(had + amount, target));
+            }
+        }
+        if (!hits.isEmpty()) {
+            recheck(player, p);
+        }
+    }
+
+    /** Whether every condition on a task or reward holds for this player now. */
+    static boolean conditionsMet(ServerPlayer player, PlayerProgress p, JsonObject holder) {
+        return QuestConditions.allMet(holder, new Conditions(player, p));
+    }
+
+    private record Conditions(ServerPlayer player, PlayerProgress progress) implements QuestConditions.Context {
+        @Override
+        public boolean hasStage(String stage) {
+            return progress.teamStages.contains(stage) || ProgressService.hasStage(player, stage);
+        }
+
+        @Override
+        public long score(String objective) {
+            var obj = player.getScoreboard().getObjective(objective);
+            return obj == null ? 0 : player.getScoreboard().getOrCreatePlayerScore(player, obj).get();
+        }
+
+        @Override
+        public boolean hasItem(JsonObject condition) {
+            if (!condition.has("item")) {
+                return false;
+            }
+            ItemRequirement requirement = ItemRequirement.of(condition);
+            long need = Math.max(1, condition.has("count") && condition.get("count").isJsonPrimitive()
+                    ? condition.get("count").getAsLong() : 1);
+            return countItems(player, requirement) >= need;
+        }
+
+        @Override
+        public boolean advancementDone(String advancement, String criterion) {
+            return ProgressService.advancementDone(player, advancement, criterion);
+        }
+
+        @Override
+        public int partySize() {
+            return TeamResolver.onlineMembers(player.server, player.getUUID()).size();
+        }
+    }
+
+    private static String interactionKind(JsonObject t) {
+        String action = str(t, "action");
+        return action.isEmpty() ? str(t, "kind") : action;
+    }
+
+    private static boolean interactionMatches(ServerPlayer player, JsonObject t, String kind, ItemStack stack,
+                                              BlockState state, Entity entity, Entity other, String recipe) {
+        return switch (kind) {
+            case "craft" -> {
+                String wanted = str(t, "recipe");
+                if (!wanted.isEmpty() && !wanted.equals(recipe)) {
+                    yield false;
+                }
+                yield !t.has("item") || stack != null && ItemRequirement.of(t).matches(stack, player.registryAccess());
+            }
+            case "use_item", "pickup" -> !t.has("item") || stack != null && ItemRequirement.of(t).matches(stack, player.registryAccess());
+            case "right_click_block" -> state != null && blockMatches(blockSpec(t), state);
+            default -> {
+                if (entity == null) {
+                    yield false;
+                }
+                yield entityMatches(player, t, entity) || other != null && entityMatches(player, t, other);
+            }
+        };
+    }
+
+    /** A kill (or interaction) task's entity filters: type/tag, custom name, and an optional SNBT subset. */
+    static boolean entityMatches(ServerPlayer player, JsonObject task, Entity entity) {
+        String tag = str(task, "entity_tag");
+        if (!tag.isEmpty()) {
+            if (!entityTypeTagMatches(tag.startsWith("#") ? tag : "#" + tag, entity.getType())) {
+                return false;
+            }
+        } else if (!entityMatches(str(task, "entity"), entity.getType())) {
+            return false;
+        }
+        String name = str(task, "name");
+        if (!name.isEmpty()) {
+            String actual = entity instanceof ServerPlayer other
+                    ? other.getGameProfile().getName()
+                    : entity.getCustomName() == null ? "" : entity.getCustomName().getString();
+            if (!name.equals(actual)) {
+                return false;
+            }
+        }
+        String nbt = str(task, "nbt");
+        if (!nbt.isEmpty()) {
+            Optional<CompoundTag> filter = NBT_FILTERS.computeIfAbsent(nbt, text -> {
+                try {
+                    return Optional.of(TagParser.parseTag(text));
+                } catch (CommandSyntaxException e) {
+                    return Optional.empty();
+                }
+            });
+            if (filter.isEmpty() || !NbtUtils.compareNbt(filter.get(), entity.saveWithoutId(new CompoundTag()), true)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static void onAction(ServerPlayer player, ActionPayload a) {
@@ -308,12 +544,14 @@ public final class ProgressService {
             }
             case "submit" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
+                        && conditionsMet(player, p, n.tasks.get(a.index()))
                         && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
                     submit(player, p, n, a.index());
                 }
             }
             case "check" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
+                        && conditionsMet(player, p, n.tasks.get(a.index()))
                         && manual(n.tasks.get(a.index()))) {
                     JsonObject task = n.tasks.get(a.index());
                     long max = ProgressRules.target(task);
@@ -405,7 +643,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i)) {
+                if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
                     continue;
                 }
                 String ty = type(t);
@@ -464,7 +702,7 @@ public final class ProgressService {
             if (!working(r, p, n)) {
                 continue;
             }
-            if (!r.taskOpen(p, n, i)) {
+            if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
                 continue;
             }
             long target = ProgressRules.target(t);
@@ -566,7 +804,7 @@ public final class ProgressService {
             }
             for (int i = 0; i < n.tasks.size(); i++) {
                 JsonObject t = n.tasks.get(i);
-                if (!r.taskOpen(p, n, i)) {
+                if (!r.taskOpen(p, n, i) || !conditionsMet(player, p, t)) {
                     continue;
                 }
                 long value = switch (type(t)) {
@@ -576,7 +814,8 @@ public final class ProgressService {
                     case "location" -> inside(player, t) ? 1 : 0;
                     case "advancement" -> advancementDone(player, str(t, "advancement"), str(t, "criterion")) ? 1 : 0;
                     case "stat" -> stat(player, str(t, "stat"));
-                    case "stage" -> hasStage(player, str(t, "stage")) ? 1 : 0;
+                    case "stage" -> (ProgressModel.boolOf(t, "team") && p.teamStages.contains(str(t, "stage"))
+                            || hasStage(player, str(t, "stage"))) ? 1 : 0;
                     default -> -1;
                 };
                 if (value < 0) {
@@ -698,7 +937,7 @@ public final class ProgressService {
             }
             PlayerProgress pm = progress(member);
             giveAuto(member, pm, n, false);
-            if (ProgressRules.allRewardsClaimed(pm, n)) {
+            if (ProgressRules.allRewardsClaimed(pm, n, i -> !conditionsMet(member, pm, n.rewards.get(i)))) {
                 pm.claimed.add(n.key);
             }
             others.add(pm);
@@ -718,15 +957,20 @@ public final class ProgressService {
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
             String key = n.key + "#" + i;
-            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key)) {
+            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
                 continue;
             }
             if (ProgressModel.boolOf(rw, "team") && !actor) {
                 continue;
             }
-            Rewards.give(player, p, n, rw, -1);
-            markReward(p, rw, key);
-            ProgressStore.get(player.server).setDirty();
+            int rewardIndex = i;
+            boolean blocked = Rewards.blocked(p, rw);
+            if (com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, rewardIndex,
+                    com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, blocked,
+                    () -> Rewards.give(player, p, n, rw, -1,
+                            com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, rewardIndex)))) {
+                ProgressStore.get(player.server).setDirty();
+            }
         }
     }
 
@@ -739,17 +983,27 @@ public final class ProgressService {
             return;
         }
         for (JsonObject rw : n.rewards) {
+            if (Rewards.blocked(p, rw) && com.kuronami.questtree.progress.RewardLedger.blockedChoice(true, rw)) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                        "message.kuronami_quest_tree.choice_blocked",
+                        "This reward cannot be taken while rewards are blocked: its choice is not kept."));
+                return;
+            }
             if (choiceMissing(rw, choice)) {
                 return;
             }
         }
         for (int i = 0; i < n.rewards.size(); i++) {
             String key = n.key + "#" + i;
-            if (p.rewardClaimed(key)) {
+            JsonObject rw = n.rewards.get(i);
+            if (p.rewardClaimed(key) || !conditionsMet(player, p, rw)) {
                 continue;
             }
-            Rewards.give(player, p, n, n.rewards.get(i), choice);
-            markReward(p, n.rewards.get(i), key);
+            int rewardIndex = i;
+            com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, rewardIndex,
+                    com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, Rewards.blocked(p, rw),
+                    () -> Rewards.give(player, p, n, rw, choice,
+                            com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, rewardIndex)));
         }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
@@ -765,25 +1019,24 @@ public final class ProgressService {
             return;
         }
         JsonObject rw = n.rewards.get(index);
-        if (choiceMissing(rw, choice)) {
+        if (Rewards.blocked(p, rw) && com.kuronami.questtree.progress.RewardLedger.blockedChoice(true, rw)) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
+                    "message.kuronami_quest_tree.choice_blocked",
+                    "This reward cannot be taken while rewards are blocked: its choice is not kept."));
             return;
         }
-        Rewards.give(player, p, n, rw, choice);
-        markReward(p, rw, key);
+        if (choiceMissing(rw, choice) || !conditionsMet(player, p, rw)) {
+            return;
+        }
+        boolean paid = com.kuronami.questtree.progress.RewardLedger.claim(p, rw, n.key, index,
+                com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, true, Rewards.blocked(p, rw),
+                () -> Rewards.give(player, p, n, rw, choice,
+                        com.kuronami.questtree.progress.RewardLedger.pendingKey(n.key, com.kuronami.questtree.progress.RewardLedger.QUEST_RANK, index)));
+        if (!paid) {
+            return;
+        }
         ProgressStore.get(player.server).setDirty();
         finishClaim(player, p, n);
-    }
-
-    /**
-     * Records a reward as taken. A reward with {@code "team": true} (FTBQ's team_reward) settles once for the whole
-     * team; every other reward belongs to the player who claimed it.
-     */
-    private static void markReward(PlayerProgress p, JsonObject rw, String key) {
-        if (ProgressModel.boolOf(rw, "team")) {
-            p.claimTeamReward(key);
-        } else {
-            p.claimedRewards.add(key);
-        }
     }
 
     /** A choice table needs the player to pick a valid option before anything on the node is claimed. */
@@ -794,7 +1047,8 @@ public final class ProgressService {
 
     /** Marks the node claimed and starts a repeat once its last reward was taken. */
     private static void finishClaim(ServerPlayer player, PlayerProgress p, ProgressModel.Node n) {
-        if (p.claimed.contains(n.key) || !ProgressRules.allRewardsClaimed(p, n)) {
+        if (p.claimed.contains(n.key)
+                || !ProgressRules.allRewardsClaimed(p, n, i -> !conditionsMet(player, p, n.rewards.get(i)))) {
             return;
         }
         p.claimed.add(n.key);
@@ -831,6 +1085,7 @@ public final class ProgressService {
     static void markDirty(ServerPlayer player) {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             DIRTY.put(member.getUUID(), true);
+            BARRIERS.clear(member.getUUID());
         }
     }
 
@@ -875,6 +1130,7 @@ public final class ProgressService {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
+        BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
         TeamSync.broadcast(player.server, player.getUUID());
@@ -1110,7 +1366,28 @@ public final class ProgressService {
         return player.getStats().getValue(Stats.CUSTOM.get(BuiltInRegistries.CUSTOM_STAT.get(rl)));
     }
 
-    /** Pack Stages (mod-100) is driven through its command so neither mod depends on the other. */
+    /**
+     * Whether a quest barrier opens for this player: the named node is complete, or the named stage is held. The
+     * answer is remembered for a few ticks and dropped whenever progress or a stage changes; the lookup itself never
+     * folds a team change, because a collision can happen while the player is moving (2026-10-21 review).
+     */
+    public static boolean barrierAllows(ServerPlayer player, String mode, String key) {
+        int tick = player.server.getTickCount();
+        Boolean cached = BARRIERS.get(player.getUUID(), mode, key, tick);
+        if (cached != null) {
+            return cached;
+        }
+        PlayerProgress p = ProgressStore.get(player.server).viewReadOnly(player.server, player.getUUID());
+        java.util.Set<String> stages = new java.util.HashSet<>(p.stages);
+        stages.addAll(p.teamStages);
+        if ("stage".equals(mode) && !stages.contains(key) && hasStage(player, key)) {
+            stages.add(key);
+        }
+        boolean allowed = com.kuronami.questtree.progress.BarrierRule.allows(mode, key, p.completed, stages);
+        BARRIERS.put(player.getUUID(), mode, key, tick, allowed);
+        return allowed;
+    }
+
     static boolean hasStage(ServerPlayer player, String stage) {
         if (stage.isEmpty() || !Services.PLATFORM.isModLoaded("pack_stages")) {
             return false;

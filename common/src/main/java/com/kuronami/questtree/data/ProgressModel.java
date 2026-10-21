@@ -110,6 +110,8 @@ public final class ProgressModel {
         public final int cost;
         public final boolean optional;
         public final boolean root;
+        /** Whether the node's completion and task counters are shared with the team (default true; FTBQ "shared: false"). */
+        public final boolean shared;
         /** "all" (default), "any", "all_started", "any_started" */
         public final String requireMode;
         public final int requireMin;
@@ -161,6 +163,7 @@ public final class ProgressModel {
             this.cost = intOf(o, "cost", 0);
             this.optional = boolOf(o, "optional");
             this.root = boolOf(o, "root");
+            this.shared = boolOr(o, "shared", true);
             JsonObject req = obj(o, "requires");
             for (JsonElement e : arr(req, "nodes")) {
                 requiresRaw.add(e.getAsString());
