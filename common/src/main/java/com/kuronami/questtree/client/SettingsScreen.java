@@ -2,6 +2,7 @@ package com.kuronami.questtree.client;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.util.Mth;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -20,6 +21,8 @@ public final class SettingsScreen extends Screen {
 
     private final Screen parent;
     private final List<Row> rows = new ArrayList<>();
+    private float scroll;
+    private float scrollTarget;
 
     private interface Row {
         Component label();
@@ -299,26 +302,70 @@ public final class SettingsScreen extends Screen {
         return false;
     }
 
+    private int contentHeight() {
+        return rows.size() * ROW_H + 8;
+    }
+
+    /** The title stays at its usual place while the list fits; a short screen moves it up to leave room to scroll. */
+    private int titleY() {
+        int natural = Math.max(24, height / 2 - (contentHeight() + 30) / 2);
+        int room = height - (natural + 22) - 8;
+        return contentHeight() <= room ? natural : 8;
+    }
+
+    private int panelTop() {
+        return titleY() + 22;
+    }
+
+    private int panelHeight() {
+        return Math.min(contentHeight(), Math.max(ROW_H + 8, height - panelTop() - 8));
+    }
+
+    private float maxScroll() {
+        return Math.max(0, contentHeight() - panelHeight());
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         Ui.textScale = ClientConfig.textScale();
         renderBackground(g, mouseX, mouseY, partialTick);
         g.fill(0, 0, width, height, Ui.GROUND);
         int x = (width - PANEL_W) / 2;
-        int y = Math.max(24, height / 2 - (rows.size() * ROW_H + 30) / 2);
+        int y = titleY();
+        int top = panelTop();
+        int h = panelHeight();
+        scrollTarget = Mth.clamp(scrollTarget, 0, maxScroll());
+        scroll += (scrollTarget - scroll) * 0.35f;
+        scroll = Mth.clamp(scroll, 0, maxScroll());
+        int off = Math.round(scroll);
         Ui.textCenter(g, font, title, width / 2, y, Ui.TEXT);
-        y += 22;
-        Ui.surface(g, x, y, PANEL_W, rows.size() * ROW_H + 8, Ui.R4, Ui.PANEL_TRANSLUCENT);
-        Ui.outline(g, x, y, PANEL_W, rows.size() * ROW_H + 8, Ui.R4, Ui.HAIRLINE);
+        Ui.surface(g, x, top, PANEL_W, h, Ui.R4, Ui.PANEL_TRANSLUCENT);
+        Ui.outline(g, x, top, PANEL_W, h, Ui.R4, Ui.HAIRLINE);
+        int listTop = top + 4;
+        int listBottom = top + h - 4;
+        g.enableScissor(x, listTop, x + PANEL_W, listBottom);
+        boolean inPanel = mouseX >= x && mouseX < x + PANEL_W && mouseY >= listTop && mouseY < listBottom;
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
-            int ry = y + 4 + i * ROW_H;
-            boolean hover = mouseX >= x + 4 && mouseX < x + PANEL_W - 4 && mouseY >= ry && mouseY < ry + ROW_H;
+            int ry = listTop + i * ROW_H - off;
+            if (ry + ROW_H <= listTop || ry >= listBottom) {
+                continue;
+            }
+            boolean hover = inPanel && mouseX >= x + 4 && mouseX < x + PANEL_W - 4
+                    && mouseY >= ry && mouseY < ry + ROW_H;
             if (hover) {
                 Ui.surface(g, x + 4, ry, PANEL_W - 8, ROW_H, Ui.R2, Ui.OVERLAY_1);
             }
             Ui.text(g, font, row.label(), x + 12, ry + (ROW_H - 8) / 2, hover ? Ui.TEXT : Ui.MUTED);
             Ui.textRight(g, font, row.value(), x + PANEL_W - 12, ry + (ROW_H - 8) / 2, Ui.TEXT);
+        }
+        g.disableScissor();
+        if (maxScroll() > 0) {
+            int track = h - 8;
+            int knobH = Math.max(12, Math.round(track * h / (float) contentHeight()));
+            int knobY = listTop + Math.round((track - knobH) * (scroll / maxScroll()));
+            Ui.surface(g, x + PANEL_W - 4, listTop, 2, track, 1, Ui.OVERLAY_2);
+            Ui.surface(g, x + PANEL_W - 4, knobY, 2, knobH, 1, Ui.MUTED);
         }
     }
 
@@ -328,9 +375,15 @@ public final class SettingsScreen extends Screen {
             return super.mouseClicked(mx, my, button);
         }
         int x = (width - PANEL_W) / 2;
-        int y = Math.max(24, height / 2 - (rows.size() * ROW_H + 30) / 2) + 22;
+        int top = panelTop();
+        int listTop = top + 4;
+        int listBottom = top + panelHeight() - 4;
+        if (mx < x || mx >= x + PANEL_W || my < listTop || my >= listBottom) {
+            return super.mouseClicked(mx, my, button);
+        }
+        int off = Math.round(scroll);
         for (int i = 0; i < rows.size(); i++) {
-            int ry = y + 4 + i * ROW_H;
+            int ry = listTop + i * ROW_H - off;
             if (mx >= x + 4 && mx < x + PANEL_W - 4 && my >= ry && my < ry + ROW_H) {
                 rows.get(i).click();
                 ClientConfig.save();
@@ -339,6 +392,17 @@ public final class SettingsScreen extends Screen {
             }
         }
         return super.mouseClicked(mx, my, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+        int x = (width - PANEL_W) / 2;
+        int top = panelTop();
+        if (maxScroll() > 0 && mx >= x && mx < x + PANEL_W && my >= top && my < top + panelHeight()) {
+            scrollTarget = Mth.clamp(scrollTarget - (float) scrollY * ROW_H * 2, 0, maxScroll());
+            return true;
+        }
+        return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
     @Override

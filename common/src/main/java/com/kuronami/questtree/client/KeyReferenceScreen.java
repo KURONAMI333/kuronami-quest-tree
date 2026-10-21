@@ -3,6 +3,7 @@ package com.kuronami.questtree.client;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,8 @@ public final class KeyReferenceScreen extends Screen {
     private final Screen parent;
     private final List<String> labels = new ArrayList<>();
     private final List<Component> keys = new ArrayList<>();
+    private float scroll;
+    private float scrollTarget;
 
     public KeyReferenceScreen(Screen parent) {
         super(Component.translatable("screen.kuronami_quest_tree.keys"));
@@ -46,22 +49,72 @@ public final class KeyReferenceScreen extends Screen {
         return false;
     }
 
+    private int contentHeight() {
+        return labels.size() * ROW_H + 8;
+    }
+
+    private int titleY() {
+        int natural = Math.max(16, (height - (contentHeight() + 30)) / 2);
+        int room = height - (natural + 22) - 8;
+        return contentHeight() <= room ? natural : 8;
+    }
+
+    private int panelTop() {
+        return titleY() + 22;
+    }
+
+    private int panelHeight() {
+        return Math.min(contentHeight(), Math.max(ROW_H + 8, height - panelTop() - 8));
+    }
+
+    private float maxScroll() {
+        return Math.max(0, contentHeight() - panelHeight());
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         Ui.textScale = ClientConfig.textScale();
         g.fill(0, 0, width, height, Ui.GROUND);
         int x = (width - PANEL_W) / 2;
-        int h = labels.size() * ROW_H + 30;
-        int y = Math.max(16, (height - h) / 2);
-        Ui.textCenter(g, font, title, width / 2, y, Ui.TEXT);
-        y += 22;
-        Ui.surface(g, x, y, PANEL_W, labels.size() * ROW_H + 8, Ui.R4, Ui.PANEL_TRANSLUCENT);
-        Ui.outline(g, x, y, PANEL_W, labels.size() * ROW_H + 8, Ui.R4, Ui.HAIRLINE);
+        int top = panelTop();
+        int h = panelHeight();
+        scrollTarget = Mth.clamp(scrollTarget, 0, maxScroll());
+        scroll += (scrollTarget - scroll) * 0.35f;
+        scroll = Mth.clamp(scroll, 0, maxScroll());
+        int off = Math.round(scroll);
+        Ui.textCenter(g, font, title, width / 2, titleY(), Ui.TEXT);
+        Ui.surface(g, x, top, PANEL_W, h, Ui.R4, Ui.PANEL_TRANSLUCENT);
+        Ui.outline(g, x, top, PANEL_W, h, Ui.R4, Ui.HAIRLINE);
+        int listTop = top + 4;
+        int listBottom = top + h - 4;
+        g.enableScissor(x, listTop, x + PANEL_W, listBottom);
         for (int i = 0; i < labels.size(); i++) {
-            int ry = y + 4 + i * ROW_H;
+            int ry = listTop + i * ROW_H - off;
+            if (ry + ROW_H <= listTop || ry >= listBottom) {
+                continue;
+            }
             Ui.text(g, font, Component.translatable(labels.get(i)), x + 12, ry + (ROW_H - 8) / 2, Ui.MUTED);
             Ui.textRight(g, font, keys.get(i), x + PANEL_W - 12, ry + (ROW_H - 8) / 2, Ui.TEXT);
         }
+        g.disableScissor();
+        if (maxScroll() > 0) {
+            int track = h - 8;
+            int knobH = Math.max(12, Math.round(track * h / (float) contentHeight()));
+            int knobY = listTop + Math.round((track - knobH) * (scroll / maxScroll()));
+            Ui.surface(g, x + PANEL_W - 4, listTop, 2, track, 1, Ui.OVERLAY_2);
+            Ui.surface(g, x + PANEL_W - 4, knobY, 2, knobH, 1, Ui.MUTED);
+        }
+    }
+
+    @Override
+    public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
+        int x = (width - PANEL_W) / 2;
+        int top = panelTop();
+        if (maxScroll() > 0 && mx >= x && mx < x + PANEL_W && my >= top && my < top + panelHeight()) {
+            scrollTarget = Mth.clamp(scrollTarget - (float) scrollY * ROW_H * 2, 0, maxScroll());
+            return true;
+        }
+        return super.mouseScrolled(mx, my, scrollX, scrollY);
     }
 
     @Override
