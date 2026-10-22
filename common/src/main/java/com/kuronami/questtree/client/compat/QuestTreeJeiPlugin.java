@@ -3,6 +3,7 @@ package com.kuronami.questtree.client.compat;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.RecipeViewer;
 import com.kuronami.questtree.client.viewer.QuestViewerData;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Hit;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -117,6 +118,10 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
      */
     private static final class QuestViewerRecipeManager implements IRecipeManagerPlugin {
 
+        /** The whole list is only rebuilt when the index is replaced; JEI asks for it on every category open. */
+        private static QuestViewerIndex.Index cachedIndex;
+        private static List<QuestViewerRecipe> cachedRecipes = List.of();
+
         @Override
         public <T, V> List<T> getRecipes(IRecipeCategory<T> category, IFocus<V> focus) {
             if (!(category instanceof QuestViewerJeiCategory)) {
@@ -158,8 +163,14 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             return has ? List.of(QuestViewerJeiCategory.TYPE) : List.of();
         }
 
+        @SuppressWarnings("unchecked")
         private static <T> List<T> all() {
-            return recipes(QuestViewerData.index().hits());
+            var index = QuestViewerData.index();
+            if (index != cachedIndex) {
+                cachedRecipes = recipes(index.hits());
+                cachedIndex = index;
+            }
+            return (List<T>) cachedRecipes;
         }
 
         @SuppressWarnings("unchecked")

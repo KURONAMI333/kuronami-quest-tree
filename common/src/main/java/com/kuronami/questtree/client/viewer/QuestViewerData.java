@@ -36,6 +36,9 @@ public final class QuestViewerData {
 
     private static volatile List<Quest> all = List.of();
     private static volatile Index index = Index.empty();
+    private static final ViewerVisibility VISIBLE = new ViewerVisibility();
+    /** Bumped by every rebuild of {@code all}, so a same-keys apply after new data still rebuilds the index. */
+    private static int generation;
     /** Set by the EMI plugin: EMI is the one viewer that cannot answer a lookup from a live source. */
     private static volatile Runnable refreshHook;
 
@@ -100,6 +103,7 @@ public final class QuestViewerData {
             }
         }
         all = List.copyOf(quests);
+        generation++;
         apply();
     }
 
@@ -110,6 +114,8 @@ public final class QuestViewerData {
 
     public static void clear() {
         all = List.of();
+        generation++;
+        VISIBLE.reset();
         Index previous = index;
         index = Index.empty();
         if (!previous.signature().equals(index.signature())) {
@@ -123,8 +129,14 @@ public final class QuestViewerData {
     }
 
     private static void apply() {
+        Visibility visibility = visibility();
+        // a progress packet usually leaves the visible set alone: skip the whole rebuild when nothing can change
+        if (!VISIBLE.changed(generation, all, visibility)) {
+            return;
+        }
         Index previous = index;
-        index = QuestViewerIndex.build(all, visibility());
+        index = QuestViewerIndex.build(all, visibility);
+        VISIBLE.accept(generation, all, visibility);
         if (!previous.signature().equals(index.signature())) {
             notifyViewers();
         }

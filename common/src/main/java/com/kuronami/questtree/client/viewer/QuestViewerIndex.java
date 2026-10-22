@@ -1,7 +1,12 @@
 package com.kuronami.questtree.client.viewer;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The item-to-quest table shared by JEI, EMI and REI. Pure (no game classes) so the matching rules can be tested
@@ -121,7 +126,8 @@ public final class QuestViewerIndex {
         }
     }
 
-    public record Hit(Quest quest, Need need) {
+    /** One viewer row. {@code order} keeps the quest/need order even when lookups come from different buckets. */
+    public record Hit(Quest quest, Need need, int order) {
     }
 
     @FunctionalInterface
@@ -130,16 +136,32 @@ public final class QuestViewerIndex {
     }
 
     public static final class Index {
-        private static final Index EMPTY = new Index(List.of(), List.of(), "");
+        private static final Index EMPTY = new Index(List.of(), List.of(), Map.of(), Map.of(), List.of(), "",
+                Set.of());
 
         private final List<Quest> quests;
         private final List<Hit> hits;
+        private final Map<String, List<Hit>> byItem;
+        private final Map<String, List<Hit>> byTag;
+        private final List<Hit> byFilter;
         private final String signature;
+        private final Set<String> questKeys;
 
-        private Index(List<Quest> quests, List<Hit> hits, String signature) {
+        private Index(List<Quest> quests, List<Hit> hits, Map<String, List<Hit>> byItem,
+                      Map<String, List<Hit>> byTag, List<Hit> byFilter, String signature, Set<String> questKeys) {
             this.quests = List.copyOf(quests);
             this.hits = List.copyOf(hits);
+            this.byItem = freeze(byItem);
+            this.byTag = freeze(byTag);
+            this.byFilter = List.copyOf(byFilter);
             this.signature = signature;
+            this.questKeys = Set.copyOf(questKeys);
+        }
+
+        private static Map<String, List<Hit>> freeze(Map<String, List<Hit>> map) {
+            Map<String, List<Hit>> out = new HashMap<>(map.size());
+            map.forEach((key, value) -> out.put(key, List.copyOf(value)));
+            return Map.copyOf(out);
         }
 
         public static Index empty() {
@@ -156,6 +178,11 @@ public final class QuestViewerIndex {
 
         public boolean isEmpty() {
             return hits.isEmpty();
+        }
+
+        /** Whether a quest with this key is in the current visible index. */
+        public boolean containsQuest(String key) {
+            return questKeys.contains(key);
         }
 
         /** Everything a task of the quest needs. */
@@ -191,12 +218,27 @@ public final class QuestViewerIndex {
                 return List.of();
             }
             List<Hit> out = new ArrayList<>();
-            for (Hit hit : hits) {
+            collect(kind, query, byItem.get(query.itemId()), out);
+            // the tag ids are the ones the index knows (already parsed), not every need's string
+            for (Map.Entry<String, List<Hit>> e : byTag.entrySet()) {
+                if (query.inTag(e.getKey())) {
+                    collect(kind, query, e.getValue(), out);
+                }
+            }
+            collect(kind, query, byFilter, out);
+            out.sort(Comparator.comparingInt(Hit::order));
+            return List.copyOf(out);
+        }
+
+        private static void collect(Kind kind, Query query, List<Hit> candidates, List<Hit> out) {
+            if (candidates == null) {
+                return;
+            }
+            for (Hit hit : candidates) {
                 if (hit.need().kind() == kind && hit.need().matches(query)) {
                     out.add(hit);
                 }
             }
-            return List.copyOf(out);
         }
     }
 
@@ -212,28 +254,41 @@ public final class QuestViewerIndex {
     public static Index build(List<Quest> quests, Visibility visibility) {
         List<Quest> visibleQuests = new ArrayList<>();
         List<Hit> hits = new ArrayList<>();
+        Map<String, List<Hit>> byItem = new HashMap<>();
+        Map<String, List<Hit>> byTag = new HashMap<>();
+        List<Hit> byFilter = new ArrayList<>();
+        Set<String> questKeys = new HashSet<>();
         StringBuilder signature = new StringBuilder();
         for (Quest quest : quests) {
             if (quest == null || (visibility != null && !visibility.canSee(quest))) {
                 continue;
             }
             visibleQuests.add(quest);
+            questKeys.add(quest.key());
             signature.append(quest.key()).append('\u0001')
                     .append(quest.chapterId()).append('\u0001')
                     .append(quest.title()).append('\u0001')
                     .append(quest.chapterTitle()).append('\u0001')
                     .append(quest.iconItemId()).append('\u0002');
             for (Need need : quest.needs()) {
-                hits.add(new Hit(quest, need));
+                Hit hit = new Hit(quest, need, hits.size());
+                hits.add(hit);
+                switch (need.spec().kind()) {
+                    case ITEM -> byItem.computeIfAbsent(need.spec().id(), key -> new ArrayList<>()).add(hit);
+                    case TAG -> byTag.computeIfAbsent(need.spec().id(), key -> new ArrayList<>()).add(hit);
+                    case FILTER -> byFilter.add(hit);
+                }
                 signature.append(need.kind()).append('\u0001')
-                        .append(need.spec().tag() ? '#' : 'i')
+                        .append(need.spec().kind()).append('\u0001')
                         .append(need.spec().id()).append('\u0001')
                         .append(need.count()).append('\u0001')
                         .append(need.label()).append('\u0001')
                         .append(need.index()).append('\u0001')
-                        .append(need.choice()).append('\u0002');
+                        .append(need.choice()).append('\u0001')
+                        .append(need.itemJson()).append('\u0001')
+                        .append(need.matchMode()).append('\u0002');
             }
         }
-        return new Index(visibleQuests, hits, signature.toString());
+        return new Index(visibleQuests, hits, byItem, byTag, byFilter, signature.toString(), questKeys);
     }
 }
