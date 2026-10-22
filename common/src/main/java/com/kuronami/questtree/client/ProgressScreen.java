@@ -2288,7 +2288,7 @@ public class ProgressScreen extends Screen {
             // FTB Quests' guide_page: only shown when the pack set one; the label is a command, not an explanation
             Component label = Component.translatable("screen.kuronami_quest_tree.open_guide");
             int bw = Math.min(w, Ui.textWidth(font, label) + 2 * Ui.S2);
-            button(g, label, x, y, bw, 0, true, mouseX, mouseY, () -> GuidePages.open(n.guidePage));
+            button(g, label, x, y, bw, 0, true, mouseX, mouseY, () -> GuidePages.open(this, n.guidePage));
             y += BTN + 4;
         }
         TeamStatus.Mark mark = TeamStatus.mark(ClientTeam.view().inTeam(), state, p, n.key);
