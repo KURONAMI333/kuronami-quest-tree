@@ -25,6 +25,19 @@ public interface RecipeViewer {
     /** Whether the viewer's own search field is being typed in. */
     boolean typing();
 
+    /** Whether the press is the viewer's bookmark key (JEI's own key binding), so its bookmarks stay one concept. */
+    default boolean isBookmarkKey(int key, int scan) {
+        return false;
+    }
+
+    /**
+     * Adds or removes {@code stack} in the viewer's bookmarks: {@code true} added, {@code false} removed, {@code null}
+     * when this viewer has no bookmarks. Only JEI has them.
+     */
+    default Boolean toggleBookmark(ItemStack stack) {
+        return null;
+    }
+
     /** The item under the pointer in the viewer's own lists, or empty. */
     ItemStack underMouse();
 

@@ -27,6 +27,15 @@ public class TaskScreenRenderer implements BlockEntityRenderer<TaskScreenBlockEn
     public TaskScreenRenderer(BlockEntityRendererProvider.Context context) {
     }
 
+    /**
+     * A 5x5 or 7x7 screen's core block can sit outside the frustum while its face is still in view; the screen is one
+     * drawn surface, so it must not blink out when that block is culled.
+     */
+    @Override
+    public boolean shouldRenderOffScreen(TaskScreenBlockEntity screen) {
+        return true;
+    }
+
     @Override
     public void render(TaskScreenBlockEntity screen, float partialTick, PoseStack pose, MultiBufferSource buffers,
                        int light, int overlay) {

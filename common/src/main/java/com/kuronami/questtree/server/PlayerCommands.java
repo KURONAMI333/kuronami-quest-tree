@@ -319,8 +319,9 @@ final class PlayerCommands {
     }
 
     /**
-     * FTB Quests' {@code locked}: the book is closed for a whole team. Progress keeps counting, as it does for FTB
-     * Quests' team data; only opening the book is refused, with a short toast and the lock sound on the client.
+     * FTB Quests' {@code locked}: the book is closed for a whole team. Like FTB Quests' team data, nothing moves while
+     * it is on: task progress, submissions and reward claims are refused, and the client shows a toast and a lock
+     * sound instead of the book.
      */
     private static int bookLock(CommandContext<CommandSourceStack> c, boolean locked) throws CommandSyntaxException {
         Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");

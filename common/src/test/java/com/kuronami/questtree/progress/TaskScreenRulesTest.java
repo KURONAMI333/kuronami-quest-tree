@@ -6,6 +6,7 @@ import com.google.gson.JsonParser;
 import com.kuronami.questtree.data.ProgressModel;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,6 +53,16 @@ class TaskScreenRulesTest {
         assertTrue(ScreenRules.takesItem(consumed, consumed.tasks.get(0)));
         assertFalse(ScreenRules.takesItem(free, free.tasks.get(0)));
         assertTrue(ScreenRules.takesItem(screenOnly, screenOnly.tasks.get(0)));
+    }
+
+    @Test
+    void maxInputCapsOneTransferAndZeroMeansNoCap() {
+        assertEquals(500, ScreenRules.maxInput(
+                JsonParser.parseString("{\"type\":\"energy\",\"max_input\":500}").getAsJsonObject()));
+        assertEquals(0, ScreenRules.maxInput(
+                JsonParser.parseString("{\"type\":\"energy\",\"max_input\":0}").getAsJsonObject()));
+        assertEquals(0, ScreenRules.maxInput(JsonParser.parseString("{\"type\":\"energy\"}").getAsJsonObject()));
+        assertEquals(0, ScreenRules.maxInput(null));
     }
 
     @Test

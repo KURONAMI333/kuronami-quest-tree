@@ -94,11 +94,18 @@ final class ProgressFeedback {
                     if (n != null) {
                         int index = event.actor() == null ? -1 : parseIntOr(event.actor(), -1);
                         ItemStack icon = rewardIcon(n, index);
-                        if (!icon.isEmpty()) {
-                            rewardIcons.add(icon);
+                        Component name = icon.isEmpty() ? Component.translatable("toast.kuronami_quest_tree.reward")
+                                : icon.getHoverName();
+                        switch (ClientConfig.rewardStyle()) {
+                            case TOAST -> {
+                                if (!icon.isEmpty()) {
+                                    rewardIcons.add(icon);
+                                }
+                                rewardNames.add(name);
+                            }
+                            case ACTION_BAR -> actionBar(Component.translatable("toast.kuronami_quest_tree.reward"), name);
+                            case NONE -> { }
                         }
-                        rewardNames.add(icon.isEmpty() ? Component.translatable("toast.kuronami_quest_tree.reward")
-                                : icon.getHoverName());
                     }
                 }
                 case "submit" -> feedback(QtSounds.SUBMIT, 1, 0.8f);

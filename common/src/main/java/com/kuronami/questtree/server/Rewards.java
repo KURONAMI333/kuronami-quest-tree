@@ -636,6 +636,10 @@ public final class Rewards {
         if (count <= 0) {
             return false;
         }
+        // FTB Quests' only_one: a reward for an item the player already carries is not given again
+        if (ProgressModel.boolOf(rw, "only_one") && player.getInventory().contains(new ItemStack(item))) {
+            return true;
+        }
         int max = new ItemStack(item).getMaxStackSize();
         while (count > 0) {
             ItemStack st = new ItemStack(item, Math.min(count, max));

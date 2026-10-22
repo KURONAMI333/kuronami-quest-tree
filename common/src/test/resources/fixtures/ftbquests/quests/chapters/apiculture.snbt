@@ -17,6 +17,13 @@
 			width: 3.0d
 			height: 3.0d
 			rotation: 0.0d
+			hover: [ "Hej" ]
+			click: "command:say hej"
+			text_on_image: true
+			text_h_align: "left"
+			text_v_align: "top"
+			text_inset: 3
+			text_shadow: true
 		}
 		{
 			id: "1000000000470CF4"
@@ -27,6 +34,7 @@
 			height: 2.0d
 			rotation: 15.0d
 			dependency: "1000000000030557"
+			click_action: "open_quest:1000000000001EEF"
 		}
 	]
 	quests: [

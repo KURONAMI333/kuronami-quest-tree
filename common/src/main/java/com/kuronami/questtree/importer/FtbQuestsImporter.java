@@ -79,7 +79,8 @@ public final class FtbQuestsImporter {
     private static final Map<String, String> DEP_MODE = Map.of("all_completed", "all", "one_completed", "any",
             "all_started", "all_started", "one_started", "any_started");
     private static final List<String> IMAGE_KEYS = List.of("image", "x", "y", "width", "height", "rotation", "order", "id", "click",
-            "hover", "dev", "color", "alpha", "corner", "align_to_corner", "click_action", "dependency");
+            "hover", "dev", "color", "alpha", "corner", "align_to_corner", "click_action", "dependency",
+            "text_on_image", "text_h_align", "text_v_align", "text_shadow", "text_inset");
 
     private FtbQuestsImporter() {
     }
@@ -202,22 +203,52 @@ public final class FtbQuestsImporter {
             copy(i, "alpha", d, "alpha");
             copy(i, "hover", d, "hover");
             if (i.has("click") && i.get("click").isJsonPrimitive()) {
-                // FTB Quests: a quest id (optionally "#id") opens that quest; anything else (a URL) is kept as it is
+                // the old single string: http(s) URL, "#id" quest, "custom:event", "command:line"
                 String click = i.get("click").getAsString().trim();
-                String[] t = node(idToNode, click);
-                if (t != null) {
-                    JsonObject c = new JsonObject();
-                    c.addProperty("type", "node");
-                    c.addProperty("target", t[0].equals(cid) ? t[1] : t[0] + "/" + t[1]);
-                    d.add("click", c);
-                } else if (!click.isEmpty()) {
-                    JsonObject c = new JsonObject();
+                JsonObject c = new JsonObject();
+                if (click.startsWith("http://") || click.startsWith("https://")) {
                     c.addProperty("type", "url");
                     c.addProperty("target", click);
+                } else if (click.startsWith("command:")) {
+                    c.addProperty("type", "run_command");
+                    c.addProperty("target", click.substring(8));
+                } else if (click.startsWith("custom:")) {
+                    c.addProperty("type", "custom_event");
+                    c.addProperty("target", click.substring(7));
+                } else {
+                    String[] t = node(idToNode, click.startsWith("#") ? click.substring(1) : click);
+                    if (t != null) {
+                        c.addProperty("type", "node");
+                        c.addProperty("target", t[0].equals(cid) ? t[1] : t[0] + "/" + t[1]);
+                    }
+                }
+                if (!c.isEmpty()) {
                     d.add("click", c);
                 }
             }
-            copy(i, "click_action", d, "click_action");
+            if (i.has("click_action") && i.get("click_action").isJsonPrimitive()) {
+                String action = i.get("click_action").getAsString();
+                int colon = action.indexOf(':');
+                String type = colon < 0 ? "" : action.substring(0, colon);
+                String data = colon < 0 ? "" : action.substring(colon + 1);
+                if (type.equals("open_quest")) {
+                    String[] t = node(idToNode, data.split("/", 2)[0]);
+                    if (t != null) {
+                        String target = t[0].equals(cid) ? t[1] : t[0] + "/" + t[1];
+                        if (data.split("/", 2).length > 1) {
+                            target += "/" + data.split("/", 2)[1];
+                        }
+                        d.addProperty("click_action", "open_quest:" + target);
+                    }
+                } else if (!action.isEmpty()) {
+                    d.addProperty("click_action", action);
+                }
+            }
+            copy(i, "text_on_image", d, "text_on_image");
+            copy(i, "text_h_align", d, "text_h_align");
+            copy(i, "text_v_align", d, "text_v_align");
+            copy(i, "text_shadow", d, "text_shadow");
+            copy(i, "text_inset", d, "text_inset");
             if (i.has("dependency")) {
                 String[] t = node(idToNode, i.get("dependency"));
                 if (t != null) {

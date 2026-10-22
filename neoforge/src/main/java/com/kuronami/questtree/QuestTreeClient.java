@@ -23,6 +23,22 @@ public final class QuestTreeClient {
         public static void keys(RegisterKeyMappingsEvent event) {
             event.register(ClientProgress.OPEN_KEY);
             event.register(ClientProgress.TRACK_KEY);
+            event.register(com.kuronami.questtree.client.BookKeys.SEARCH);
+            event.register(com.kuronami.questtree.client.BookKeys.PREFS);
+            event.register(com.kuronami.questtree.client.BookKeys.RECENTER);
+            event.register(com.kuronami.questtree.client.BookKeys.ZOOM_IN);
+            event.register(com.kuronami.questtree.client.BookKeys.ZOOM_OUT);
+            event.register(com.kuronami.questtree.client.BookKeys.ZOOM_RESET);
+            event.register(com.kuronami.questtree.client.BookKeys.INFO);
+            event.register(com.kuronami.questtree.client.BookKeys.NEXT_CHAPTER);
+            event.register(com.kuronami.questtree.client.BookKeys.PREV_CHAPTER);
+            event.register(com.kuronami.questtree.client.BookKeys.UNDO);
+            event.register(com.kuronami.questtree.client.BookKeys.REDO);
+            event.register(com.kuronami.questtree.client.BookKeys.SELECT_ALL);
+            event.register(com.kuronami.questtree.client.BookKeys.COPY);
+            event.register(com.kuronami.questtree.client.BookKeys.PASTE);
+            event.register(com.kuronami.questtree.client.BookKeys.DELETE);
+            event.register(com.kuronami.questtree.client.BookKeys.LINK);
             ClientProgress.sender = a -> {
                 var conn = net.minecraft.client.Minecraft.getInstance().getConnection();
                 if (conn != null && conn.hasChannel(a.type())) {

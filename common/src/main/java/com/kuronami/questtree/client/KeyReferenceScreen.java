@@ -28,15 +28,36 @@ public final class KeyReferenceScreen extends Screen {
         this.parent = parent;
         add("open", ClientProgress.OPEN_KEY.getTranslatedKeyMessage());
         add("track", ClientProgress.TRACK_KEY.getTranslatedKeyMessage());
-        add("search", Component.literal("Ctrl + F"));
-        add("tab", Component.literal("Tab"));
+        add("search", withCtrl(BookKeys.SEARCH.getTranslatedKeyMessage()));
+        add("prefs", withCtrl(BookKeys.PREFS.getTranslatedKeyMessage()));
+        add("tab", BookKeys.NEXT_CHAPTER.getTranslatedKeyMessage());
+        add("prev", withShift(BookKeys.PREV_CHAPTER.getTranslatedKeyMessage()));
         add("back", Component.literal("Backspace"));
-        add("recenter", Component.literal("Space"));
+        add("recenter", BookKeys.RECENTER.getTranslatedKeyMessage());
         add("page", Component.literal("Page Up / Page Down"));
-        add("zoom", Component.literal("Ctrl + " + Component.translatable("screen.kuronami_quest_tree.keys.wheel").getString()));
+        add("zoom", withCtrl(Component.translatable("screen.kuronami_quest_tree.keys.wheel")));
         add("pan", Component.translatable("screen.kuronami_quest_tree.keys.wheel"));
+        add("zoom_in", BookKeys.ZOOM_IN.getTranslatedKeyMessage());
+        add("zoom_out", BookKeys.ZOOM_OUT.getTranslatedKeyMessage());
+        add("zoom_reset", BookKeys.ZOOM_RESET.getTranslatedKeyMessage());
+        add("info", BookKeys.INFO.getTranslatedKeyMessage());
+        add("editor_undo", withCtrl(BookKeys.UNDO.getTranslatedKeyMessage()));
+        add("editor_redo", withCtrl(BookKeys.REDO.getTranslatedKeyMessage()));
+        add("editor_select_all", withCtrl(BookKeys.SELECT_ALL.getTranslatedKeyMessage()));
+        add("editor_copy", withCtrl(BookKeys.COPY.getTranslatedKeyMessage()));
+        add("editor_paste", withCtrl(BookKeys.PASTE.getTranslatedKeyMessage()));
+        add("editor_delete", BookKeys.DELETE.getTranslatedKeyMessage());
+        add("editor_link", BookKeys.LINK.getTranslatedKeyMessage());
         add("debug", Component.literal("F3"));
         add("close", Component.literal("Esc"));
+    }
+
+    private static Component withCtrl(Component key) {
+        return Component.literal("Ctrl + ").append(key);
+    }
+
+    private static Component withShift(Component key) {
+        return Component.literal("Shift + ").append(key);
     }
 
     private void add(String label, Component key) {

@@ -153,6 +153,10 @@ public final class TaskScreenService {
         if (!canSubmit(level.getServer(), core, n) || !ScreenRules.acceptsEnergy(task)) {
             return 0;
         }
+        long limit = ScreenRules.maxInput(task);
+        if (limit > 0) {
+            amount = Math.min(amount, limit);
+        }
         long accepted = Math.min(amount, remaining(level.getServer(), core, n, task));
         if (accepted <= 0) {
             return 0;
@@ -235,7 +239,11 @@ public final class TaskScreenService {
         if (server == null || rules == null) {
             return false;
         }
-        ProgressRules.State state = rules.state(ProgressStore.get(server).view(server, core.owner()), n);
+        PlayerProgress owner = ProgressStore.get(server).view(server, core.owner());
+        if (owner.bookLocked()) {
+            return false;
+        }
+        ProgressRules.State state = rules.state(owner, n);
         return state == ProgressRules.State.OPEN || state == ProgressRules.State.PROGRESS;
     }
 
