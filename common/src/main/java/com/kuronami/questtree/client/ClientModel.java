@@ -636,6 +636,11 @@ public final class ClientModel {
             return name;
         }
 
+        /** The item matcher as written ({@code id}, {@code #tag}, or {@code ~filter}); empty when the task names none. */
+        public String itemSpec() {
+            return requirement.spec();
+        }
+
         private void resolve() {
             if (resolved) {
                 return;
