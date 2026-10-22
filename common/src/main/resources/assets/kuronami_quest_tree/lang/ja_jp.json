@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "%s を %s にリンクしました",
   "commands.kuronami_quest_tree.giver.cleared": "%s のクエストリンクを解除しました",
   "commands.kuronami_quest_tree.giver.none": "%s にはクエストリンクがありません",
-  "commands.kuronami_quest_tree.giver.player_only": "クエストギバーを変更できるのはプレイヤーだけです"
+  "commands.kuronami_quest_tree.giver.player_only": "クエストギバーを変更できるのはプレイヤーだけです",
+  "commands.kuronami_quest_tree.giver.list.header": "クエストギバー: %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "リンクされたクエストギバーはありません",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "%s のクエストギバーのリンクを解除しました",
+  "commands.kuronami_quest_tree.giver.uuid.none": "%s にはクエストギバーのリンクがありません",
+  "message.kuronami_quest_tree.giver.missing": "このクエストギバーのリンク先 %s はブックにありません"
 }

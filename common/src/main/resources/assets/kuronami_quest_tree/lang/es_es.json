@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "%s se ha vinculado a %s",
   "commands.kuronami_quest_tree.giver.cleared": "Se ha quitado el vínculo de búsqueda de %s",
   "commands.kuronami_quest_tree.giver.none": "%s no tiene ningún vínculo de búsqueda",
-  "commands.kuronami_quest_tree.giver.player_only": "Solo un jugador puede cambiar un dador de búsquedas"
+  "commands.kuronami_quest_tree.giver.player_only": "Solo un jugador puede cambiar un dador de búsquedas",
+  "commands.kuronami_quest_tree.giver.list.header": "Entregadores de misiones: %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "No hay ningún entregador de misiones vinculado",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "Se eliminó el vínculo del entregador de misiones para %s",
+  "commands.kuronami_quest_tree.giver.uuid.none": "No hay vínculo de entregador de misiones para %s",
+  "message.kuronami_quest_tree.giver.missing": "Este entregador de misiones apunta a %s, que ya no está en el libro"
 }

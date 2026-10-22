@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "%s a été lié à %s",
   "commands.kuronami_quest_tree.giver.cleared": "Le lien de quête de %s a été retiré",
   "commands.kuronami_quest_tree.giver.none": "%s n'a aucun lien de quête",
-  "commands.kuronami_quest_tree.giver.player_only": "Seul un joueur peut modifier un donneur de quêtes"
+  "commands.kuronami_quest_tree.giver.player_only": "Seul un joueur peut modifier un donneur de quêtes",
+  "commands.kuronami_quest_tree.giver.list.header": "Donneurs de quêtes : %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "Aucun donneur de quête n'est lié",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "Lien du donneur de quête supprimé pour %s",
+  "commands.kuronami_quest_tree.giver.uuid.none": "Aucun lien de donneur de quête pour %s",
+  "message.kuronami_quest_tree.giver.missing": "Ce donneur de quête pointe vers %s, qui n'est plus dans le livre"
 }

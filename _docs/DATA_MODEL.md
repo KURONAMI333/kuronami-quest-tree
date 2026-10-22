@@ -365,13 +365,18 @@ A quest giver opens the book on one quest or chapter when a player right-clicks 
 ```
 /quest_tree giver set <namespace>:<chapter>/<node>
 /quest_tree giver set <namespace>:<chapter>
+/quest_tree giver list
 /quest_tree giver clear
+/quest_tree giver clear <uuid>
 ```
 
 - Both need permission level 2 and a player source, because the target is what that player is looking at. `/quest_tree giver clear` on an entity removes its link; on a quest board it empties the block.
 - `quest_task_block` without a link opens the book where it would normally open. A linked entity keeps its ordinary interaction while the player sneaks, so a villager can still trade.
 - A hidden chapter opens nothing. A locked chapter opens at the chapter list with that pack's hint, not its map. A visible quest opens on its node and a visible chapter opens on its chapter.
 - A giver target survives a restart. The entity list is its own file so a broken link cannot take player progress with it; a board's link travels with the block.
+- `/quest_tree giver list` prints every entity link as `<uuid> -> <node|chapter>|<id>`. `/quest_tree giver clear <uuid>` removes one without looking at the entity; the plain `clear` still works on what the player is looking at.
+- A linked entity that dies or is discarded loses its link. Chunk unloads and dimension changes keep it.
+- A link whose quest or chapter is no longer in the book opens nothing and shows a short line with the missing id in the action bar.
 
 ## Overlay and editor
 

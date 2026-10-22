@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "%s привязан к %s",
   "commands.kuronami_quest_tree.giver.cleared": "Привязка квеста у %s снята",
   "commands.kuronami_quest_tree.giver.none": "У %s нет привязки квеста",
-  "commands.kuronami_quest_tree.giver.player_only": "Менять выдающего квесты может только игрок"
+  "commands.kuronami_quest_tree.giver.player_only": "Менять выдающего квесты может только игрок",
+  "commands.kuronami_quest_tree.giver.list.header": "Выдача квестов: %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "Нет связанных выдач квестов",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "Связь выдачи квеста удалена для %s",
+  "commands.kuronami_quest_tree.giver.uuid.none": "Нет связи выдачи квеста для %s",
+  "message.kuronami_quest_tree.giver.missing": "Эта выдача квеста указывает на %s, которого больше нет в книге"
 }

@@ -13,6 +13,7 @@ import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * The command arguments that name a chapter or a quest must accept an unquoted id: a resource location has a colon
@@ -38,6 +39,13 @@ class GiverCommandParsingTest {
         CommandNode<CommandSourceStack> argument = GiverCommands.node().getChild("set").getChild("target");
         assertEquals("fixture:roles", parsedId(argument, "target", "fixture:roles"));
         assertEquals("fixture:roles/one", parsedId(argument, "target", "fixture:roles/one"));
+    }
+
+    @Test
+    void giverListAndClearByUuidAreRegistered() {
+        CommandNode<CommandSourceStack> giver = GiverCommands.node();
+        assertNotNull(giver.getChild("list"));
+        assertNotNull(giver.getChild("clear").getChild("uuid"));
     }
 
     @Test

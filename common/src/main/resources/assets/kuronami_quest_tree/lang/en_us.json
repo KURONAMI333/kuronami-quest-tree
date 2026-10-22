@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "Linked %s to %s",
   "commands.kuronami_quest_tree.giver.cleared": "Cleared the quest link from %s",
   "commands.kuronami_quest_tree.giver.none": "%s has no quest link",
-  "commands.kuronami_quest_tree.giver.player_only": "Only a player can change a quest giver"
+  "commands.kuronami_quest_tree.giver.player_only": "Only a player can change a quest giver",
+  "commands.kuronami_quest_tree.giver.list.header": "Quest givers: %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "No quest giver is linked",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "Removed the quest giver link for %s",
+  "commands.kuronami_quest_tree.giver.uuid.none": "No quest giver link for %s",
+  "message.kuronami_quest_tree.giver.missing": "This quest giver points at %s, which is no longer in the book"
 }

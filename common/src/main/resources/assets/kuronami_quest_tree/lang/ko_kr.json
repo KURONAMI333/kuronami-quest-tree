@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "%s을(를) %s에 연결했습니다",
   "commands.kuronami_quest_tree.giver.cleared": "%s의 퀘스트 연결을 해제했습니다",
   "commands.kuronami_quest_tree.giver.none": "%s에는 퀘스트 연결이 없습니다",
-  "commands.kuronami_quest_tree.giver.player_only": "퀘스트 제공자는 플레이어만 변경할 수 있습니다"
+  "commands.kuronami_quest_tree.giver.player_only": "퀘스트 제공자는 플레이어만 변경할 수 있습니다",
+  "commands.kuronami_quest_tree.giver.list.header": "퀘스트 지급자: %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "연결된 퀘스트 지급자가 없습니다",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "%s의 퀘스트 지급자 연결을 해제했습니다",
+  "commands.kuronami_quest_tree.giver.uuid.none": "%s에 퀘스트 지급자 연결이 없습니다",
+  "message.kuronami_quest_tree.giver.missing": "이 퀘스트 지급자는 %s을(를) 가리키지만 책에 없습니다"
 }
