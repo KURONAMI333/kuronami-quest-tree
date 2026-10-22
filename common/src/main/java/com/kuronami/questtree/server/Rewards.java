@@ -607,11 +607,25 @@ public final class Rewards {
     }
 
     static boolean item(ServerPlayer player, JsonObject rw) {
+        List<ItemStack> stacks = itemStacks(player, rw);
+        if (stacks.isEmpty()) {
+            return false;
+        }
+        for (ItemStack st : stacks) {
+            if (!player.getInventory().add(st) || !st.isEmpty()) {
+                player.drop(st, false);
+            }
+        }
+        return true;
+    }
+
+    /** The stacks an item reward pays, split by max stack size; empty when the id or count is unusable. */
+    public static List<ItemStack> itemStacks(ServerPlayer player, JsonObject rw) {
         JsonElement it = rw.get("item");
         String id;
         int count = 1;
         if (it == null) {
-            return false;
+            return List.of();
         }
         if (it.isJsonPrimitive() && it.getAsJsonPrimitive().isString()) {
             id = it.getAsString();
@@ -621,7 +635,7 @@ public final class Rewards {
                     && o.get("id").getAsJsonPrimitive().isString() ? o.get("id").getAsString() : "";
             count = intOf(o, "count", 1);
         } else {
-            return false;
+            return List.of();
         }
         int bonus = intOf(rw, "random_bonus", 0);
         if (bonus > 0) {
@@ -631,20 +645,19 @@ public final class Rewards {
         Item item = rl == null ? Items.AIR : BuiltInRegistries.ITEM.get(rl);
         if (item == Items.AIR) {
             Constants.LOG.warn("Reward item '{}' does not exist", id);
-            return false;
+            return List.of();
         }
         if (count <= 0) {
-            return false;
+            return List.of();
         }
+        List<ItemStack> out = new ArrayList<>();
         int max = new ItemStack(item).getMaxStackSize();
         while (count > 0) {
             ItemStack st = new ItemStack(item, Math.min(count, max));
             count -= st.getCount();
-            if (!player.getInventory().add(st) || !st.isEmpty()) {
-                player.drop(st, false);
-            }
+            out.add(st);
         }
-        return true;
+        return out;
     }
 
     private static void command(ServerPlayer player, JsonObject rw) {
@@ -665,6 +678,12 @@ public final class Rewards {
                 intOf(rw, "permission_level", com.kuronami.questtree.progress.RewardPermission.DEFAULT),
                 com.kuronami.questtree.config.ServerConfig.rewardCommandPermission());
         ServerCommands.run(player, cmd, level, !rw.has("silent") || ProgressModel.boolOf(rw, "silent"));
+    }
+
+    /** Pays one entry of a loot crate's table. The entry has no quest, so it gets a node made for this one pay-out. */
+    public static boolean crateEntry(ServerPlayer player, PlayerProgress p, JsonObject rw, String tableId) {
+        ProgressModel.Node n = ProgressModel.crateNode(tableId, rw);
+        return give(player, p, n, rw, -1, "crate:" + tableId, false, false);
     }
 
     /**

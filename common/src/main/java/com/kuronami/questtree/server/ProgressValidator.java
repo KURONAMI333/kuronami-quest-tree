@@ -634,6 +634,96 @@ public final class ProgressValidator {
             problem(out, Severity.WARNING, ref, path + ".cooldown_seconds",
                     "\"cooldown_seconds\" is not a number, so the default 3600 s is used");
         }
+        checkLootCrateSettings(out, ref, settings);
+    }
+
+    /** {@code settings.loot_crates}, with the imported FTB Quests names read as fallbacks. */
+    private static void checkLootCrateSettings(Result out, ChapterRef ref, JsonObject settings) {
+        JsonElement cratesElement = settings.get("loot_crates");
+        JsonObject crates;
+        String path;
+        if (cratesElement != null && cratesElement.isJsonObject()) {
+            crates = cratesElement.getAsJsonObject();
+            path = "settings.loot_crates";
+        } else {
+            if (cratesElement != null) {
+                problem(out, Severity.WARNING, ref, "settings.loot_crates",
+                        "\"loot_crates\" is not an object, so crates are not dropped");
+            }
+            return;
+        }
+        booleanShape(out, ref, path, crates, "enabled");
+        JsonElement noDropElement = crates.get("no_drop");
+        if (noDropElement != null && noDropElement.isJsonObject()) {
+            crateWeights(out, ref, path + ".no_drop", noDropElement.getAsJsonObject());
+        } else if (noDropElement != null) {
+            problem(out, Severity.WARNING, ref, path + ".no_drop",
+                    "\"no_drop\" is not an object, so the default weights are used");
+        }
+    }
+
+    /** The crate's own fields; the readers fill anything they cannot read from the string id's defaults. */
+    private static void checkLootCrate(Result out, ChapterRef ref, String path, JsonObject table) {
+        if (!table.has("loot_crate") || table.get("loot_crate").isJsonNull()) {
+            return;
+        }
+        if (!table.get("loot_crate").isJsonObject()) {
+            problem(out, Severity.WARNING, ref, path,
+                    "loot crate settings must be an object; rolled as a normal table");
+            return;
+        }
+        JsonObject crate = table.getAsJsonObject("loot_crate");
+        textShape(out, ref, path, crate, "string_id", Severity.WARNING);
+        textShape(out, ref, path, crate, "item_name", Severity.WARNING);
+        crateColor(out, ref, path + ".color", crate.get("color"));
+        booleanShape(out, ref, path, crate, "glow");
+        JsonElement dropsElement = crate.get("drops");
+        if (dropsElement != null && dropsElement.isJsonObject()) {
+            crateWeights(out, ref, path + ".drops", dropsElement.getAsJsonObject());
+        } else if (dropsElement != null) {
+            problem(out, Severity.WARNING, ref, path + ".drops",
+                    "\"drops\" is not an object, so the string id's default weights are used");
+        }
+    }
+
+    /** A colour is a JSON number or a string like {@code #RRGGBB}; anything else becomes white. */
+    private static void crateColor(Result out, ChapterRef ref, String path, JsonElement color) {
+        if (color == null) {
+            return;
+        }
+        boolean ok;
+        if (color.isJsonPrimitive() && color.getAsJsonPrimitive().isNumber()) {
+            long value = color.getAsLong();
+            ok = value >= 0 && value <= 0xFFFFFF;
+        } else if (color.isJsonPrimitive() && color.getAsJsonPrimitive().isString()) {
+            String text = color.getAsString().trim();
+            if (text.startsWith("#")) {
+                text = text.substring(1);
+            } else if (text.startsWith("0x") || text.startsWith("0X")) {
+                text = text.substring(2);
+            }
+            ok = text.length() == 6 && text.matches("[0-9a-fA-F]{6}");
+        } else {
+            ok = false;
+        }
+        if (!ok) {
+            problem(out, Severity.WARNING, ref, path,
+                    "\"color\" is not #RRGGBB, so the default colour is used");
+        }
+    }
+
+    /** Drop weights are non-negative whole numbers; a bad one is read as 0 by the selector. */
+    private static void crateWeights(Result out, ChapterRef ref, String path, JsonObject weights) {
+        for (String key : List.of("passive", "monster", "boss")) {
+            JsonElement e = weights.get(key);
+            if (e == null) {
+                continue;
+            }
+            if (!e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber() || e.getAsLong() < 0) {
+                problem(out, Severity.WARNING, ref, path + "." + key,
+                        quote(key) + " is not a non-negative whole number, so 0 is used");
+            }
+        }
     }
 
     private static void countProblem(Result out, ChapterRef ref, String path, JsonElement count) {
@@ -1299,9 +1389,7 @@ public final class ProgressValidator {
         }
         whole(out, ref, path, table, "rolls");
         numberShape(out, ref, path, table, "empty_weight");
-        if (table.has("loot_crate") && !table.get("loot_crate").isJsonNull() && !table.get("loot_crate").isJsonObject()) {
-            problem(out, Severity.WARNING, ref, path + ".loot_crate", "loot crate settings must be an object; rolled as a normal table");
-        }
+        checkLootCrate(out, ref, path + ".loot_crate", table);
     }
 
     /** A weight the table does not choose with: Rewards.table reads it with getAsDouble, and 0 means "never". */

@@ -7,6 +7,7 @@ public final class ModBlockEntities {
 
     private static BlockEntityType<QuestTaskBlockEntity> task;
     private static BlockEntityType<QuestBarrierBlockEntity> barrier;
+    private static BlockEntityType<LootCrateOpenerBlockEntity> lootCrateOpener;
 
     private ModBlockEntities() {
     }
@@ -25,5 +26,13 @@ public final class ModBlockEntities {
 
     public static void setBarrier(BlockEntityType<QuestBarrierBlockEntity> type) {
         barrier = type;
+    }
+
+    public static BlockEntityType<LootCrateOpenerBlockEntity> lootCrateOpener() {
+        return lootCrateOpener;
+    }
+
+    public static void setLootCrateOpener(BlockEntityType<LootCrateOpenerBlockEntity> type) {
+        lootCrateOpener = type;
     }
 }

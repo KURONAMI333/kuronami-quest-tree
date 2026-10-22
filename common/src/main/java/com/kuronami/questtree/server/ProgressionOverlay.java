@@ -173,6 +173,24 @@ public final class ProgressionOverlay {
         }
     }
 
+    /**
+     * The whole pack settings file (2026-10-22, p1-crates): one revision and one object, written whole. A settings
+     * object is a small config, so a partial patch would only decide which key a nested path means.
+     */
+    public static final class SettingsOverlay {
+        public long revision;
+        public JsonObject settings = new JsonObject();
+        public String file = "";
+        public String raw = "";
+
+        public JsonObject toJson() {
+            JsonObject out = new JsonObject();
+            out.addProperty("revision", revision);
+            out.add("settings", settings.deepCopy());
+            return out;
+        }
+    }
+
     /** Everything the overlay directory held, plus what could not be read. */
     public static final class Overlay {
         public final Map<String, ChapterOverlay> chapters = new LinkedHashMap<>();
@@ -183,6 +201,8 @@ public final class ProgressionOverlay {
         public final Map<String, Long> tableRevisions = new LinkedHashMap<>();
         /** The whole restrictions file, or null when it does not exist and the pack's rules apply. */
         public RestrictionOverlay restrictions;
+        /** The whole settings file, or null when it does not exist and the pack's settings apply. */
+        public SettingsOverlay settings;
         public final List<ProgressValidator.Problem> problems = new ArrayList<>();
 
         public ChapterOverlay chapter(String id) {
@@ -330,9 +350,78 @@ public final class ProgressionOverlay {
         bundle.addProperty("restrictions_revision", restrictions.revision);
     }
 
+    /**
+     * Puts the overlay's settings into {@code bundle} when the file exists; the object replaces the pack's settings
+     * whole, so an editor can also remove a key the pack shipped.
+     */
+    public void applySettingsTo(JsonObject bundle) {
+        if (settings == null) {
+            return;
+        }
+        bundle.add("settings", settings.settings.deepCopy());
+        bundle.addProperty("settings_revision", settings.revision);
+    }
+
     }
 
     private ProgressionOverlay() {
+    }
+
+    private static void readSettings(Path progressionRoot, Overlay out) {
+        Path file = progressionRoot.resolve("settings.json");
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        String shown = display(progressionRoot, file);
+        String text;
+        try {
+            text = Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                    "could not be read: " + ex.getMessage(), 0));
+            return;
+        }
+        JsonElement parsed;
+        try {
+            parsed = JsonParser.parseString(text);
+        } catch (Exception ex) {
+            out.problems.add(ProgressValidator.parseError(shown, text, ex));
+            return;
+        }
+        if (!parsed.isJsonObject()) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                    "the settings file is not a JSON object", 0));
+            return;
+        }
+        JsonObject o = parsed.getAsJsonObject();
+        SettingsOverlay overlay = new SettingsOverlay();
+        overlay.file = shown;
+        overlay.raw = text;
+        overlay.revision = number(o, "revision");
+        JsonElement settings = o.get("settings");
+        if (settings == null || !settings.isJsonObject()) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "settings",
+                    "\"settings\" is not an object, so the file is ignored and the pack's settings apply", 0));
+            return;
+        }
+        overlay.settings = settings.getAsJsonObject().deepCopy();
+        out.settings = overlay;
+    }
+
+    /** Writes {@code settings.json} atomically; the caller passes the new revision and the complete settings object. */
+    public static void writeSettings(Path progressionRoot, long revision, JsonObject settings) throws IOException {
+        SettingsOverlay overlay = new SettingsOverlay();
+        overlay.revision = revision;
+        overlay.settings = settings.deepCopy();
+        Path file = progressionRoot.resolve("settings.json");
+        Files.createDirectories(progressionRoot);
+        Path temp = Files.createTempFile(progressionRoot, "settings", ".tmp");
+        try {
+            Files.writeString(temp, GSON.toJson(overlay.toJson()), StandardCharsets.UTF_8);
+            moveAtomically(temp, file);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 
     private static void readRestrictions(Path progressionRoot, Overlay out) {
@@ -403,6 +492,7 @@ public final class ProgressionOverlay {
     /** Reads the overlay under {@code progressionRoot} (the {@code progression} folder, not the world root). */
     public static Overlay read(Path progressionRoot) {
         Overlay out = new Overlay();
+        readSettings(progressionRoot, out);
         readRestrictions(progressionRoot, out);
         Path chaptersDir = progressionRoot.resolve("chapters");
         if (!Files.isDirectory(chaptersDir)) {

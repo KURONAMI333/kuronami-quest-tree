@@ -117,7 +117,8 @@ public final class ProgressionEditor {
         boolean creatingChapter = op.equals("create_chapter");
         boolean tableOp = op.equals("update_table") || op.equals("delete_table") || op.equals("restore_table");
         boolean restrictionsOp = op.equals("update_restrictions");
-        if (!creatingChapter && !tableOp && !restrictionsOp && !validChapterId(chapterId)) {
+        boolean settingsOp = op.equals("update_settings");
+        if (!creatingChapter && !tableOp && !restrictionsOp && !settingsOp && !validChapterId(chapterId)) {
             return fail("chapter id is not <namespace>:<chapter>", 0);
         }
         ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot);
@@ -129,6 +130,9 @@ public final class ProgressionEditor {
         args = args == null ? new JsonObject() : args;
         if (restrictionsOp) {
             return updateRestrictions(overlay, revision, args);
+        }
+        if (settingsOp) {
+            return updateSettings(overlay, revision, args);
         }
         if (tableOp) {
             return applyTable(overlay, packChapters, tables, packSources, chapterId, revision, op, args, unreadable,
@@ -183,6 +187,37 @@ public final class ProgressionEditor {
             ProgressionOverlay.writeRestrictions(overlayRoot, next, rules);
         } catch (IOException ex) {
             return fail("could not write restrictions: " + ex.getMessage(), current);
+        }
+        return new Outcome(true, false, true, "", next, List.copyOf(messages));
+    }
+
+    /**
+     * Writes the whole settings file (2026-10-22, p1-crates). Crate drops are read from this object on every kill, so
+     * the crate weights are parsed here and an impossible all-zero enabled config is reported in the reply.
+     */
+    private Outcome updateSettings(ProgressionOverlay.Overlay overlay, long revision, JsonObject args) {
+        long current = overlay.settings == null ? 0 : overlay.settings.revision;
+        if (revision != current) {
+            return new Outcome(false, true, false, "", current,
+                    List.of("settings changed while you were editing them; reload them and try again"));
+        }
+        JsonElement settingsArg = args.get("settings");
+        if (settingsArg == null || !settingsArg.isJsonObject()) {
+            return fail("settings must be an object", current);
+        }
+        JsonObject settings = settingsArg.getAsJsonObject().deepCopy();
+        com.kuronami.questtree.progress.LootCrateRules.Settings crates =
+                com.kuronami.questtree.progress.LootCrateRules.settings(settings);
+        List<String> messages = new ArrayList<>();
+        if (crates.enabled() && crates.noDropPassive() == 0 && crates.noDropMonster() == 0
+                && crates.noDropBoss() == 0) {
+            messages.add("loot_crates: every no-drop weight is 0; a kill will always drop a crate that has weight");
+        }
+        long next = current + 1;
+        try {
+            ProgressionOverlay.writeSettings(overlayRoot, next, settings);
+        } catch (IOException ex) {
+            return fail("could not write settings: " + ex.getMessage(), current);
         }
         return new Outcome(true, false, true, "", next, List.copyOf(messages));
     }

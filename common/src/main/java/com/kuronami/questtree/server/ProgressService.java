@@ -1370,7 +1370,7 @@ public final class ProgressService {
 
     // ------------------------------------------------------------------ matching helpers
 
-    static String type(JsonObject o) {
+    public static String type(JsonObject o) {
         return o.has("type") ? o.get("type").getAsString() : "";
     }
 

@@ -4,13 +4,18 @@ import com.kuronami.questtree.block.ModBlockEntities;
 import com.kuronami.questtree.block.ModBlocks;
 import com.kuronami.questtree.block.QuestBarrierBlock;
 import com.kuronami.questtree.block.QuestBarrierBlockEntity;
+import com.kuronami.questtree.block.LootCrateOpenerBlock;
+import com.kuronami.questtree.block.LootCrateOpenerBlockEntity;
 import com.kuronami.questtree.block.QuestTaskBlock;
 import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.EditorSession;
+import com.kuronami.questtree.item.LootCrateItem;
+import com.kuronami.questtree.item.ModDataComponents;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.item.QuestBlockItem;
 import com.kuronami.questtree.item.QuestBookItem;
+import com.kuronami.questtree.server.LootCrates;
 import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
@@ -27,7 +32,11 @@ import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
+import com.mojang.serialization.Codec;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -57,11 +66,15 @@ public class QuestTree {
     private static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(Constants.MOD_ID);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, Constants.MOD_ID);
+    private static final DeferredRegister<DataComponentType<?>> DATA_COMPONENTS =
+            DeferredRegister.create(Registries.DATA_COMPONENT_TYPE, Constants.MOD_ID);
 
     public static final DeferredBlock<QuestTaskBlock> QUEST_TASK_BLOCK = BLOCKS.register("quest_task_block",
             () -> new QuestTaskBlock(BlockBehaviour.Properties.of().strength(1.5F)));
     public static final DeferredBlock<QuestBarrierBlock> QUEST_BARRIER_BLOCK = BLOCKS.register("quest_barrier",
             () -> new QuestBarrierBlock(BlockBehaviour.Properties.of().strength(-1.0F, 3600000.0F).noOcclusion()));
+    public static final DeferredBlock<LootCrateOpenerBlock> LOOT_CRATE_OPENER = BLOCKS.register("loot_crate_opener",
+            () -> new LootCrateOpenerBlock(BlockBehaviour.Properties.of().strength(1.8F)));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuestTaskBlockEntity>> QUEST_TASK_BE =
             BLOCK_ENTITIES.register("quest_task_block", () -> {
@@ -77,6 +90,19 @@ public class QuestTree {
                 ModBlockEntities.setBarrier(type);
                 return type;
             });
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LootCrateOpenerBlockEntity>> LOOT_CRATE_OPENER_BE =
+            BLOCK_ENTITIES.register("loot_crate_opener", () -> {
+                BlockEntityType<LootCrateOpenerBlockEntity> type = BlockEntityType.Builder
+                        .of(LootCrateOpenerBlockEntity::new, LOOT_CRATE_OPENER.get()).build(null);
+                ModBlockEntities.setLootCrateOpener(type);
+                return type;
+            });
+
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<String>> LOOT_CRATE_COMPONENT =
+            DATA_COMPONENTS.register("loot_crate", () -> DataComponentType.<String>builder()
+                    .persistent(Codec.STRING)
+                    .networkSynchronized(ByteBufCodecs.STRING_UTF8)
+                    .build());
 
     public static final DeferredItem<BlockItem> QUEST_TASK_ITEM = ITEMS.register("quest_task_block", () -> {
         BlockItem item = new QuestBlockItem(QUEST_TASK_BLOCK.get(), new Item.Properties(),
@@ -88,6 +114,18 @@ public class QuestTree {
         BlockItem item = new QuestBlockItem(QUEST_BARRIER_BLOCK.get(), new Item.Properties(),
                 "block.kuronami_quest_tree.quest_barrier.desc");
         ModBlocks.setBarrier(QUEST_BARRIER_BLOCK.get(), item);
+        return item;
+    });
+    public static final DeferredItem<BlockItem> LOOT_CRATE_OPENER_ITEM = ITEMS.register("loot_crate_opener", () -> {
+        BlockItem item = new BlockItem(LOOT_CRATE_OPENER.get(), new Item.Properties());
+        ModBlocks.setLootCrateOpener(LOOT_CRATE_OPENER.get(), item);
+        return item;
+    });
+
+    /** The loot crate item. Its table id lives in {@link #LOOT_CRATE_COMPONENT}. */
+    public static final DeferredItem<LootCrateItem> LOOT_CRATE = ITEMS.register("loot_crate", () -> {
+        LootCrateItem item = new LootCrateItem(new Item.Properties());
+        ModItems.setLootCrate(item);
         return item;
     });
 
@@ -103,11 +141,15 @@ public class QuestTree {
         BLOCKS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
         ITEMS.register(modBus);
+        DATA_COMPONENTS.register(modBus);
+        ModDataComponents.setLootCrate(LOOT_CRATE_COMPONENT);
         modBus.addListener((net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent e) -> {
             if (e.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
                 e.accept(QUEST_BOOK);
                 e.accept(QUEST_TASK_ITEM);
                 e.accept(QUEST_BARRIER_ITEM);
+                e.accept(LOOT_CRATE_OPENER_ITEM);
+                e.accept(LOOT_CRATE);
             }
         });
         modBus.addListener(QuestTree::registerPayloads);
@@ -141,6 +183,12 @@ public class QuestTree {
             }
         });
         // a restricted block is refused before it breaks; the counting listener below only sees breaks that happen
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.living.LivingDropsEvent e) -> {
+            if (!e.getEntity().level().isClientSide()
+                    && e.getEntity().level() instanceof net.minecraft.server.level.ServerLevel level) {
+                LootCrates.onLivingDrops(level, e.getEntity(), e.getDrops());
+            }
+        });
         NeoForge.EVENT_BUS.addListener((BlockEvent.BreakEvent e) -> {
             if (e.getPlayer() instanceof ServerPlayer sp && Restrictions.blockedBreak(sp, e.getState())) {
                 e.setCanceled(true);
@@ -181,8 +229,11 @@ public class QuestTree {
         // version is bumped when a payload changes shape (2: ActionPayload gained its choice field; 3: the editor
         // gained its state payload; 4: the team view; 5: quest givers; 6: non-chat cues and restriction tooltips), so
         // an older client fails the handshake instead of silently missing a feature.
-        var r = event.registrar("6");
+        var r = event.registrar("7");
         r.playToClient(SyncPayload.TYPE, SyncPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onSync(payload));
+        r.playToClient(com.kuronami.questtree.network.CrateLootPayload.TYPE,
+                com.kuronami.questtree.network.CrateLootPayload.STREAM_CODEC,
+                (payload, context) -> ClientProgress.onCrateLoot(payload));
         r.playToClient(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onProgress(payload));
         r.playToClient(OpenPayload.TYPE, OpenPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onOpen(payload));
         r.playToClient(TeamPayload.TYPE, TeamPayload.STREAM_CODEC, (payload, context) -> com.kuronami.questtree.client.ClientTeam.onTeam(payload));

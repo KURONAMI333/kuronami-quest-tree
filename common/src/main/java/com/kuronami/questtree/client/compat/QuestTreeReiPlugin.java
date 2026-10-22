@@ -27,13 +27,16 @@ public class QuestTreeReiPlugin implements REIClientPlugin {
     @Override
     public void registerCategories(CategoryRegistry registry) {
         registry.add(new QuestViewerReiCategory());
+        registry.add(new CrateViewerReiCategory());
         registry.addWorkstations(QuestViewerReiCategory.ID, EntryStacks.of(QuestViewerRecipe.book()));
     }
 
     @Override
     public void registerDisplays(DisplayRegistry registry) {
         DisplaySerializerRegistry.getInstance().registerNotSerializable(QuestViewerReiCategory.ID);
+        DisplaySerializerRegistry.getInstance().registerNotSerializable(CrateViewerReiCategory.ID);
         registry.registerGlobalDisplayGenerator(new QuestViewerReiGenerator());
+        registry.registerGlobalDisplayGenerator(new CrateViewerReiGenerator());
     }
 
     @Override

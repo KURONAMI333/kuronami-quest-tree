@@ -4,6 +4,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.ProgressScreen;
 import com.kuronami.questtree.client.QuestViewerStyle;
+import com.kuronami.questtree.client.viewer.QuestViewerData;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Hit;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Kind;
@@ -146,7 +147,29 @@ public final class QuestViewerRecipe {
                 "quest/" + key + "/" + kind + "/" + hit.need().index() + "/" + Integer.toHexString(hash));
     }
 
-    private static List<ItemStack> stacksOf(Need need) {
+    /** The display stacks of one reward table entry, used by the crate preview. */
+    public static List<ItemStack> stacksOfReward(com.google.gson.JsonObject reward) {
+        if (reward == null) {
+            return List.of();
+        }
+        String type = QuestViewerData.string(reward, "type");
+        if (!type.isEmpty() && !type.equals("item")) {
+            return List.of();
+        }
+        com.google.gson.JsonElement item = reward.get("item");
+        if (item == null || item.isJsonNull()) {
+            return List.of();
+        }
+        Spec spec = QuestViewerData.specOf(item);
+        if (spec.id().isEmpty()) {
+            return List.of();
+        }
+        Need need = new Need(Kind.REWARD, spec, Math.max(1, QuestViewerData.countOf(item)), "", "", 0,
+                false, false, item.isJsonObject() ? item.toString() : "", "");
+        return stacksOf(need);
+    }
+
+    public static List<ItemStack> stacksOf(Need need) {
         Spec spec = need.spec();
         if (spec == null || spec.id().isEmpty()) {
             return List.of();

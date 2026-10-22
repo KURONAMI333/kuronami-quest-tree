@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "kuronami_quest_tree:block/loot_crate_opener"
+    }
+  }
+}

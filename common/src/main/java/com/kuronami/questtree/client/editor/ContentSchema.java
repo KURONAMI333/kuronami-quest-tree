@@ -339,7 +339,14 @@ public final class ContentSchema {
         return List.of(
                 FieldSpec.integer("rolls", P + "rolls"),
                 FieldSpec.decimal("empty_weight", P + "empty_weight"),
-                FieldSpec.flag("loot_crate", P + "loot_crate"));
+                FieldSpec.flag("loot_crate", P + "loot_crate"),
+                FieldSpec.text("loot_crate.string_id", P + "loot_crate.string_id"),
+                FieldSpec.text("loot_crate.item_name", P + "loot_crate.item_name"),
+                FieldSpec.text("loot_crate.color", P + "loot_crate.color"),
+                FieldSpec.bool("loot_crate.glow", P + "loot_crate.glow"),
+                FieldSpec.integer("loot_crate.drops.passive", P + "loot_crate.drops.passive"),
+                FieldSpec.integer("loot_crate.drops.monster", P + "loot_crate.drops.monster"),
+                FieldSpec.integer("loot_crate.drops.boss", P + "loot_crate.drops.boss"));
     }
 
     /** One entry of a table: its weight, then the reward's own type and fields under {@code reward}. */

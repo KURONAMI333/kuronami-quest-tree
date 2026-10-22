@@ -9,8 +9,10 @@ public final class ModBlocks {
 
     private static Block taskBlock;
     private static Block barrierBlock;
+    private static Block lootCrateOpener;
     private static Item taskItem;
     private static Item barrierItem;
+    private static Item lootCrateOpenerItem;
 
     private ModBlocks() {
     }
@@ -25,6 +27,11 @@ public final class ModBlocks {
         barrierItem = item;
     }
 
+    public static void setLootCrateOpener(Block block, Item item) {
+        lootCrateOpener = block;
+        lootCrateOpenerItem = item;
+    }
+
     public static Block taskBlock() {
         return taskBlock;
     }
@@ -33,12 +40,20 @@ public final class ModBlocks {
         return barrierBlock;
     }
 
+    public static Block lootCrateOpener() {
+        return lootCrateOpener;
+    }
+
     public static Item taskItem() {
         return taskItem;
     }
 
     public static Item barrierItem() {
         return barrierItem;
+    }
+
+    public static Item lootCrateOpenerItem() {
+        return lootCrateOpenerItem;
     }
 
     public static ItemStack taskItem(String node) {

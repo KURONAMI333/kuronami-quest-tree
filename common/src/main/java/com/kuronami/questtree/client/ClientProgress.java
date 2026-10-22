@@ -94,10 +94,14 @@ public final class ClientProgress {
                 com.google.gson.JsonArray nextRestrictions = bundle.has("restrictions")
                         && bundle.get("restrictions").isJsonArray()
                         ? bundle.getAsJsonArray("restrictions").deepCopy() : new com.google.gson.JsonArray();
+                com.google.gson.JsonObject nextSettings = bundle.has("settings")
+                        && bundle.get("settings").isJsonObject()
+                        ? bundle.getAsJsonObject("settings").deepCopy() : new com.google.gson.JsonObject();
                 // a filter's items come from the tags this server sent, so items worked out for another world are dropped
                 com.kuronami.questtree.progress.ItemFilter.clearCache();
                 sync = new SyncState<>(nextModel, nextRules, nextChapters, nextTables, nextDeleted);
                 restrictions = nextRestrictions;
+                settings = nextSettings;
                 EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
@@ -116,6 +120,11 @@ public final class ClientProgress {
             }
             buffer = null;
         }
+    }
+
+    /** A crate was opened: show its loot in the same kind of screen FTB Quests uses. */
+    public static void onCrateLoot(com.kuronami.questtree.network.CrateLootPayload p) {
+        Minecraft.getInstance().setScreen(new CrateLootScreen(p.items()));
     }
 
     /** A quest giver, a quest block or an addon asked the server to open the book on one target. */
@@ -173,6 +182,7 @@ public final class ClientProgress {
 
     /** The restrictions array of the last bundle; replaced whole, so no other sync state has to know about it. */
     private static com.google.gson.JsonArray restrictions = new com.google.gson.JsonArray();
+    private static com.google.gson.JsonObject settings = new com.google.gson.JsonObject();
 
     public static ProgressRules rules() {
         return sync.rules();
@@ -213,6 +223,10 @@ public final class ClientProgress {
     }
 
     /** The restriction rules as the server last sent them (pack plus the writable restrictions file). */
+    public static com.google.gson.JsonObject rawSettings() {
+        return settings.deepCopy();
+    }
+
     public static com.google.gson.JsonArray rawRestrictions() {
         return restrictions.deepCopy();
     }

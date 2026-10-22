@@ -67,6 +67,21 @@ public final class ProgressModel {
         return m;
     }
 
+    /**
+     * A node that exists only while one crate entry is paid. Loot crate entries are rewards without a quest, but the
+     * reward pay-out still needs a node for attribute slots, points chapters and custom reward callbacks.
+     */
+    public static Node crateNode(String tableId, JsonObject reward) {
+        JsonObject node = new JsonObject();
+        JsonArray rewards = new JsonArray();
+        rewards.add(reward);
+        node.add("rewards", rewards);
+        Chapter chapter = new Chapter("kuronami_quest_tree:crates", new JsonObject());
+        String id = tableId == null ? "table" : tableId.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^a-z0-9_./-]", "_");
+        return new Node(chapter, id, node);
+    }
+
     public static final class Chapter {
         public final String id;
         public final String namespace;

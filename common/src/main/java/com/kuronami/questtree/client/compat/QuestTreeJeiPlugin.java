@@ -38,7 +38,8 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
 
     @Override
     public void registerCategories(IRecipeCategoryRegistration registration) {
-        registration.addRecipeCategories(new QuestViewerJeiCategory(registration.getJeiHelpers().getGuiHelper()));
+        registration.addRecipeCategories(new QuestViewerJeiCategory(registration.getJeiHelpers().getGuiHelper()),
+                new CrateViewerJeiCategory(registration.getJeiHelpers().getGuiHelper()));
     }
 
     /**
@@ -129,11 +130,17 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
 
         @Override
         public <T, V> List<T> getRecipes(IRecipeCategory<T> category, IFocus<V> focus) {
-            if (!(category instanceof QuestViewerJeiCategory)) {
-                return List.of();
-            }
             Object ingredient = focus.getTypedValue().getIngredient();
             if (!(ingredient instanceof ItemStack stack) || stack.isEmpty()) {
+                return List.of();
+            }
+            if (category instanceof CrateViewerJeiCategory) {
+                if (focus.getRole() == RecipeIngredientRole.CATALYST) {
+                    return stack.is(CrateViewerJeiCategory.iconStack().getItem()) ? crateRecipes() : List.of();
+                }
+                return crateRecipes(stack);
+            }
+            if (!(category instanceof QuestViewerJeiCategory)) {
                 return List.of();
             }
             if (focus.getRole() == RecipeIngredientRole.CATALYST) {
@@ -151,6 +158,9 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
 
         @Override
         public <T> List<T> getRecipes(IRecipeCategory<T> category) {
+            if (category instanceof CrateViewerJeiCategory) {
+                return crateRecipes();
+            }
             return category instanceof QuestViewerJeiCategory ? all() : List.of();
         }
 
@@ -161,8 +171,11 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
                 return List.of();
             }
             if (focus.getRole() == RecipeIngredientRole.CATALYST) {
-                return stack.is(QuestViewerRecipe.book().getItem())
-                        ? List.of(QuestViewerJeiCategory.TYPE) : List.of();
+                if (stack.is(QuestViewerRecipe.book().getItem())) {
+                    return List.of(QuestViewerJeiCategory.TYPE);
+                }
+                return stack.is(CrateViewerJeiCategory.iconStack().getItem())
+                        ? List.of(CrateViewerJeiCategory.TYPE) : List.of();
             }
             var index = QuestViewerData.index();
             var query = QuestViewerData.query(stack);
@@ -170,10 +183,17 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             if (role != RecipeIngredientRole.INPUT && role != RecipeIngredientRole.OUTPUT) {
                 return List.of();
             }
+            List<RecipeType<?>> types = new java.util.ArrayList<>(2);
             // RENDER_ONLY and other roles are not a lookup in this category: only a real input/output focuses it
             boolean has = role == RecipeIngredientRole.INPUT
                     ? !index.uses(query).isEmpty() : !index.rewards(query).isEmpty();
-            return has ? List.of(QuestViewerJeiCategory.TYPE) : List.of();
+            if (has) {
+                types.add(QuestViewerJeiCategory.TYPE);
+            }
+            if (!CrateViewerData.matching(stack).isEmpty()) {
+                types.add(CrateViewerJeiCategory.TYPE);
+            }
+            return types;
         }
 
         @SuppressWarnings("unchecked")
@@ -192,6 +212,16 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
                     .map(QuestViewerRecipe::new)
                     .filter(recipe -> !recipe.stacks().isEmpty())
                     .toList();
+        }
+
+        @SuppressWarnings("unchecked")
+        private static <T> List<T> crateRecipes() {
+            return (List<T>) CrateViewerData.all();
+        }
+
+        @SuppressWarnings("unchecked")
+        private static <T> List<T> crateRecipes(ItemStack stack) {
+            return (List<T>) CrateViewerData.matching(stack);
         }
     }
 }

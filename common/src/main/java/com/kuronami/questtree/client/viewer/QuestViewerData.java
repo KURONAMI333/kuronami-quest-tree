@@ -108,6 +108,8 @@ public final class QuestViewerData {
         all = List.copyOf(quests);
         generation++;
         apply();
+        // a table can gain or lose crate settings without changing a quest's item list, so EMI must reload anyway
+        notifyViewers();
     }
 
     /** Re-applies hidden/secret rules after progress moved, without walking the bundle again. */
@@ -119,11 +121,8 @@ public final class QuestViewerData {
         all = List.of();
         generation++;
         VISIBLE.reset();
-        Index previous = index;
         index = Index.empty();
-        if (!previous.signature().equals(index.signature())) {
-            notifyViewers();
-        }
+        notifyViewers();
     }
 
     /**
@@ -268,7 +267,7 @@ public final class QuestViewerData {
                 matchMode));
     }
 
-    private static Spec specOf(JsonElement item) {
+    public static Spec specOf(JsonElement item) {
         if (item == null || item.isJsonNull()) {
             return Spec.item("");
         }
@@ -287,7 +286,7 @@ public final class QuestViewerData {
                 ? Spec.item(object.get("id").getAsString()) : Spec.item("");
     }
 
-    private static long countOf(JsonElement item) {
+    public static long countOf(JsonElement item) {
         return item != null && item.isJsonObject()
                 ? Math.max(1, PackNumbers.intOr(item.getAsJsonObject().get("count"), 1)) : 1;
     }
@@ -328,7 +327,7 @@ public final class QuestViewerData {
         return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
 
-    private static String string(JsonObject object, String key) {
+    public static String string(JsonObject object, String key) {
         return object != null && object.has(key) && object.get(key).isJsonPrimitive()
                 ? object.get(key).getAsString() : "";
     }
