@@ -3924,6 +3924,17 @@ public class ProgressScreen extends Screen {
         }
     }
 
+    /** Dev tour only: open the link picker for a node, the way the edit menu's "link to" entry does. */
+    void tourOpenLinkPicker(String chapterId, String nodeId) {
+        ClientModel m = model();
+        ClientModel.Chapter ch = m == null ? null : m.chapters.stream()
+                .filter(c -> c.id.equals(chapterId)).findFirst().orElse(null);
+        ClientModel.Node from = ch == null ? null : ch.nodes.get(nodeId);
+        if (ch != null && from != null) {
+            openLinkPicker(ch, from);
+        }
+    }
+
     /** Dev tour only: open one chapter's settings screen. */
     void tourOpenChapterEditor(String chapterId) {
         ClientModel m = model();

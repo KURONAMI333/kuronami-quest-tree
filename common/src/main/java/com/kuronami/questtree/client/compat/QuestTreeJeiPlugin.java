@@ -86,6 +86,16 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
 
             @Override
+            public void showCrates() {
+                List<CrateViewerData.Recipe> recipes = CrateViewerData.all();
+                if (recipes.isEmpty()) {
+                    return;
+                }
+                runtime.getRecipesGui().showRecipes(
+                        runtime.getRecipeManager().getRecipeCategory(CrateViewerJeiCategory.TYPE), recipes, List.of());
+            }
+
+            @Override
             public boolean typing() {
                 return runtime.getIngredientListOverlay().hasKeyboardFocus();
             }

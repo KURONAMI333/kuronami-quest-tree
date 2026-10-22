@@ -5,15 +5,21 @@ import com.kuronami.questtree.progress.ProgressRules.State;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.DeathScreen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -492,7 +498,103 @@ final class DevTour {
             }
         });
         shot(et + 217, "48_viewer_uses");
-        at(et + 219, () -> {
+        // the tools FTB Quests has and the book shows only in their own places (2026-10-22, pack-tool photos):
+        // a loot crate, the crate category in the viewer, the task screens, the detector, then the pack-side rows
+        // the editor draws. The world photos build their own platform in the sky and put the world back afterwards.
+        int qt = et + 219;
+        cmd(qt, "item replace entity @s weapon.mainhand with "
+                + "kuronami_quest_tree:loot_crate[kuronami_quest_tree:loot_crate=\"aa_devtour:crate\"]");
+        at(qt + 4, () -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.gameMode == null) {
+                Constants.LOG.warn("Dev tour: no player to open the crate with");
+                return;
+            }
+            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+        });
+        shot(qt + 8, "49_crate_loot");
+        // the crate in the recipe viewer's own category: the crate, its table and every reward it can roll
+        at(qt + 10, () -> {
+            Minecraft.getInstance().setScreen(null);
+            RecipeViewer viewer = RecipeViewer.Holder.get();
+            if (viewer == null) {
+                Constants.LOG.warn("Dev tour: no recipe viewer for the crate category photo");
+                return;
+            }
+            viewer.showCrates();
+        });
+        shot(qt + 18, "50_viewer_crates");
+        at(qt + 20, () -> Minecraft.getInstance().setScreen(null));
+        at(qt + 24, DevTour::worldBuild);
+        shot(qt + 44, "51_task_screens");
+        at(qt + 46, DevTour::worldApproachConfigurator);
+        at(qt + 50, DevTour::worldUseConfigurator);
+        shot(qt + 58, "52_screen_picker");
+        at(qt + 60, () -> Minecraft.getInstance().setScreen(null));
+        at(qt + 62, DevTour::worldPlaceDetector);
+        at(qt + 66, DevTour::worldPowerDetector);
+        shot(qt + 106, "53_detector");
+        at(qt + 108, DevTour::worldCleanup);
+        // the pack's own guide address, the row the settings screen adds from settings.json
+        at(qt + 112, () -> {
+            ClientConfig.textScale = 1.2f;
+            Ui.textScale = 1.2f;
+            Minecraft.getInstance().setScreen(new SettingsScreen(null));
+        });
+        shot(qt + 116, "54_settings_guide");
+        at(qt + 118, () -> {
+            ClientConfig.textScale = textScaleBefore;
+            Ui.textScale = textScaleBefore;
+            Minecraft.getInstance().setScreen(null);
+            openId("aa_devtour:parity");
+        });
+        // a closed quest's lock mark, next to the per-quest switch that hides it
+        at(qt + 120, () -> ProgressScreen.tourRailOpen(false));
+        shot(qt + 122, "55_lock_icons");
+        // a quest with guide_page: its details sheet carries the guide button
+        at(qt + 124, () -> onScreen("56_guide_button", s -> s.tourSelect("aa_devtour:parity/guided")));
+        shot(qt + 130, "56_guide_button");
+        // the map's changelog of the edits other operators made in this session
+        at(qt + 132, () -> {
+            EditorChangelog.clear();
+            openId("aa_devtour:showcase");
+        });
+        at(qt + 134, () -> {
+            long now = net.minecraft.Util.getMillis();
+            EditorChangelog.add("create_node", "aa_devtour:showcase", "second", 1, "", "delete_node", now);
+            EditorChangelog.add("link", "aa_devtour:showcase", "second", 1, "unlink", "", now);
+            EditorChangelog.add("delete_node", "aa_devtour:showcase", "", 3, "restore_node", "", now);
+            EditorChangelog.add("move_node", "aa_devtour:showcase", "rich", 2, "move_node", "move_node", now);
+        });
+        shot(qt + 136, "57_editor_changelog");
+        // one size for a whole selection
+        at(qt + 138, () -> Minecraft.getInstance().setScreen(
+                new BulkSizeScreen(null, "aa_devtour:parity", List.of("screens", "guided", "guarded", "blocked"))));
+        shot(qt + 142, "58_bulk_size");
+        // a reward table's screen: its fields up top, then the quests that roll it
+        at(qt + 144, () -> Minecraft.getInstance().setScreen(new TableEditScreen(null, "aa_devtour:crate", false)));
+        shot(qt + 148, "59_table_used_by");
+        // a chapter's image card, at the bottom of its settings
+        at(qt + 150, () -> Minecraft.getInstance().setScreen(new ChapterEditScreen(null, "aa_devtour:parity")));
+        at(qt + 152, () -> {
+            if (Minecraft.getInstance().screen instanceof EditorScreen s) {
+                s.tourScrollEnd();
+            }
+        });
+        shot(qt + 156, "60_chapter_image");
+        // the picker behind the map's "link to" entry
+        at(qt + 158, () -> {
+            Minecraft.getInstance().setScreen(null);
+            openId("aa_devtour:parity");
+        });
+        at(qt + 160, () -> onScreen("61_link_picker", s -> s.tourOpenLinkPicker("aa_devtour:parity", "screens")));
+        shot(qt + 164, "61_link_picker");
+        // a locale's translation screen: every key the pack's English file has, unset in this one
+        at(qt + 166, () -> Minecraft.getInstance().setScreen(new TranslationEditScreen(null, "ja_jp")));
+        shot(qt + 170, "62_translation");
+        at(qt + 172, () -> Minecraft.getInstance().setScreen(null));
+        at(qt + 200, () -> {
+            worldCleanup();
             Ui.clearCornerRadius();
             Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
@@ -561,6 +663,145 @@ final class DevTour {
         ClientModel.Task task = n.tasks.get(0);
         long count = Math.max(1, Math.round(task.count * share));
         Minecraft.getInstance().player.connection.sendCommand("give @s " + BuiltInRegistries.ITEM.getKey(task.item.getItem()) + " " + count);
+    }
+
+    // ---- the pack-tool photos' world side (2026-10-22, parity dev tour) ----
+    // The task screens and the detector are blocks a photo has to stand in front of, so the tour builds a platform
+    // high over the player's own chunk (nothing there to overwrite), teleports there for the shots and puts the
+    // player, the world's time and every block it placed back when the tour leaves.
+
+    private static final int TOUR_FLOOR_Y = 260;
+    private static final int TOUR_DETECTOR_RADIUS = 16;
+
+    private static double tourHomeX;
+    private static double tourHomeY;
+    private static double tourHomeZ;
+    private static float tourHomeYaw;
+    private static float tourHomePitch;
+    private static long tourHomeDayTime;
+    private static int tourCx;
+    private static int tourCz;
+    private static boolean tourHomeSet;
+
+    private static void cmdNow(String command) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.connection.sendCommand(command);
+        }
+    }
+
+    private static String fmt(double value) {
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    /** A player UUID as the four-int array the block entity's own {@code putUUID} writes. */
+    private static String ownerTag(UUID id) {
+        long hi = id.getMostSignificantBits();
+        long lo = id.getLeastSignificantBits();
+        return "[I;" + (int) (hi >> 32) + "," + (int) hi + "," + (int) (lo >> 32) + "," + (int) lo + "]";
+    }
+
+    /** Stands in front of the screen row, so the one at {@code dx} blocks across is centred with {@code dz} to look along. */
+    private static void standAt(double dx, double dz, double targetX, double targetZ) {
+        double px = tourCx + dx;
+        double pz = tourCz + dz;
+        double yaw = Math.toDegrees(Math.atan2(-(targetX - px), targetZ - pz));
+        cmdNow("tp @s " + fmt(px) + " " + (TOUR_FLOOR_Y + 1) + " " + fmt(pz) + " " + fmt(yaw) + " 0.0");
+    }
+
+    private static void worldBuild() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) {
+            return;
+        }
+        if (!tourHomeSet) {
+            tourHomeX = mc.player.getX();
+            tourHomeY = mc.player.getY();
+            tourHomeZ = mc.player.getZ();
+            tourHomeYaw = mc.player.getYRot();
+            tourHomePitch = mc.player.getXRot();
+            tourHomeDayTime = mc.level.getDayTime();
+            tourCx = (int) Math.floor(tourHomeX);
+            tourCz = (int) Math.floor(tourHomeZ);
+            tourHomeSet = true;
+        }
+        int cx = tourCx;
+        int cz = tourCz;
+        int y = TOUR_FLOOR_Y;
+        String owner = ownerTag(mc.player.getUUID());
+        cmdNow("time set day");
+        cmdNow("fill " + (cx - 14) + " " + y + " " + (cz - 16) + " " + (cx + 13) + " " + y + " " + (cz + 2)
+                + " minecraft:polished_deepslate");
+        // one core per size, all with the bottom of the drawn face on the floor, so the sizes line up
+        int[][] screens = {
+                {cx - 11, y + 1, 1, 0, 3},
+                {cx - 7, y + 3, 3, 1, 8},
+                {cx - 1, y + 5, 5, 2, 20},
+                {cx + 7, y + 7, 7, 3, 61},
+        };
+        for (int[] s : screens) {
+            cmdNow("setblock " + s[0] + " " + s[1] + " " + cz
+                    + " kuronami_quest_tree:task_screen_" + s[2] + "[facing=south]");
+            cmdNow("data merge block " + s[0] + " " + s[1] + " " + cz
+                    + " {node:\"aa_devtour:parity/screens\",task:" + s[3] + ",owner:" + owner + "}");
+            cmdNow("quest_tree progress @s aa_devtour:parity/screens " + (s[3] + 1) + " " + s[4]);
+        }
+        standAt(0, -13, cx, cz);
+    }
+
+    private static void worldApproachConfigurator() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || !tourHomeSet) {
+            return;
+        }
+        cmdNow("item replace entity @s weapon.mainhand with kuronami_quest_tree:task_screen_configurator");
+        standAt(-11, -3, tourCx - 11, tourCz);
+    }
+
+    private static void worldUseConfigurator() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.gameMode == null || mc.level == null || !tourHomeSet) {
+            return;
+        }
+        BlockPos core = new BlockPos(tourCx - 11, TOUR_FLOOR_Y + 1, tourCz);
+        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
+                new BlockHitResult(Vec3.atCenterOf(core), Direction.NORTH, core, false));
+    }
+
+    private static void worldPlaceDetector() {
+        if (!tourHomeSet) {
+            return;
+        }
+        int cx = tourCx;
+        int cz = tourCz;
+        int y = TOUR_FLOOR_Y;
+        // back to the start of the first task, so the detector's pulse is what completes it
+        cmdNow("quest_tree progress @s aa_devtour:parity/screens 1 0");
+        cmdNow("setblock " + (cx - 9) + " " + (y + 1) + " " + cz + " kuronami_quest_tree:quest_detector");
+        cmdNow("data merge block " + (cx - 9) + " " + (y + 1) + " " + cz
+                + " {target:\"aa_devtour:parity/screens#0\",radius:" + TOUR_DETECTOR_RADIUS + "}");
+        standAt(-5, -6, cx - 9, cz);
+    }
+
+    private static void worldPowerDetector() {
+        if (!tourHomeSet) {
+            return;
+        }
+        cmdNow("setblock " + (tourCx - 9) + " " + (TOUR_FLOOR_Y + 2) + " " + tourCz + " minecraft:redstone_block");
+    }
+
+    /** Every block the photos placed, the world's time and the player's own place back. */
+    private static void worldCleanup() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !tourHomeSet) {
+            return;
+        }
+        cmdNow("fill " + (tourCx - 15) + " " + (TOUR_FLOOR_Y - 1) + " " + (tourCz - 17)
+                + " " + (tourCx + 14) + " " + (TOUR_FLOOR_Y + 10) + " " + (tourCz + 3) + " minecraft:air");
+        cmdNow("time set " + tourHomeDayTime);
+        cmdNow("tp @s " + fmt(tourHomeX) + " " + fmt(tourHomeY) + " " + fmt(tourHomeZ)
+                + " " + fmt(tourHomeYaw) + " " + fmt(tourHomePitch));
+        tourHomeSet = false;
     }
 
     private static void shot(String name) {
