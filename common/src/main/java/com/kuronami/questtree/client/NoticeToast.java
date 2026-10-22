@@ -5,7 +5,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.util.List;
@@ -13,7 +12,6 @@ import java.util.List;
 /** A short gameplay notice in the vanilla advancement frame: an icon and at most two lines, never chat. */
 final class NoticeToast implements Toast, OwnSoundToast {
 
-    private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("toast/advancement");
     private static final long SHOW = 3200;
 
     private final String icon;
@@ -36,7 +34,7 @@ final class NoticeToast implements Toast, OwnSoundToast {
 
     @Override
     public Visibility render(GuiGraphics g, ToastComponent toasts, long time) {
-        g.blitSprite(BACKGROUND, 0, 0, width(), height());
+        Ui.toastFrame(g, width(), height());
         Tiles.icon(g, icon, 7, 8, 16, "gift".equals(icon) ? Tiles.GOLD : Ui.MUTED);
         var font = toasts.getMinecraft().font;
         int room = width() - 38;

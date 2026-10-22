@@ -143,7 +143,7 @@ final class EditForm {
             int thumb = Math.max(12, (int) (vh * ratio));
             int ty = vy + (int) ((vh - thumb) * (scroll / maxScroll()));
             boolean over = mouseX >= vx + vw - 5 && mouseX < vx + vw && mouseY >= vy && mouseY < vy + vh;
-            Ui.surface(g, vx + vw - 4, ty, 3, thumb, 2, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
+            Ui.surface(g, vx + vw - 4, ty, 3, thumb, Ui.CORNER, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
         }
     }
 
@@ -377,8 +377,8 @@ final class EditForm {
         private void renderToggle(GuiGraphics g, int cx, int y, int mx, int my) {
             boolean on = on();
             boolean over = inside(mx, my, cx, y + 3, 26, 12);
-            Ui.surface(g, cx, y + 3, 26, 12, 6, on ? Ui.ACCENT : over ? Ui.OVERLAY_3 : Ui.OVERLAY_2);
-            Ui.surface(g, on ? cx + 15 : cx + 3, y + 5, 8, 8, 4, Ui.BRIGHT);
+            Ui.surface(g, cx, y + 3, 26, 12, Ui.CORNER, on ? Ui.ACCENT : over ? Ui.OVERLAY_3 : Ui.OVERLAY_2);
+            Ui.surface(g, on ? cx + 15 : cx + 3, y + 5, 8, 8, Ui.CORNER, Ui.BRIGHT);
         }
 
         private Component optionText(String id) {

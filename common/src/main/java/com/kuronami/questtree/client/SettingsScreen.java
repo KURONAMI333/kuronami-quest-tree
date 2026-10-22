@@ -380,8 +380,8 @@ public final class SettingsScreen extends Screen {
             int track = h - 8;
             int knobH = Math.max(12, Math.round(track * h / (float) contentHeight()));
             int knobY = listTop + Math.round((track - knobH) * (scroll / maxScroll()));
-            Ui.surface(g, x + PANEL_W - 4, listTop, 2, track, 1, Ui.OVERLAY_2);
-            Ui.surface(g, x + PANEL_W - 4, knobY, 2, knobH, 1, Ui.MUTED);
+            Ui.surface(g, x + PANEL_W - 4, listTop, 2, track, Ui.CORNER, Ui.OVERLAY_2);
+            Ui.surface(g, x + PANEL_W - 4, knobY, 2, knobH, Ui.CORNER, Ui.MUTED);
         }
     }
 

@@ -55,5 +55,8 @@
   "hud_tracker": "#B3111214",
   "hud_tracker_edge": "#B3383838",
   "hud_tracker_edge_bottom": "#B3242424",
-  "toast_track": "#FF2A2A2A"
+  "toast_track": "#FF2A2A2A",
+  "toast_fill": "#FF212121",
+  "toast_edge": "#FF555555",
+  "corner_radius": 2
 }

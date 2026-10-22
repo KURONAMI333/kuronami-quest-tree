@@ -497,6 +497,9 @@ public final class GlassPanel {
     /** Nine-slices the corner mask, which cuts the slab's coverage outside the rounded corners. */
     private static void mask(int pw, int ph, double scale, int radiusGui) {
         double r = Math.min(radiusGui * scale, Math.min(pw, ph) * 0.5);
+        if (r < 0.5) {
+            return; // square: the slab already covers the whole rectangle
+        }
         double sx0 = r / pw;
         double sy0 = r / ph;
         double[] dx = {0.0, sx0, 1.0 - sx0, 1.0};

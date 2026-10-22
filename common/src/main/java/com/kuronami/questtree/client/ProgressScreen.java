@@ -948,9 +948,9 @@ public class ProgressScreen extends Screen {
         }
         int fx = 4 + Ui.S1;
         int fw = w - 2 * Ui.S1;
-        Ui.surface(g, fx, y, fw, SEARCH_H, SEARCH_H / 2, Ui.OVERLAY_1);
+        Ui.surface(g, fx, y, fw, SEARCH_H, Ui.CORNER, Ui.OVERLAY_1);
         if (railBox.isFocused()) {
-            Ui.outline(g, fx, y, fw, SEARCH_H, SEARCH_H / 2, Ui.FOCUS);
+            Ui.outline(g, fx, y, fw, SEARCH_H, Ui.CORNER, Ui.FOCUS);
         }
         int ix = fx + Ui.S1;
         Tiles.icon(g, "search", ix, y + (SEARCH_H - RAIL_ICON) / 2f, RAIL_ICON,
@@ -1126,7 +1126,7 @@ public class ProgressScreen extends Screen {
                 int thumb = Math.max(12, Math.round(h * h / content));
                 int ty = top + Math.round((h - thumb) * (railScroll / max));
                 boolean over = mouseX < 4 + w && mouseX >= 4 && mouseY >= top && mouseY < bottom;
-                Ui.surface(g, 4 + w - 5, ty, 2, thumb, 1, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
+                Ui.surface(g, 4 + w - 5, ty, 2, thumb, Ui.CORNER, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
             }
             g.pose().popPose();
         }
@@ -1253,9 +1253,9 @@ public class ProgressScreen extends Screen {
                          String right, boolean locked) {
         boolean on = index == chapterIndex;
         if ((on || hover) && !locked) {
-            Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, hgt, hgt / 2, on ? Ui.ACCENT : Ui.OVERLAY_1);
+            Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, hgt, Ui.CORNER, on ? Ui.ACCENT : Ui.OVERLAY_1);
         } else if (hover) {
-            Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, hgt, hgt / 2, Ui.OVERLAY_1);
+            Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, hgt, Ui.CORNER, Ui.OVERLAY_1);
         }
         g.pose().pushPose();
         g.pose().translate(RAIL_ICON_X, y + (hgt - RAIL_ICON) / 2f, 0);
@@ -1325,7 +1325,7 @@ public class ProgressScreen extends Screen {
         if (railT > 0.6f) {
             int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
             if (hover) {
-                Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, HEADER_H, HEADER_H / 2, Ui.OVERLAY_1);
+                Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, HEADER_H, Ui.CORNER, Ui.OVERLAY_1);
             }
             int color = ((hover ? Ui.TEXT : Ui.DIM) & 0xFFFFFF) | alpha;
             foldMark(g, RAIL_ICON_X + (RAIL_ICON - FOLD) / 2f, y + (HEADER_H - FOLD) / 2f, shut, color);
@@ -1814,7 +1814,7 @@ public class ProgressScreen extends Screen {
             g.drawString(font, title, tx, ty, Ui.BRIGHT, true);
             boolean sover = mouseX >= sx && mouseX < sx + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
             if (sover) {
-                Ui.surface(g, sx, py, pin, pin, pin / 2, Ui.OVERLAY_1);
+                Ui.surface(g, sx, py, pin, pin, Ui.CORNER, Ui.OVERLAY_1);
                 pendingTip = List.of(Component.translatable("screen.kuronami_quest_tree.search"));
             }
             Tiles.icon(g, "search", sx + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH,
@@ -1829,7 +1829,7 @@ public class ProgressScreen extends Screen {
             boolean on = EditorSession.active();
             boolean eover = mouseX >= ex && mouseX < ex + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
             if (on || eover) {
-                Ui.surface(g, ex, py, pin, pin, pin / 2, on ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
+                Ui.surface(g, ex, py, pin, pin, Ui.CORNER, on ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
             }
             if (eover) {
                 pendingTip = List.of(Component.translatable(on ? "screen.kuronami_quest_tree.editing.on"
@@ -1848,7 +1848,7 @@ public class ProgressScreen extends Screen {
         boolean pinned = ClientConfig.railPinned(ch.id);
         boolean over = mouseX >= px && mouseX < px + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
         if (over) {
-            Ui.surface(g, px, py, pin, pin, pin / 2, Ui.OVERLAY_1);
+            Ui.surface(g, px, py, pin, pin, Ui.CORNER, Ui.OVERLAY_1);
             pendingTip = List.of(Component.translatable(pinned ? "screen.kuronami_quest_tree.pinned" : "screen.kuronami_quest_tree.pin"));
         }
         Tiles.icon(g, "pin", px + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH,
@@ -1865,7 +1865,7 @@ public class ProgressScreen extends Screen {
             int bx = width - Ui.S2 - bw;
             int by = Ui.S2;
             boolean bo = mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh && mouseX < open;
-            Ui.surface(g, bx, by, bw, bh, bh / 2, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
+            Ui.surface(g, bx, by, bw, bh, Ui.CORNER, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
             Ui.text(g, font, claimLabel, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
             Ui.text(g, font, n, bx + bw - Ui.S2 - Ui.textWidth(font, n), by + (bh - 8) / 2, Tiles.INK);
             Runnable claim = () -> {
@@ -1912,12 +1912,12 @@ public class ProgressScreen extends Screen {
         // on the map there is nothing under it but tiles: the same glass as the other controls, so the map does not
         // show through the text (the faint overlay used inside the rail let tile icons read through, 2026-10-20)
         if (GlassPanel.on()) {
-            GlassPanel.render(g, GlassPanel.SEARCH, GlassPanel.Kind.REGULAR, x, y, w, h, h / 2, mouseX, mouseY);
+            GlassPanel.render(g, GlassPanel.SEARCH, GlassPanel.Kind.REGULAR, x, y, w, h, Ui.CORNER, mouseX, mouseY);
         } else {
-            Ui.surface(g, x, y, w, h, h / 2, Ui.PANEL_TRANSLUCENT);
+            Ui.surface(g, x, y, w, h, Ui.CORNER, Ui.PANEL_TRANSLUCENT);
         }
         if (searchBox.isFocused()) {
-            Ui.outline(g, x, y, w, h, h / 2, Ui.FOCUS);
+            Ui.outline(g, x, y, w, h, Ui.CORNER, Ui.FOCUS);
         }
         int ix = x + Ui.S1;
         Tiles.icon(g, "search", ix, y + (h - TITLE_GLYPH) / 2f, TITLE_GLYPH,
@@ -1978,8 +1978,8 @@ public class ProgressScreen extends Screen {
         var mc = rules == null ? null : rules.model().chapters.get(ch.id);
         double need = mc == null ? 0 : rules.experienceForLevel(mc, level);
         double frac = need <= 0 ? 0 : Mth.clamp(p.xp.getOrDefault(key, 0.0) / need, 0, 1);
-        Ui.surface(g, bx, y + 2, 60, 4, 2, Ui.OVERLAY_2);
-        Ui.surface(g, bx, y + 2, frac <= 0 ? 0 : Math.max(1, (int) (60 * frac)), 4, 2, Tiles.GREEN_TEXT);
+        Ui.surface(g, bx, y + 2, 60, 4, Ui.CORNER, Ui.OVERLAY_2);
+        Ui.surface(g, bx, y + 2, frac <= 0 ? 0 : Math.max(1, (int) (60 * frac)), 4, Ui.CORNER, Tiles.GREEN_TEXT);
         int pts = ClientProgress.points(ch.id);
         int next = bx + 68;
         if (pts > 0) {
@@ -2055,8 +2055,8 @@ public class ProgressScreen extends Screen {
                              List<Component> tip, Runnable run) {
         int h = 14;
         boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
-        Ui.surface(g, x, y, w, h, 3, enabled ? (hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1) : Ui.DISABLED);
-        Ui.outline(g, x, y, w, h, 3, Ui.HAIRLINE);
+        Ui.surface(g, x, y, w, h, Ui.CORNER, enabled ? (hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1) : Ui.DISABLED);
+        Ui.outline(g, x, y, w, h, Ui.CORNER, Ui.HAIRLINE);
         Ui.textCenter(g, font, label, x + w / 2, y + (h - 8) / 2, enabled ? Ui.TEXT : Ui.DIM);
         if (hover) {
             pendingTip = tip;
@@ -2429,7 +2429,7 @@ public class ProgressScreen extends Screen {
             int thumb = Math.max(12, Math.round((float) trackH * trackH / (trackH + sheetContentMax)));
             int ty = contentTop + Math.round((trackH - thumb) * (sheetScroll / Math.max(1, sheetContentMax)));
             boolean over = mouseX >= x0 && mouseX < x0 + sw && mouseY >= contentTop && mouseY < contentBottom;
-            Ui.surface(g, x0 + pw - Ui.S1 - 3, ty, 3, thumb, 2, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
+            Ui.surface(g, x0 + pw - Ui.S1 - 3, ty, 3, thumb, Ui.CORNER, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
         }
         // the actions sit just under short content instead of pinned to the bottom; while the content overflows they
         // stay at the bottom, where the scrollbar ends
@@ -2642,7 +2642,7 @@ public class ProgressScreen extends Screen {
             if (hover) {
                 // a round light inside the cell, clear of the dividers and the bar's rounded ends (until 2026-10-20 a
                 // square strip that cut across the bar's corners, the player)
-                Ui.surface(g, cx + 4, y + 4, BTN - 8, BTN - 8, (BTN - 8) / 2, Ui.OVERLAY_1);
+                Ui.surface(g, cx + 4, y + 4, BTN - 8, BTN - 8, Ui.CORNER, Ui.OVERLAY_1);
             }
             Tiles.icon(g, glyphs[i], cx + (BTN - 12) / 2, y + (BTN - 12) / 2, 12, Ui.TEXT);
             int which = i;
@@ -2741,7 +2741,7 @@ public class ProgressScreen extends Screen {
         int y0 = Mth.clamp((int) Math.floor(oy + vy0 * k), r[1] + 2, r[1] + r[3] - 2);
         int x1 = Mth.clamp((int) Math.ceil(ox + vx1 * k), r[0] + 2, r[0] + r[2] - 2);
         int y1 = Mth.clamp((int) Math.ceil(oy + vy1 * k), r[1] + 2, r[1] + r[3] - 2);
-        Ui.outline(g, x0, y0, Math.max(3, x1 - x0), Math.max(3, y1 - y0), 2, Ui.MINIMAP_VIEW);
+        Ui.outline(g, x0, y0, Math.max(3, x1 - x0), Math.max(3, y1 - y0), Ui.CORNER, Ui.MINIMAP_VIEW);
     }
 
     private static int minimapColor(State s) {
@@ -2938,7 +2938,7 @@ public class ProgressScreen extends Screen {
             float alpha = left < 700 ? Math.max(0, left / 700f) : 1f;
             int w = Ui.textWidth(font, n.text()) + 2 * Ui.S2;
             int x = (width - w) / 2;
-            Ui.surface(g, x, y, w, 14, 7, Tiles.withAlpha(Ui.FLOATING, alpha * 0.95f));
+            Ui.surface(g, x, y, w, 14, Ui.CORNER, Tiles.withAlpha(Ui.FLOATING, alpha * 0.95f));
             Ui.text(g, font, n.text(), x + Ui.S2, y + 3, Tiles.withAlpha(n.error() ? Ui.TEXT_ERROR : Ui.TEXT, alpha));
             y += 16;
         }

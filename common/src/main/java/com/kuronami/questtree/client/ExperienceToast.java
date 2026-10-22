@@ -6,7 +6,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
@@ -20,7 +19,6 @@ import java.util.Map;
  */
 final class ExperienceToast implements Toast, OwnSoundToast {
 
-    private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("toast/advancement");
     private static final long SHOW = 3000;
 
     private final ClientModel.Chapter chapter;
@@ -97,7 +95,7 @@ final class ExperienceToast implements Toast, OwnSoundToast {
             changed = false;
         }
         shown += (target - shown) * 0.25;
-        g.blitSprite(BACKGROUND, 0, 0, width(), height());
+        Ui.toastFrame(g, width(), height());
         Tiles.tile(g, "square", 6, 6, 20, levelled ? Tiles.Look.AFFORDABLE : Tiles.Look.PROGRESS, shown,
                 chapter.iconTexture != null ? net.minecraft.world.item.ItemStack.EMPTY : chapter.displayIcon(), false);
         if (chapter.iconTexture != null) {

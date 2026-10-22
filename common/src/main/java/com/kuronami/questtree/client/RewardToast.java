@@ -5,7 +5,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -14,7 +13,6 @@ import java.util.List;
 /** "Reward" in the vanilla toast frame, with the names of what was just paid out (2026-10-22). */
 final class RewardToast implements Toast, OwnSoundToast {
 
-    private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("toast/advancement");
     private static final long SHOW = 3000;
     private record Pending(ItemStack icon, Component names) {
     }
@@ -71,7 +69,7 @@ final class RewardToast implements Toast, OwnSoundToast {
 
     @Override
     public Visibility render(GuiGraphics g, ToastComponent toasts, long time) {
-        g.blitSprite(BACKGROUND, 0, 0, width(), height());
+        Ui.toastFrame(g, width(), height());
         Tiles.tile(g, "square", 6, 6, 20, Tiles.Look.DONE, 1, icon, false);
         var font = toasts.getMinecraft().font;
         g.drawString(font, Component.translatable("toast.kuronami_quest_tree.reward"), 32, 7, Tiles.GOLD, false);

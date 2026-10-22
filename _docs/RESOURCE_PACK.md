@@ -22,7 +22,15 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
 | `line_requires`, `line_unlocks` | Around the quest under the pointer (or the selected one): the lines into it (what it needs) and out of it (what it opens); the other lines fade |
 | `selection`, `optional_outline`, `mark`, `flash`, `scrollbar`, `scrollbar_hover`, `minimap_view`, `minimap_open` | Selection ring, optional quests' dashed outline, small marks on tiles, state-change flash, scrollbars, minimap |
 | `glass_regular`, `glass_clear`, `glass_tint` | Liquid Glass: the tone the blurred picture behind the chapter list, details, search, zoom buttons and tooltips is pulled towards (alpha = how far); the minimap's dimming layer (alpha = how much) and its tint. With glass turned off (`"glass": false` in `config/kuronami_quest_tree-client.json`) the flat `panel_translucent`, `rail_closed` and `floating` are used instead |
-| `hud_back`, `hud_text`, `hud_muted`, `toast_track` | The pinned-quest overlay over the world, and the experience toast's bar |
+| `hud_back`, `hud_text`, `hud_muted`, `toast_track`, `toast_fill`, `toast_edge` | The pinned-quest overlay over the world; the experience toast's bar, its body and its 1-pixel frame (the advancement toast's own sprite is fixed at a 2-pixel corner, so the mod draws the frame from these) |
+
+### Corner radius: `corner_radius`
+
+`corner_radius` is the palette's one non-colour key: a whole number of GUI pixels, default `2`, and `0` draws square
+corners. Every surface and edge on the screen follows it — panels, the chapter list, buttons, rows, fields, chips,
+count badges, scrollbars, the HUD tracker and the toasts. The white masks keep their 23-pixel (fill) and 12-pixel
+(edge) corners and are nine-sliced to the requested radius, so any value from 0 up works. Quest tile shapes and the
+belt's chevrons are content, not chrome, and keep the shape drawn in their own pictures.
 
 ## Shapes and icons: `assets/kuronami_quest_tree/textures/gui/`
 
