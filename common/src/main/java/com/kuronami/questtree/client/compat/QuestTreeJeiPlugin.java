@@ -136,8 +136,11 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
             var index = QuestViewerData.index();
             var query = QuestViewerData.query(stack);
-            List<Hit> hits = focus.getRole() == RecipeIngredientRole.INPUT
-                    ? index.uses(query) : index.rewards(query);
+            RecipeIngredientRole role = focus.getRole();
+            if (role != RecipeIngredientRole.INPUT && role != RecipeIngredientRole.OUTPUT) {
+                return List.of();
+            }
+            List<Hit> hits = role == RecipeIngredientRole.INPUT ? index.uses(query) : index.rewards(query);
             return recipes(hits);
         }
 
@@ -158,7 +161,12 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
             var index = QuestViewerData.index();
             var query = QuestViewerData.query(stack);
-            boolean has = focus.getRole() == RecipeIngredientRole.INPUT
+            RecipeIngredientRole role = focus.getRole();
+            if (role != RecipeIngredientRole.INPUT && role != RecipeIngredientRole.OUTPUT) {
+                return List.of();
+            }
+            // RENDER_ONLY and other roles are not a lookup in this category: only a real input/output focuses it
+            boolean has = role == RecipeIngredientRole.INPUT
                     ? !index.uses(query).isEmpty() : !index.rewards(query).isEmpty();
             return has ? List.of(QuestViewerJeiCategory.TYPE) : List.of();
         }
