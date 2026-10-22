@@ -25,6 +25,7 @@ import net.minecraft.server.level.ServerPlayer;
  *
  * QuestTree.registerTask('example:held_level', context => context.player().experienceLevel)
  * QuestTree.registerCondition('example:level_30', context => context.player().experienceLevel >= 30)
+ * QuestTree.open(player, 'example:basics/start')
  * }</pre>
  * A registered condition joins the five built-in kinds in the same {@code conditions} array; no built-in kind needs
  * registering.
@@ -101,6 +102,11 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
                 return true;
             }
             return false;
+        }
+
+        /** Opens a quest or chapter for a player, e.g. from an NPC script. */
+        public boolean open(ServerPlayer player, String target) {
+            return QuestTreeApi.open(player, target);
         }
     }
 

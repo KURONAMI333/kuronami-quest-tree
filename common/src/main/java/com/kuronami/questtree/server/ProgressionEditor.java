@@ -116,7 +116,8 @@ public final class ProgressionEditor {
         // chapterId and the namespace in the args, and the server mints the id. Every other op needs a real one.
         boolean creatingChapter = op.equals("create_chapter");
         boolean tableOp = op.equals("update_table") || op.equals("delete_table") || op.equals("restore_table");
-        if (!creatingChapter && !tableOp && !validChapterId(chapterId)) {
+        boolean restrictionsOp = op.equals("update_restrictions");
+        if (!creatingChapter && !tableOp && !restrictionsOp && !validChapterId(chapterId)) {
             return fail("chapter id is not <namespace>:<chapter>", 0);
         }
         ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot);
@@ -126,6 +127,9 @@ public final class ProgressionEditor {
             return fail(readErrors, creatingChapter ? 0 : overlay.revision(chapterId));
         }
         args = args == null ? new JsonObject() : args;
+        if (restrictionsOp) {
+            return updateRestrictions(overlay, revision, args);
+        }
         if (tableOp) {
             return applyTable(overlay, packChapters, tables, packSources, chapterId, revision, op, args, unreadable,
                     writerPermissionLevel);
@@ -150,6 +154,37 @@ public final class ProgressionEditor {
         }
         return applyOp(overlay, packChapters, tables, packSources, before, beforeSources, chapterId, current,
                 op, args, unreadable, writerPermissionLevel);
+    }
+
+    /**
+     * Writes the whole restrictions file (2026-10-22, G6). It has its own revision, separate from chapters and tables,
+     * and no undo: a rule is an entry in one array, and the last 50 versions of that array are not worth the memory.
+     * The rules are parsed here so the reply carries the same warnings {@code /quest_tree validate} would print.
+     */
+    private Outcome updateRestrictions(ProgressionOverlay.Overlay overlay, long revision, JsonObject args) {
+        long current = overlay.restrictions == null ? 0 : overlay.restrictions.revision;
+        if (revision != current) {
+            return new Outcome(false, true, false, "", current,
+                    List.of("restrictions changed while you were editing them; reload them and try again"));
+        }
+        JsonElement rulesArg = args.get("rules");
+        if (rulesArg == null || !rulesArg.isJsonArray()) {
+            return fail("rules must be an array", current);
+        }
+        JsonArray rules = rulesArg.getAsJsonArray().deepCopy();
+        com.kuronami.questtree.progress.RestrictionRules.Result parsed =
+                com.kuronami.questtree.progress.RestrictionRules.parse(rules);
+        List<String> messages = new ArrayList<>();
+        for (com.kuronami.questtree.progress.RestrictionRules.Problem problem : parsed.problems()) {
+            messages.add(problem.path() + ": " + problem.message());
+        }
+        long next = current + 1;
+        try {
+            ProgressionOverlay.writeRestrictions(overlayRoot, next, rules);
+        } catch (IOException ex) {
+            return fail("could not write restrictions: " + ex.getMessage(), current);
+        }
+        return new Outcome(true, false, true, "", next, List.copyOf(messages));
     }
 
     // ------------------------------------------------------------------ operations

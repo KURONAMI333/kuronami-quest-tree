@@ -7,11 +7,13 @@ import com.kuronami.questtree.block.QuestBarrierBlockEntity;
 import com.kuronami.questtree.block.QuestTaskBlock;
 import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
+import com.kuronami.questtree.network.OpenPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.network.TeamPayload;
@@ -82,6 +84,7 @@ public class QuestTree implements ModInitializer {
         // the quest_book item is synced, so the client mod is required (like FTB Quests)
         PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(OpenPayload.TYPE, OpenPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(TeamPayload.TYPE, TeamPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC);
@@ -114,6 +117,9 @@ public class QuestTree implements ModInitializer {
                 CommonClass.onKill(sp, killed);
             }
         });
+        // a restricted block is refused before it breaks, so nothing drops and no break task counts it
+        PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, blockEntity) ->
+                !(player instanceof ServerPlayer sp) || !Restrictions.blockedBreak(sp, state));
         PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, blockEntity) -> {
             if (player instanceof ServerPlayer sp) {
                 CommonClass.onBlockBroken(sp, state);

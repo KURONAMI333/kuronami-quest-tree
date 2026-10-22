@@ -7,6 +7,8 @@ The server-side storage format and operations. The client sends `EditorOpPayload
 ```
 <world>/kuronami_quest_tree/progression/
   chapters/<namespace>/<chapter path>.json
+  tables/<namespace>/<table>.json
+  restrictions.json
   revisions.json
 ```
 
@@ -60,6 +62,7 @@ When writing a file by hand, an omitted `action` is read as `add`. An unreadable
 | `delete_chapter` / `restore_chapter` | `{}` |
 | `update_table` | `{"id": "...", "create": true?, "table": {...}}` (whole table; `patch` is also accepted) |
 | `delete_table` / `restore_table` | `{"id": "..."}` |
+| `update_restrictions` | `{"rules": [...]}` (the whole array; `chapterId` is `restrictions`) |
 | `link` / `unlink` | `{"from": "...", "to": "..."}` (`to` is a node name in the same chapter, or `chapter/node` for another chapter) |
 | `undo` / `redo` | `{}` |
 
@@ -106,6 +109,12 @@ A vanilla custom payload to the server is at most 32767 bytes, and Fabric does n
 - `export` (`args.namespace`, or the chapter's namespace when absent) runs `/quest_tree export <namespace>` and returns only the output folder name (`quest_tree_export_<namespace>`) in the reply lines. It never exposes a server absolute path. A failed command does not report success; it returns the reason.
 - `test_chapter` (`chapterId`) runs `/quest_tree reset @s <chapter>` and only on success turns edit mode off. It refuses without doing anything when the chapter is not in the book, when the player is in a party (progress is shared, so other members' chapter progress would be erased too), or when the command fails. The reply repeats the request's revision, since no chapter is written and the client's version must not move.
 - Both check the namespace / chapter id with `ProgressExport.validNamespace` / `ProgressionEditor.validChapterId` before building the command string (`EditorOps`).
+
+## Phase 5: restrictions (2026-10-22)
+
+- The right-click menu's "Restrictions" opens `RestrictionsEditScreen`. It edits one file, `restrictions.json`, whose `{revision, rules}` replaces the pack's rule array whole when it exists. The revision is a single number for the file (`EditorSession.RESTRICTIONS`, `restrictions_revision` in the bundle); saving sends `update_restrictions`, and a stale one is refused like a chapter's.
+- Rows are the rule's id, items, item tags, blocks, block tags, actions and message as one line each, and `conditions` as compact JSON text (the same kinds as tasks and rewards). An unreadable conditions text leaves the last readable value in place.
+- The reply carries the same rule warnings `/quest_tree validate` prints (a missing target, an unknown action, no conditions). There is no undo for this file: the array is small and its history is not worth 50 copies.
 
 ## Still missing
 

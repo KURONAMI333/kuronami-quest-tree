@@ -66,7 +66,7 @@ class ProgressDataRemapTest {
         chapter.add("nodes", nodes);
         JsonObject chapters = new JsonObject();
         chapters.add(CHAPTER, chapter);
-        return ProgressData.packOf(chapters, new JsonObject(), new JsonArray(), new JsonObject());
+        return ProgressData.packOf(chapters, new JsonObject(), new JsonArray(), new JsonObject(), new JsonArray());
     }
 
     private void installPack(String... items) {

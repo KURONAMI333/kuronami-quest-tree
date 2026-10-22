@@ -50,6 +50,7 @@ public final class ProgressCommands {
                 // party commands are for every player; the book/admin commands below keep the old permission gate
                 .then(PartyCommands.node())
                 .then(MigrationCommands.node())
+                .then(GiverCommands.node())
                 .then(Commands.literal("import").requires(ADMIN)
                         .then(Commands.literal("ftbquests")
                                 .executes(c -> importFtb(c, "ftbquests"))

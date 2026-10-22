@@ -1,6 +1,7 @@
 package com.kuronami.questtree.mixin;
 
 import com.kuronami.questtree.server.ProgressService;
+import com.kuronami.questtree.server.Restrictions;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
@@ -13,18 +14,26 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** use_item tasks: an item was used (eaten, drunk, thrown, drawn, placed by use). */
+/**
+ * use_item tasks: an item was used (eaten, drunk, thrown, drawn, placed by use). A restriction on the item's
+ * {@code use} action refuses it before anything happens (DATA_MODEL.md "制限").
+ */
 @Mixin(ItemStack.class)
 public abstract class ItemStackUseMixin {
 
     @Unique
     private static final ThreadLocal<ItemStack> QUEST_TREE_USED_STACK = new ThreadLocal<>();
 
-    @Inject(method = "use", at = @At("HEAD"))
+    @Inject(method = "use", at = @At("HEAD"), cancellable = true)
     private void questTree$beforeUse(Level level, Player player, InteractionHand hand,
                                      CallbackInfoReturnable<InteractionResultHolder<ItemStack>> cir) {
-        if (player instanceof ServerPlayer) {
-            QUEST_TREE_USED_STACK.set(((ItemStack) (Object) this).copy());
+        if (player instanceof ServerPlayer sp) {
+            ItemStack self = (ItemStack) (Object) this;
+            if (Restrictions.blockedItem(sp, self, "use")) {
+                cir.setReturnValue(InteractionResultHolder.fail(self));
+                return;
+            }
+            QUEST_TREE_USED_STACK.set(self.copy());
         }
     }
 

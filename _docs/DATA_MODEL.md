@@ -33,6 +33,7 @@ data/<ns>/progression/
   chapters/<chapter>.json       one chapter (nodes, decoration, points)
   reward_tables/<table>.json    reward tables (random, choice, all, loot crate)
   patches/<anything>.json       replace only part of another data pack's chapter or node
+  restrictions.json             item and block use gated by conditions (merged across namespaces)
 ```
 
 `settings.json` holds pack-wide settings and is read from the first namespace that provides one. A missing key takes its default.
@@ -227,6 +228,34 @@ A registered kind is written as `<namespace>:<id>` and registered through the pu
 
 Conditions are evaluated once, when the reward is granted. Revocation (respec, reset) and login re-granting follow the team's paid record and do not re-evaluate conditions. A reward that was not paid because its conditions were unmet has no record and is never touched by revocation or re-granting. Skill `points` rewards count toward respec checks and revocation only when they are in the record. A skill reward's conditions are checked against the player who took it, while its effects (`attribute`, `tag` and so on) apply to every team member. The record is shared by the team.
 
+## Restrictions
+
+`restrictions.json` stops an item or a block until the rule's conditions hold. It is read from every namespace and merged in resource order, so an add-on pack can add its own rules beside the base pack's.
+
+```json
+{"rules": [
+  {"id": "iron_tools",
+   "items": ["minecraft:iron_sword"],
+   "item_tags": ["minecraft:swords"],
+   "blocks": ["minecraft:iron_ore"],
+   "block_tags": ["minecraft:ores"],
+   "actions": ["use", "attack", "place", "break", "equip"],
+   "message": "Finish the trial first",
+   "conditions": [{"type": "stage", "stage": "trial/one"}]}
+]}
+```
+
+- `id` is required and global across namespaces. A second namespace writing the same id is ignored with a `WARNING`; the first one wins.
+- At least one of `items`, `item_tags`, `blocks`, `block_tags` is required. Tags are written as ordinary tag ids (`minecraft:swords`, no leading `#`).
+- `actions` is any of `equip`, `use`, `attack`, `place`, `break`. Omitted or null means all five; an empty list or an unknown name is reported (`WARNING`) and applies to nothing.
+- `conditions` uses the same five built-in kinds and registered kinds as tasks and rewards. A rule with no conditions is reported (`WARNING`): it would keep its items shut forever.
+- `message` is the reason shown in the action bar; it is shown as written (not translated). Without it the mod shows its own line. A refusal is shown at most once a second per player.
+- `equip` covers the armour slots and the offhand. A restricted item there is put back into the inventory (or dropped when full) on the same tick. The main hand is not checked, because moving an item into it happens constantly.
+- `use` covers using the item in the air, on a block, or on an entity; it also covers using a restricted block (a chest, a door, and so on).
+- `place` matches the item being placed and the block it would become. `break` matches the block and the item held to break it. A refused action never drops anything or counts toward a task.
+- Restrictions are enforced on the server only. The client mod does not need to know them; the synced bundle carries the rules for the editor.
+- Problems in the file (a missing id, an unreadable target, an unknown action, a missing condition) are `WARNING`s and appear in `/quest_tree validate`. Item and block ids are not checked against the registries here; see the validation notes below.
+
 ## Skills
 
 A chapter with a `points` object is a skill chapter.
@@ -313,13 +342,35 @@ Whether the quest book drops on death is the server config `drop_book_on_death`.
 
 ## Blocks
 
-`quest_task_block` (quest board) opens the quest recorded on it when right-clicked. `quest_barrier` (quest barrier) lets through only a player who has completed the recorded quest or holds the recorded stage; other entities never pass. Both move their key from the placed item's custom data to the block entity. Operators can hand them out with:
+`quest_task_block` (quest board) opens the quest or chapter recorded on it when right-clicked. `quest_barrier` (quest barrier) lets through only a player who has completed the recorded quest or holds the recorded stage; other entities never pass. Both move their key from the placed item's custom data to the block entity. Operators can hand them out with:
 
 ```
 /quest_tree block task <players> <node>
 /quest_tree block barrier <players> node <node>
 /quest_tree block barrier <players> stage <stage>
 ```
+
+A chapter on a quest board is written with `/quest_tree giver set <chapter>` while looking at it; the block entity keeps it as `quest_chapter` next to the old `quest_node`.
+
+## Quest givers
+
+A quest giver opens the book on one quest or chapter when a player right-clicks it. The server only sends the target; the client applies its own hidden and locked rules, so a giver never reveals something the player may not see.
+
+| Kind | Stored in | Link it with |
+|---|---|---|
+| Entity | `<world>/data/kuronami_quest_tree_givers.dat`, by entity UUID | `/quest_tree giver set <quest\|chapter>` while looking at it |
+| Quest board | the block entity's `quest_node` / `quest_chapter` | `/quest_tree giver set <quest\|chapter>` while looking at it |
+
+```
+/quest_tree giver set <namespace>:<chapter>/<node>
+/quest_tree giver set <namespace>:<chapter>
+/quest_tree giver clear
+```
+
+- Both need permission level 2 and a player source, because the target is what that player is looking at. `/quest_tree giver clear` on an entity removes its link; on a quest board it empties the block.
+- `quest_task_block` without a link opens the book where it would normally open. A linked entity keeps its ordinary interaction while the player sneaks, so a villager can still trade.
+- A hidden chapter opens nothing. A locked chapter opens at the chapter list with that pack's hint, not its map. A visible quest opens on its node and a visible chapter opens on its chapter.
+- A giver target survives a restart. The entity list is its own file so a broken link cannot take player progress with it; a board's link travels with the block.
 
 ## Overlay and editor
 

@@ -181,6 +181,20 @@ public final class QuestTreeApi {
     }
 
     /**
+     * Opens the book for one player on a quest or chapter (2026-10-22, G3). The target is a quest key
+     * ({@code <namespace>:<chapter>/<node>}) or a chapter id ({@code <namespace>:<path>}); the player's client applies
+     * its own hidden and locked rules, so a locked chapter opens at the chapter list with its hint and a hidden quest
+     * stays hidden. Returns false when the id is not in the loaded book.
+     * <pre>{@code
+     * QuestTreeApi.open(player, "example:basics/start");
+     * QuestTreeApi.open(player, "example:basics");
+     * }</pre>
+     */
+    public static boolean open(ServerPlayer player, String target) {
+        return player != null && com.kuronami.questtree.server.GiverService.open(player, target);
+    }
+
+    /**
      * Whether every entry in {@code data.conditions} passes; a missing list means yes. This is the public face of the
      * one gauge in {@code ProgressService}: built-in kinds and registered addon kinds are judged together.
      */

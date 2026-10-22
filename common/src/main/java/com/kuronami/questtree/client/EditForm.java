@@ -296,9 +296,17 @@ final class EditForm {
                 box.setBordered(false);
                 box.setMaxLength(8192);
                 box.setTextColor(Ui.TEXT);
-                box.setValue(EditorDoc.show(root, spec));
+                box.setValue(spec.kind() == FieldSpec.Kind.IDS ? EditorDoc.showIds(root, spec.path())
+                        : spec.kind() == FieldSpec.Kind.JSON ? EditorDoc.showJson(root, spec.path())
+                        : EditorDoc.show(root, spec));
                 box.setResponder(v -> {
-                    EditorDoc.write(root, spec, v);
+                    if (spec.kind() == FieldSpec.Kind.IDS) {
+                        EditorDoc.writeIds(root, spec.path(), v);
+                    } else if (spec.kind() == FieldSpec.Kind.JSON) {
+                        EditorDoc.writeJson(root, spec.path(), v);
+                    } else {
+                        EditorDoc.write(root, spec, v);
+                    }
                     edited.accept(spec.path());
                 });
                 boxed = true;
@@ -330,7 +338,9 @@ final class EditForm {
         @Override
         public void refresh() {
             if (box != null && !box.isFocused()) {
-                box.setValue(EditorDoc.show(root, spec));
+                box.setValue(spec.kind() == FieldSpec.Kind.IDS ? EditorDoc.showIds(root, spec.path())
+                        : spec.kind() == FieldSpec.Kind.JSON ? EditorDoc.showJson(root, spec.path())
+                        : EditorDoc.show(root, spec));
             }
         }
 

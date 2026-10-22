@@ -1,6 +1,7 @@
 package com.kuronami.questtree.mixin;
 
 import com.kuronami.questtree.server.ProgressService;
+import com.kuronami.questtree.server.Restrictions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerPlayerGameMode;
@@ -27,10 +28,16 @@ public abstract class ServerPlayerGameModeUseItemOnMixin {
     @Unique
     private static final ThreadLocal<BlockState> QUEST_TREE_CLICKED_STATE = new ThreadLocal<>();
 
-    @Inject(method = "useItemOn", at = @At("HEAD"))
+    @Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true)
     private void questTree$beforeUseItemOn(ServerPlayer player, Level level, ItemStack stack, InteractionHand hand,
                                           BlockHitResult hit, CallbackInfoReturnable<InteractionResult> cir) {
-        QUEST_TREE_CLICKED_STATE.set(level.getBlockState(hit.getBlockPos()));
+        BlockState state = level.getBlockState(hit.getBlockPos());
+        // the item's and the block's use restrictions both refuse the interaction (DATA_MODEL.md "制限")
+        if (Restrictions.blockedItem(player, stack, "use") || Restrictions.blockedBlock(player, state, "use")) {
+            cir.setReturnValue(InteractionResult.FAIL);
+            return;
+        }
+        QUEST_TREE_CLICKED_STATE.set(state);
     }
 
     @Inject(method = "useItemOn", at = @At("RETURN"))

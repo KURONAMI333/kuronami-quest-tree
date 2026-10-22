@@ -6,6 +6,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
+import com.kuronami.questtree.network.OpenPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.progress.PlayerProgress;
@@ -81,9 +82,13 @@ public final class ClientProgress {
                         ? bundle.getAsJsonObject("reward_tables").deepCopy() : new JsonObject();
                 JsonObject nextDeleted = bundle.has("deleted") && bundle.get("deleted").isJsonObject()
                         ? bundle.getAsJsonObject("deleted").deepCopy() : new JsonObject();
+                com.google.gson.JsonArray nextRestrictions = bundle.has("restrictions")
+                        && bundle.get("restrictions").isJsonArray()
+                        ? bundle.getAsJsonArray("restrictions").deepCopy() : new com.google.gson.JsonArray();
                 // a filter's items come from the tags this server sent, so items worked out for another world are dropped
                 com.kuronami.questtree.progress.ItemFilter.clearCache();
                 sync = new SyncState<>(nextModel, nextRules, nextChapters, nextTables, nextDeleted);
+                restrictions = nextRestrictions;
                 EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
@@ -92,6 +97,16 @@ public final class ClientProgress {
                 Constants.LOG.error("Could not read progression data from server", ex);
             }
             buffer = null;
+        }
+    }
+
+    /** A quest giver, a quest block or an addon asked the server to open the book on one target. */
+    public static void onOpen(OpenPayload p) {
+        String target = p.target() == null ? "" : p.target();
+        if (target.isEmpty()) {
+            Minecraft.getInstance().setScreen(new ProgressScreen());
+        } else {
+            ProgressScreen.openTarget(target);
         }
     }
 
@@ -116,6 +131,9 @@ public final class ClientProgress {
     public static PlayerProgress progress() {
         return progress;
     }
+
+    /** The restrictions array of the last bundle; replaced whole, so no other sync state has to know about it. */
+    private static com.google.gson.JsonArray restrictions = new com.google.gson.JsonArray();
 
     public static ProgressRules rules() {
         return sync.rules();
@@ -153,6 +171,11 @@ public final class ClientProgress {
     /** Every reward table as the server last sent it (pack plus the writable table overlay). */
     public static JsonObject rawTables() {
         return sync.tables().deepCopy();
+    }
+
+    /** The restriction rules as the server last sent them (pack plus the writable restrictions file). */
+    public static com.google.gson.JsonArray rawRestrictions() {
+        return restrictions.deepCopy();
     }
 
     /** The restore list: {@code chapters} (ids) and {@code nodes} (chapter id to node ids). */

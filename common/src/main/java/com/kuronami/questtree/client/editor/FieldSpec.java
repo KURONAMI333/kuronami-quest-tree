@@ -20,7 +20,11 @@ public record FieldSpec(String path, Kind kind, String label, List<String> optio
         TEXT, MULTILINE, INT, DOUBLE, BOOL,
         /** {@code true} or an object means on; the member is an object once a child field is written. */
         FLAG_OBJECT,
-        ENUM, ITEM, ENTITY, DIMENSION, BIOME, STRUCTURE, ADVANCEMENT
+        ENUM, ITEM, ENTITY, DIMENSION, BIOME, STRUCTURE, ADVANCEMENT,
+        /** A JSON array of ids, shown as a comma-separated line. */
+        IDS,
+        /** A JSON value shown as compact JSON text (an object, an array, a number); unreadable text is not written. */
+        JSON
     }
 
     public static FieldSpec text(String path, String label) {

@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.progress.RestrictionRules;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -136,6 +137,7 @@ public final class ProgressData {
         JsonObject patches = new JsonObject();
         JsonArray groups = new JsonArray();
         JsonObject settings = new JsonObject();
+        JsonArray restrictions = new JsonArray();
 
         Map<String, ProgressValidator.Source> sources = new LinkedHashMap<>();
         readProblems.clear();
@@ -165,6 +167,7 @@ public final class ProgressData {
                 }
             }
         }
+        readRestrictions(rm, restrictions);
         // translations shipped inside the data pack (imported packs carry their own text, like FTB Quests does)
         Map<String, JsonObject> byLocale = new TreeMap<>();
         for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(ROOT + "/lang", id -> id.getPath().endsWith(".json")).entrySet()) {
@@ -179,7 +182,7 @@ public final class ProgressData {
         }
 
         applyPatches(chapters, patches);
-        installPack(packOf(chapters, tables, groups, settings), sources, unreadable,
+        installPack(packOf(chapters, tables, groups, settings, restrictions), sources, unreadable,
                 List.copyOf(readProblems), byLocale);
     }
 
@@ -187,12 +190,14 @@ public final class ProgressData {
      * The pack side of a bundle, in the shape {@link #rebuild()} reads. Shared with {@link #installPack}, so a test
      * can hand in exactly what a reload would have kept.
      */
-    static JsonObject packOf(JsonObject chapters, JsonObject tables, JsonArray groups, JsonObject settings) {
+    static JsonObject packOf(JsonObject chapters, JsonObject tables, JsonArray groups, JsonObject settings,
+                             JsonArray restrictions) {
         JsonObject pack = new JsonObject();
         pack.add("chapters", chapters);
         pack.add("reward_tables", tables);
         pack.add("groups", groups);
         pack.add("settings", settings);
+        pack.add("restrictions", restrictions);
         return pack;
     }
 
@@ -242,6 +247,7 @@ public final class ProgressData {
                 overlay.applyTo(chapters, sources);
                 JsonObject tables = bundle.getAsJsonObject("reward_tables");
                 overlay.applyTablesTo(tables, sources);
+                overlay.applyRestrictionsTo(bundle);
                 // editors learn each chapter's current revision from the bundle, without spending a request
                 revisions = overlay.revisionsJson();
                 bundle.add("revisions", revisions);
@@ -308,6 +314,7 @@ public final class ProgressData {
         base = bundle;
         COMPRESSED.clear();
         model = built;
+        restrictions = RestrictionRules.of(bundle);
         generation++;
         chapterCount = chapters.size();
         Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount,
@@ -612,6 +619,41 @@ public final class ProgressData {
     }
 
     /**
+     * Reads {@code progression/restrictions.json} from every namespace. The rules merge in resource order, so a pack
+     * can add its own rules beside another pack's; ids are global, and the first namespace that writes one wins.
+     */
+    private static void readRestrictions(ResourceManager rm, JsonArray rules) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (Map.Entry<ResourceLocation, Resource> e : rm.listResources(ROOT,
+                id -> id.getPath().equals(ROOT + "/restrictions.json")).entrySet()) {
+            String file = "data/" + e.getKey().getPath();
+            JsonElement el = read(e.getKey(), e.getValue());
+            if (el == null) {
+                continue;
+            }
+            JsonElement list = el.isJsonObject() ? el.getAsJsonObject().get("rules") : el;
+            if (list == null || !list.isJsonArray()) {
+                readProblems.add(new ProgressValidator.Problem(ProgressValidator.Severity.WARNING, file, "rules",
+                        "restrictions must be an object with a rules array", 0));
+                continue;
+            }
+            RestrictionRules.Result parsed = RestrictionRules.parse(list.getAsJsonArray());
+            for (RestrictionRules.Problem p : parsed.problems()) {
+                readProblems.add(new ProgressValidator.Problem(ProgressValidator.Severity.WARNING, file,
+                        p.path(), p.message(), 0));
+            }
+            for (RestrictionRules.Rule rule : parsed.rules()) {
+                if (!ids.add(rule.id())) {
+                    readProblems.add(new ProgressValidator.Problem(ProgressValidator.Severity.WARNING, file,
+                            "rules", "duplicate rule id '" + rule.id() + "'; this copy is ignored", 0));
+                    continue;
+                }
+                rules.add(rule.json());
+            }
+        }
+    }
+
+    /**
      * Reads every {@code .json} under {@code dir} into {@code into}, keyed {@code <namespace>:<name>}. The raw text is
      * kept in {@code sources} (for the validator's line numbers) and a file that will not parse becomes a problem
      * instead of just a log line. When {@code unreadable} is given, such a file's id is added to it.
@@ -698,6 +740,13 @@ public final class ProgressData {
             b.add("lang", lang);
             return gzip(GSON.toJson(b).getBytes(StandardCharsets.UTF_8));
         });
+    }
+
+    private static RestrictionRules restrictions = RestrictionRules.empty();
+
+    /** The item and block restrictions of the loaded data (DATA_MODEL.md "制限"), rebuilt with the model. */
+    public static RestrictionRules restrictions() {
+        return restrictions;
     }
 
     private static com.kuronami.questtree.data.ProgressModel model = com.kuronami.questtree.data.ProgressModel.of(new JsonObject());

@@ -5,6 +5,7 @@ import com.kuronami.questtree.server.ProgressCommands;
 import com.kuronami.questtree.server.ProgressData;
 import com.kuronami.questtree.server.PartyActions;
 import com.kuronami.questtree.server.ProgressService;
+import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.server.SkillExperience;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.progress.ActionRateLimiter;
@@ -69,6 +70,7 @@ public final class CommonClass {
     /** Server-side player tick (end of tick). */
     public static void onPlayerTick(ServerPlayer player) {
         ProgressService.onPlayerTick(player);
+        Restrictions.tick(player);
     }
 
     /** An edit request from a client in editing mode. */
@@ -126,6 +128,7 @@ public final class CommonClass {
         ProgressService.onLogout(player);
         EditorService.onLogout(player);
         ActionRateLimiter.forget(player.getUUID());
+        Restrictions.forget(player.getUUID());
     }
 
     /** The server is stopping: runtime-only state (anti-farming windows) is dropped. */
