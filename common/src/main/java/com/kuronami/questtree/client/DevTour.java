@@ -238,7 +238,18 @@ final class DevTour {
         // the open chapter list over the light tiles of the same map: the text on the glass has to stay legible there
         at(pt + 84, () -> ProgressScreen.tourRailOpen(true));
         shot(pt + 88, "21_rail_over_tiles");
-        at(pt + 90, () -> ProgressScreen.tourRailOpen(false));
+        // the compact footer: one row of icons, with the hover label that replaced the row text
+        at(pt + 89, () -> onScreen("21_rail_footer", s -> {
+            int[] foot = s.tourRailFoot(0);
+            if (foot != null) {
+                ProgressScreen.tourPointer(foot[0], foot[1]);
+            }
+        }));
+        shot(pt + 90, "21_rail_footer");
+        at(pt + 91, () -> {
+            ProgressScreen.tourPointerClear();
+            ProgressScreen.tourRailOpen(false);
+        });
         at(pt + 92, () -> {
             ClientConfig.glass = glassBefore;
             for (String id : new ArrayList<>(ClientConfig.railPinned())) {
