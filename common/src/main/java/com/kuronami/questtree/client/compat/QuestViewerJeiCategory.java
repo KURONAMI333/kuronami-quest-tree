@@ -46,7 +46,7 @@ public final class QuestViewerJeiCategory implements IRecipeCategory<QuestViewer
 
     @Override
     public Component getTitle() {
-        return Component.translatable("viewer.category.quests");
+        return Component.translatable("kuronami_quest_tree.viewer.category.quests");
     }
 
     @Override

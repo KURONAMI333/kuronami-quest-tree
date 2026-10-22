@@ -89,7 +89,9 @@ public final class QuestViewerRecipe {
             label = Component.literal(need.label().isEmpty() ? need.spec().id() : need.label());
         }
         if (need.choice()) {
-            label = Component.translatable("viewer.choice", label);
+            label = Component.translatable("kuronami_quest_tree.viewer.choice", label);
+        } else if (need.random()) {
+            label = Component.translatable("kuronami_quest_tree.viewer.random", label);
         }
         if (need.count() > 1) {
             label = Component.empty().append(label).append(" × " + need.count());
@@ -138,7 +140,8 @@ public final class QuestViewerRecipe {
                 .replace(':', '/').replaceAll("[^a-z0-9_./-]", "_");
         String kind = needsItem() ? "task" : "reward";
         int hash = (hit.quest().key() + '|' + kind + '|' + hit.need().index() + '|'
-                + hit.need().spec().id() + '|' + hit.need().choice()).hashCode();
+                + hit.need().spec().kind() + '|' + hit.need().spec().id() + '|' + hit.need().count() + '|'
+                + hit.need().choice() + '|' + hit.need().random() + '|' + hit.need().itemJson()).hashCode();
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID,
                 "quest/" + key + "/" + kind + "/" + hit.need().index() + "/" + Integer.toHexString(hash));
     }

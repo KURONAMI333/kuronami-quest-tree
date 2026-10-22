@@ -98,7 +98,7 @@ public final class QuestViewerIndex {
      * applied when the row is drawn, not when the bundle arrived.
      */
     public record Need(Kind kind, Spec spec, long count, String label, String labelJson, int index, boolean choice,
-                       String itemJson, String matchMode) {
+                       boolean random, String itemJson, String matchMode) {
 
         public Need {
             label = label == null ? "" : label;
@@ -109,7 +109,7 @@ public final class QuestViewerIndex {
 
         /** A need with a plain label and no components (a tag, a plain item or a reward). */
         public Need(Kind kind, Spec spec, long count, String label, int index, boolean choice) {
-            this(kind, spec, count, label, "", index, choice, "", "");
+            this(kind, spec, count, label, "", index, choice, false, "", "");
         }
 
         /** Whether the stack named by {@code query} counts for this task or reward. */
@@ -292,6 +292,7 @@ public final class QuestViewerIndex {
                         .append(need.labelJson()).append('\u0001')
                         .append(need.index()).append('\u0001')
                         .append(need.choice()).append('\u0001')
+                        .append(need.random()).append('\u0001')
                         .append(need.itemJson()).append('\u0001')
                         .append(need.matchMode()).append('\u0002');
             }

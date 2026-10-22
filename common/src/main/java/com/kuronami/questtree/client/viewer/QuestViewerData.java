@@ -190,10 +190,10 @@ public final class QuestViewerData {
             if (task.filter != null) {
                 // one row per task, not one per example: the filter itself answers whether a stack counts
                 needs.add(new Need(Kind.TASK, Spec.filter(task.filter.expression()), task.count,
-                        task.name().getString(), componentJson(task.name()), i, false, "", ""));
+                        task.name().getString(), componentJson(task.name()), i, false, false, "", ""));
             } else {
                 addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(),
-                        componentJson(task.name()), i, false, task.viewerItemJson(), task.viewerMatchMode());
+                        componentJson(task.name()), i, false, false, task.viewerItemJson(), task.viewerMatchMode());
             }
         }
         JsonObject raw = ClientProgress.rawNode(chapter.id, node.id);
@@ -205,7 +205,9 @@ public final class QuestViewerData {
             JsonObject reward = rewards.get(i).getAsJsonObject();
             String type = string(reward, "type");
             if (type.equals("table")) {
-                boolean choice = string(reward, "mode").equals("choice");
+                String mode = string(reward, "mode");
+                boolean choice = mode.equals("choice");
+                boolean random = mode.isEmpty() || mode.equals("random");
                 JsonElement table = tables.get(string(reward, "table"));
                 JsonArray entries = table != null && table.isJsonObject()
                         ? arr(table.getAsJsonObject(), "entries") : new JsonArray();
@@ -216,10 +218,10 @@ public final class QuestViewerData {
                     JsonObject row = entry.getAsJsonObject();
                     JsonObject inner = row.has("reward") && row.get("reward").isJsonObject()
                             ? row.getAsJsonObject("reward") : row;
-                    addReward(needs, inner, i, choice);
+                    addReward(needs, inner, i, choice, random);
                 }
             } else {
-                addReward(needs, reward, i, false);
+                addReward(needs, reward, i, false, false);
             }
         }
         if (needs.isEmpty()) {
@@ -231,7 +233,7 @@ public final class QuestViewerData {
                 icon.isEmpty() ? "" : itemId(icon), needs);
     }
 
-    private static void addReward(List<Need> needs, JsonObject reward, int index, boolean choice) {
+    private static void addReward(List<Need> needs, JsonObject reward, int index, boolean choice, boolean random) {
         String type = string(reward, "type");
         if (!type.isEmpty() && !type.equals("item")) {
             return;
@@ -241,26 +243,29 @@ public final class QuestViewerData {
             return;
         }
         Spec parsed = specOf(item);
-        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), "", index, choice,
+        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), "", index, choice, random,
                 item.isJsonObject() ? item.toString() : "", "");
     }
 
     private static void addSpec(List<Need> needs, Kind kind, String spec, long count, String label,
-                                String labelJson, int index, boolean choice, String itemJson, String matchMode) {
+                                String labelJson, int index, boolean choice, boolean random, String itemJson,
+                                String matchMode) {
         if (spec == null || spec.isEmpty()) {
             return;
         }
         Spec parsed = spec.startsWith("#") ? Spec.tag(spec.substring(1))
                 : spec.startsWith("~") ? Spec.filter(spec.substring(1)) : Spec.item(spec);
-        addSpec(needs, kind, parsed, count, label, labelJson, index, choice, itemJson, matchMode);
+        addSpec(needs, kind, parsed, count, label, labelJson, index, choice, random, itemJson, matchMode);
     }
 
     private static void addSpec(List<Need> needs, Kind kind, Spec parsed, long count, String label,
-                                String labelJson, int index, boolean choice, String itemJson, String matchMode) {
+                                String labelJson, int index, boolean choice, boolean random, String itemJson,
+                                String matchMode) {
         if (parsed == null || parsed.id().isEmpty()) {
             return;
         }
-        needs.add(new Need(kind, parsed, Math.max(1, count), label, labelJson, index, choice, itemJson, matchMode));
+        needs.add(new Need(kind, parsed, Math.max(1, count), label, labelJson, index, choice, random, itemJson,
+                matchMode));
     }
 
     private static Spec specOf(JsonElement item) {

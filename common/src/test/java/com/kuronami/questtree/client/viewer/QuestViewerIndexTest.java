@@ -92,7 +92,7 @@ class QuestViewerIndexTest {
     void aComponentSpecificTaskOnlyMatchesTheVariantItNames() {
         String itemJson = "{\"id\":\"minecraft:potion\",\"components\":{\"minecraft:potion_contents\":\"minecraft:healing\"}}";
         Quest quest = quest("pack:healing", "Healing",
-                new Need(Kind.TASK, Spec.item("minecraft:potion"), 1, "Healing Potion", "", 0, false,
+                new Need(Kind.TASK, Spec.item("minecraft:potion"), 1, "Healing Potion", "", 0, false, false,
                         itemJson, "FUZZY"));
         Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
 
@@ -103,7 +103,7 @@ class QuestViewerIndexTest {
     @Test
     void aTaskWithoutAComponentModeIgnoresTheComponentCheck() {
         Quest quest = quest("pack:plain", "Plain", new Need(Kind.TASK, Spec.item("minecraft:potion"), 1,
-                "Potion", "", 0, false, "{\"id\":\"minecraft:potion\"}", "NONE"));
+                "Potion", "", 0, false, false, "{\"id\":\"minecraft:potion\"}", "NONE"));
         Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
 
         assertEquals(List.of("pack:plain"), keys(index.uses(componentQuery("", false))));
@@ -112,7 +112,7 @@ class QuestViewerIndexTest {
     @Test
     void aKeptLabelComponentIsCarriedSoTheViewerCanResolveItLater() {
         Need need = new Need(Kind.TASK, Spec.item("minecraft:stick"), 1, "Stick",
-                "{\"translate\":\"item.minecraft.stick\"}", 0, false, "", "");
+                "{\"translate\":\"item.minecraft.stick\"}", 0, false, false, "", "");
         Hit hit = QuestViewerIndex.build(List.of(quest("pack:q", "Quest", need)), quest1 -> true)
                 .uses(query("minecraft:stick")).get(0);
 

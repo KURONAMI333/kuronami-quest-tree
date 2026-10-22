@@ -513,10 +513,11 @@
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Questgeber-Verknüpfung für %s entfernt",
   "commands.kuronami_quest_tree.giver.uuid.none": "Keine Questgeber-Verknüpfung für %s",
   "sidebar_button.kuronami_quest_tree.quest_book": "Questbuch",
-  "viewer.category.quests": "Quests",
+  "kuronami_quest_tree.viewer.category.quests": "Quests",
   "emi.category.kuronami_quest_tree.quest": "Quests",
-  "viewer.state.done": "Erledigt",
-  "viewer.state.open": "Offen",
-  "viewer.state.locked": "Gesperrt",
-  "viewer.choice": "%s (Auswahl)"
+  "kuronami_quest_tree.viewer.state.done": "Erledigt",
+  "kuronami_quest_tree.viewer.state.open": "Offen",
+  "kuronami_quest_tree.viewer.state.locked": "Gesperrt",
+  "kuronami_quest_tree.viewer.choice": "%s (Auswahl)",
+  "kuronami_quest_tree.viewer.random": "%s (zufällig)"
 }
