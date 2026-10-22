@@ -907,6 +907,38 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aCrateColourWrittenAsTextIsAccepted() {
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "reward_tables": {"t:crate": {"entries": [], "loot_crate": {
+                  "string_id": "rare", "color": "#12ab34", "glow": true,
+                  "drops": {"passive": 1, "monster": 2, "boss": 3}}}}}
+                """);
+        assertEquals(List.of(), r.problems);
+    }
+
+    @Test
+    void aBadCrateColourAndNegativeWeightWarnButDoNotDrop() {
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "reward_tables": {"t:crate": {"entries": [], "loot_crate": {
+                  "color": "red", "glow": "yes", "drops": {"passive": -1}}}}}
+                """);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "so the default colour is used"));
+        assertTrue(says(r, "is not true or false"));
+        assertTrue(says(r, "is not a non-negative whole number"));
+    }
+
+    @Test
+    void crateSettingsAreCheckedWithoutDroppingNodes() {
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "settings": {"loot_crates": {"enabled": "yes", "no_drop": {"passive": -1}}}}
+                """);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "is not true or false"));
+        assertTrue(says(r, "is not a non-negative whole number"));
+    }
+
+    @Test
     void anEmergencyItemThatDoesNotExistWarns() {
         ProgressValidator.Result r = validate("""
                 {"chapters": {}, "settings": {"items": ["minecraft:nope"], "cooldown_seconds": 60}}

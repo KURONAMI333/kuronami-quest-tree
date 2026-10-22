@@ -1,5 +1,7 @@
 package com.kuronami.questtree;
 
+import com.kuronami.questtree.block.LootCrateOpenerBlock;
+import com.kuronami.questtree.block.LootCrateOpenerBlockEntity;
 import com.kuronami.questtree.block.ModBlockEntities;
 import com.kuronami.questtree.block.ModBlocks;
 import com.kuronami.questtree.block.QuestBarrierBlock;
@@ -11,7 +13,10 @@ import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.block.TaskScreenAuxBlockEntity;
 import com.kuronami.questtree.block.TaskScreenBlock;
 import com.kuronami.questtree.block.TaskScreenBlockEntity;
+import com.kuronami.questtree.item.LootCrateItem;
+import com.kuronami.questtree.item.ModDataComponents;
 import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.server.LootCrates;
 import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.item.QuestBlockItem;
 import com.kuronami.questtree.item.QuestBookItem;
@@ -43,7 +48,11 @@ import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.fabricmc.fabric.api.transfer.v1.fluid.FluidStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
 import net.fabricmc.loader.api.FabricLoader;
+import com.mojang.serialization.Codec;
 import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -120,6 +129,22 @@ public class QuestTree implements ModInitializer {
     public static BlockEntityType<TaskScreenBlockEntity> SCREEN_BE;
     public static BlockEntityType<TaskScreenAuxBlockEntity> SCREEN_AUX_BE;
 
+    public static final Block LOOT_CRATE_OPENER_BLOCK = Registry.register(BuiltInRegistries.BLOCK,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "loot_crate_opener"),
+            new LootCrateOpenerBlock(BlockBehaviour.Properties.of().strength(1.8F)));
+    public static final Item LOOT_CRATE_OPENER_ITEM = Registry.register(BuiltInRegistries.ITEM,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "loot_crate_opener"),
+            new net.minecraft.world.item.BlockItem(LOOT_CRATE_OPENER_BLOCK, new Item.Properties()));
+
+    public static final DataComponentType<String> LOOT_CRATE_COMPONENT = Registry.register(
+            BuiltInRegistries.DATA_COMPONENT_TYPE,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "loot_crate"),
+            DataComponentType.<String>builder().persistent(Codec.STRING)
+                    .networkSynchronized(ByteBufCodecs.STRING_UTF8).build());
+    public static final LootCrateItem LOOT_CRATE = Registry.register(BuiltInRegistries.ITEM,
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "loot_crate"),
+            new LootCrateItem(new Item.Properties()));
+
     @Override
     public void onInitialize() {
         CommonClass.init();
@@ -127,6 +152,9 @@ public class QuestTree implements ModInitializer {
         ModBlocks.setTask(QUEST_TASK_BLOCK, QUEST_TASK_ITEM);
         ModBlocks.setBarrier(QUEST_BARRIER_BLOCK, QUEST_BARRIER_ITEM);
         ModBlocks.setDetector(QUEST_DETECTOR_BLOCK, QUEST_DETECTOR_ITEM);
+        ModBlocks.setLootCrateOpener(LOOT_CRATE_OPENER_BLOCK, LOOT_CRATE_OPENER_ITEM);
+        ModItems.setLootCrate(LOOT_CRATE);
+        ModDataComponents.setLootCrate(LOOT_CRATE_COMPONENT);
         BlockEntityType<QuestTaskBlockEntity> taskBe = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_task_block"),
                 BlockEntityType.Builder.of(QuestTaskBlockEntity::new, QUEST_TASK_BLOCK).build(null));
@@ -173,6 +201,10 @@ public class QuestTree implements ModInitializer {
         if (FabricLoader.getInstance().isModLoaded("team_reborn_energy")) {
             FabricEnergyStorages.register(SCREEN_BE, SCREEN_AUX_BE);
         }
+        BlockEntityType<LootCrateOpenerBlockEntity> openerBe = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "loot_crate_opener"),
+                BlockEntityType.Builder.of(LootCrateOpenerBlockEntity::new, LOOT_CRATE_OPENER_BLOCK).build(null));
+        ModBlockEntities.setLootCrateOpener(openerBe);
         ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(e -> {
             e.accept(QUEST_BOOK);
             e.accept(QUEST_TASK_ITEM);
@@ -183,6 +215,8 @@ public class QuestTree implements ModInitializer {
             e.accept(TASK_SCREEN_5_ITEM);
             e.accept(TASK_SCREEN_7_ITEM);
             e.accept(TASK_SCREEN_CONFIGURATOR);
+            e.accept(LOOT_CRATE_OPENER_ITEM);
+            e.accept(LOOT_CRATE);
         });
         // the quest_book item is synced, so the client mod is required (like FTB Quests)
         PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.STREAM_CODEC);
@@ -192,6 +226,8 @@ public class QuestTree implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(CuePayload.TYPE, CuePayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(com.kuronami.questtree.network.CrateLootPayload.TYPE,
+                com.kuronami.questtree.network.CrateLootPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(ActionPayload.TYPE, ActionPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(EditorOpPayload.TYPE, EditorOpPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(ScreenBindOpenPayload.TYPE, ScreenBindOpenPayload.STREAM_CODEC);
@@ -237,6 +273,8 @@ public class QuestTree implements ModInitializer {
         net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
             if (entity instanceof ServerPlayer sp) {
                 CommonClass.onDeath(sp);
+            } else if (entity.level() instanceof net.minecraft.server.level.ServerLevel level) {
+                LootCrates.spawnDrop(level, entity);
             }
         });
         // damage experience: FabricActuallyHurtMixin (health actually lost, same as NeoForge)

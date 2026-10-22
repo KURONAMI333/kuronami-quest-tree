@@ -6,6 +6,7 @@ import com.kuronami.questtree.client.ClientTaskScreens;
 import com.kuronami.questtree.client.TaskScreenRenderer;
 import com.kuronami.questtree.client.ClientTeam;
 import com.kuronami.questtree.client.EditorSession;
+import com.kuronami.questtree.network.CrateLootPayload;
 import com.kuronami.questtree.network.CuePayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
@@ -45,12 +46,16 @@ public class QuestTreeClient implements ClientModInitializer {
                 com.kuronami.questtree.client.BookKeys.LINK}) {
             KeyBindingHelper.registerKeyBinding(mapping);
         }
+        net.fabricmc.fabric.api.client.rendering.v1.ColorProviderRegistry.ITEM.register(
+                (stack, tint) -> com.kuronami.questtree.client.ClientLootCrates.color(stack), QuestTree.LOOT_CRATE);
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register((g, delta) -> com.kuronami.questtree.client.ProgressHud.render(g));
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register((g, delta) -> com.kuronami.questtree.client.RestrictionCue.render(g));
         ClientTickEvents.END_CLIENT_TICK.register(mc -> ClientProgress.onClientTick());
         ClientPlayNetworking.registerGlobalReceiver(SyncPayload.TYPE, (payload, context) -> ClientProgress.onSync(payload));
         ClientPlayNetworking.registerGlobalReceiver(ProgressPayload.TYPE, (payload, context) -> ClientProgress.onProgress(payload));
         ClientPlayNetworking.registerGlobalReceiver(OpenPayload.TYPE, (payload, context) -> ClientProgress.onOpen(payload));
+        ClientPlayNetworking.registerGlobalReceiver(CrateLootPayload.TYPE,
+                (payload, context) -> ClientProgress.onCrateLoot(payload));
         ClientPlayNetworking.registerGlobalReceiver(TeamPayload.TYPE, (payload, context) -> ClientTeam.onTeam(payload));
         ClientPlayNetworking.registerGlobalReceiver(CuePayload.TYPE, (payload, context) -> ClientCues.onCue(payload));
         ClientPlayNetworking.registerGlobalReceiver(EditorReplyPayload.TYPE,

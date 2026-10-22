@@ -10,6 +10,7 @@ public final class ModBlockEntities {
     private static BlockEntityType<QuestDetectorBlockEntity> detector;
     private static BlockEntityType<TaskScreenBlockEntity> taskScreen;
     private static BlockEntityType<TaskScreenAuxBlockEntity> taskScreenAux;
+    private static BlockEntityType<LootCrateOpenerBlockEntity> lootCrateOpener;
 
     private ModBlockEntities() {
     }
@@ -51,5 +52,12 @@ public final class ModBlockEntities {
 
     public static void setTaskScreenAux(BlockEntityType<TaskScreenAuxBlockEntity> type) {
         taskScreenAux = type;
+    }
+    public static BlockEntityType<LootCrateOpenerBlockEntity> lootCrateOpener() {
+        return lootCrateOpener;
+    }
+
+    public static void setLootCrateOpener(BlockEntityType<LootCrateOpenerBlockEntity> type) {
+        lootCrateOpener = type;
     }
 }

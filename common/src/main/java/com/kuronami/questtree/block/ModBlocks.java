@@ -16,6 +16,8 @@ public final class ModBlocks {
     private static final Block[] screens = new Block[8];
     private static final Item[] screenItems = new Item[8];
     private static Block screenAux;
+    private static Block lootCrateOpener;
+    private static Item lootCrateOpenerItem;
 
     private ModBlocks() {
     }
@@ -33,6 +35,10 @@ public final class ModBlocks {
     public static void setDetector(Block block, Item item) {
         detectorBlock = block;
         detectorItem = item;
+    }
+    public static void setLootCrateOpener(Block block, Item item) {
+        lootCrateOpener = block;
+        lootCrateOpenerItem = item;
     }
 
     public static Block taskBlock() {
@@ -63,6 +69,9 @@ public final class ModBlocks {
     public static Block taskScreenAux() {
         return screenAux;
     }
+    public static Block lootCrateOpener() {
+        return lootCrateOpener;
+    }
 
     public static Item taskItem() {
         return taskItem;
@@ -78,6 +87,9 @@ public final class ModBlocks {
 
     public static Item detectorItem() {
         return detectorItem;
+    }
+    public static Item lootCrateOpenerItem() {
+        return lootCrateOpenerItem;
     }
 
     public static ItemStack taskItem(String node) {

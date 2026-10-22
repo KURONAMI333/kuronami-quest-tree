@@ -251,6 +251,7 @@ public final class ProgressData {
                 JsonObject tables = bundle.getAsJsonObject("reward_tables");
                 overlay.applyTablesTo(tables, sources);
                 overlay.applyRestrictionsTo(bundle);
+                overlay.applySettingsTo(bundle);
                 // editors learn each chapter's current revision from the bundle, without spending a request
                 revisions = overlay.revisionsJson();
                 bundle.add("revisions", revisions);

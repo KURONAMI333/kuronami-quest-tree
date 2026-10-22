@@ -20,6 +20,12 @@ public final class QuestTreeClient {
     @EventBusSubscriber(modid = Constants.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
     public static final class ModEvents {
         @SubscribeEvent
+        public static void colors(net.neoforged.neoforge.client.event.RegisterColorHandlersEvent.Item event) {
+            event.register((stack, tint) -> com.kuronami.questtree.client.ClientLootCrates.color(stack),
+                    QuestTree.LOOT_CRATE.get());
+        }
+
+        @SubscribeEvent
         public static void keys(RegisterKeyMappingsEvent event) {
             event.register(ClientProgress.OPEN_KEY);
             event.register(ClientProgress.TRACK_KEY);
