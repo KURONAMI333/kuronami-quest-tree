@@ -264,16 +264,12 @@ public final class SettingsScreen extends Screen {
 
             @Override
             public Component value() {
-                // with FTB Library the inventory button comes from its sidebar, so this switch has nothing to show
-                return com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")
-                        ? Component.literal("FTB") : onOff(ClientConfig.inventoryButton());
+                return onOff(ClientConfig.inventoryButton());
             }
 
             @Override
             public void click() {
-                if (!com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")) {
-                    ClientConfig.inventoryButton = !ClientConfig.inventoryButton;
-                }
+                ClientConfig.inventoryButton = !ClientConfig.inventoryButton;
             }
         });
     }

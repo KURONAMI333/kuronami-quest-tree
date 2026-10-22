@@ -2,7 +2,6 @@ package com.kuronami.questtree.client;
 
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.mixin.AbstractContainerScreenAccessor;
-import com.kuronami.questtree.platform.Services;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractButton;
@@ -24,9 +23,9 @@ import java.util.function.Consumer;
  * {@code textures/gui/sprites/quest_book_button_highlighted.png}.
  * <p>
  * It reads {@code leftPos}/{@code topPos} every frame, so opening the recipe book (which moves the inventory) and
- * resizing keep it over the preview. With FTB Library installed its sidebar already puts a quest button on this screen,
- * so this one is left out (FTB's own sidebar setting hides that one); the client setting
- * {@code inventory_button} turns this one off in packs without it.
+ * resizing keep it over the preview. The player chose this spot (2026-10-22), so it stays even when FTB Library adds
+ * our entry to its sidebar as well; the client setting {@code inventory_button} turns this one off, and FTB's own
+ * sidebar settings turn that one off.
  */
 public final class InventoryQuestButton extends ImageButton {
 
@@ -44,12 +43,9 @@ public final class InventoryQuestButton extends ImageButton {
         followPanel();
     }
 
-    /** Adds the button to the survival inventory, once. Other screens, creative, and FTB Library are left alone. */
+    /** Adds the button to the survival inventory, once. Other screens and creative are left alone. */
     public static void add(Screen screen, Consumer<AbstractButton> add) {
         if (!(screen instanceof InventoryScreen) || !ClientConfig.inventoryButton()) {
-            return;
-        }
-        if (Services.PLATFORM.isModLoaded("ftblibrary")) {
             return;
         }
         add.accept(new InventoryQuestButton((AbstractContainerScreen<?>) screen));
