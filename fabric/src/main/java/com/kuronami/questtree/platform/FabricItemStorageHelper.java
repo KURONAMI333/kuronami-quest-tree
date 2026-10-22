@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.transfer.v1.fluid.FluidStorage;
 import net.fabricmc.fabric.api.transfer.v1.fluid.FluidVariant;
 import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
 import net.fabricmc.fabric.api.transfer.v1.storage.StorageView;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -49,12 +50,12 @@ public class FabricItemStorageHelper implements IItemStorageHelper {
 
     @Override
     public boolean supportsEnergy() {
-        return false;
+        // Team Reborn Energy is optional (FTB Quests bundles it); without it an energy task cannot count here
+        return FabricLoader.getInstance().isModLoaded("team_reborn_energy");
     }
 
     @Override
     public long energyStored(ItemStack stack) {
-        // Fabric has no energy API in the base API; energy tasks stay at 0 on this loader
-        return 0;
+        return supportsEnergy() ? FabricItemEnergy.stored(stack) : 0;
     }
 }

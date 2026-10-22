@@ -25,6 +25,39 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
 | `hud_back`, `hud_text`, `hud_muted`, `toast_track`, `toast_fill`, `toast_edge` | The pinned-quest overlay over the world; the experience toast's bar, its body and its 1-pixel frame (the advancement toast's own sprite is fixed at a 2-pixel corner, so the mod draws the frame from these) |
 | `hud_tracker`, `hud_tracker_edge`, `hud_tracker_edge_bottom` | The tracker card's frame. The defaults match Jade's dark tooltip at its default 0.7 alpha: `#B1131313` inside, `#B1383838` at the top and sides, `#B1242424` at the bottom |
 
+### Per-chapter and per-quest colours: `assets/kuronami_quest_tree/gui/theme.json`
+
+FTB Quests lets a pack restyle one chapter or one quest through theme selectors; the same idea is here as a small
+file beside the palette. It can override the tile colours for one chapter, one quest, or both:
+
+```json
+{
+  "chapters": {
+    "mypack:magic": { "done_settled": "#FF7A4FC8", "progress": "#FF9B6BE0" },
+    "mypack:deep/ruins": { "tile_locked": "#FF4A4A55" }
+  },
+  "quests": {
+    "mypack:magic/the_first_spell": { "done_settled": "#FFFF9B4F", "done_bright": "#FFFFC46B" }
+  }
+}
+```
+
+Chapter keys are chapter ids (`namespace:path`), quest keys are node keys (`chapter id/node id`), both as written in
+the chapter JSON. The keys inside are palette names: the done tile's `done_settled` and its rewards-waiting
+`done_bright`, the open and in-progress tile's `tile_open`, a skill's affordable `tile_white`, not-yet `tile_locked`,
+the progress water's `progress`, and its top line's `progress_surface`; others are ignored for now. Values are
+`"#RRGGBB"` or `"#AARRGGBB"`.
+
+Resolution is the palette default, then the quest's chapter, then the quest itself, so a chapter recolours all of its
+quests and a quest entry wins over its chapter's. A key no entry sets keeps the palette's colour, so a pack that only
+wants one chapter coloured does not need to copy the palette. `progress_surface` follows the resolved `progress`
+unless it is set too. High contrast (`ClientConfig.highContrast()`) ignores these overrides, as it does the palette,
+because it is a readability switch.
+
+The file is read when the book arrives and every time the screen opens, like the palette, so after `F3 + T` reopen the
+screen. A missing file means no overrides. Chapter icons, sounds and shapes stay in their own files above; this file
+only changes tile colours.
+
 ### Corner radius: `corner_radius`
 
 `corner_radius` is the palette's one non-colour key: a whole number of GUI pixels, default `2`, and `0` draws square

@@ -12,9 +12,9 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Fabric's transfer API view of a task screen (2026-10-22). Insertion is permanent (the item, fluid or FE becomes task
- * progress), so there is nothing to extract. Fabric has no energy API in 1.21.1; energy screens are NeoForge-only, as
- * are the energy tasks themselves in this mod (see ProgressValidator).
+ * Fabric's transfer API view of a task screen's items and fluids (2026-10-22). Insertion is permanent (the item or
+ * fluid becomes task progress), so there is nothing to extract. Energy is not part of this API; see
+ * {@link FabricEnergyStorages}, which registers Team Reborn Energy when that optional mod is loaded.
  */
 final class FabricTaskScreenStorages {
 

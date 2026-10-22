@@ -140,9 +140,9 @@ Action tasks replace FTB Quests' Task Screen by counting the player's own action
 
 `kill` can narrow by `entity`, `entity_tag`, `name` (exact display name) and `nbt` (partial SNBT match).
 
-`fluid` takes `fluid` (an id or `#tag`) and `amount` (mB, default 1000, one bucket). It counts the total matching liquid in the inventory, with a bucket counting as 1000. `energy` takes `amount` (FE) and counts the single inventory stack holding the most energy, not the total. It is counted only on NeoForge. Fabric has no common energy API, so an `energy` task there stays at 0, never completes, and the pack validator reports a `WARNING` for it.
+`fluid` takes `fluid` (an id or `#tag`) and `amount` (mB, default 1000, one bucket). It counts the total matching liquid in the inventory, with a bucket counting as 1000. `energy` takes `amount` (FE). The task screen's energy input counts FE poured into it; the inventory check counts the single stack holding the most energy, not the total. NeoForge always has an energy API; on Fabric the task needs the optional Team Reborn Energy mod (FTB Quests bundles it), and without it an `energy` task stays at 0 and the pack validator reports a `WARNING`.
 
-Quest Tree has no Task Screen block, so `energy` reads the fullest stack the player carries instead of energy poured into a block. A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
+An `energy` task can be filled at a task screen (place one and bind it to the task), or completed by carrying the fullest single stack when a pack checks the inventory instead. A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
 
 `observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`.
 

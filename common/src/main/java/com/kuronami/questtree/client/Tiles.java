@@ -324,7 +324,7 @@ final class Tiles {
      * the bottom of the water and the same water was drawn over the icon again at low alpha; the band read as a leftover
      * thick bottom edge and the second pass tinted the item blue (the player: put the water behind the item).
      */
-    private static void water(GuiGraphics g, String shape, int x, int y, int s, double fraction) {
+    private static void water(GuiGraphics g, String shape, int x, int y, int s, double fraction, String themeKey) {
         double f = Math.max(0, Math.min(1, fraction));
         if (f <= 0) {
             return;
@@ -332,14 +332,20 @@ final class Tiles {
         Metrics m = Metrics.of(shape);
         // the face spans the inset part of the box, so the fill is measured over that span, not the whole tile
         double top = m.faceTop + (m.faceBottom - m.faceTop) * (1 - f);
-        tinted(g, m.face, x, y, s, s, top, 1, BLUE);
+        int blue = Ui.themed("progress", BLUE, themeKey);
+        int surface = Ui.themed("progress_surface", blue == BLUE ? SURFACE : surfaceOf(blue), themeKey);
+        tinted(g, m.face, x, y, s, s, top, 1, blue);
         if (f < 1 && f * s * (m.faceBottom - m.faceTop) > 3) {
-            tinted(g, m.face, x, y, s, s, top, top + 1.0 / s, SURFACE);
+            tinted(g, m.face, x, y, s, s, top, top + 1.0 / s, surface);
         }
     }
 
     static void tile(GuiGraphics g, String shape, int x, int y, int s, State state, double fraction, ItemStack icon, boolean far) {
-        tile(g, shape, x, y, s, look(state), fraction, icon, far);
+        tile(g, shape, x, y, s, look(state), fraction, icon, far, null);
+    }
+
+    static void tile(GuiGraphics g, String shape, int x, int y, int s, State state, double fraction, ItemStack icon, boolean far, String themeKey) {
+        tile(g, shape, x, y, s, look(state), fraction, icon, far, themeKey);
     }
 
     /**
@@ -351,6 +357,14 @@ final class Tiles {
     }
 
     static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon, boolean far) {
+        tile(g, shape, x, y, s, look, fraction, icon, far, null);
+    }
+
+    /**
+     * A state tile with the node's own theme (2026-10-22, {@code gui/theme.json}): its chapter's and then its own
+     * overrides recolour the face and the progress water. Without an override every colour is the palette's.
+     */
+    static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon, boolean far, String themeKey) {
         shape = shapeOf(shape);
         int big = drawnSize(shape, s);
         x -= (big - s) / 2;
@@ -358,16 +372,16 @@ final class Tiles {
         s = big;
         switch (look) {
             // done: green. Rewards still waiting = the brighter green and the yellow notification dot; claimed = settled
-            case DONE_REWARD -> rim(g, shape, x, y, s, GREEN_BRIGHT);
-            case DONE -> rim(g, shape, x, y, s, GREEN_SETTLED);
-            case AFFORDABLE -> rim(g, shape, x, y, s, WHITE);
-            case OPEN -> rim(g, shape, x, y, s, GREY);
+            case DONE_REWARD -> rim(g, shape, x, y, s, Ui.themed("done_bright", GREEN_BRIGHT, themeKey));
+            case DONE -> rim(g, shape, x, y, s, Ui.themed("done_settled", GREEN_SETTLED, themeKey));
+            case AFFORDABLE -> rim(g, shape, x, y, s, Ui.themed("tile_white", WHITE, themeKey));
+            case OPEN -> rim(g, shape, x, y, s, Ui.themed("tile_open", GREY, themeKey));
             case PROGRESS -> {
-                rim(g, shape, x, y, s, GREY);
+                rim(g, shape, x, y, s, Ui.themed("tile_open", GREY, themeKey));
                 // the blue rises with the tasks done, inside the rim and behind the icon
-                water(g, shape, x, y, s, fraction);
+                water(g, shape, x, y, s, fraction, themeKey);
             }
-            case LOCKED_FAR, LOCKED_NEAR, EXCLUDED -> rim(g, shape, x, y, s, TILE_LOCKED);
+            case LOCKED_FAR, LOCKED_NEAR, EXCLUDED -> rim(g, shape, x, y, s, Ui.themed("tile_locked", TILE_LOCKED, themeKey));
         }
         if (far) {
             // zoomed out the surface colour is the information; nothing on top
