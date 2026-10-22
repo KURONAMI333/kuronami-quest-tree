@@ -10,6 +10,7 @@ The server-side storage format and operations. The client sends `EditorOpPayload
   tables/<namespace>/<table>.json
   restrictions.json
   revisions.json
+  lang/<locale>.json
 ```
 
 Loading applies, from lowest to highest precedence: data pack chapters, reward tables and groups → data pack `patches/*.json` → this overlay. The overlay is per chapter and can also remove a pack chapter. `/reload` is not needed. Each save applies the layers through `ProgressData`, validates the result, then raises the generation and resends it to everyone (at most once per ten ticks).
@@ -62,7 +63,9 @@ When writing a file by hand, an omitted `action` is read as `add`. An unreadable
 | `delete_chapter` / `restore_chapter` | `{}` |
 | `update_table` | `{"id": "...", "create": true?, "table": {...}}` (whole table; `patch` is also accepted) |
 | `delete_table` / `restore_table` | `{"id": "..."}` |
+| `resize_nodes` | `{"nodes": [{"id": "...", "size": 2}, ...]}` (one revision and one undo step) |
 | `update_restrictions` | `{"rules": [...]}` (the whole array; `chapterId` is `restrictions`) |
+| `update_lang` | `{"locale": "ja_jp", "entries": {"key": "text", ...}}` (the whole locale; `chapterId` is the same locale) |
 | `link` / `unlink` | `{"from": "...", "to": "..."}` (`to` is a node name in the same chapter, or `chapter/node` for another chapter) |
 | `undo` / `redo` | `{}` |
 
@@ -116,9 +119,17 @@ A vanilla custom payload to the server is at most 32767 bytes, and Fabric does n
 - Rows are the rule's id, items, item tags, blocks, block tags, actions and message as one line each, and `conditions` as compact JSON text (the same kinds as tasks and rewards). An unreadable conditions text leaves the last readable value in place.
 - The reply carries the same rule warnings `/quest_tree validate` prints (a missing target, an unknown action, no conditions). There is no undo for this file: the array is small and its history is not worth 50 copies.
 
+## Phase 6: parity details (2026-10-22, p6-editor)
+
+- **Changelog (row 99).** Every accepted operation is broadcast to the other editors (author excluded) as `EditorChangePayload` with the op, target, how many nodes it touched, and the changes undo / redo would take back next (the history's own words, as FTB Quests sends). The client keeps the last 100 and draws the newest four at the map's bottom right for 12 seconds, fading at the end; the line names the chapter or node from the client's own model and text comes from the lang files. There is no chat line, because a drag would fill it. Entries live in `EditorChangelog` and are dropped when editing is turned off.
+- **Reward tables (row 106).** `title` is the table's own name and is drawn as a reward line unless `hide_tooltip` is on. `TableEditScreen` lists the nodes whose rewards roll the table ("Used by") and each row opens the node; the list is computed from the client's chapter copy, not sent. `loot_size` has no separate field: KQT already spells it `rolls`.
+- **Bulk size (row 109).** The node menu's "Size" resizes every selected node in that chapter (or just the clicked one) through one `resize_nodes`; a zero, negative or non-finite size is refused. `BulkSizeScreen` is one number field, and the save is one revision and one undo step.
+- **Chapter images (row 110).** `ChapterEditScreen` shows the chapter's `decorations` as cards: image path, position, size, rotation, order, visibility. Each card can move up / down, remove, or fix one side to the texture's own ratio ("W" keeps the height, "H" keeps the width; `DecorationGeometry`). "Paste image" reads a texture path from the clipboard and adds a decoration at the clicked map spot, or from the image card in the chapter screen.
+- **Links (row 111).** The node menu's "Link to quest" opens the picker over every node in the same namespace (the server refuses `:` in a reference), and sends the existing `link` with `to` as `chapter/node`. Dragging with L still links inside the current chapter.
+- **Translations (row 113).** `lang/<locale>.json` is `{revision, entries}` and replaces that locale whole, so deleting a key is a real delete. `update_lang` validates the locale, requires the target id to name it, refuses blank values (an empty overlay entry would hide the English text), sorts keys and bumps that locale's revision only. Editors receive every locale in the bundle (`bundleFor(locale, allLocales)`), plus `lang_revisions`; readers still get English and their own. `TranslationEditScreen` lists the union of all locales' keys, marks a key missing in this locale with `* `, and drops an emptied box on save so the English text applies again.
+- **Copy id (row 114).** The node menu copies the node's id, which is the name requirement references and translation keys use.
+
 ## Still missing
 
 - Confirmation in the real client (runClient).
-- A UI for creating cross-chapter links.
-- Editing translation files themselves (beyond overriding the displayed text).
 - Automatic merging across a chapter's `revision` (an old version is refused and fetched again).

@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.client.editor.ContentSchema;
+import com.kuronami.questtree.client.editor.TableReferences;
 import com.kuronami.questtree.client.editor.EditorDoc;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -43,6 +44,16 @@ final class TableEditScreen extends EditorScreen {
         lines.add(new EditForm.HeadLine(Component.literal(tableId)));
         lines.addAll(fieldRows(ContentSchema.tableFields(), root));
 
+        lines.add(new EditForm.HeadLine(Component.translatable(PREFIX + "table.used_in")));
+        List<String> usedIn = TableReferences.usedIn(ClientProgress.rawChapters(), tableId);
+        if (usedIn.isEmpty()) {
+            lines.add(new EditForm.CardLine(Component.translatable(PREFIX + "table.used_in.none"), null, List.of()));
+        } else {
+            for (String key : usedIn) {
+                lines.add(new EditForm.CardLine(Component.literal(key), () -> openNode(key), List.of()));
+            }
+        }
+
         lines.add(new EditForm.HeadLine(Component.translatable(PREFIX + "table.entries")));
         JsonArray entries = EditorDoc.array(root, "entries", false);
         int count = entries == null ? 0 : entries.size();
@@ -65,6 +76,14 @@ final class TableEditScreen extends EditorScreen {
                     List.of(new EditForm.Action("cross", null, this::confirmDelete, true))));
         }
         form.set(lines);
+    }
+
+    private void openNode(String key) {
+        int slash = key.indexOf('/');
+        if (slash <= 0 || minecraft == null) {
+            return;
+        }
+        minecraft.setScreen(new NodeEditScreen(this, key.substring(0, slash), key.substring(slash + 1)));
     }
 
     private JsonArray entriesOrCreate() {

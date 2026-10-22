@@ -60,6 +60,22 @@ final class Tiles {
         });
     }
 
+    /**
+     * The file a chapter image names, given the shape FTB Quests writes: a bare path is under {@code textures/}, an
+     * {@code ns:block/x} sprite keeps its namespace, and a name ending in {@code .png} is already a texture path.
+     */
+    static ResourceLocation imagePath(String image) {
+        if (image == null || image.isBlank()) {
+            return null;
+        }
+        ResourceLocation parsed = ResourceLocation.tryParse(image.trim());
+        if (parsed == null) {
+            return null;
+        }
+        return parsed.getPath().endsWith(".png") ? parsed
+                : ResourceLocation.fromNamespaceAndPath(parsed.getNamespace(), "textures/" + parsed.getPath() + ".png");
+    }
+
     /** Draws a whole texture into a square, however many pixels the file has (chapter icons are not always 16x16). */
     static void textureIcon(GuiGraphics g, ResourceLocation id, float x, float y, float size) {
         int[] dims = textureSize(id);

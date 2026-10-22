@@ -97,11 +97,19 @@ public final class ClientProgress {
                 com.google.gson.JsonObject nextSettings = bundle.has("settings")
                         && bundle.get("settings").isJsonObject()
                         ? bundle.getAsJsonObject("settings").deepCopy() : new com.google.gson.JsonObject();
+                // an editor's bundle carries every locale for the translation screen; a reader's carries two
+                com.google.gson.JsonObject nextLangs = bundle.has("lang") && bundle.get("lang").isJsonObject()
+                        ? bundle.getAsJsonObject("lang").deepCopy() : new com.google.gson.JsonObject();
+                com.google.gson.JsonObject nextLangRevisions = bundle.has("lang_revisions")
+                        && bundle.get("lang_revisions").isJsonObject()
+                        ? bundle.getAsJsonObject("lang_revisions").deepCopy() : new com.google.gson.JsonObject();
                 // a filter's items come from the tags this server sent, so items worked out for another world are dropped
                 com.kuronami.questtree.progress.ItemFilter.clearCache();
                 sync = new SyncState<>(nextModel, nextRules, nextChapters, nextTables, nextDeleted);
                 restrictions = nextRestrictions;
                 settings = nextSettings;
+                langs = nextLangs;
+                langRevisions = nextLangRevisions;
                 EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
@@ -188,6 +196,10 @@ public final class ClientProgress {
     /** The restrictions array of the last bundle; replaced whole, so no other sync state has to know about it. */
     private static com.google.gson.JsonArray restrictions = new com.google.gson.JsonArray();
     private static com.google.gson.JsonObject settings = new com.google.gson.JsonObject();
+    /** Every locale the bundle carried (all of them for an editor), keyed by folder name. */
+    private static com.google.gson.JsonObject langs = new com.google.gson.JsonObject();
+    /** Locale to the overlay's revision; 0 for a locale the overlay never wrote. */
+    private static com.google.gson.JsonObject langRevisions = new com.google.gson.JsonObject();
 
     public static ProgressRules rules() {
         return sync.rules();
@@ -212,6 +224,22 @@ public final class ClientProgress {
         }
         com.google.gson.JsonElement node = nodes.getAsJsonObject().get(nodeId);
         return node != null && node.isJsonObject() ? node.getAsJsonObject().deepCopy() : null;
+    }
+
+    /** Every chapter's raw JSON, as the server last sent it; the table screen counts reward-table references here. */
+    public static JsonObject rawChapters() {
+        return sync.chapters() == null ? new JsonObject() : sync.chapters().deepCopy();
+    }
+
+    /** Every locale of the last bundle, keyed by folder name; a non-editor's bundle holds English and its own. */
+    public static com.google.gson.JsonObject langs() {
+        return langs.deepCopy();
+    }
+
+    /** The revision a translation save for {@code locale} must name. */
+    public static long langRevision(String locale) {
+        com.google.gson.JsonElement e = langRevisions.get(locale);
+        return e == null || !e.isJsonPrimitive() ? 0 : e.getAsLong();
     }
 
     /** One chapter's raw JSON, or null; the chapter editor patches this so unknown fields survive. */

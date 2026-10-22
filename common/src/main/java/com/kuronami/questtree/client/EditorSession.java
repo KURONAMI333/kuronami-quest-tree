@@ -82,6 +82,7 @@ public final class EditorSession {
             idleTasks.clear();
             optimistic.clear();
             settledAt.clear();
+            EditorChangelog.clear();
         }
     }
 
@@ -209,6 +210,13 @@ public final class EditorSession {
 
     public static void clearNotices() {
         notices.clear();
+    }
+
+    /** One line in the same place refusals appear, for something the client did itself (a copied id, for example). */
+    public static void note(String text) {
+        if (text != null && !text.isBlank()) {
+            notices.add(new Notice(text, false, net.minecraft.Util.getMillis()));
+        }
     }
 
     public static void clearOptimistic() {

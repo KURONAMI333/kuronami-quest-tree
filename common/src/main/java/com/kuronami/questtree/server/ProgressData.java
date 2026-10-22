@@ -46,6 +46,8 @@ public final class ProgressData {
     /** Bundle without translations, plus translations per locale; a player gets their locale and en_us only. */
     private static JsonObject base = new JsonObject();
     private static Map<String, JsonObject> langs = new TreeMap<>();
+    /** The pack's own text, before the writable overlay; {@link #langs} is this plus the overlay each rebuild. */
+    private static Map<String, JsonObject> packLangs = new TreeMap<>();
     private static final Map<String, byte[]> COMPRESSED = new java.util.concurrent.ConcurrentHashMap<>();
     private static int generation;
     private static int chapterCount;
@@ -208,6 +210,7 @@ public final class ProgressData {
         packSources = sources;
         packUnreadable = unreadable;
         packProblems = problems;
+        packLangs = locales;
         langs = locales;
         rebuild(true);
     }
@@ -243,6 +246,7 @@ public final class ProgressData {
         Set<String> unreadable = new LinkedHashSet<>(packUnreadable);
         List<ProgressValidator.Problem> found = new ArrayList<>(packProblems);
 
+        Map<String, JsonObject> mergedLangs = new TreeMap<>(packLangs);
         if (overlayRoot != null) {
             try {
                 ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot.resolve(ProgressionOverlay.DIR));
@@ -252,10 +256,12 @@ public final class ProgressData {
                 overlay.applyTablesTo(tables, sources);
                 overlay.applyRestrictionsTo(bundle);
                 overlay.applySettingsTo(bundle);
+                overlay.applyLangsTo(mergedLangs);
                 // editors learn each chapter's current revision from the bundle, without spending a request
                 revisions = overlay.revisionsJson();
                 bundle.add("revisions", revisions);
                 bundle.add("table_revisions", overlay.tableRevisionsJson());
+                bundle.add("lang_revisions", overlay.langRevisionsJson());
                 bundle.add("deleted", overlay.deletedJson());
             } catch (RuntimeException ex) {
                 Constants.LOG.error("Could not read the progression overlay", ex);
@@ -263,6 +269,8 @@ public final class ProgressData {
                         "the progression overlay could not be read: " + ex, 0));
             }
         }
+
+        langs = mergedLangs;
 
         // check the data before it becomes a model: a broken node is dropped, the rest of the pack keeps working
         ProgressValidator.Result result;
@@ -325,7 +333,7 @@ public final class ProgressData {
         generation++;
         chapterCount = chapters.size();
         Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount,
-                bundleFor("en_us").length / 1024, langs.size());
+                bundleFor("en_us", false).length / 1024, langs.size());
         return true;
     }
 
@@ -733,16 +741,26 @@ public final class ProgressData {
         return out.toByteArray();
     }
 
-    private static byte[] bundleFor(String locale) {
+    /**
+     * The bundle for one client. A reader gets English and its own language; an editor gets every locale, because the
+     * translation screen edits any of them with the rest as fallback (2026-10-22, p6-editor).
+     */
+    private static byte[] bundleFor(String locale, boolean allLocales) {
         String loc = langs.containsKey(locale) ? locale : "en_us";
-        return COMPRESSED.computeIfAbsent(loc, l -> {
+        return COMPRESSED.computeIfAbsent((allLocales ? "all:" : "") + loc, key -> {
             JsonObject b = base.deepCopy();
             JsonObject lang = new JsonObject();
             if (langs.containsKey("en_us")) {
                 lang.add("en_us", langs.get("en_us"));
             }
-            if (langs.containsKey(l)) {
-                lang.add(l, langs.get(l));
+            if (allLocales) {
+                langs.forEach((name, entries) -> {
+                    if (!lang.has(name)) {
+                        lang.add(name, entries);
+                    }
+                });
+            } else if (langs.containsKey(loc)) {
+                lang.add(loc, langs.get(loc));
             }
             b.add("lang", lang);
             return gzip(GSON.toJson(b).getBytes(StandardCharsets.UTF_8));
@@ -764,7 +782,9 @@ public final class ProgressData {
     }
 
     public static void sync(ServerPlayer player) {
-        byte[] data = bundleFor(player.clientInformation().language().toLowerCase(java.util.Locale.ROOT));
+        String locale = player.clientInformation().language().toLowerCase(java.util.Locale.ROOT);
+        boolean editor = EditorService.isEditing(player) && player.hasPermissions(2);
+        byte[] data = bundleFor(locale, editor);
         int total = Math.max(1, (data.length + SyncPayload.MAX_PART - 1) / SyncPayload.MAX_PART);
         for (int i = 0; i < total; i++) {
             int from = i * SyncPayload.MAX_PART;

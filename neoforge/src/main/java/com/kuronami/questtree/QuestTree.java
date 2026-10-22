@@ -311,7 +311,7 @@ public class QuestTree {
         // version is bumped when a payload changes shape (2: ActionPayload gained its choice field; 3: the editor
         // gained its state payload; 4: the team view; 5: quest givers; 6: non-chat cues and restriction tooltips), so
         // an older client fails the handshake instead of silently missing a feature.
-        var r = event.registrar("7");
+        var r = event.registrar("8");
         r.playToClient(SyncPayload.TYPE, SyncPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onSync(payload));
         r.playToClient(com.kuronami.questtree.network.CrateLootPayload.TYPE,
                 com.kuronami.questtree.network.CrateLootPayload.STREAM_CODEC,
@@ -325,6 +325,9 @@ public class QuestTree {
                 (payload, context) -> EditorSession.onReply(payload));
         r.playToClient(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC,
                 (payload, context) -> EditorSession.setAllowed(payload.canEdit()));
+        r.playToClient(com.kuronami.questtree.network.EditorChangePayload.TYPE,
+                com.kuronami.questtree.network.EditorChangePayload.STREAM_CODEC,
+                (payload, context) -> com.kuronami.questtree.client.EditorChangelog.on(payload));
         r.playToServer(ActionPayload.TYPE, ActionPayload.STREAM_CODEC, (payload, context) -> {
             if (context.player() instanceof ServerPlayer sp) {
                 CommonClass.onAction(sp, payload);

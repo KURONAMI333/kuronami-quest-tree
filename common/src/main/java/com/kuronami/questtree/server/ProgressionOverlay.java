@@ -191,6 +191,29 @@ public final class ProgressionOverlay {
         }
     }
 
+    /**
+     * One locale's overlay (2026-10-22, p6-editor): the whole locale object and one revision, written whole so an
+     * editor can remove a key the pack shipped. The file is {@code lang/<locale>.json} under the progression folder.
+     */
+    public static final class LangOverlay {
+        public final String locale;
+        public long revision;
+        public JsonObject entries = new JsonObject();
+        public String file = "";
+        public String raw = "";
+
+        public LangOverlay(String locale) {
+            this.locale = locale;
+        }
+
+        public JsonObject toJson() {
+            JsonObject out = new JsonObject();
+            out.addProperty("revision", revision);
+            out.add("entries", entries.deepCopy());
+            return out;
+        }
+    }
+
     /** Everything the overlay directory held, plus what could not be read. */
     public static final class Overlay {
         public final Map<String, ChapterOverlay> chapters = new LinkedHashMap<>();
@@ -203,6 +226,8 @@ public final class ProgressionOverlay {
         public RestrictionOverlay restrictions;
         /** The whole settings file, or null when it does not exist and the pack's settings apply. */
         public SettingsOverlay settings;
+        /** Locale to the whole locale object the editor wrote for it; absent locales keep the pack's text. */
+        public final Map<String, LangOverlay> langs = new LinkedHashMap<>();
         public final List<ProgressValidator.Problem> problems = new ArrayList<>();
 
         public ChapterOverlay chapter(String id) {
@@ -232,6 +257,20 @@ public final class ProgressionOverlay {
             JsonObject out = new JsonObject();
             for (Map.Entry<String, Long> e : tableRevisions.entrySet()) {
                 out.addProperty(e.getKey(), e.getValue());
+            }
+            return out;
+        }
+
+        /** Locale to its revision, so the translation screen knows what its save must name. */
+        public long langRevision(String locale) {
+            LangOverlay overlay = langs.get(locale);
+            return overlay == null ? 0 : overlay.revision;
+        }
+
+        public JsonObject langRevisionsJson() {
+            JsonObject out = new JsonObject();
+            for (Map.Entry<String, LangOverlay> e : langs.entrySet()) {
+                out.addProperty(e.getKey(), e.getValue().revision);
             }
             return out;
         }
@@ -362,9 +401,109 @@ public final class ProgressionOverlay {
         bundle.addProperty("settings_revision", settings.revision);
     }
 
+    /**
+     * Replaces the pack's text for every locale the editor wrote; a locale without an overlay file keeps the pack's
+     * own object. The object is whole, so a key the editor removed leaves the book instead of falling back to English.
+     */
+    public void applyLangsTo(Map<String, JsonObject> into) {
+        for (Map.Entry<String, LangOverlay> e : langs.entrySet()) {
+            into.put(e.getKey(), e.getValue().entries.deepCopy());
+        }
+    }
+
     }
 
     private ProgressionOverlay() {
+    }
+
+    private static void readLangs(Path progressionRoot, Overlay out) {
+        Path dir = progressionRoot.resolve("lang");
+        if (!Files.isDirectory(dir)) {
+            return;
+        }
+        List<Path> files = new ArrayList<>();
+        try (Stream<Path> walk = Files.list(dir)) {
+            walk.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".json")).forEach(files::add);
+        } catch (IOException ex) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, display(progressionRoot, dir),
+                    "", "could not read the translation overlay: " + ex.getMessage(), 0));
+            return;
+        }
+        files.sort(Path::compareTo);
+        for (Path file : files) {
+            String name = file.getFileName().toString();
+            String locale = name.substring(0, name.length() - 5).toLowerCase(java.util.Locale.ROOT);
+            String shown = display(progressionRoot, file);
+            if (!validLocale(locale)) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "translation files are named <locale>.json, for example ja_jp.json", 0));
+                continue;
+            }
+            String text;
+            try {
+                text = Files.readString(file, StandardCharsets.UTF_8);
+            } catch (IOException ex) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "could not be read: " + ex.getMessage(), 0));
+                continue;
+            }
+            JsonElement parsed;
+            try {
+                parsed = JsonParser.parseString(text);
+            } catch (Exception ex) {
+                out.problems.add(ProgressValidator.parseError(shown, text, ex));
+                continue;
+            }
+            if (!parsed.isJsonObject()) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                        "the translation file is not a JSON object", 0));
+                continue;
+            }
+            JsonObject o = parsed.getAsJsonObject();
+            JsonElement entries = o.get("entries");
+            if (entries == null || !entries.isJsonObject()) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "entries",
+                        "\"entries\" is not an object, so the file is ignored and the pack's text applies", 0));
+                continue;
+            }
+            LangOverlay overlay = new LangOverlay(locale);
+            overlay.file = shown;
+            overlay.raw = text;
+            overlay.revision = number(o, "revision");
+            overlay.entries = entries.getAsJsonObject().deepCopy();
+            out.langs.put(locale, overlay);
+        }
+    }
+
+    /** Whether a locale folder name is one the game would ask for: {@code en_us}, {@code ja_jp}, {@code zh_cn}. */
+    public static boolean validLocale(String locale) {
+        if (locale == null || locale.length() < 2 || locale.length() > 16) {
+            return false;
+        }
+        for (int i = 0; i < locale.length(); i++) {
+            char c = locale.charAt(i);
+            if (!(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9') && c != '_') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Writes {@code lang/<locale>.json} atomically; the caller passes the new revision and the whole locale object. */
+    public static void writeLang(Path progressionRoot, String locale, long revision, JsonObject entries) throws IOException {
+        LangOverlay overlay = new LangOverlay(locale);
+        overlay.revision = revision;
+        overlay.entries = entries.deepCopy();
+        Path dir = progressionRoot.resolve("lang");
+        Files.createDirectories(dir);
+        Path file = dir.resolve(locale + ".json");
+        Path temp = Files.createTempFile(dir, "lang", ".tmp");
+        try {
+            Files.writeString(temp, GSON.toJson(overlay.toJson()), StandardCharsets.UTF_8);
+            moveAtomically(temp, file);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 
     private static void readSettings(Path progressionRoot, Overlay out) {
@@ -499,6 +638,7 @@ public final class ProgressionOverlay {
             readTables(progressionRoot, out);
             readRevisions(progressionRoot, out);
             readTableRevisions(progressionRoot, out);
+            readLangs(progressionRoot, out);
             return out;
         }
         List<Path> files = new ArrayList<>();
@@ -551,6 +691,7 @@ public final class ProgressionOverlay {
         readTables(progressionRoot, out);
         readRevisions(progressionRoot, out);
         readTableRevisions(progressionRoot, out);
+        readLangs(progressionRoot, out);
         return out;
     }
 

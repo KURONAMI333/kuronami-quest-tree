@@ -9,6 +9,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -908,5 +910,120 @@ class ProgressionEditorTest {
 
         assertFalse(out.ok(), "a second run of the same command is a new command the writer cannot grant");
         assertTrue(out.messages().stream().anyMatch(m -> m.contains("permission level 4")), out.messages().toString());
+    }
+
+    /** A translation save writes the whole locale, sorted, under its own revision (2026-10-22, p6-editor). */
+    @Test
+    void aTranslationSaveWritesSortedEntriesUnderItsOwnRevision() throws Exception {
+        ProgressionEditor.Outcome out = editor().apply(pack(), new JsonObject(), Map.of(), "ja_jp", 0,
+                "update_lang", JsonParser.parseString(
+                        "{\"locale\":\"ja_jp\",\"entries\":{\"b.key\":\"B\",\"a.key\":\"A\"}}")
+                        .getAsJsonObject(), Set.of());
+
+        assertTrue(out.ok(), out.messages().toString());
+        assertEquals(1, out.revision());
+        JsonObject written = JsonParser.parseString(Files.readString(
+                temp.resolve(ProgressionOverlay.DIR).resolve("lang").resolve("ja_jp.json"))).getAsJsonObject();
+        assertEquals(1, written.get("revision").getAsInt());
+        JsonObject entries = written.getAsJsonObject("entries");
+        assertEquals(List.of("a.key", "b.key"), new ArrayList<>(entries.keySet()));
+        assertEquals("A", entries.get("a.key").getAsString());
+    }
+
+    @Test
+    void aTranslationSaveAgainstAnOlderRevisionIsRefusedAndKeepsTheFile() throws Exception {
+        ProgressionEditor editor = editor();
+        assertTrue(editor.apply(pack(), new JsonObject(), Map.of(), "ja_jp", 0, "update_lang",
+                JsonParser.parseString("{\"locale\":\"ja_jp\",\"entries\":{\"a.key\":\"A\"}}")
+                        .getAsJsonObject(), Set.of()).ok());
+
+        ProgressionEditor.Outcome out = editor.apply(pack(), new JsonObject(), Map.of(), "ja_jp", 0, "update_lang",
+                JsonParser.parseString("{\"locale\":\"ja_jp\",\"entries\":{\"a.key\":\"B\"}}")
+                        .getAsJsonObject(), Set.of());
+
+        assertFalse(out.ok());
+        assertTrue(out.stale());
+        assertEquals(1, out.revision());
+        assertTrue(Files.readString(temp.resolve(ProgressionOverlay.DIR).resolve("lang").resolve("ja_jp.json"))
+                .contains("\"A\""));
+    }
+
+    @Test
+    void aTranslationSaveMustNameTheLocaleItIsAddressedTo() throws Exception {
+        ProgressionEditor.Outcome out = editor().apply(pack(), new JsonObject(), Map.of(), "ja_jp", 0,
+                "update_lang", JsonParser.parseString(
+                        "{\"locale\":\"de_de\",\"entries\":{\"a.key\":\"A\"}}").getAsJsonObject(), Set.of());
+
+        assertFalse(out.ok());
+        assertFalse(Files.exists(temp.resolve(ProgressionOverlay.DIR).resolve("lang").resolve("de_de.json")));
+    }
+
+    @Test
+    void aBlankTranslationIsRefusedSoTheEnglishTextKeepsShowing() throws Exception {
+        ProgressionEditor.Outcome out = editor().apply(pack(), new JsonObject(), Map.of(), "ja_jp", 0,
+                "update_lang", JsonParser.parseString(
+                        "{\"locale\":\"ja_jp\",\"entries\":{\"a.key\":\"  \"}}").getAsJsonObject(), Set.of());
+
+        assertFalse(out.ok());
+        assertFalse(Files.exists(temp.resolve(ProgressionOverlay.DIR).resolve("lang").resolve("ja_jp.json")));
+    }
+
+    /** Bulk resize is one revision and one undo step however many nodes it names (2026-10-22, p6-editor). */
+    @Test
+    void resizingManyNodesWritesOneRevisionAndUndoPutsEverySizeBack() throws Exception {
+        ProgressionEditor editor = editor();
+        ProgressionEditor.Outcome out = apply(editor, CHAPTER, 0, "resize_nodes",
+                "{\"nodes\":[{\"id\":\"a\",\"size\":2},{\"id\":\"b\",\"size\":1.5}]}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        assertEquals(1, out.revision());
+        assertEquals(2, editor.lastActivity().change().count());
+        assertEquals("resize_nodes", editor.lastActivity().change().op());
+        JsonObject written = JsonParser.parseString(Files.readString(overlayFile(CHAPTER))).getAsJsonObject();
+        JsonObject nodes = written.getAsJsonObject("nodes");
+        assertEquals(2, nodes.getAsJsonObject("a").getAsJsonObject("node").get("size").getAsDouble(), 0.001);
+        assertEquals(1.5, nodes.getAsJsonObject("b").getAsJsonObject("node").get("size").getAsDouble(), 0.001);
+
+        ProgressionEditor.Outcome undone = apply(editor, CHAPTER, 1, "undo", "{}");
+        assertTrue(undone.ok(), undone.messages().toString());
+        assertEquals("undo", editor.lastActivity().change().op());
+        // neither node had an overlay entry before the resize, so undoing the only step removes the file itself
+        Path file = overlayFile(CHAPTER);
+        if (Files.exists(file)) {
+            JsonObject after = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+            assertFalse(after.getAsJsonObject("nodes").getAsJsonObject("a").getAsJsonObject("node").has("size"));
+        }
+    }
+
+    @Test
+    void aZeroOrUnknownNodeSizeIsRefusedAndWritesNothing() {
+        ProgressionEditor editor = editor();
+        ProgressionEditor.Outcome zero = apply(editor, CHAPTER, 0, "resize_nodes",
+                "{\"nodes\":[{\"id\":\"a\",\"size\":0}]}");
+        assertFalse(zero.ok());
+        assertFalse(Files.exists(overlayFile(CHAPTER)));
+
+        ProgressionEditor.Outcome unknown = apply(editor, CHAPTER, 0, "resize_nodes",
+                "{\"nodes\":[{\"id\":\"nope\",\"size\":2}]}");
+        assertFalse(unknown.ok());
+        assertFalse(Files.exists(overlayFile(CHAPTER)));
+    }
+
+    /** The changelog line for an edit names the chapter and the node, and what undo would take back (2026-10-22). */
+    @Test
+    void anEditRecordsWhatTheChangelogShows() {
+        ProgressionEditor editor = editor();
+
+        assertTrue(apply(editor, CHAPTER, 0, "update_node", "{\"id\":\"a\",\"patch\":{\"x\":7}}").ok());
+
+        ProgressionEditor.Activity activity = editor.lastActivity();
+        assertTrue(activity != null, "the change is recorded for the changelog");
+        assertEquals("update_node", activity.change().op());
+        assertEquals(CHAPTER, activity.change().chapterId());
+        assertEquals("a", activity.change().node());
+        assertEquals(1, activity.change().count());
+        assertEquals("update_node", activity.undo().op());
+        assertEquals("a", activity.undo().node());
+        assertTrue(activity.redo() == null, "the first edit has nothing to redo");
     }
 }

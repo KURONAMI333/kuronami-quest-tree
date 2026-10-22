@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -173,4 +174,54 @@ class ProgressionOverlayTest {
                 && p.message().contains("no items or blocks")), overlay.problems.toString());
     }
 
+
+    /** Translations are a writable overlay per locale (2026-10-22, p6-editor): read, revised and merged. */
+    @Test
+    void translationFilesAreReadPerLocaleAndWinOverThePacksText() throws Exception {
+        Path dir = temp.resolve(ProgressionOverlay.DIR).resolve("lang");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("ja_jp.json"), """
+                {"revision": 4, "entries": {"a.key": "A", "b.key": "B"}}
+                """, StandardCharsets.UTF_8);
+
+        ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR));
+
+        assertTrue(overlay.problems.isEmpty(), overlay.problems.toString());
+        assertEquals(4, overlay.langRevision("ja_jp"));
+        assertEquals(0, overlay.langRevision("de_de"));
+        assertEquals(4, overlay.langRevisionsJson().get("ja_jp").getAsLong());
+        Map<String, JsonObject> into = new LinkedHashMap<>();
+        into.put("en_us", JsonParser.parseString("{\"a.key\":\"English\"}").getAsJsonObject());
+        overlay.applyLangsTo(into);
+        assertEquals("A", into.get("ja_jp").get("a.key").getAsString());
+        assertEquals("English", into.get("en_us").get("a.key").getAsString());
+    }
+
+    @Test
+    void writeLangWritesAFileTheNextReadFinds() throws Exception {
+        JsonObject entries = JsonParser.parseString("{\"a.key\":\"A\"}").getAsJsonObject();
+
+        ProgressionOverlay.writeLang(temp.resolve(ProgressionOverlay.DIR), "ja_jp", 2, entries);
+        ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR));
+
+        assertTrue(overlay.problems.isEmpty(), overlay.problems.toString());
+        assertEquals(2, overlay.langRevision("ja_jp"));
+        Map<String, JsonObject> into = new LinkedHashMap<>();
+        overlay.applyLangsTo(into);
+        assertEquals("A", into.get("ja_jp").get("a.key").getAsString());
+    }
+
+    @Test
+    void aTranslationFileWithABadNameIsReportedAndIgnored() throws Exception {
+        Path dir = temp.resolve(ProgressionOverlay.DIR).resolve("lang");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("ja-JP.json"), """
+                {"revision": 1, "entries": {"a.key": "A"}}
+                """, StandardCharsets.UTF_8);
+
+        ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR));
+
+        assertTrue(!overlay.problems.isEmpty(), "a file the game cannot address is a problem to show");
+        assertEquals(0, overlay.langRevision("japanese"));
+    }
 }
