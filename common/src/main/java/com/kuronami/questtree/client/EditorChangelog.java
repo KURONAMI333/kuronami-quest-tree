@@ -3,7 +3,6 @@ package com.kuronami.questtree.client;
 import com.kuronami.questtree.network.EditorChangePayload;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
@@ -38,6 +37,8 @@ public final class EditorChangelog {
     }
 
     private static final Deque<Entry> entries = new ArrayDeque<>();
+    /** The list a frame draws; rebuilt once per client tick, never while rendering (2026-10-23, R6 L4). */
+    private static List<Entry> snapshot = List.of();
 
     private EditorChangelog() {
     }
@@ -68,16 +69,26 @@ public final class EditorChangelog {
 
     /** The newest entries still inside {@link #LIFE_MS}, oldest first; drops the ones that have faded. */
     static List<Entry> recent(long now) {
+        tick(now);
+        return snapshot;
+    }
+
+    /**
+     * One client tick: drop the faded entries and take the frame's snapshot. Rendering only reads the snapshot, so a
+     * full copy and a {@code removeIf} no longer run on every frame.
+     */
+    static void tick(long now) {
         entries.removeIf(e -> now - e.at() > LIFE_MS);
-        return new ArrayList<>(entries);
+        snapshot = List.copyOf(entries);
     }
 
     public static List<Entry> recent() {
-        return recent(net.minecraft.Util.getMillis());
+        return snapshot;
     }
 
     public static void clear() {
         entries.clear();
+        snapshot = List.of();
     }
 
     /**

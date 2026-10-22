@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The map's changelog list: what stays, what fades, and the word a line starts with (2026-10-22, p6-editor). */
@@ -63,6 +65,29 @@ class EditorChangelogTest {
         assertEquals("change", EditorChangelog.action("update_lang"));
         assertEquals("change", EditorChangelog.action("something_new"));
         assertEquals("change", EditorChangelog.action(null));
+    }
+
+    @Test
+    void aFrameReadsOneSnapshotUntilTheNextTick() {
+        EditorChangelog.add("update_node", "t:basics", "a", 1, "", "", 0);
+        EditorChangelog.tick(0);
+
+        List<EditorChangelog.Entry> first = EditorChangelog.recent();
+        assertSame(first, EditorChangelog.recent(), "rendering must not copy the list");
+
+        EditorChangelog.tick(1);
+        assertNotSame(first, EditorChangelog.recent());
+        assertEquals(1, EditorChangelog.recent().size());
+    }
+
+    @Test
+    void expiryIsResolvedOnTheTick() {
+        EditorChangelog.add("update_node", "t:basics", "a", 1, "", "", 0);
+        EditorChangelog.tick(0);
+        assertEquals(1, EditorChangelog.recent().size());
+
+        EditorChangelog.tick(EditorChangelog.LIFE_MS + 1);
+        assertTrue(EditorChangelog.recent().isEmpty());
     }
 
     @Test
