@@ -1,7 +1,9 @@
 package com.kuronami.questtree.server;
 
+import com.google.gson.JsonObject;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
+import com.kuronami.questtree.progress.ProgressRules;
 
 /**
  * The write behind a task progress bump ({@code ProgressService.bump}). Conditions are deliberately not read here:
@@ -22,5 +24,13 @@ final class TaskWrite {
         long before = p.task(n.key, index);
         p.setTask(n.key, index, value);
         return before < target && value >= target;
+    }
+
+    /**
+     * The value a command writes into a task (2026-10-22): an admin asking for more than the target gets the target,
+     * because the counter past it means nothing, and a negative value is 0.
+     */
+    static long clamped(JsonObject task, long requested) {
+        return Math.max(0, Math.min(requested, ProgressRules.target(task)));
     }
 }

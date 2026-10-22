@@ -8,6 +8,7 @@ import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -35,6 +36,9 @@ import java.util.function.BiConsumer;
  * <pre>
  * /quest_tree reset &lt;players&gt; [chapter|node]      forget progress (all, one chapter, one node)
  * /quest_tree complete &lt;players&gt; &lt;node&gt;           finish a quest's tasks (rewards stay claimable)
+ * /quest_tree complete_all &lt;players&gt;               finish every quest (skills are left alone)
+ * /quest_tree progress &lt;players&gt; &lt;node&gt; &lt;task&gt; &lt;value&gt;  set one task's counter (task counted from 1)
+ * /quest_tree book_lock &lt;players&gt; on|off           close/open the book for a whole team
  * /quest_tree respec &lt;players&gt; &lt;chapter&gt;          give back every point spent in a skill chapter
  * /quest_tree points &lt;players&gt; &lt;chapter&gt; &lt;n&gt;      add (or remove) spendable points
  * /quest_tree experience &lt;players&gt; &lt;chapter&gt; &lt;n&gt;  add experience to a skill chapter
@@ -81,6 +85,19 @@ final class PlayerCommands {
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(NODES)
                                         .executes(c -> each(c, (p, pr) -> complete(p, pr, id(c)))))))
+                .then(Commands.literal("complete_all").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("players", EntityArgument.players())
+                                .executes(c -> each(c, PlayerCommands::completeAll))))
+                .then(Commands.literal("progress").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(NODES)
+                                        .then(Commands.argument("task", IntegerArgumentType.integer(1))
+                                                .then(Commands.argument("value", LongArgumentType.longArg(0))
+                                                        .executes(c -> each(c, (p, pr) -> setProgress(c, pr))))))))
+                .then(Commands.literal("book_lock").requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("players", EntityArgument.players())
+                                .then(Commands.literal("on").executes(c -> bookLock(c, true)))
+                                .then(Commands.literal("off").executes(c -> bookLock(c, false)))))
                 .then(Commands.literal("respec").requires(s -> s.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("id", ResourceLocationArgument.id()).suggests(SKILL_CHAPTERS)
@@ -232,6 +249,65 @@ final class PlayerCommands {
             pr.pendingRewards.keySet().removeIf(k -> k.startsWith(n.key + "#"));
             pr.rewardRolls.keySet().removeIf(k -> k.startsWith(n.key + "#"));
         }
+    }
+
+    /**
+     * FTB Quests' {@code change_progress complete-all}: every quest's tasks reach their targets. Skill chapters are
+     * left alone, because their nodes are taken with points rather than with task counters.
+     */
+    private static void completeAll(ServerPlayer p, PlayerProgress pr) {
+        for (ProgressModel.Node n : ProgressService.rules().model().nodes.values()) {
+            if (!n.chapter.isSkills()) {
+                complete(p, pr, n.id);
+            }
+        }
+    }
+
+    /**
+     * FTB Quests has no partial value (its change_progress only completes or resets), so this is the KQT addition:
+     * one task's counter is set to a value clamped to the task's target. The node is then rechecked, which completes
+     * it when every task is done and pays its automatic rewards once.
+     */
+    private static void setProgress(CommandContext<CommandSourceStack> c, PlayerProgress pr) {
+        String nodeId = id(c);
+        ProgressModel.Node n = ProgressService.rules().model().nodes.get(nodeId);
+        if (n == null) {
+            throw new IllegalArgumentException("Unknown node " + nodeId);
+        }
+        int index = IntegerArgumentType.getInteger(c, "task") - 1;
+        if (index < 0 || index >= n.tasks.size()) {
+            throw new IllegalArgumentException("Node " + nodeId + " has no task " + (index + 1));
+        }
+        long value = TaskWrite.clamped(n.tasks.get(index), LongArgumentType.getLong(c, "value"));
+        TaskWrite.records(pr, n, index, value, ProgressRules.target(n.tasks.get(index)));
+    }
+
+    /**
+     * FTB Quests' {@code locked}: the book is closed for a whole team. Progress keeps counting, as it does for FTB
+     * Quests' team data; only opening the book is refused, with a short toast and the lock sound on the client.
+     */
+    private static int bookLock(CommandContext<CommandSourceStack> c, boolean locked) throws CommandSyntaxException {
+        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
+        Map<UUID, ServerPlayer> firstOfTeam = new LinkedHashMap<>();
+        for (ServerPlayer p : players) {
+            firstOfTeam.putIfAbsent(TeamResolver.teamId(p.server, p.getUUID()), p);
+        }
+        for (ServerPlayer p : firstOfTeam.values()) {
+            PlayerProgress pr = ProgressService.progress(p);
+            if (pr.bookLocked() == locked) {
+                continue;
+            }
+            pr.setBookLocked(locked);
+            ProgressStore.get(p.server).setDirty();
+            ProgressService.markDirty(p);
+            ProgressService.flushTeam(p);
+        }
+        int n = players.size();
+        c.getSource().sendSuccess(() -> Component.translatableWithFallback(locked
+                        ? "commands.kuronami_quest_tree.book_lock.locked"
+                        : "commands.kuronami_quest_tree.book_lock.unlocked",
+                locked ? "Locked the quest book for %s players" : "Unlocked the quest book for %s players", n), true);
+        return n;
     }
 
     private static void resetAll(ServerPlayer p, PlayerProgress pr) {

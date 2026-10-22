@@ -75,6 +75,7 @@ public final class ProgressCommands {
                                 .then(Commands.literal("force")
                                         .executes(c -> export(c, StringArgumentType.getString(c, "namespace"), true))))));
         PlayerCommands.register(dispatcher);
+        AdminCommands.register(dispatcher);
     }
 
     /** How many of a chapter's problems {@code /quest_tree validate} prints before pointing at the report. */

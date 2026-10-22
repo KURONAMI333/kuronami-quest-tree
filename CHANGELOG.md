@@ -13,5 +13,6 @@
 - Item tooltips show which quests need the item.
 - Quest givers: right-click a linked entity or quest board to open the book on a quest or chapter. `/quest_tree giver set|clear`, `QuestTreeApi.open` and KubeJS `QuestTree.open` link one from a command, another mod or an NPC script.
 - `/quest_tree validate` reports problems in overlay restriction rules, not only in the pack's own restrictions file.
+- The rest of the FTB Quests operator commands: `/quest_tree book_lock` closes a team's book, `progress` sets one task counter, `complete_all` finishes every quest, `open_book` opens the book at a chapter or quest, `chapter generate` makes a chapter from the creative list, a player's inventory or a container, and `table export|import|delete_empty` moves reward tables in and out of containers and removes empty ones. `cleanup_translations` finds and deletes language keys the book no longer reads.
 - Other mods can register task, reward and condition types and listen for progression events. KubeJS can do the same on NeoForge.
 - Alpha note: data and save formats may still change between alpha versions. Back up a world before importing, migrating or editing a book on it.

@@ -63,6 +63,26 @@ repeatable state that was cleared and skills that were erased. `apply force` rep
 source says so in the report notes. The FTB Quests hash covers the team files in `<world>/ftbquests/`, the Pufferfish's
 Skills hash the whole `puffish_skills.dat`.
 
+
+## Commands, side by side
+
+The FTB Quests commands an operator is used to, and what to run here. All need permission level 2. KQT publishes a write
+at once, so a command that says "created" is followed by a book that has it (the editor waits a few ticks to batch).
+
+| FTB Quests | KQT | Difference |
+|---|---|---|
+| `locked <team> on\|off` | `/quest_tree book_lock <players> on\|off` | KQT locks the whole team's book from opening. Progress still counts, as it does on the FTB Quests team record. |
+| `change_progress <players> <id> <progress>` | `/quest_tree complete <players> <node>` | FTB Quests takes `reset` or `complete`; KQT's `complete` does not claim rewards. |
+| `change_progress ... complete-all` | `/quest_tree complete_all <players>` | Skill chapters are left alone; their nodes are taken with points. |
+| (no partial value) | `/quest_tree progress <players> <node> <task> <value>` | KQT addition: the value is clamped to 0..the task's target. The task counts from 1. |
+| `generate_chapter <items>` | `/quest_tree chapter generate creative\|inventory\|container <pos>` | The chapter is written at once instead of opening an editor screen. One quest per distinct item, 40 to a row, a blank row between namespaces. |
+| `export_reward_table <id> [pos]` | `/quest_tree table export <id> [pos]` | Item rewards only; other reward kinds stay in the table. Without `pos`, the container the player looks at is used. |
+| `import_reward_table <id> [pos]` | `/quest_tree table import <id> [pos]` | Item id and count only (no components). Weight 1.0, one roll, empty weight 0. |
+| `remove_empty_reward_tables` | `/quest_tree table delete_empty` | A table with only a weight-0 entry is not empty. |
+| `open_book [id]` | `/quest_tree open_book [<chapter or node>]` | A player only; the console cannot open a screen. |
+| `clear_item_display_cache` | `/quest_tree clear_display_cache` | KQT keeps no display cache, so this only answers the command. |
+| `cleanup_stale_translations` | `/quest_tree cleanup_translations show\|execute` | `show` lists; `execute` rewrites the world data packs' `progression/lang/<locale>.json` and reports keys left in read-only packs. Run `/reload` to make the cleaned files the ones the server reads. |
+
 ## Rules the commands follow
 
 - Merge only: nothing is removed; sets are united and counters take the larger value. A second apply changes nothing.

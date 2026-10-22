@@ -17,6 +17,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TaskWriteTest {
 
+    /** A command may ask for any value, but the counter never passes its target or goes below zero. */
+    @Test
+    void aCommandValueIsClampedToTheTaskTarget() {
+        JsonObject ten = JsonParser.parseString("{\"type\":\"item\",\"item\":{\"id\":\"minecraft:stone\",\"count\":10}}")
+                .getAsJsonObject();
+        assertEquals(10, TaskWrite.clamped(ten, 99));
+        assertEquals(4, TaskWrite.clamped(ten, 4));
+        assertEquals(0, TaskWrite.clamped(ten, -3));
+        JsonObject unknown = JsonParser.parseString("{\"type\":\"checkmark\"}").getAsJsonObject();
+        assertEquals(1, TaskWrite.clamped(unknown, 5));
+    }
+
     /** The player has just handed the ten diamonds over, so the task's own item condition no longer holds. */
     private static final QuestConditions.Context EMPTY_HANDS = new QuestConditions.Context() {
         @Override
