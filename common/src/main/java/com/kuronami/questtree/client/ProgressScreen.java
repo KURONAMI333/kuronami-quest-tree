@@ -1367,15 +1367,6 @@ public class ProgressScreen extends Screen {
     static int LINE_UNLOCKS = 0xFFF2C230;
     /** The dark edge on both sides of every line and arrowhead, in the ground's colour. */
     static int LINE_CASING_COLOR = 0xE6313338;
-    /**
-     * Belt and casing widths in map units (they grow with the zoom along with the tiles), and the least each may shrink
-     * to on screen in GUI pixels, so zoomed out the chevrons still read. Widened on 2026-10-20 (the player: the belt
-     * read thin, and the texture looked cheap): the casing is a hairline again now that the chevron reaches the edges.
-     */
-    private static final float LINE_W = 6f;
-    private static final float LINE_CASING = 0.75f;
-    private static final float LINE_MIN_PX = 5f;
-    private static final float CASING_MIN_PX = 1f;
     /** How fast the chevrons move, in belt widths per second (only around the node in focus). */
     private static final float BELT_SPEED = 0.8f;
 
@@ -4408,7 +4399,8 @@ public class ProgressScreen extends Screen {
      * books come from FTB Quests, whose authors laid out their trees for straight lines: the elbows of 2026-10-18
      * invented routes that ran through other tiles and merged siblings into one trunk. Since 2026-10-20 the ends run to
      * the tiles' centres instead of their edges (the player: the ends looked bad): the lines are drawn before the
-     * tiles, so each tile covers the end that runs in under it. The belt and its casing keep a minimum size on screen.
+     * tiles, so each tile covers the end that runs in under it. Widths come from {@link BeltMetrics}: map units, so the
+     * belt and its chevrons keep the same share of a tile at every zoom, with a small floor at the tightest zoom.
      */
     private LineDraw lineGeometry(ClientModel.Node p, ClientModel.Node n, int color, int role, float open, float zoom) {
         float x1 = (float) (editX(p) * UNIT);
@@ -4421,8 +4413,8 @@ public class ProgressScreen extends Screen {
         if (len < 1) {
             return null;
         }
-        float w = Math.max(LINE_W, LINE_MIN_PX / zoom);
-        float casing = Math.max(LINE_CASING, CASING_MIN_PX / zoom);
+        float w = BeltMetrics.width(NODE, zoom);
+        float casing = BeltMetrics.casing(NODE, zoom);
         return new LineDraw(x1, y1, x2, y2, w, casing, color, role, open);
     }
 
