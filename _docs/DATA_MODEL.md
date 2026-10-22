@@ -254,6 +254,7 @@ Conditions are evaluated once, when the reward is granted. Revocation (respec, r
 - `use` covers using the item in the air, on a block, or on an entity; it also covers using a restricted block (a chest, a door, and so on).
 - `place` matches the item being placed and the block it would become. `break` matches the block and the item held to break it. A refused action never drops anything or counts toward a task.
 - Restrictions are enforced on the server only. The client mod does not need to know them; the synced bundle carries the rules for the editor.
+- A fake player (one with no connection, or a mod's own `ServerPlayer` subclass, such as Create's deployer) is not restricted and gets no progress record.
 - Problems in the file (a missing id, an unreadable target, an unknown action, a missing condition) are `WARNING`s and appear in `/quest_tree validate`. Item and block ids are not checked against the registries here; see the validation notes below.
 
 ## Skills

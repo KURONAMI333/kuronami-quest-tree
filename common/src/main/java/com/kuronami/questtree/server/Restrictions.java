@@ -81,7 +81,7 @@ public final class Restrictions {
 
     /** Whether using (or attacking with, placing) this stack is refused for the player. */
     public static boolean blockedItem(ServerPlayer player, ItemStack stack, String action) {
-        if (stack == null || stack.isEmpty() || player.isSpectator()) {
+        if (stack == null || stack.isEmpty() || player.isSpectator() || ServerPlayers.isFake(player)) {
             return false;
         }
         RestrictionRules rules = ProgressData.restrictions();
@@ -107,7 +107,7 @@ public final class Restrictions {
 
     /** Whether using, placing or breaking this block is refused for the player. */
     public static boolean blockedBlock(ServerPlayer player, BlockState state, String action) {
-        if (state == null || player.isSpectator()) {
+        if (state == null || player.isSpectator() || ServerPlayers.isFake(player)) {
             return false;
         }
         RestrictionRules rules = ProgressData.restrictions();
@@ -131,7 +131,7 @@ public final class Restrictions {
      * last check, so a player with nothing restricted costs almost nothing.
      */
     public static void tick(ServerPlayer player) {
-        if (!EquipmentPoll.due(player.server.getTickCount(), player.getUUID())) {
+        if (ServerPlayers.isFake(player) || !EquipmentPoll.due(player.server.getTickCount(), player.getUUID())) {
             return;
         }
         RestrictionRules rules = ProgressData.restrictions();

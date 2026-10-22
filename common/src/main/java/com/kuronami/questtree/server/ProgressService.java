@@ -102,6 +102,10 @@ public final class ProgressService {
     }
 
     public static PlayerProgress progress(ServerPlayer player) {
+        if (ServerPlayers.isFake(player)) {
+            // a machine stand-in gets no record at all; the caller may read an empty progress and write nothing
+            return new PlayerProgress();
+        }
         // build the rule index before any view is made, so personal-node keys are current for the first joiner
         // after a data reload (2026-10-21 review)
         rules();
@@ -157,6 +161,9 @@ public final class ProgressService {
 
     /** Join or data reload: re-check everything and send the full state. */
     public static void onJoin(ServerPlayer player) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         // the client starts with no team: never skip the first view because a previous session had the same one
         TeamSync.forget(player.getUUID());
         PlayerProgress p = progress(player);
@@ -231,6 +238,9 @@ public final class ProgressService {
     }
 
     public static void onPlayerTick(ServerPlayer player) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         long t = player.server.getTickCount();
         // "observation" counts consecutive ticks of looking at the target, so it is read every tick and only written
         // every 10 ticks (writing every tick would send a progress packet every tick)
@@ -257,6 +267,9 @@ public final class ProgressService {
     }
 
     public static void onKill(ServerPlayer player, Entity killed) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         PlayerProgress p = progress(player);
         ProgressRules r = rules();
         // Only kill tasks can move. The old loop walked every node before finding that out, and rechecked even for a
@@ -287,6 +300,9 @@ public final class ProgressService {
 
     /** A block was broken (survival or creative). Counts "break" tasks, capped at the target. */
     public static void onBlockBreak(ServerPlayer player, BlockState state) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         ProgressRules r = rules();
         List<TaskRef> refs = tasksOfType(r, "break");
         if (refs.isEmpty()) {
@@ -392,7 +408,7 @@ public final class ProgressService {
      */
     private static void interaction(ServerPlayer player, String kind, ItemStack stack, BlockState state,
                                     Entity entity, Entity other, int amount, String recipe) {
-        if (amount <= 0) {
+        if (amount <= 0 || ServerPlayers.isFake(player)) {
             return;
         }
         ProgressRules r = rules();
