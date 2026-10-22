@@ -4703,7 +4703,7 @@ public class ProgressScreen extends Screen {
                     pasteSelection(ech);
                     return true;
                 }
-                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_D) {
+                if (BookKeys.ctrl(BookKeys.DUPLICATE, key, scan)) {
                     duplicateSelection(ech);
                     return true;
                 }
