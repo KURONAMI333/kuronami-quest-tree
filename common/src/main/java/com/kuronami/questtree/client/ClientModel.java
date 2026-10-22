@@ -32,7 +32,9 @@ public final class ClientModel {
     /** Reward tables, used to show the options of a choice reward. */
     final JsonObject tables;
     /** Pack-wide settings ({@code progression/settings.json}): links, emergency items, text. */
-    final JsonObject settings;
+    final JsonObject settingsJson;
+    /** The same file read as FTB Quests' file settings (lock text, defaults, presets). */
+    public final com.kuronami.questtree.data.FileSettings file;
     /** Items the pack hands out from the emergency button, and how long it rests between uses. */
     public final List<ItemStack> emergencyItems = new ArrayList<>();
     public final long emergencyCooldownMs;
@@ -53,9 +55,10 @@ public final class ClientModel {
 
     public ClientModel(JsonObject bundle) {
         this.tables = obj(bundle, "reward_tables");
-        this.settings = obj(bundle, "settings");
-        JsonObject emergency = settings.has("emergency") && settings.get("emergency").isJsonObject()
-                ? settings.getAsJsonObject("emergency") : settings;
+        this.settingsJson = obj(bundle, "settings");
+        this.file = com.kuronami.questtree.data.FileSettings.of(settingsJson);
+        JsonObject emergency = settingsJson.has("emergency") && settingsJson.get("emergency").isJsonObject()
+                ? settingsJson.getAsJsonObject("emergency") : settingsJson;
         this.emergencyCooldownMs = PackNumbers.cooldownMs(
                 emergency, "cooldown_seconds", 3600);
         for (JsonElement e : arr(emergency, "items")) {
@@ -72,8 +75,8 @@ public final class ClientModel {
             }
             emergencyItems.add(stack);
         }
-        this.wikiUrl = url(settings, "wiki_url");
-        this.guideUrl = url(settings, "guide_url");
+        this.wikiUrl = url(settingsJson, "wiki_url");
+        this.guideUrl = url(settingsJson, "guide_url");
         String locale = Minecraft.getInstance().getLanguageManager().getSelected().toLowerCase(Locale.ROOT);
         JsonObject lang = obj(bundle, "lang");
         copyText(lang, "en_us", fallback);
@@ -238,6 +241,12 @@ public final class ClientModel {
         public final int respecCost;
         /** {@code visibility.lock_hint}: what the pack tells a player whose chapter is locked; null when unset. */
         public final Component lockHint;
+        /** {@code autofocus}: the node the book centres on when this chapter opens, "" when unset. */
+        public final String autofocus;
+        /** {@code preset}: this chapter's default visual preset name, "" when unset. */
+        public final String preset;
+        /** {@code defaults.detail_width} (FTB Quests' {@code default_min_width}); 0 = no minimum. */
+        public final int defaultDetailWidth;
 
         Chapter(ClientModel m, String id, JsonObject o, Map<String, Integer> groupOrder) {
             this.id = id;
@@ -265,7 +274,12 @@ public final class ClientModel {
             String hint = visibility.has("lock_hint") && visibility.get("lock_hint").isJsonPrimitive()
                     ? visibility.get("lock_hint").getAsString() : "";
             this.lockHint = hint.isBlank() ? null : m.component(hint, parseText(hint));
+            this.autofocus = o.has("autofocus") && o.get("autofocus").isJsonPrimitive()
+                    ? o.get("autofocus").getAsString() : "";
+            this.preset = o.has("preset") && o.get("preset").isJsonPrimitive()
+                    ? o.get("preset").getAsString() : "";
             JsonObject defaults = obj(o, "defaults");
+            this.defaultDetailWidth = Math.max(0, PackNumbers.intOr(defaults.get("detail_width"), 0));
             this.defaults = defaults;
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
             this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive()
@@ -412,6 +426,22 @@ public final class ClientModel {
         public final Component title;
         /** FTB Quests' subtitle: one step under the title in the sheet and on the map's hover tooltip, or null. */
         public final Component subtitle;
+        /** {@code icon_scale}: how much of the tile the icon fills, 1 = FTB Quests' own size. */
+        public final double iconScale;
+        /** {@code detail_width} (FTB Quests' {@code min_width}); 0 = the sheet keeps its usual width. */
+        public final int detailWidth;
+        /** {@code visibility.hide_lock_icon}: this node draws no lock badge. */
+        public final boolean hideLockIcon;
+        /** {@code hide_from_recipe_viewer}; null = follow the file's {@code default_quest_disable_jei}. */
+        public final Boolean hideFromRecipeViewer;
+        /** {@code guide_page}: the page a guide mod opens for this quest, "" when unset. */
+        public final String guidePage;
+        /** {@code preset}: this node's visual preset name, "" when it follows the chapter. */
+        public final String preset;
+        /** A drawn icon ({@code icon.type = "texture"}), or null when the node shows an item. */
+        public final ResourceLocation iconTexture;
+        /** An entity face icon ({@code icon.type = "entity"}), or null. */
+        public final ResourceLocation iconEntity;
         public final List<FtbText.Line> description;
 
         Node(ClientModel m, Chapter ch, String id, JsonObject o) {
@@ -421,11 +451,25 @@ public final class ClientModel {
             this.y = num(o, "y");
             boolean milestone = ProgressModel.boolOf(o, "milestone");
             this.root = ProgressModel.boolOf(o, "root");
-            this.size = o.has("size") && o.get("size").isJsonPrimitive()
+            double size = o.has("size") && o.get("size").isJsonPrimitive()
                     && o.get("size").getAsJsonPrimitive().isNumber() ? Math.max(0.3, PackNumbers.coordinate(o.get("size").getAsDouble()))
                     : milestone && !ch.defaultSizeSet ? MILESTONE_SIZE : Math.max(0.3, ch.defaultSize);
             String sh = o.has("shape") ? o.get("shape").getAsString() : "";
-            this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
+            String shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
+            // a named preset (node -> chapter -> file) sets the tile's shape and size, as in FTB Quests
+            String presetName = !presetOf(o).isEmpty() ? presetOf(o)
+                    : !ch.preset.isEmpty() ? ch.preset : m.file.defaultPreset;
+            com.kuronami.questtree.data.FileSettings.Preset visual = m.file.preset(presetName);
+            if (visual != null) {
+                if (visual.shape() != null && !visual.shape().isEmpty()) {
+                    shape = visual.shape();
+                }
+                if (visual.size() > 0) {
+                    size = Math.max(0.3, visual.size());
+                }
+            }
+            this.shape = shape;
+            this.size = size;
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             this.cost = PackNumbers.intOr(o.get("cost"), 0);
             this.flexible = flexible(o, ch);
@@ -455,7 +499,8 @@ public final class ClientModel {
             this.hideLinesToDependents = lines.has("hide_to_dependents") && lines.get("hide_to_dependents").getAsBoolean();
             for (JsonElement t : arr(o, "tasks")) {
                 if (t.isJsonObject()) {
-                    tasks.add(new Task(m, t.getAsJsonObject(), o.has("repeat") && !(o.get("repeat").isJsonPrimitive() && !o.get("repeat").getAsBoolean())));
+                    tasks.add(new Task(m, t.getAsJsonObject(), o.has("repeat") && !(o.get("repeat").isJsonPrimitive() && !o.get("repeat").getAsBoolean()),
+                            ProgressModel.boolOf(ch.defaults, "consume_items") || m.file.consumeItems));
                 }
             }
             JsonArray rewardArray = arr(o, "rewards");
@@ -500,9 +545,11 @@ public final class ClientModel {
                 }
             }
             this.choiceReward = hasChoiceReward;
-            ItemStack ic = stack(o.get("icon"));
-            this.iconTask = ic.isEmpty() && !tasks.isEmpty() && tasks.get(0).filter != null ? tasks.get(0) : null;
-            if (ic.isEmpty() && !tasks.isEmpty()) {
+            IconSpec custom = iconSpec(o.get("icon"), ch.namespace);
+            boolean drawn = custom.texture != null || custom.entity != null;
+            ItemStack ic = drawn ? ItemStack.EMPTY : stack(o.get("icon"));
+            this.iconTask = ic.isEmpty() && !drawn && !tasks.isEmpty() && tasks.get(0).filter != null ? tasks.get(0) : null;
+            if (ic.isEmpty() && !drawn && this.iconTask == null && !tasks.isEmpty()) {
                 ic = tasks.get(0).icon();
             }
             this.icon = ic;
@@ -530,6 +577,21 @@ public final class ClientModel {
                 });
             }
             this.description = d == null ? List.of() : FtbText.descriptionLines(d);
+            double scale = o.has("icon_scale") && o.get("icon_scale").isJsonPrimitive()
+                    && o.get("icon_scale").getAsJsonPrimitive().isNumber() ? o.get("icon_scale").getAsDouble() : 1;
+            this.iconScale = clamp(scale, 0.25, 4);
+            this.detailWidth = Math.max(0, PackNumbers.intOr(o.get("detail_width"), ch.defaultDetailWidth));
+            this.hideLockIcon = vis.has("hide_lock_icon") && vis.get("hide_lock_icon").isJsonPrimitive()
+                    && vis.get("hide_lock_icon").getAsBoolean();
+            JsonElement recipe = o.get("hide_from_recipe_viewer");
+            this.hideFromRecipeViewer = recipe != null && recipe.isJsonPrimitive() && !recipe.getAsString().isBlank()
+                    ? truth(recipe) : null;
+            this.guidePage = o.has("guide_page") && o.get("guide_page").isJsonPrimitive()
+                    ? o.get("guide_page").getAsString() : "";
+            this.preset = o.has("preset") && o.get("preset").isJsonPrimitive()
+                    ? o.get("preset").getAsString() : "";
+            this.iconTexture = custom.texture;
+            this.iconEntity = custom.entity;
         }
 
         /**
@@ -571,6 +633,81 @@ public final class ClientModel {
         }
     }
 
+    /** A preset name written directly into the node, read before the final fields exist. */
+    private static String presetOf(JsonObject o) {
+        return o.has("preset") && o.get("preset").isJsonPrimitive() ? o.get("preset").getAsString() : "";
+    }
+
+    /**
+     * A drawn or entity icon ({@code {"type": "texture", ...}} / {@code {"type": "entity", ...}}) written by the
+     * importer for FTB Quests' custom icon item. {@code texture} wins when both are present.
+     */
+    record IconSpec(ResourceLocation texture, ResourceLocation entity) {
+        static final IconSpec NONE = new IconSpec(null, null);
+
+        static boolean isCustom(JsonElement e) {
+            return e != null && e.isJsonObject() && e.getAsJsonObject().has("type");
+        }
+
+        static IconSpec of(JsonElement e, String namespace) {
+            if (!isCustom(e)) {
+                return NONE;
+            }
+            JsonObject o = e.getAsJsonObject();
+            String type = o.has("type") ? o.get("type").getAsString() : "";
+            if (type.equals("texture")) {
+                return new IconSpec(texturePath(o, namespace), null);
+            }
+            if (type.equals("entity")) {
+                String id = first(o, "entity", "id");
+                ResourceLocation rl = id.isEmpty() ? null : ResourceLocation.tryParse(id);
+                return new IconSpec(null, rl);
+            }
+            return NONE;
+        }
+
+        private static String first(JsonObject o, String... keys) {
+            for (String key : keys) {
+                if (o.has(key) && o.get(key).isJsonPrimitive()) {
+                    return o.get(key).getAsString();
+                }
+            }
+            return "";
+        }
+
+        private static ResourceLocation texturePath(JsonObject o, String namespace) {
+            String path = first(o, "texture", "id", "path");
+            if (path.isBlank()) {
+                return null;
+            }
+            ResourceLocation rl = ResourceLocation.tryParse(path.contains(":") ? path : namespace + ":" + path);
+            if (rl == null) {
+                return null;
+            }
+            String p = rl.getPath();
+            if (!p.endsWith(".png")) {
+                p = p + ".png";
+            }
+            if (!p.startsWith("textures/")) {
+                p = "textures/" + p;
+            }
+            return ResourceLocation.fromNamespaceAndPath(rl.getNamespace(), p);
+        }
+    }
+
+    static IconSpec iconSpec(JsonElement e, String namespace) {
+        return IconSpec.of(e, namespace);
+    }
+
+    /** A JSON true/false or their strings, as the overlay's tri-state enum writes them. */
+    static boolean truth(JsonElement e) {
+        return e.getAsJsonPrimitive().isBoolean() ? e.getAsBoolean() : Boolean.parseBoolean(e.getAsString());
+    }
+
+    private static double clamp(double v, double min, double max) {
+        return Math.max(min, Math.min(max, v));
+    }
+
     /** One item every second from a list, the way FTB Quests steps through a filter's items. */
     static ItemStack cycle(List<ItemStack> items) {
         if (items.isEmpty()) {
@@ -602,10 +739,12 @@ public final class ClientModel {
         private boolean resolved;
         private final boolean authorTitle;
 
-        Task(ClientModel m, JsonObject o, boolean repeatable) {
+        Task(ClientModel m, JsonObject o, boolean repeatable, boolean chapterConsume) {
             this.type = o.has("type") ? o.get("type").getAsString() : "";
-            // same rule as ProgressRules.consumes: repeatable quests take their items
-            this.consume = (type.equals("item") && (repeatable || (o.has("consume") && o.get("consume").getAsBoolean()))) || type.equals("xp");
+            // same rule as ProgressRules.consumes: repeatable quests take their items, else quest -> chapter -> file
+            boolean take = o.has("consume") && o.get("consume").isJsonPrimitive()
+                    ? o.get("consume").getAsBoolean() : chapterConsume;
+            this.consume = (type.equals("item") && (repeatable || take)) || type.equals("xp");
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             String fx = type.equals("item") && o.has("item") && o.get("item").isJsonObject()
                     ? com.kuronami.questtree.progress.ItemFilter.filterExpression(o.getAsJsonObject("item")) : null;

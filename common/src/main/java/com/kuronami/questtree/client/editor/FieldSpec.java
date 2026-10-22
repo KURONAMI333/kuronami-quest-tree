@@ -59,6 +59,11 @@ public record FieldSpec(String path, Kind kind, String label, List<String> optio
         return new FieldSpec(path, Kind.ENUM, label, List.of(values), false);
     }
 
+    /** A free-form JSON value (an object such as the presets map), edited as compact text. */
+    public static FieldSpec json(String path, String label) {
+        return new FieldSpec(path, Kind.JSON, label, List.of(), false);
+    }
+
     public static FieldSpec picker(String path, String label, Kind kind) {
         return new FieldSpec(path, kind, label, List.of(), false);
     }

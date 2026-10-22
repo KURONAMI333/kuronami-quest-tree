@@ -186,7 +186,7 @@ public final class ProgressStore extends SavedData {
                 continue;
             }
             for (int i = 0; i < n.rewards.size(); i++) {
-                if (com.kuronami.questtree.data.ProgressModel.boolOf(n.rewards.get(i), "team")) {
+                if (ProgressService.fileSettings().team(n.rewards.get(i))) {
                     out.add(key + "#" + i);
                 }
             }

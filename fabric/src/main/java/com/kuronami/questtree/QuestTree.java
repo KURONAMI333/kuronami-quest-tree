@@ -217,6 +217,10 @@ public class QuestTree implements ModInitializer {
             e.accept(TASK_SCREEN_CONFIGURATOR);
             e.accept(LOOT_CRATE_OPENER_ITEM);
             e.accept(LOOT_CRATE);
+            for (net.minecraft.world.item.ItemStack crate
+                    : com.kuronami.questtree.server.LootCrates.creativeStacks()) {
+                e.accept(crate);
+            }
         });
         // the quest_book item is synced, so the client mod is required (like FTB Quests)
         PayloadTypeRegistry.playS2C().register(SyncPayload.TYPE, SyncPayload.STREAM_CODEC);

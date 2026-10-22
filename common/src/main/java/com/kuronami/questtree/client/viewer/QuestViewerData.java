@@ -99,6 +99,12 @@ public final class QuestViewerData {
         List<Quest> quests = new ArrayList<>();
         for (ClientModel.Chapter chapter : model.chapters) {
             for (ClientModel.Node node : chapter.nodes.values()) {
+                // row 8: the quest's own switch wins, else the file's default (FTB Quests' recipe-viewer hide)
+                boolean hidden = node.hideFromRecipeViewer != null
+                        ? node.hideFromRecipeViewer : model.file.hidesFromRecipeViewers();
+                if (hidden) {
+                    continue;
+                }
                 Quest quest = questOf(chapter, node, tables);
                 if (quest != null) {
                     quests.add(quest);

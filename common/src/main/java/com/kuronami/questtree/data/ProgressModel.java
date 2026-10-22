@@ -23,13 +23,15 @@ public final class ProgressModel {
     /** Every node by global key. */
     public final Map<String, Node> nodes = new LinkedHashMap<>();
     public final Map<String, JsonObject> rewardTables = new LinkedHashMap<>();
+    /** The pack's file settings (from the same bundle), for defaults that are not the chapter's business. */
+    public final FileSettings file;
 
     public static ProgressModel of(JsonObject bundle) {
-        ProgressModel m = new ProgressModel();
+        ProgressModel m = new ProgressModel(FileSettings.of(obj(bundle, "settings")));
         JsonObject chapters = obj(bundle, "chapters");
         for (Map.Entry<String, JsonElement> e : chapters.entrySet()) {
             if (e.getValue().isJsonObject()) {
-                Chapter c = new Chapter(e.getKey(), e.getValue().getAsJsonObject());
+                Chapter c = new Chapter(m, e.getKey(), e.getValue().getAsJsonObject());
                 m.chapters.put(c.id, c);
                 c.nodes.values().forEach(n -> m.nodes.put(n.key, n));
             }
@@ -76,13 +78,19 @@ public final class ProgressModel {
         JsonArray rewards = new JsonArray();
         rewards.add(reward);
         node.add("rewards", rewards);
-        Chapter chapter = new Chapter("kuronami_quest_tree:crates", new JsonObject());
+        ProgressModel model = new ProgressModel(FileSettings.EMPTY);
+        Chapter chapter = new Chapter(model, "kuronami_quest_tree:crates", new JsonObject());
         String id = tableId == null ? "table" : tableId.toLowerCase(java.util.Locale.ROOT)
                 .replaceAll("[^a-z0-9_./-]", "_");
         return new Node(chapter, id, node);
     }
 
+    private ProgressModel(FileSettings file) {
+        this.file = file;
+    }
+
     public static final class Chapter {
+        public final ProgressModel model;
         public final String id;
         public final String namespace;
         public final String path;
@@ -92,15 +100,19 @@ public final class ProgressModel {
         public final Map<String, List<Node>> exclusiveGroups = new LinkedHashMap<>();
         /** Chapter defaults for its nodes ("hidden_until", "shape", ...). */
         public final JsonObject defaults;
+        /** {@code defaults.consume_items}, else the file's {@code default_consume_items}. */
+        public final boolean defaultConsume;
         /** The whole chapter is hidden from the list (FTB Quests "always invisible"). */
         public final boolean alwaysHidden;
-        Chapter(String id, JsonObject o) {
+        Chapter(ProgressModel model, String id, JsonObject o) {
+            this.model = model;
             this.id = id;
             int colon = id.indexOf(':');
             this.namespace = id.substring(0, colon);
             this.path = id.substring(colon + 1);
             this.points = o.has("points") && o.get("points").isJsonObject() ? o.getAsJsonObject("points") : null;
             this.defaults = obj(o, "defaults");
+            this.defaultConsume = boolOf(defaults, "consume_items") || model.file.consumeItems;
             JsonObject visibility = obj(o, "visibility");
             this.alwaysHidden = boolOf(visibility, "always_hidden");
             for (Map.Entry<String, JsonElement> e : obj(o, "nodes").entrySet()) {

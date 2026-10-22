@@ -116,6 +116,21 @@ public final class LootCrates {
         return out;
     }
 
+    /**
+     * One stack per table that has crate settings, for the creative tab: a pack's tables each keep their own name,
+     * colour and glow, which a single generic crate cannot show. Empty before the pack has loaded.
+     */
+    public static List<ItemStack> creativeStacks() {
+        List<ItemStack> out = new ArrayList<>();
+        for (String id : ProgressData.model().rewardTables.keySet()) {
+            ItemStack stack = stack(id);
+            if (!stack.isEmpty()) {
+                out.add(stack);
+            }
+        }
+        return out;
+    }
+
     /** A crate stack for {@code tableId}, or empty when the table has no crate settings. */
     public static ItemStack stack(String tableId) {
         JsonObject table = ProgressService.rules().model().rewardTables.get(tableId);

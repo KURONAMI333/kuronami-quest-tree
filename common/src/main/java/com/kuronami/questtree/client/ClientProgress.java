@@ -316,7 +316,13 @@ public final class ClientProgress {
         }
         Boolean v = VISIBLE.get(key);
         // the rules fill the map themselves as they work through a node's requirements (one memo per progress)
-        return v != null ? v : sync.rules().visible(progress, n, VISIBLE);
+        boolean shown = v != null ? v : sync.rules().visible(progress, n, VISIBLE);
+        if (shown && model() != null && model().file.hideExcludedQuests
+                && sync.rules().state(progress, n) == ProgressRules.State.EXCLUDED) {
+            // hide_excluded_quests: a quest closed by the other choice in its group leaves the map entirely
+            return false;
+        }
+        return shown;
     }
 
     private static final java.util.Map<String, Boolean> VISIBLE = new java.util.HashMap<>();
@@ -387,6 +393,14 @@ public final class ClientProgress {
             }
         }
         return n.icon;
+    }
+
+    /** What a node's tile shows: its icon item, or the drawn/entity icon the importer kept. */
+    static Tiles.Glyph glyphFor(ClientModel.Node n) {
+        if (n.iconTexture != null || n.iconEntity != null) {
+            return new Tiles.Glyph(net.minecraft.world.item.ItemStack.EMPTY, n.iconTexture, n.iconEntity);
+        }
+        return Tiles.Glyph.item(iconFor(n));
     }
 
     public static double fraction(String key) {

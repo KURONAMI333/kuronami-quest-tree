@@ -1094,7 +1094,9 @@ public final class ProgressRules {
         if (type.equals("xp")) {
             return true;
         }
-        return type.equals("item") && (repeatable(n) || (task.has("consume") && task.get("consume").getAsBoolean()));
+        boolean consume = task.has("consume") && task.get("consume").isJsonPrimitive()
+                ? task.get("consume").getAsBoolean() : n.chapter.defaultConsume;
+        return type.equals("item") && (repeatable(n) || consume);
     }
 
     /** Respec works only inside an unlocked chapter, however the request reached the server (2026-10-22 review). */

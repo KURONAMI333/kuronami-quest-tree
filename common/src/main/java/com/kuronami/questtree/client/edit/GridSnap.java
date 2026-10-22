@@ -5,13 +5,20 @@ public final class GridSnap {
 
     /** The default snap: half a grid unit, fine enough for a tidy tree and coarse enough to settle by eye. */
     public static final double STEP = 0.5;
+    /** FTB Quests' {@code grid_scale} for the open pack; 0.5 until a model sets it. */
+    private static double step = STEP;
 
     private GridSnap() {
     }
 
-    /** The nearest half unit. */
+    /** Applies the pack's grid scale ({@code progression/settings.json}); clamped to FTB Quests' own range. */
+    public static void step(double value) {
+        step = Math.max(0.03125, Math.min(8.0, value));
+    }
+
+    /** The nearest grid step. */
     public static double snap(double value) {
-        return Math.round(value / STEP) * STEP;
+        return Math.round(value / step) * step;
     }
 
     /** The nearest half unit unless snapping is off (Alt while dragging). */
