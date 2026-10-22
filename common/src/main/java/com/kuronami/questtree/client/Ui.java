@@ -424,23 +424,48 @@ final class Ui {
     }
 
     /**
-     * A thin border around a fill, both rounded on the same mask (2026-10-22, the in-game tracker after Jade's
-     * tooltip): the fill is inset by the 1px line. Jade's border is a vertical gradient, #383838 at the top to
-     * #242424 at the bottom; the bottom edge carries the darker tone and the sides keep the lighter one, which reads
-     * the same without a scissor (a scissor would use screen coordinates and break under the HUD's own pose).
+     * A thin border around a fill (2026-10-22, the in-game tracker after Jade's tooltip). Jade's border is a vertical
+     * gradient, #383838 at the top to #242424 at the bottom; the bottom row carries the darker tone and the sides keep
+     * the lighter one. Every pixel is painted exactly once: the border and the fill never overlap, so a translucent
+     * fill shows the world through it at its own alpha. (Until 2026-10-22 the fill sat on top of a full-size border
+     * surface, which doubled the alpha inside the card to about 0.9 and read darker than Jade's 0.7.)
+     * Corners are cut row by row from the radius, so 0 is square and 1-2 is the slight rounding the screens use.
      */
     static void frame(GuiGraphics g, int x, int y, int w, int h, int radius, int edge, int edgeBottom, int fill) {
         if (w <= 2 || h <= 2) {
             return;
         }
-        int r = Math.min(Math.min(radius, Math.min(w, h) / 2), EDGE_CORNER);
-        surface(g, x, y, w, h, radius, edge);
-        if (r > 0) {
-            g.fill(x + r, y + h - 1, x + w - r, y + h, edgeBottom);
-        } else {
-            g.fill(x, y + h - 1, x + w, y + h, edgeBottom);
+        int r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+        for (int i = 0; i < h; i++) {
+            int in = cornerInset(r, i, h);
+            int x0 = x + in;
+            int x1 = x + w - in;
+            if (i == 0 || i == h - 1) {
+                g.fill(x0, y + i, x1, y + i + 1, i == h - 1 ? edgeBottom : edge);
+                continue;
+            }
+            // the side border is wider where the row above or below is cut further in, so the outline stays closed
+            int side = Math.max(1, Math.max(cornerInset(r, i - 1, h), cornerInset(r, i + 1, h)) - in);
+            side = Math.min(side, (x1 - x0) / 2);
+            g.fill(x0, y + i, x0 + side, y + i + 1, edge);
+            g.fill(x1 - side, y + i, x1, y + i + 1, edge);
+            if (x1 - side > x0 + side) {
+                g.fill(x0 + side, y + i, x1 - side, y + i + 1, fill);
+            }
         }
-        surface(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, radius - 1), fill);
+    }
+
+    /** How far row {@code i} of an {@code h}-tall shape with corner radius {@code r} starts in from its sides. */
+    static int cornerInset(int r, int i, int h) {
+        if (r <= 0 || i < 0 || i >= h) {
+            return 0;
+        }
+        int d = Math.min(i, h - 1 - i);
+        if (d >= r) {
+            return 0;
+        }
+        double dy = r - d - 0.5;
+        return r - (int) Math.round(Math.sqrt(Math.max(0.0, (double) r * r - dy * dy)));
     }
 
     /** A panel: a rounded fill with a hairline, the treatment every container in the screen shares. */
