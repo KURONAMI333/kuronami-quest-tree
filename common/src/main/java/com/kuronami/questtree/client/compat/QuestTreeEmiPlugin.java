@@ -35,19 +35,26 @@ public class QuestTreeEmiPlugin implements EmiPlugin {
         RecipeViewer.Holder.set("emi", new Viewer());
     }
 
-    /** EMI builds its list once per reload; ask it to rebuild after a sync or progress change. */
-    private static void reload() {
+    /**
+     * EMI builds its list once per reload; ask it to rebuild after the index has been quiet. Returns {@code false}
+     * while EMI is still loading (the caller keeps the request pending) and {@code true} once it was asked.
+     */
+    private static boolean reload() {
         if (Minecraft.getInstance().level == null) {
-            return;
+            return false;
         }
         try {
-            Class.forName("dev.emi.emi.runtime.EmiReloadManager")
-                    .getMethod("reload")
-                    .invoke(null);
+            Class<?> manager = Class.forName("dev.emi.emi.runtime.EmiReloadManager");
+            if (!(Boolean) manager.getMethod("isLoaded").invoke(null)) {
+                return false;
+            }
+            manager.getMethod("reload").invoke(null);
+            return true;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
             if (WARNED.compareAndSet(false, true)) {
                 Constants.LOG.warn("EMI is present but its reload entry point could not be called", ex);
             }
+            return true;
         }
     }
 

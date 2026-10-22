@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.client.QuestViewerStyle;
+import com.kuronami.questtree.client.viewer.QuestViewerData;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import dev.emi.emi.api.recipe.BasicEmiRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
@@ -46,6 +47,10 @@ public final class QuestViewerEmiRecipe extends BasicEmiRecipe {
 
     @Override
     public void addWidgets(WidgetHolder widgets) {
+        // a reload can still show a row for a quest that just became hidden: draw nothing rather than stale text
+        if (!QuestViewerData.index().containsQuest(recipe.hit().quest().key())) {
+            return;
+        }
         Font font = Minecraft.getInstance().font;
         int titleWidth = 76;
 

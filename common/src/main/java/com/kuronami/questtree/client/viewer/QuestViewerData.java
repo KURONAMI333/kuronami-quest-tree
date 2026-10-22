@@ -41,7 +41,9 @@ public final class QuestViewerData {
     /** Bumped by every rebuild of {@code all}, so a same-keys apply after new data still rebuilds the index. */
     private static int generation;
     /** Set by the EMI plugin: EMI is the one viewer that cannot answer a lookup from a live source. */
-    private static volatile Runnable refreshHook;
+    private static volatile java.util.function.BooleanSupplier refreshHook;
+    /** EMI reloads are expensive, so a burst of changes becomes one reload after a quiet window. */
+    private static final ViewerRefresh REFRESH = new ViewerRefresh();
 
     private QuestViewerData() {
     }
@@ -124,9 +126,37 @@ public final class QuestViewerData {
         }
     }
 
-    /** EMI calls this from its plugin; JEI and REI read {@link #index()} at lookup time and need no hook. */
-    public static void setRefreshHook(Runnable hook) {
+    /**
+     * EMI calls this from its plugin; JEI and REI read {@link #index()} at lookup time and need no hook. The hook
+     * returns {@code false} while EMI is still reloading, so the request stays pending instead of piling up.
+     */
+    public static void setRefreshHook(java.util.function.BooleanSupplier hook) {
         refreshHook = hook;
+        if (hook != null) {
+            REFRESH.reset();
+        }
+    }
+
+    /** Called every client tick: reloads EMI once the index has been quiet for a while. */
+    public static void onClientTick() {
+        if (refreshHook == null) {
+            REFRESH.reset();
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (!REFRESH.due(now)) {
+            return;
+        }
+        boolean accepted;
+        try {
+            accepted = refreshHook.getAsBoolean();
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("Could not refresh the quest entries in EMI", ex);
+            accepted = true;
+        }
+        if (accepted) {
+            REFRESH.done();
+        }
     }
 
     private static void apply() {
@@ -148,14 +178,8 @@ public final class QuestViewerData {
     }
 
     private static void notifyViewers() {
-        Runnable hook = refreshHook;
-        if (hook == null) {
-            return;
-        }
-        try {
-            hook.run();
-        } catch (RuntimeException ex) {
-            Constants.LOG.warn("Could not refresh the quest entries in EMI", ex);
+        if (refreshHook != null) {
+            REFRESH.mark(System.currentTimeMillis());
         }
     }
 

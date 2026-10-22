@@ -484,6 +484,7 @@ public final class ClientProgress {
 
     /** Called every client tick by the loader module. The same key opens and closes the screen. */
     public static void onClientTick() {
+        QuestViewerData.onClientTick();
         Minecraft mc = Minecraft.getInstance();
         if (DevTour.ENABLED) {
             DevTour.tick();
