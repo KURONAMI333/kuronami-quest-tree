@@ -38,6 +38,8 @@ final class DevTour {
 
     private static int idle;
     private static String lastScreen = "";
+    /** The quest this tour pinned for the tracker photo, so the pin can be put back at the end. */
+    private static String tourPin;
 
     static void tick() {
         Minecraft mc = Minecraft.getInstance();
@@ -81,6 +83,7 @@ final class DevTour {
         ClientModel.Chapter quests = first(m, false);
         ClientModel.Chapter skills = first(m, true);
         List<ClientModel.Node> nodes = quests == null ? List.of() : new ArrayList<>(quests.nodes.values());
+        ClientConfig.TrackerMode trackerModeBefore = ClientConfig.trackerMode();
         int t = 100;
         // progress to look at: a few completed (claimable), one claimed, one half done, experience and points
         for (int i = 0; i < Math.min(4, nodes.size()); i++) {
@@ -151,7 +154,17 @@ final class DevTour {
                 at(ticks + 70, () -> shot("09_toast"));
             }
         });
-        at(t + 380, ProgressHud::toggleTracker);
+        // a known tracker state: the mode is saved between runs, so cycling it left some tours hidden or pinned-empty
+        at(t + 380, () -> {
+            ClientModel.Node pin = trackerPin();
+            if (pin == null) {
+                Constants.LOG.warn("Dev tour: no unfinished quest to pin for the tracker");
+            } else if (!Pins.has(pin.key)) {
+                Pins.toggle(pin.key);
+                tourPin = pin.key;
+            }
+            ProgressHud.tourTracker(pin == null ? null : pin.key);
+        });
         shot(t + 400, "10_tracker");
         int pt = t + 420;
         // every shape in every look, in the game's renderer
@@ -439,6 +452,11 @@ final class DevTour {
         at(et + 186, () -> {
             Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
+            if (tourPin != null) {
+                Pins.toggle(tourPin);
+                tourPin = null;
+            }
+            ClientConfig.setTrackerMode(trackerModeBefore);
             ClientConfig.textScale = textScaleBefore;
             ClientConfig.highContrast = contrastBefore;
             Ui.textScale = textScaleBefore;
@@ -458,6 +476,25 @@ final class DevTour {
             if ((s == State.OPEN || s == State.PROGRESS) && !n.tasks.isEmpty() && !n.tasks.get(0).item.isEmpty()
                     && ClientProgress.visible(n.key)) {
                 return n;
+            }
+        }
+        return null;
+    }
+
+    /** A visible unfinished quest to pin for the tracker photo: an item quest first, then anything open. */
+    private static ClientModel.Node trackerPin() {
+        ClientModel.Node open = openItemQuest();
+        if (open != null) {
+            return open;
+        }
+        for (ClientModel.Chapter c : ClientProgress.model().chapters) {
+            if (ClientProgress.chapterLocked(c.id)) {
+                continue;
+            }
+            for (ClientModel.Node n : c.nodes.values()) {
+                if (!n.tasks.isEmpty() && ClientProgress.visible(n.key) && ClientProgress.state(n.key) != State.DONE) {
+                    return n;
+                }
             }
         }
         return null;

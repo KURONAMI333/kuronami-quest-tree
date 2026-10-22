@@ -224,10 +224,15 @@ public final class ClientConfig {
         return trackerMode;
     }
 
-    public static void cycleTrackerMode() {
+    /** Sets the tracker's mode and saves it, so the next session and the dev tour start from a known state. */
+    public static void setTrackerMode(TrackerMode mode) {
         ensureLoaded();
-        trackerMode = trackerMode.next();
+        trackerMode = mode;
         write();
+    }
+
+    public static void cycleTrackerMode() {
+        setTrackerMode(trackerMode().next());
     }
 
     public static int trackerOffsetX() {
