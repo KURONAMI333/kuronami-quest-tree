@@ -104,11 +104,14 @@ public final class QuestViewerJeiCategory implements IRecipeCategory<QuestViewer
 
             @Override
             public boolean handleInput(double mouseX, double mouseY, IJeiUserInput input) {
-                if (input.getKey().getType() == InputConstants.Type.MOUSE) {
-                    recipe.open();
-                    return true;
+                // only a real left click opens the quest: JEI also probes handlers with other buttons and with
+                // simulated input, and opening during a simulation would replace the screen again on every pass
+                if (input.isSimulate() || input.getKey().getType() != InputConstants.Type.MOUSE
+                        || input.getKey().getValue() != InputConstants.MOUSE_BUTTON_LEFT) {
+                    return false;
                 }
-                return false;
+                recipe.open();
+                return true;
             }
         });
     }
