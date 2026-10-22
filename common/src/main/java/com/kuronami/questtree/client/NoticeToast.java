@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
@@ -39,8 +40,9 @@ final class NoticeToast implements Toast, OwnSoundToast {
         var font = toasts.getMinecraft().font;
         int room = width() - 38;
         if (body != null) {
-            g.drawString(font, font.plainSubstrByWidth(title.getString(), room), 32, 7, Ui.TOAST_TITLE, false);
-            g.drawString(font, font.plainSubstrByWidth(body.getString(), room), 32, 18, Ui.TOAST_TITLE, false);
+            wrapped(g, font, title, 32, 7, room, 1);
+            int bodyLines = Math.max(1, (height() - 18) / 10);
+            wrapped(g, font, body, 32, 18, room, bodyLines);
         } else {
             List<FormattedCharSequence> lines = font.split(title, room);
             int y = 8;
@@ -50,5 +52,28 @@ final class NoticeToast implements Toast, OwnSoundToast {
             }
         }
         return time >= SHOW * toasts.getNotificationDisplayTimeMultiplier() ? Visibility.HIDE : Visibility.SHOW;
+    }
+
+    /**
+     * A component as at most {@code maxLines} lines, styles kept (2026-10-23, R6 L7). When more remains, the last line
+     * gets an ellipsis: the body is a real sentence, so cutting it with no sign was reading as a broken toast.
+     */
+    private static void wrapped(GuiGraphics g, Font font, Component text, int x, int y, int room, int maxLines) {
+        if (text == null || text.getString().isEmpty()) {
+            return;
+        }
+        List<FormattedCharSequence> lines = font.split(text, room);
+        boolean clipped = lines.size() > maxLines;
+        if (clipped) {
+            lines = font.split(text, Math.max(8, room - font.width("…")));
+        }
+        int shown = Math.min(maxLines, lines.size());
+        for (int i = 0; i < shown; i++) {
+            FormattedCharSequence line = lines.get(i);
+            g.drawString(font, line, x, y + i * 10, Ui.TOAST_TITLE, false);
+            if (clipped && i == shown - 1) {
+                g.drawString(font, "…", x + font.width(line), y + i * 10, Ui.TOAST_TITLE, false);
+            }
+        }
     }
 }
