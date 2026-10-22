@@ -13,7 +13,11 @@ import com.kuronami.questtree.client.viewer.QuestViewerIndex.Query;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Quest;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Visibility;
+import com.google.gson.JsonParser;
+import com.kuronami.questtree.progress.ItemFilter;
+import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PackNumbers;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -33,8 +37,13 @@ public final class QuestViewerData {
 
     private static volatile List<Quest> all = List.of();
     private static volatile Index index = Index.empty();
+    private static final ViewerVisibility VISIBLE = new ViewerVisibility();
+    /** Bumped by every rebuild of {@code all}, so a same-keys apply after new data still rebuilds the index. */
+    private static int generation;
     /** Set by the EMI plugin: EMI is the one viewer that cannot answer a lookup from a live source. */
-    private static volatile Runnable refreshHook;
+    private static volatile java.util.function.BooleanSupplier refreshHook;
+    /** EMI reloads are expensive, so a burst of changes becomes one reload after a quiet window. */
+    private static final ViewerRefresh REFRESH = new ViewerRefresh();
 
     private QuestViewerData() {
     }
@@ -59,6 +68,23 @@ public final class QuestViewerData {
                 ResourceLocation tag = ResourceLocation.tryParse(tagId);
                 return tag != null && stack.is(TagKey.create(Registries.ITEM, tag));
             }
+
+            @Override
+            public boolean inFilter(String expression) {
+                var level = net.minecraft.client.Minecraft.getInstance().level;
+                return ItemFilter.parse(expression).test(stack, level == null ? null : level.registryAccess());
+            }
+
+            @Override
+            public boolean accepts(String itemJson, String matchMode) {
+                try {
+                    var level = net.minecraft.client.Minecraft.getInstance().level;
+                    return ItemRequirement.matches(stack, JsonParser.parseString(itemJson).getAsJsonObject(),
+                            matchMode, level == null ? null : level.registryAccess());
+                } catch (RuntimeException ex) {
+                    return false;
+                }
+            }
         };
     }
 
@@ -80,6 +106,7 @@ public final class QuestViewerData {
             }
         }
         all = List.copyOf(quests);
+        generation++;
         apply();
     }
 
@@ -90,6 +117,8 @@ public final class QuestViewerData {
 
     public static void clear() {
         all = List.of();
+        generation++;
+        VISIBLE.reset();
         Index previous = index;
         index = Index.empty();
         if (!previous.signature().equals(index.signature())) {
@@ -97,14 +126,48 @@ public final class QuestViewerData {
         }
     }
 
-    /** EMI calls this from its plugin; JEI and REI read {@link #index()} at lookup time and need no hook. */
-    public static void setRefreshHook(Runnable hook) {
+    /**
+     * EMI calls this from its plugin; JEI and REI read {@link #index()} at lookup time and need no hook. The hook
+     * returns {@code false} while EMI is still reloading, so the request stays pending instead of piling up.
+     */
+    public static void setRefreshHook(java.util.function.BooleanSupplier hook) {
         refreshHook = hook;
+        if (hook != null) {
+            REFRESH.reset();
+        }
+    }
+
+    /** Called every client tick: reloads EMI once the index has been quiet for a while. */
+    public static void onClientTick() {
+        if (refreshHook == null) {
+            REFRESH.reset();
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (!REFRESH.due(now)) {
+            return;
+        }
+        boolean accepted;
+        try {
+            accepted = refreshHook.getAsBoolean();
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("Could not refresh the quest entries in EMI", ex);
+            accepted = true;
+        }
+        if (accepted) {
+            REFRESH.done();
+        }
     }
 
     private static void apply() {
+        Visibility visibility = visibility();
+        // a progress packet usually leaves the visible set alone: skip the whole rebuild when nothing can change
+        if (!VISIBLE.changed(generation, all, visibility)) {
+            return;
+        }
         Index previous = index;
-        index = QuestViewerIndex.build(all, visibility());
+        index = QuestViewerIndex.build(all, visibility);
+        VISIBLE.accept(generation, all, visibility);
         if (!previous.signature().equals(index.signature())) {
             notifyViewers();
         }
@@ -115,14 +178,8 @@ public final class QuestViewerData {
     }
 
     private static void notifyViewers() {
-        Runnable hook = refreshHook;
-        if (hook == null) {
-            return;
-        }
-        try {
-            hook.run();
-        } catch (RuntimeException ex) {
-            Constants.LOG.warn("Could not refresh the quest entries in EMI", ex);
+        if (refreshHook != null) {
+            REFRESH.mark(System.currentTimeMillis());
         }
     }
 
@@ -131,14 +188,12 @@ public final class QuestViewerData {
         for (int i = 0; i < node.tasks.size(); i++) {
             ClientModel.Task task = node.tasks.get(i);
             if (task.filter != null) {
-                for (ItemStack example : task.filter.examples()) {
-                    if (!example.isEmpty()) {
-                        needs.add(new Need(Kind.TASK, Spec.item(itemId(example)), task.count,
-                                task.name().getString(), i, false));
-                    }
-                }
+                // one row per task, not one per example: the filter itself answers whether a stack counts
+                needs.add(new Need(Kind.TASK, Spec.filter(task.filter.expression()), task.count,
+                        task.name().getString(), componentJson(task.name()), i, false, false, "", ""));
             } else {
-                addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(), i, false);
+                addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(),
+                        componentJson(task.name()), i, false, false, task.viewerItemJson(), task.viewerMatchMode());
             }
         }
         JsonObject raw = ClientProgress.rawNode(chapter.id, node.id);
@@ -150,7 +205,9 @@ public final class QuestViewerData {
             JsonObject reward = rewards.get(i).getAsJsonObject();
             String type = string(reward, "type");
             if (type.equals("table")) {
-                boolean choice = string(reward, "mode").equals("choice");
+                String mode = string(reward, "mode");
+                boolean choice = mode.equals("choice");
+                boolean random = mode.isEmpty() || mode.equals("random");
                 JsonElement table = tables.get(string(reward, "table"));
                 JsonArray entries = table != null && table.isJsonObject()
                         ? arr(table.getAsJsonObject(), "entries") : new JsonArray();
@@ -161,10 +218,10 @@ public final class QuestViewerData {
                     JsonObject row = entry.getAsJsonObject();
                     JsonObject inner = row.has("reward") && row.get("reward").isJsonObject()
                             ? row.getAsJsonObject("reward") : row;
-                    addReward(needs, inner, i, choice);
+                    addReward(needs, inner, i, choice, random);
                 }
             } else {
-                addReward(needs, reward, i, false);
+                addReward(needs, reward, i, false, false);
             }
         }
         if (needs.isEmpty()) {
@@ -172,11 +229,11 @@ public final class QuestViewerData {
         }
         ItemStack icon = !node.icon.isEmpty() ? node.icon
                 : node.iconTask != null ? node.iconTask.shown() : ItemStack.EMPTY;
-        return new Quest(node.key, chapter.id, node.title.getString(), chapter.title.getString(),
+        return new Quest(node.key, chapter.id, componentJson(node.title), componentJson(chapter.title),
                 icon.isEmpty() ? "" : itemId(icon), needs);
     }
 
-    private static void addReward(List<Need> needs, JsonObject reward, int index, boolean choice) {
+    private static void addReward(List<Need> needs, JsonObject reward, int index, boolean choice, boolean random) {
         String type = string(reward, "type");
         if (!type.isEmpty() && !type.equals("item")) {
             return;
@@ -186,24 +243,29 @@ public final class QuestViewerData {
             return;
         }
         Spec parsed = specOf(item);
-        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), index, choice);
+        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), "", index, choice, random,
+                item.isJsonObject() ? item.toString() : "", "");
     }
 
     private static void addSpec(List<Need> needs, Kind kind, String spec, long count, String label,
-                                int index, boolean choice) {
-        if (spec == null || spec.isEmpty() || spec.startsWith("~")) {
+                                String labelJson, int index, boolean choice, boolean random, String itemJson,
+                                String matchMode) {
+        if (spec == null || spec.isEmpty()) {
             return;
         }
-        addSpec(needs, kind, spec.startsWith("#") ? Spec.tag(spec.substring(1)) : Spec.item(spec),
-                count, label, index, choice);
+        Spec parsed = spec.startsWith("#") ? Spec.tag(spec.substring(1))
+                : spec.startsWith("~") ? Spec.filter(spec.substring(1)) : Spec.item(spec);
+        addSpec(needs, kind, parsed, count, label, labelJson, index, choice, random, itemJson, matchMode);
     }
 
     private static void addSpec(List<Need> needs, Kind kind, Spec parsed, long count, String label,
-                                int index, boolean choice) {
+                                String labelJson, int index, boolean choice, boolean random, String itemJson,
+                                String matchMode) {
         if (parsed == null || parsed.id().isEmpty()) {
             return;
         }
-        needs.add(new Need(kind, parsed, Math.max(1, count), label, index, choice));
+        needs.add(new Need(kind, parsed, Math.max(1, count), label, labelJson, index, choice, random, itemJson,
+                matchMode));
     }
 
     private static Spec specOf(JsonElement item) {
@@ -249,6 +311,17 @@ public final class QuestViewerData {
         }
         var item = BuiltInRegistries.ITEM.get(location);
         return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
+    }
+
+    /** The text of a Component as JSON, so the viewer can apply the language when it draws the row. */
+    private static String componentJson(net.minecraft.network.chat.Component component) {
+        try {
+            var level = net.minecraft.client.Minecraft.getInstance().level;
+            return net.minecraft.network.chat.Component.Serializer.toJson(component,
+                    level == null ? RegistryAccess.EMPTY : level.registryAccess());
+        } catch (RuntimeException ex) {
+            return component.getString();
+        }
     }
 
     private static String itemId(ItemStack stack) {

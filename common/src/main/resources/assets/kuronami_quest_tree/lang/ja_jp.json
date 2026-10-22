@@ -513,10 +513,11 @@
   "commands.kuronami_quest_tree.giver.uuid.cleared": "%s のクエストギバーのリンクを解除しました",
   "commands.kuronami_quest_tree.giver.uuid.none": "%s にはクエストギバーのリンクがありません",
   "sidebar_button.kuronami_quest_tree.quest_book": "クエストブック",
-  "viewer.category.quests": "クエスト",
+  "kuronami_quest_tree.viewer.category.quests": "クエスト",
   "emi.category.kuronami_quest_tree.quest": "クエスト",
-  "viewer.state.done": "完了",
-  "viewer.state.open": "受付中",
-  "viewer.state.locked": "ロック",
-  "viewer.choice": "%s（選択）"
+  "kuronami_quest_tree.viewer.state.done": "完了",
+  "kuronami_quest_tree.viewer.state.open": "受付中",
+  "kuronami_quest_tree.viewer.state.locked": "ロック",
+  "kuronami_quest_tree.viewer.choice": "%s（選択）",
+  "kuronami_quest_tree.viewer.random": "%s（ランダム）"
 }

@@ -3,6 +3,7 @@ package com.kuronami.questtree.client.compat;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.RecipeViewer;
 import com.kuronami.questtree.client.viewer.QuestViewerData;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Hit;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -40,6 +41,11 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
         registration.addRecipeCategories(new QuestViewerJeiCategory(registration.getJeiHelpers().getGuiHelper()));
     }
 
+    /**
+     * Known JEI limitation, accepted: JEI computes the unfocused category list once and caches it
+     * ({@code recipeCategoriesVisibleCache}). If the player opens that list before the bundle has synced, this
+     * category stays out of it until JEI reloads. The focused lookups below are live, so nothing else is stale.
+     */
     @Override
     public void registerAdvanced(IAdvancedRegistration registration) {
         registration.addRecipeManagerPlugin(new QuestViewerRecipeManager());
@@ -117,6 +123,10 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
      */
     private static final class QuestViewerRecipeManager implements IRecipeManagerPlugin {
 
+        /** The whole list is only rebuilt when the index is replaced; JEI asks for it on every category open. */
+        private static QuestViewerIndex.Index cachedIndex;
+        private static List<QuestViewerRecipe> cachedRecipes = List.of();
+
         @Override
         public <T, V> List<T> getRecipes(IRecipeCategory<T> category, IFocus<V> focus) {
             if (!(category instanceof QuestViewerJeiCategory)) {
@@ -131,8 +141,11 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
             var index = QuestViewerData.index();
             var query = QuestViewerData.query(stack);
-            List<Hit> hits = focus.getRole() == RecipeIngredientRole.INPUT
-                    ? index.uses(query) : index.rewards(query);
+            RecipeIngredientRole role = focus.getRole();
+            if (role != RecipeIngredientRole.INPUT && role != RecipeIngredientRole.OUTPUT) {
+                return List.of();
+            }
+            List<Hit> hits = role == RecipeIngredientRole.INPUT ? index.uses(query) : index.rewards(query);
             return recipes(hits);
         }
 
@@ -153,13 +166,24 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
             var index = QuestViewerData.index();
             var query = QuestViewerData.query(stack);
-            boolean has = focus.getRole() == RecipeIngredientRole.INPUT
+            RecipeIngredientRole role = focus.getRole();
+            if (role != RecipeIngredientRole.INPUT && role != RecipeIngredientRole.OUTPUT) {
+                return List.of();
+            }
+            // RENDER_ONLY and other roles are not a lookup in this category: only a real input/output focuses it
+            boolean has = role == RecipeIngredientRole.INPUT
                     ? !index.uses(query).isEmpty() : !index.rewards(query).isEmpty();
             return has ? List.of(QuestViewerJeiCategory.TYPE) : List.of();
         }
 
+        @SuppressWarnings("unchecked")
         private static <T> List<T> all() {
-            return recipes(QuestViewerData.index().hits());
+            var index = QuestViewerData.index();
+            if (index != cachedIndex) {
+                cachedRecipes = recipes(index.hits());
+                cachedIndex = index;
+            }
+            return (List<T>) cachedRecipes;
         }
 
         @SuppressWarnings("unchecked")

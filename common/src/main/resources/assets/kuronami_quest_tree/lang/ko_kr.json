@@ -513,10 +513,11 @@
   "commands.kuronami_quest_tree.giver.uuid.cleared": "%s의 퀘스트 지급자 연결을 해제했습니다",
   "commands.kuronami_quest_tree.giver.uuid.none": "%s에 퀘스트 지급자 연결이 없습니다",
   "sidebar_button.kuronami_quest_tree.quest_book": "퀘스트 책",
-  "viewer.category.quests": "퀘스트",
+  "kuronami_quest_tree.viewer.category.quests": "퀘스트",
   "emi.category.kuronami_quest_tree.quest": "퀘스트",
-  "viewer.state.done": "완료",
-  "viewer.state.open": "진행 가능",
-  "viewer.state.locked": "잠김",
-  "viewer.choice": "%s (선택)"
+  "kuronami_quest_tree.viewer.state.done": "완료",
+  "kuronami_quest_tree.viewer.state.open": "진행 가능",
+  "kuronami_quest_tree.viewer.state.locked": "잠김",
+  "kuronami_quest_tree.viewer.choice": "%s (선택)",
+  "kuronami_quest_tree.viewer.random": "%s (무작위)"
 }

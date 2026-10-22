@@ -16,9 +16,9 @@ public final class QuestViewerStyle {
 
     public static Component stateLabel(ProgressRules.State state) {
         return switch (state) {
-            case DONE, CLAIM -> Component.translatable("viewer.state.done");
-            case LOCKED, EXCLUDED -> Component.translatable("viewer.state.locked");
-            default -> Component.translatable("viewer.state.open");
+            case DONE, CLAIM -> Component.translatable("kuronami_quest_tree.viewer.state.done");
+            case LOCKED, EXCLUDED -> Component.translatable("kuronami_quest_tree.viewer.state.locked");
+            default -> Component.translatable("kuronami_quest_tree.viewer.state.open");
         };
     }
 

@@ -513,10 +513,11 @@
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Removed the quest giver link for %s",
   "commands.kuronami_quest_tree.giver.uuid.none": "No quest giver link for %s",
   "sidebar_button.kuronami_quest_tree.quest_book": "Quest Book",
-  "viewer.category.quests": "Quests",
+  "kuronami_quest_tree.viewer.category.quests": "Quests",
   "emi.category.kuronami_quest_tree.quest": "Quests",
-  "viewer.state.done": "Done",
-  "viewer.state.open": "Open",
-  "viewer.state.locked": "Locked",
-  "viewer.choice": "%s (choice)"
+  "kuronami_quest_tree.viewer.state.done": "Done",
+  "kuronami_quest_tree.viewer.state.open": "Open",
+  "kuronami_quest_tree.viewer.state.locked": "Locked",
+  "kuronami_quest_tree.viewer.choice": "%s (choice)",
+  "kuronami_quest_tree.viewer.random": "%s (random)"
 }

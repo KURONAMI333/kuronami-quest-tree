@@ -641,6 +641,16 @@ public final class ClientModel {
             return requirement.spec();
         }
 
+        /** The task's item JSON with its components, for the viewer's display stack. */
+        public String viewerItemJson() {
+            return requirement.itemJson();
+        }
+
+        /** The component mode of the task ({@code NONE}, {@code FUZZY}, {@code STRICT}). */
+        public String viewerMatchMode() {
+            return requirement.matchMode();
+        }
+
         private void resolve() {
             if (resolved) {
                 return;

@@ -1,6 +1,8 @@
 package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.client.QuestViewerStyle;
+import com.kuronami.questtree.client.viewer.QuestViewerData;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import dev.emi.emi.api.recipe.BasicEmiRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
 import dev.emi.emi.api.stack.EmiStack;
@@ -14,7 +16,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 
 import java.util.List;
 
@@ -31,18 +35,22 @@ public final class QuestViewerEmiRecipe extends BasicEmiRecipe {
                 recipe.id().getNamespace(), "/" + recipe.id().getPath()), QuestViewerRecipe.WIDTH, QuestViewerRecipe.HEIGHT);
         this.recipe = recipe;
 
-        List<EmiStack> stacks = recipe.stacks().stream().map(EmiStack::of).toList();
         if (recipe.needsItem()) {
-            this.inputs = List.of(EmiIngredient.of(stacks));
+            this.inputs = List.of(ingredient(recipe));
             this.outputs = List.of();
         } else {
             this.inputs = List.of();
-            this.outputs = stacks;
+            // outputs are a stack list, so a tag has to be expanded: every member, not just the first 64
+            this.outputs = recipe.stacks().stream().map(EmiStack::of).toList();
         }
     }
 
     @Override
     public void addWidgets(WidgetHolder widgets) {
+        // a reload can still show a row for a quest that just became hidden: draw nothing rather than stale text
+        if (!QuestViewerData.index().containsQuest(recipe.hit().quest().key())) {
+            return;
+        }
         Font font = Minecraft.getInstance().font;
         int titleWidth = 76;
 
@@ -65,8 +73,20 @@ public final class QuestViewerEmiRecipe extends BasicEmiRecipe {
             graphics.drawString(font, text, 62 - font.width(text), 1, 0xFFFFFFFF, false);
         }));
 
-        List<EmiStack> stacks = recipe.stacks().stream().map(EmiStack::of).toList();
-        widgets.addSlot(EmiIngredient.of(stacks), 8, 30);
+        widgets.addSlot(ingredient(recipe), 8, 30);
+    }
+
+    /** A tag becomes one tag ingredient so EMI knows every member, however long the tag is. */
+    private static EmiIngredient ingredient(QuestViewerRecipe recipe) {
+        Spec spec = recipe.hit().need().spec();
+        if (spec != null && spec.tag()) {
+            ResourceLocation id = ResourceLocation.tryParse(spec.id());
+            if (id != null) {
+                return EmiIngredient.of(TagKey.create(Registries.ITEM, id),
+                        Math.max(1, Math.min(99, recipe.hit().need().count())));
+            }
+        }
+        return EmiIngredient.of(recipe.stacks().stream().map(EmiStack::of).toList());
     }
 
     private static String trim(String text, int width, Font font) {

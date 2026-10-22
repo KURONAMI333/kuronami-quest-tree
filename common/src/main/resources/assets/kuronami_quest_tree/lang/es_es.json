@@ -513,10 +513,11 @@
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Se eliminó el vínculo del entregador de misiones para %s",
   "commands.kuronami_quest_tree.giver.uuid.none": "No hay vínculo de entregador de misiones para %s",
   "sidebar_button.kuronami_quest_tree.quest_book": "Libro de misiones",
-  "viewer.category.quests": "Misiones",
+  "kuronami_quest_tree.viewer.category.quests": "Misiones",
   "emi.category.kuronami_quest_tree.quest": "Misiones",
-  "viewer.state.done": "Completada",
-  "viewer.state.open": "Abierta",
-  "viewer.state.locked": "Bloqueada",
-  "viewer.choice": "%s (elección)"
+  "kuronami_quest_tree.viewer.state.done": "Completada",
+  "kuronami_quest_tree.viewer.state.open": "Abierta",
+  "kuronami_quest_tree.viewer.state.locked": "Bloqueada",
+  "kuronami_quest_tree.viewer.choice": "%s (elección)",
+  "kuronami_quest_tree.viewer.random": "%s (aleatorio)"
 }

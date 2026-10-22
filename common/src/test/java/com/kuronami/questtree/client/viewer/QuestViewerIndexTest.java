@@ -79,6 +79,59 @@ class QuestViewerIndexTest {
     }
 
     @Test
+    void aFilterTaskMatchesThroughItsExpression() {
+        Quest quest = quest("pack:any_log", "Any Log",
+                need(Kind.TASK, Spec.filter("item_tag(minecraft:logs)"), 8));
+        Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
+
+        assertEquals(List.of("pack:any_log"), keys(index.uses(filterQuery("minecraft:oak_log", "item_tag(minecraft:logs)"))));
+        assertTrue(index.uses(filterQuery("minecraft:stone", "item(minecraft:stone)")).isEmpty());
+    }
+
+    @Test
+    void aComponentSpecificTaskOnlyMatchesTheVariantItNames() {
+        String itemJson = "{\"id\":\"minecraft:potion\",\"components\":{\"minecraft:potion_contents\":\"minecraft:healing\"}}";
+        Quest quest = quest("pack:healing", "Healing",
+                new Need(Kind.TASK, Spec.item("minecraft:potion"), 1, "Healing Potion", "", 0, false, false,
+                        itemJson, "FUZZY"));
+        Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
+
+        assertEquals(List.of("pack:healing"), keys(index.uses(componentQuery(itemJson, true))));
+        assertTrue(index.uses(componentQuery(itemJson, false)).isEmpty());
+    }
+
+    @Test
+    void aTaskWithoutAComponentModeIgnoresTheComponentCheck() {
+        Quest quest = quest("pack:plain", "Plain", new Need(Kind.TASK, Spec.item("minecraft:potion"), 1,
+                "Potion", "", 0, false, false, "{\"id\":\"minecraft:potion\"}", "NONE"));
+        Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
+
+        assertEquals(List.of("pack:plain"), keys(index.uses(componentQuery("", false))));
+    }
+
+    @Test
+    void aKeptLabelComponentIsCarriedSoTheViewerCanResolveItLater() {
+        Need need = new Need(Kind.TASK, Spec.item("minecraft:stick"), 1, "Stick",
+                "{\"translate\":\"item.minecraft.stick\"}", 0, false, false, "", "");
+        Hit hit = QuestViewerIndex.build(List.of(quest("pack:q", "Quest", need)), quest1 -> true)
+                .uses(query("minecraft:stick")).get(0);
+
+        assertEquals("Stick", hit.need().label());
+        assertEquals("{\"translate\":\"item.minecraft.stick\"}", hit.need().labelJson());
+    }
+
+    @Test
+    void tagEntriesAreNotCapped() {
+        List<String> members = new java.util.ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            members.add("minecraft:item_" + i);
+        }
+
+        assertEquals(100, QuestViewerIndex.tagEntries(members).size());
+        assertEquals("minecraft:item_99", QuestViewerIndex.tagEntries(members).get(99));
+    }
+
+    @Test
     void countAndLabelSurviveForTheViewerText() {
         Quest quest = quest("pack:q", "Quest",
                 new Need(Kind.TASK, Spec.item("minecraft:oak_log"), 32, "Oak Log", 2, false));
@@ -110,6 +163,44 @@ class QuestViewerIndexTest {
             @Override
             public boolean inTag(String tagId) {
                 return tagSet.contains(tagId);
+            }
+        };
+    }
+
+    private static Query componentQuery(String expectedJson, boolean passes) {
+        return new Query() {
+            @Override
+            public String itemId() {
+                return "minecraft:potion";
+            }
+
+            @Override
+            public boolean inTag(String tagId) {
+                return false;
+            }
+
+            @Override
+            public boolean accepts(String itemJson, String matchMode) {
+                return passes && itemJson.equals(expectedJson);
+            }
+        };
+    }
+
+    private static Query filterQuery(String itemId, String passingExpression) {
+        return new Query() {
+            @Override
+            public String itemId() {
+                return itemId;
+            }
+
+            @Override
+            public boolean inTag(String tagId) {
+                return false;
+            }
+
+            @Override
+            public boolean inFilter(String expression) {
+                return expression.equals(passingExpression);
             }
         };
     }

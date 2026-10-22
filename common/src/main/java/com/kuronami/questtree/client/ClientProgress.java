@@ -79,6 +79,7 @@ public final class ClientProgress {
         buffer.writeBytes(p.data());
         nextPart++;
         if (nextPart == p.total()) {
+            boolean synced = false;
             try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(buffer.toByteArray()))) {
                 JsonObject bundle = JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
                 // build everything first: a throw halfway must not leave a new model next to the old rules
@@ -100,10 +101,18 @@ public final class ClientProgress {
                 EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
-                QuestViewerData.rebuildAll();
+                synced = true;
                 Constants.LOG.info("Received {} progression chapters", sync.model().chapters.size());
             } catch (Exception ex) {
                 Constants.LOG.error("Could not read progression data from server", ex);
+            }
+            // a viewer failure must not make a good sync look like a broken bundle
+            if (synced) {
+                try {
+                    QuestViewerData.rebuildAll();
+                } catch (RuntimeException ex) {
+                    Constants.LOG.error("Could not rebuild the recipe-viewer index", ex);
+                }
             }
             buffer = null;
         }
@@ -475,6 +484,7 @@ public final class ClientProgress {
 
     /** Called every client tick by the loader module. The same key opens and closes the screen. */
     public static void onClientTick() {
+        QuestViewerData.onClientTick();
         Minecraft mc = Minecraft.getInstance();
         if (DevTour.ENABLED) {
             DevTour.tick();

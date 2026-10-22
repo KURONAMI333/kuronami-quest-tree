@@ -5,9 +5,12 @@ import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.ProgressScreen;
 import com.kuronami.questtree.client.QuestViewerStyle;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Hit;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Kind;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex.Need;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.progress.ItemFilter;
 import com.kuronami.questtree.progress.ProgressRules;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -37,7 +40,7 @@ public final class QuestViewerRecipe {
 
     public QuestViewerRecipe(Hit hit) {
         this.hit = hit;
-        this.stacks = List.copyOf(stacksOf(hit.need().spec(), hit.need().count()));
+        this.stacks = List.copyOf(stacksOf(hit.need()));
         this.icon = iconOf(hit);
     }
 
@@ -57,19 +60,63 @@ public final class QuestViewerRecipe {
         return hit.need().kind() == Kind.TASK;
     }
 
+    /** The quest title, resolved now so a language change or a translatable title follows the current language. */
+    public Component titleComponent() {
+        return text(hit.quest().title(), hit.quest().title());
+    }
+
     public String title() {
-        return hit.quest().title();
+        return titleComponent().getString();
+    }
+
+    public Component chapterComponent() {
+        return text(hit.quest().chapterTitle(), hit.quest().chapterTitle());
     }
 
     public String chapter() {
-        return hit.quest().chapterTitle();
+        return chapterComponent().getString();
+    }
+
+    /** The row's label with the real count, resolved when drawn rather than when the bundle arrived. */
+    public Component needLabelComponent() {
+        Need need = hit.need();
+        Component label;
+        if (!need.labelJson().isEmpty()) {
+            label = text(need.labelJson(), need.label());
+        } else if (!need.spec().tag() && !stacks.isEmpty()) {
+            label = stacks.get(0).getHoverName();
+        } else {
+            label = Component.literal(need.label().isEmpty() ? need.spec().id() : need.label());
+        }
+        if (need.choice()) {
+            label = Component.translatable("kuronami_quest_tree.viewer.choice", label);
+        } else if (need.random()) {
+            label = Component.translatable("kuronami_quest_tree.viewer.random", label);
+        }
+        if (need.count() > 1) {
+            label = Component.empty().append(label).append(" × " + need.count());
+        }
+        return label;
     }
 
     public String needLabel() {
-        String label = hit.need().choice()
-                ? Component.translatable("viewer.choice", hit.need().label()).getString()
-                : hit.need().label();
-        return hit.need().count() > 1 ? label + " × " + hit.need().count() : label;
+        return needLabelComponent().getString();
+    }
+
+    /** Reads a Component serialized when the bundle arrived; plain text (a test or an old bundle) is literal. */
+    private static Component text(String json, String fallback) {
+        if (json == null || json.isEmpty()) {
+            return Component.literal(fallback == null ? "" : fallback);
+        }
+        var level = net.minecraft.client.Minecraft.getInstance().level;
+        if (level == null) {
+            return Component.literal(fallback == null ? json : fallback);
+        }
+        try {
+            return Component.Serializer.fromJson(json, level.registryAccess());
+        } catch (RuntimeException ex) {
+            return Component.literal(fallback == null ? json : fallback);
+        }
     }
 
     public ProgressRules.State state() {
@@ -93,40 +140,72 @@ public final class QuestViewerRecipe {
                 .replace(':', '/').replaceAll("[^a-z0-9_./-]", "_");
         String kind = needsItem() ? "task" : "reward";
         int hash = (hit.quest().key() + '|' + kind + '|' + hit.need().index() + '|'
-                + hit.need().spec().id() + '|' + hit.need().choice()).hashCode();
+                + hit.need().spec().kind() + '|' + hit.need().spec().id() + '|' + hit.need().count() + '|'
+                + hit.need().choice() + '|' + hit.need().random() + '|' + hit.need().itemJson()).hashCode();
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID,
                 "quest/" + key + "/" + kind + "/" + hit.need().index() + "/" + Integer.toHexString(hash));
     }
 
-    private static List<ItemStack> stacksOf(Spec spec, long count) {
+    private static List<ItemStack> stacksOf(Need need) {
+        Spec spec = need.spec();
         if (spec == null || spec.id().isEmpty()) {
             return List.of();
         }
-        int amount = (int) Math.max(1, Math.min(99, count));
+        int amount = (int) Math.max(1, Math.min(99, need.count()));
         List<ItemStack> out = new ArrayList<>();
         if (spec.tag()) {
             ResourceLocation tagId = ResourceLocation.tryParse(spec.id());
             if (tagId == null) {
                 return List.of();
             }
-            BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, tagId)).ifPresent(tag -> {
-                for (var holder : tag) {
-                    out.add(new ItemStack(holder.value(), amount));
-                    if (out.size() >= 64) {
-                        break;
-                    }
-                }
-            });
-        } else {
-            ResourceLocation id = ResourceLocation.tryParse(spec.id());
-            if (id != null) {
-                Item item = BuiltInRegistries.ITEM.get(id);
+            List<Item> members = new ArrayList<>();
+            BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, tagId))
+                    .ifPresent(tag -> tag.forEach(holder -> members.add(holder.value())));
+            // no cap: JEI hides a recipe whose slot lacks the focused item, so a big tag must list every member
+            for (Item item : QuestViewerIndex.tagEntries(members)) {
                 if (item != Items.AIR) {
                     out.add(new ItemStack(item, amount));
                 }
             }
+        } else if (spec.filter()) {
+            for (ItemStack example : ItemFilter.parse(spec.id()).examples()) {
+                if (!example.isEmpty()) {
+                    out.add(example.copyWithCount(amount));
+                }
+            }
+        } else {
+            ItemStack withComponents = stackFromJson(need.itemJson(), amount);
+            if (!withComponents.isEmpty()) {
+                out.add(withComponents);
+            } else {
+                ResourceLocation id = ResourceLocation.tryParse(spec.id());
+                if (id != null) {
+                    Item item = BuiltInRegistries.ITEM.get(id);
+                    if (item != Items.AIR) {
+                        out.add(new ItemStack(item, amount));
+                    }
+                }
+            }
         }
         return out;
+    }
+
+    /** The task's or reward's item JSON as a display stack, components included; empty when it cannot be read. */
+    private static ItemStack stackFromJson(String json, int amount) {
+        if (json == null || json.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        try {
+            com.google.gson.JsonObject object = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+            object.remove("count");
+            object.addProperty("count", amount);
+            var level = net.minecraft.client.Minecraft.getInstance().level;
+            var ops = level == null ? com.mojang.serialization.JsonOps.INSTANCE
+                    : level.registryAccess().createSerializationContext(com.mojang.serialization.JsonOps.INSTANCE);
+            return ItemStack.CODEC.parse(ops, object).result().orElse(ItemStack.EMPTY);
+        } catch (RuntimeException ex) {
+            return ItemStack.EMPTY;
+        }
     }
 
     private static ItemStack iconOf(Hit hit) {
