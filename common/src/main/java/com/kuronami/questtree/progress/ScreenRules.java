@@ -67,6 +67,21 @@ public final class ScreenRules {
         return type(task).equals("energy");
     }
 
+    /**
+     * FTB Quests' {@code max_input}: the most one transfer may add to an energy task. 0 (the value FTB Quests writes
+     * when it is not set, and the default when the key is missing) means no cap.
+     */
+    public static long maxInput(JsonObject task) {
+        if (task == null || !task.has("max_input") || !task.get("max_input").isJsonPrimitive()) {
+            return 0;
+        }
+        try {
+            return Math.max(0, task.get("max_input").getAsLong());
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
     /** The fluid a task names, as written by the importer ({@code fluid} for FTB Quests). */
     public static String fluidSpec(JsonObject task) {
         JsonElement e = task == null ? null : task.get("fluid");

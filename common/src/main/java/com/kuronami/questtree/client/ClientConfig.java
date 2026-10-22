@@ -78,6 +78,8 @@ public final class ClientConfig {
 
     /** Completion notice: toast, action bar, or nothing. Gameplay notices never use chat. */
     public static NotificationStyle notificationStyle = NotificationStyle.TOAST;
+    /** What a claimed reward shows: a toast, the action bar, or nothing (FTB Quests' separate reward style). */
+    public static NotificationStyle rewardStyle = NotificationStyle.TOAST;
     /** The mod's completion, claim, unlock and level-up sounds. */
     public static boolean completionSounds = true;
     /** The pinned-quest tracker on the right edge instead of the left. */
@@ -93,6 +95,11 @@ public final class ClientConfig {
     public static boolean keepRailOpen = false;
     /** Add the current chapter's next open quest to the tracker (2026-10-22). */
     public static boolean autoPin = true;
+    /**
+     * Leave quests that are only startable because of flexible mode out of auto-pin (FTB Quests'
+     * {@code pinned_exclude_flexible}, on by default): they cannot be finished yet, so they would sit in the tracker.
+     */
+    public static boolean pinnedExcludeFlexible = true;
     /** The quest book button above the player preview in the survival inventory (2026-10-22). */
     public static boolean inventoryButton = true;
     /** Screen text scale: separate from Minecraft's GUI scale (2026-10-22). */
@@ -133,6 +140,9 @@ public final class ClientConfig {
                 if (o.has("notification_style") && o.get("notification_style").isJsonPrimitive()) {
                     notificationStyle = NotificationStyle.byId(o.get("notification_style").getAsString());
                 }
+                if (o.has("reward_style") && o.get("reward_style").isJsonPrimitive()) {
+                    rewardStyle = NotificationStyle.byId(o.get("reward_style").getAsString());
+                }
                 completionSounds = bool(o, "completion_sounds", completionSounds);
                 trackerRight = bool(o, "tracker_right", trackerRight);
                 if (o.has("tracker_mode") && o.get("tracker_mode").isJsonPrimitive()) {
@@ -143,6 +153,7 @@ public final class ClientConfig {
                 trackerScale = number(o, "tracker_scale", trackerScale);
                 keepRailOpen = bool(o, "keep_rail_open", keepRailOpen);
                 autoPin = bool(o, "auto_pin", autoPin);
+                pinnedExcludeFlexible = bool(o, "pinned_exclude_flexible", pinnedExcludeFlexible);
                 inventoryButton = bool(o, "inventory_button", inventoryButton);
                 if (o.has("text_scale") && o.get("text_scale").isJsonPrimitive() && o.get("text_scale").getAsJsonPrimitive().isNumber()) {
                     textScale = net.minecraft.util.Mth.clamp(o.get("text_scale").getAsFloat(), 0.8f, 1.2f);
@@ -212,6 +223,11 @@ public final class ClientConfig {
         return notificationStyle;
     }
 
+    public static NotificationStyle rewardStyle() {
+        ensureLoaded();
+        return rewardStyle;
+    }
+
     public static boolean completionSounds() {
         ensureLoaded();
         return completionSounds;
@@ -261,6 +277,11 @@ public final class ClientConfig {
     public static boolean autoPin() {
         ensureLoaded();
         return autoPin;
+    }
+
+    public static boolean pinnedExcludeFlexible() {
+        ensureLoaded();
+        return pinnedExcludeFlexible;
     }
 
     public static boolean inventoryButton() {
@@ -346,6 +367,7 @@ public final class ClientConfig {
             o.addProperty("item_tooltips", itemTooltips);
             o.addProperty("glass", glass);
             o.addProperty("notification_style", notificationStyle.id);
+            o.addProperty("reward_style", rewardStyle.id);
             o.addProperty("completion_sounds", completionSounds);
             o.addProperty("tracker_right", trackerRight);
             o.addProperty("tracker_mode", trackerMode.id);
@@ -354,6 +376,7 @@ public final class ClientConfig {
             o.addProperty("tracker_scale", trackerScale);
             o.addProperty("keep_rail_open", keepRailOpen);
             o.addProperty("auto_pin", autoPin);
+            o.addProperty("pinned_exclude_flexible", pinnedExcludeFlexible);
             o.addProperty("inventory_button", inventoryButton);
             o.addProperty("text_scale", textScale);
             o.addProperty("high_contrast", highContrast);

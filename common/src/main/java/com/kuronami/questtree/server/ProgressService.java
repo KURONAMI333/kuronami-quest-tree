@@ -273,6 +273,10 @@ public final class ProgressService {
             return;
         }
         PlayerProgress p = progress(player);
+        if (p.bookLocked()) {
+            // FTB Quests' locked book stops progress, not just opening: TeamData.isLocked() gates bump/claim/submit
+            return;
+        }
         ProgressRules r = rules();
         // Only kill tasks can move. The old loop walked every node before finding that out, and rechecked even for a
         // kill no task names (2026-10-22 release review).
@@ -305,12 +309,15 @@ public final class ProgressService {
         if (ServerPlayers.isFake(player)) {
             return;
         }
+        PlayerProgress p = progress(player);
+        if (p.bookLocked()) {
+            return;
+        }
         ProgressRules r = rules();
         List<TaskRef> refs = tasksOfType(r, "break");
         if (refs.isEmpty()) {
             return;
         }
-        PlayerProgress p = progress(player);
         List<TaskRef> hits = new ArrayList<>();
         for (TaskRef ref : refs) {
             ProgressModel.Node n = ref.node();
@@ -411,6 +418,9 @@ public final class ProgressService {
     private static void interaction(ServerPlayer player, String kind, ItemStack stack, BlockState state,
                                     Entity entity, Entity other, int amount, String recipe) {
         if (amount <= 0 || ServerPlayers.isFake(player)) {
+            return;
+        }
+        if (progress(player).bookLocked()) {
             return;
         }
         ProgressRules r = rules();
@@ -559,7 +569,11 @@ public final class ProgressService {
         } else if (!entityMatches(str(task, "entity"), entity.getType())) {
             return false;
         }
+        // FTB Quests writes the kill task's name filter as custom_name; an edited book may use the older name
         String name = str(task, "name");
+        if (name.isEmpty()) {
+            name = str(task, "custom_name");
+        }
         if (!name.isEmpty()) {
             String actual = entity instanceof ServerPlayer other
                     ? other.getGameProfile().getName()
@@ -586,6 +600,11 @@ public final class ProgressService {
 
     public static void onAction(ServerPlayer player, ActionPayload a) {
         PlayerProgress p = progress(player);
+        if (p.bookLocked()) {
+            // claim, claim_reward, exchange and submit all arrive here; FTB Quests refuses them while locked
+            flush(player);
+            return;
+        }
         ProgressRules r = rules();
         ProgressModel.Node n = r.model().nodes.get(a.node());
         if (n != null && !ProgressRules.chapterUnlocked(p, n.chapter)) {
@@ -757,6 +776,9 @@ public final class ProgressService {
     }
 
     private static void scanItems(ServerPlayer player, PlayerProgress p) {
+        if (p.bookLocked()) {
+            return;
+        }
         ProgressRules r = rules();
         Map<String, Long> held = null;
         // FTBQ counts what a member holds toward the team's value and only ever raises it (ItemTask.submitTask), so one
@@ -820,12 +842,15 @@ public final class ProgressService {
      * run reaches the target so the task finishes without the player having to look away.
      */
     private static void scanObservation(ServerPlayer player, boolean persist) {
+        PlayerProgress p = progress(player);
+        if (p.bookLocked()) {
+            return;
+        }
         ProgressRules r = rules();
         List<TaskRef> refs = tasksOfType(r, "observation");
         if (refs.isEmpty()) {
             return;
         }
-        PlayerProgress p = progress(player);
         for (TaskRef ref : refs) {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
@@ -931,6 +956,9 @@ public final class ProgressService {
     }
 
     private static void scanWorld(ServerPlayer player, PlayerProgress p) {
+        if (p.bookLocked()) {
+            return;
+        }
         ProgressRules r = rules();
         ServerLevel level = player.serverLevel();
         BlockPos pos = player.blockPosition();
@@ -981,6 +1009,9 @@ public final class ProgressService {
 
     /** Hands in items (or experience) for a task that consumes them. */
     private static void submit(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, int i) {
+        if (p.bookLocked()) {
+            return;
+        }
         JsonObject t = n.tasks.get(i);
         if (!conditionsMet(player, p, n, t, true)) {
             return;
@@ -1140,6 +1171,9 @@ public final class ProgressService {
     }
 
     private static void giveAuto(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, boolean actor) {
+        if (p.bookLocked()) {
+            return;
+        }
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
             String key = n.key + "#" + i;

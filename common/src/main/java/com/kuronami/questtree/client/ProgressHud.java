@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client;
 
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
@@ -110,6 +111,10 @@ public final class ProgressHud {
                 continue;
             }
             State s = ClientProgress.state(n.key);
+            if (ClientConfig.pinnedExcludeFlexible() && n.flexible && !ClientProgress.unlocked(n.key)) {
+                // flexible-only: the tasks can be worked on, but the quest cannot finish yet
+                continue;
+            }
             if (s == State.PROGRESS) {
                 return n;
             }

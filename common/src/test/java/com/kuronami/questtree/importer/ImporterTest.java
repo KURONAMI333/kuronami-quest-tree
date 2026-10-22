@@ -98,7 +98,21 @@ class ImporterTest {
         assertEquals("基本", out.lang.get("ja_jp").get("progression.test.basics.title").getAsString());
         // an image that appears after a quest keeps that link
         JsonObject api = out.chapters.get("apiculture");
-        assertTrue(api.getAsJsonArray("decorations").get(1).getAsJsonObject().has("visible_after"));
+        JsonObject late = api.getAsJsonArray("decorations").get(1).getAsJsonObject();
+        assertTrue(late.has("visible_after"));
+        // FTB Quests' old image click string and its text-on-image settings survive
+        JsonObject first = api.getAsJsonArray("decorations").get(0).getAsJsonObject();
+        assertEquals("run_command", first.getAsJsonObject("click").get("type").getAsString());
+        assertEquals("say hej", first.getAsJsonObject("click").get("target").getAsString());
+        assertTrue(first.get("text_on_image").getAsBoolean());
+        assertEquals("left", first.get("text_h_align").getAsString());
+        assertEquals("top", first.get("text_v_align").getAsString());
+        assertEquals(3, first.get("text_inset").getAsInt());
+        assertTrue(first.get("text_shadow").getAsBoolean());
+        // a newer open_quest action is remapped from FTB Quests' hex id to our node key
+        String action = late.get("click_action").getAsString();
+        assertTrue(action.startsWith("open_quest:basics/"), action);
+        assertFalse(action.contains("1000000000001EEF"), action);
         // no FTB Quests condition block survives anywhere in the converted output
         out.chapters.values().forEach(ch -> assertNoKey(ch, "conditions"));
         out.patches.values().forEach(ch -> assertNoKey(ch, "conditions"));

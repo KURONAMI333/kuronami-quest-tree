@@ -55,6 +55,23 @@ public final class SettingsScreen extends Screen {
         rows.add(new Row() {
             @Override
             public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.reward_notifications");
+            }
+
+            @Override
+            public Component value() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.notification."
+                        + ClientConfig.rewardStyle().id);
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.rewardStyle = ClientConfig.rewardStyle().next();
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
                 return Component.translatable("screen.kuronami_quest_tree.settings.sounds");
             }
 
@@ -254,6 +271,22 @@ public final class SettingsScreen extends Screen {
             @Override
             public void click() {
                 ClientConfig.autoPin = !ClientConfig.autoPin;
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.pinned_exclude_flexible");
+            }
+
+            @Override
+            public Component value() {
+                return onOff(ClientConfig.pinnedExcludeFlexible());
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.pinnedExcludeFlexible = !ClientConfig.pinnedExcludeFlexible;
             }
         });
         rows.add(new Row() {

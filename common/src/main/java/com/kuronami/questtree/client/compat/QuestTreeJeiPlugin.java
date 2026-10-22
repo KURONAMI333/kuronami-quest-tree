@@ -17,6 +17,7 @@ import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.registration.IAdvancedRegistration;
 import mezz.jei.api.registration.IRecipeCatalystRegistration;
 import mezz.jei.api.registration.IRecipeCategoryRegistration;
+import com.mojang.blaze3d.platform.InputConstants;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -86,6 +87,28 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             @Override
             public boolean typing() {
                 return runtime.getIngredientListOverlay().hasKeyboardFocus();
+            }
+
+            @Override
+            public boolean isBookmarkKey(int key, int scan) {
+                return runtime.getKeyMappings().getBookmark()
+                        .isActiveAndMatches(InputConstants.Type.KEYSYM.getOrCreate(key));
+            }
+
+            @Override
+            public Boolean toggleBookmark(ItemStack stack) {
+                if (stack.isEmpty()) {
+                    return null;
+                }
+                return runtime.getIngredientManager()
+                        .createTypedIngredient(VanillaTypes.ITEM_STACK, stack.copyWithCount(1), true)
+                        .map(typed -> {
+                            var bookmarks = runtime.getBookmarkManager();
+                            if (bookmarks.contains(typed)) {
+                                return bookmarks.remove(typed) ? Boolean.FALSE : null;
+                            }
+                            return bookmarks.add(typed) ? Boolean.TRUE : null;
+                        }).orElse(null);
             }
 
             @Override

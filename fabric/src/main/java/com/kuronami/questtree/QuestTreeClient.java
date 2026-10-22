@@ -26,6 +26,25 @@ public class QuestTreeClient implements ClientModInitializer {
     public void onInitializeClient() {
         KeyBindingHelper.registerKeyBinding(ClientProgress.OPEN_KEY);
         KeyBindingHelper.registerKeyBinding(ClientProgress.TRACK_KEY);
+        for (net.minecraft.client.KeyMapping mapping : new net.minecraft.client.KeyMapping[]{
+                com.kuronami.questtree.client.BookKeys.SEARCH,
+                com.kuronami.questtree.client.BookKeys.PREFS,
+                com.kuronami.questtree.client.BookKeys.RECENTER,
+                com.kuronami.questtree.client.BookKeys.ZOOM_IN,
+                com.kuronami.questtree.client.BookKeys.ZOOM_OUT,
+                com.kuronami.questtree.client.BookKeys.ZOOM_RESET,
+                com.kuronami.questtree.client.BookKeys.INFO,
+                com.kuronami.questtree.client.BookKeys.NEXT_CHAPTER,
+                com.kuronami.questtree.client.BookKeys.PREV_CHAPTER,
+                com.kuronami.questtree.client.BookKeys.UNDO,
+                com.kuronami.questtree.client.BookKeys.REDO,
+                com.kuronami.questtree.client.BookKeys.SELECT_ALL,
+                com.kuronami.questtree.client.BookKeys.COPY,
+                com.kuronami.questtree.client.BookKeys.PASTE,
+                com.kuronami.questtree.client.BookKeys.DELETE,
+                com.kuronami.questtree.client.BookKeys.LINK}) {
+            KeyBindingHelper.registerKeyBinding(mapping);
+        }
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register((g, delta) -> com.kuronami.questtree.client.ProgressHud.render(g));
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register((g, delta) -> com.kuronami.questtree.client.RestrictionCue.render(g));
         ClientTickEvents.END_CLIENT_TICK.register(mc -> ClientProgress.onClientTick());

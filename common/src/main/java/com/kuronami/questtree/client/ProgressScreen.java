@@ -564,6 +564,8 @@ public class ProgressScreen extends Screen {
     private boolean railBuiltSearching;
     /** The item under the pointer in the detail panel (a task or a reward), for the recipe viewer's keys. */
     private ItemStack hoverStack = ItemStack.EMPTY;
+    /** F1 (rebindable) or the vanilla debug overlay: the selected quest's id and completion time. */
+    private boolean showIds;
     private int lastMouseX;
     private int lastMouseY;
     /** A quest to show once the screen is laid out (opened from an item, see {@link #openAt}). */
@@ -1566,6 +1568,7 @@ public class ProgressScreen extends Screen {
             g.setColor(((d.color >> 16) & 255) / 255f, ((d.color >> 8) & 255) / 255f, (d.color & 255) / 255f, d.alpha);
             g.blit(d.image, -dw / 2, -dh / 2, dw, dh, 0, 0, 1, 1, 1, 1);
             g.setColor(1, 1, 1, 1);
+            drawImageText(g, d, dw, dh);
             g.pose().popPose();
         }
         // lines; authors hide some to keep busy maps readable (chapter default, or per node in either direction)
@@ -2220,8 +2223,8 @@ public class ProgressScreen extends Screen {
             }
         }
         PlayerProgress p = ClientProgress.progress();
-        if (minecraft != null && minecraft.getDebugOverlay().showDebugScreen()) {
-            // F3: the node's id and when the player finished it, for bug reports and pack work (2026-10-22)
+        if (showIds || minecraft != null && minecraft.getDebugOverlay().showDebugScreen()) {
+            // F1 or F3: the node's id and when the player finished it, for bug reports and pack work (2026-10-22)
             y += 2;
             Ui.text(g, font, "ID: " + n.key, x, y, Ui.DIM);
             y += 10;
@@ -3772,6 +3775,38 @@ public class ProgressScreen extends Screen {
     }
 
 
+    /** FTB Quests' text_on_image: the picture's own hover lines, wrapped and aligned inside it. */
+    private void drawImageText(GuiGraphics g, ClientModel.Decoration d, int dw, int dh) {
+        if (!d.textOnImage || d.hover.isEmpty()) {
+            return;
+        }
+        int inset = Math.min(d.textInset, Math.max(0, Math.min(dw, dh) / 2 - 1));
+        int room = Math.max(1, dw - inset * 2);
+        List<net.minecraft.util.FormattedCharSequence> lines = new ArrayList<>();
+        for (Component line : d.hover) {
+            lines.addAll(font.split(line, room));
+        }
+        if (lines.isEmpty()) {
+            return;
+        }
+        int total = lines.size() * 9;
+        int top = switch (d.textVAlign.toLowerCase(java.util.Locale.ROOT)) {
+            case "top" -> -dh / 2 + inset;
+            case "bottom" -> dh / 2 - inset - total;
+            default -> -total / 2;
+        };
+        for (int i = 0; i < lines.size(); i++) {
+            var line = lines.get(i);
+            int w = font.width(line);
+            int x = switch (d.textHAlign.toLowerCase(java.util.Locale.ROOT)) {
+                case "left" -> -dw / 2 + inset;
+                case "right" -> dw / 2 - inset - w;
+                default -> -w / 2;
+            };
+            g.drawString(font, line, x, top + i * 9, Ui.TEXT, d.textShadow);
+        }
+    }
+
     private boolean decorationVisible(ClientModel.Decoration d) {
         if (d.dev || d.image == null || !imageOnClient(d.image)) {
             return false;
@@ -3801,7 +3836,8 @@ public class ProgressScreen extends Screen {
         double wy = (my - v[1]) / v[2];
         for (int i = ch.decorations.size() - 1; i >= 0; i--) {
             ClientModel.Decoration d = ch.decorations.get(i);
-            if (!decorationVisible(d) || (d.hover.isEmpty() && d.clickNode == null && d.clickUrl == null)) {
+            if (!decorationVisible(d) || (d.hover.isEmpty() && d.clickNode == null && d.clickUrl == null
+                    && d.clickCommand == null && d.clickEvent == null && d.clickRecipe == null)) {
                 continue;
             }
             if (Math.abs(wx - d.x * UNIT) <= d.w * UNIT / 2 && Math.abs(wy - d.y * UNIT) <= d.h * UNIT / 2) {
@@ -4192,6 +4228,29 @@ public class ProgressScreen extends Screen {
                     net.minecraft.client.gui.screens.ConfirmLinkScreen.confirmLinkNow(this, d.clickUrl);
                     return true;
                 }
+                if (d != null && d.clickCommand != null) {
+                    dragging = false;
+                    var player = net.minecraft.client.Minecraft.getInstance().player;
+                    if (player != null && player.connection != null) {
+                        player.connection.sendCommand(d.clickCommand);
+                    }
+                    return true;
+                }
+                if (d != null && d.clickEvent != null) {
+                    dragging = false;
+                    CustomClicks.fire(d.clickEvent);
+                    return true;
+                }
+                if (d != null && d.clickRecipe != null) {
+                    dragging = false;
+                    RecipeViewer viewer = RecipeViewer.Holder.get();
+                    net.minecraft.world.item.Item item =
+                            net.minecraft.core.registries.BuiltInRegistries.ITEM.get(d.clickRecipe);
+                    if (viewer != null && item != net.minecraft.world.item.Items.AIR) {
+                        viewer.showRecipes(new ItemStack(item));
+                    }
+                    return true;
+                }
             }
             String key = hit == null ? null : hit.key;
             if (key != null && !key.equals(selected)) {
@@ -4305,9 +4364,17 @@ public class ProgressScreen extends Screen {
             // the map's keys stay behind the card
             return true;
         }
-        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_F && Screen.hasControlDown()) {
+        if (BookKeys.ctrl(BookKeys.SEARCH, key, scan)) {
             // from anywhere, including the chapter list's filter: the quest search gets the title row
             focusSearch();
+            return true;
+        }
+        if (BookKeys.ctrl(BookKeys.PREFS, key, scan)) {
+            minecraft.setScreen(new SettingsScreen(this));
+            return true;
+        }
+        if (BookKeys.plain(BookKeys.INFO, key, scan)) {
+            showIds = !showIds;
             return true;
         }
         if (railBox != null && railBox.isFocused()) {
@@ -4364,17 +4431,17 @@ public class ProgressScreen extends Screen {
                 }
             }
             if (ech != null && Screen.hasControlDown()) {
-                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_A) {
+                if (BookKeys.ctrl(BookKeys.SELECT_ALL, key, scan)) {
                     List<String> all = ech.nodes.values().stream()
                             .filter(n -> ClientProgress.visible(n.key)).map(n -> n.key).toList();
                     editSelection.selectAll(all);
                     return true;
                 }
-                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_C) {
+                if (BookKeys.ctrl(BookKeys.COPY, key, scan)) {
                     copySelection(ech);
                     return true;
                 }
-                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_V) {
+                if (BookKeys.ctrl(BookKeys.PASTE, key, scan)) {
                     pasteSelection(ech);
                     return true;
                 }
@@ -4382,22 +4449,23 @@ public class ProgressScreen extends Screen {
                     duplicateSelection(ech);
                     return true;
                 }
-                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_Z && !Screen.hasShiftDown()) {
+                if (BookKeys.ctrl(BookKeys.UNDO, key, scan) && !Screen.hasShiftDown()) {
                     EditorSession.send(ech.id, "undo", new JsonObject());
                     editSelection.clear();
                     return true;
                 }
-                if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_Z || key == org.lwjgl.glfw.GLFW.GLFW_KEY_Y) {
+                if (BookKeys.ctrl(BookKeys.REDO, key, scan)
+                        || BookKeys.ctrl(BookKeys.UNDO, key, scan) && Screen.hasShiftDown()) {
                     EditorSession.send(ech.id, "redo", new JsonObject());
                     editSelection.clear();
                     return true;
                 }
             }
-            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_DELETE && ech != null) {
+            if (BookKeys.plain(BookKeys.DELETE, key, scan) && ech != null) {
                 deleteSelection(ech);
                 return true;
             }
-            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_L) {
+            if (BookKeys.plain(BookKeys.LINK, key, scan)) {
                 linkKeyHeld = true;
                 return true;
             }
@@ -4424,6 +4492,15 @@ public class ProgressScreen extends Screen {
             }
         }
         RecipeViewer viewer = RecipeViewer.Holder.get();
+        if (viewer != null && !hoverStack.isEmpty() && viewer.isBookmarkKey(key, scan)) {
+            Boolean added = viewer.toggleBookmark(hoverStack);
+            if (added != null && net.minecraft.client.Minecraft.getInstance().player != null) {
+                net.minecraft.client.Minecraft.getInstance().player.displayClientMessage(Component.translatable(added
+                        ? "screen.kuronami_quest_tree.bookmark_added"
+                        : "screen.kuronami_quest_tree.bookmark_removed"), true);
+            }
+            return true;
+        }
         if (viewer != null && !hoverStack.isEmpty()
                 && (key == org.lwjgl.glfw.GLFW.GLFW_KEY_R || key == org.lwjgl.glfw.GLFW.GLFW_KEY_U)) {
             // the viewer's own keys: R for how it is made, U for what it is used in
@@ -4443,8 +4520,12 @@ public class ProgressScreen extends Screen {
             sheetScrollTarget = Mth.clamp(sheetScrollTarget + dir * page, 0, sheetContentMax);
             return true;
         }
-        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_TAB) {
-            cycleChapter(Screen.hasShiftDown() ? -1 : 1);
+        if (BookKeys.shift(BookKeys.PREV_CHAPTER, key, scan)) {
+            cycleChapter(-1);
+            return true;
+        }
+        if (BookKeys.plain(BookKeys.NEXT_CHAPTER, key, scan)) {
+            cycleChapter(1);
             return true;
         }
         if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE) {
@@ -4454,7 +4535,7 @@ public class ProgressScreen extends Screen {
         ClientModel.Chapter mapChapter = chapter();
         if (mapChapter != null && !mapChapter.skills) {
             float[] v = view(mapChapter);
-            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE) {
+            if (BookKeys.plain(BookKeys.RECENTER, key, scan)) {
                 // recentre on the selected quest, else the whole tree
                 lastMapMove = Util.getMillis();
                 if (selected != null && model() != null && model().nodesByKey.containsKey(selected)) {
@@ -4466,15 +4547,15 @@ public class ProgressScreen extends Screen {
                 }
                 return true;
             }
-            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_EQUAL || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ADD) {
+            if (BookKeys.plain(BookKeys.ZOOM_IN, key, scan)) {
                 zoomButton(mapChapter, v, 2);
                 return true;
             }
-            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_MINUS || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_SUBTRACT) {
+            if (BookKeys.plain(BookKeys.ZOOM_OUT, key, scan)) {
                 zoomButton(mapChapter, v, 1);
                 return true;
             }
-            if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_0 || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_0) {
+            if (BookKeys.plain(BookKeys.ZOOM_RESET, key, scan)) {
                 zoomButton(mapChapter, v, 0);
                 return true;
             }
@@ -4509,7 +4590,7 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean keyReleased(int key, int scan, int modifiers) {
-        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_L) {
+        if (BookKeys.LINK.matches(key, scan)) {
             linkKeyHeld = false;
         }
         return super.keyReleased(key, scan, modifiers);

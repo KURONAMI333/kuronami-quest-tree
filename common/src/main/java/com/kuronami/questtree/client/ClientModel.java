@@ -224,6 +224,8 @@ public final class ClientModel {
         public final boolean hideDetailsByDefault;
         /** Chapter-wide {@code require_sequential_tasks}, inherited by nodes that set no value of their own. */
         final boolean defaultSequentialTasks;
+        /** The chapter's {@code defaults} object, for node values that fall back to it. */
+        final JsonObject defaults;
         /** Tiles that stand for a quest of another chapter (FTB Quests quest links). */
         public final List<Link> links = new ArrayList<>();
         /** Pictures behind the map, bottom first (chapter {@code background}); empty = the plain ground. */
@@ -264,6 +266,7 @@ public final class ClientModel {
                     ? visibility.get("lock_hint").getAsString() : "";
             this.lockHint = hint.isBlank() ? null : m.component(hint, parseText(hint));
             JsonObject defaults = obj(o, "defaults");
+            this.defaults = defaults;
             this.defaultShape = defaults.has("shape") && !defaults.get("shape").getAsString().isEmpty() ? defaults.get("shape").getAsString() : null;
             this.defaultSizeSet = defaults.has("size") && defaults.get("size").isJsonPrimitive()
                     && defaults.get("size").getAsJsonPrimitive().isNumber();
@@ -400,6 +403,8 @@ public final class ClientModel {
         /** A reward is a choice table, so the server waits for a pick before it pays anything out. */
         public final boolean choiceReward;
         public final int cost;
+        /** FTB Quests' "flexible" progression: tasks count before the requirements are met (see ProgressRules). */
+        public final boolean flexible;
         /** FTB Quests' {@code require_sequential_tasks}: a task waits for the one before it (2026-10-20). */
         public final boolean sequentialTasks;
         /** A repeatable quest: the details header shows how often it was completed (2026-10-20). */
@@ -423,6 +428,7 @@ public final class ClientModel {
             this.shape = !sh.isEmpty() && !sh.equals("default") ? sh : ch.defaultShape != null ? ch.defaultShape : ProgressModel.roleShape(o);
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
             this.cost = PackNumbers.intOr(o.get("cost"), 0);
+            this.flexible = flexible(o, ch);
             this.sequentialTasks = ProgressModel.boolOr(o, "sequential_tasks", ch.defaultSequentialTasks);
             this.repeatable = ProgressRules.repeatable(o);
             JsonObject ex = obj(o, "exclusive");
@@ -533,6 +539,20 @@ public final class ClientModel {
          */
         public boolean needsChoice() {
             return choiceReward;
+        }
+
+        /** The same rule as {@link ProgressRules#flexible}: node value, else the chapter default. */
+        private static boolean flexible(JsonObject o, Chapter ch) {
+            if (ProgressModel.boolOf(o, "tasks_ignore_requires")) {
+                return true;
+            }
+            String mode = o.has("progression_mode") && o.get("progression_mode").isJsonPrimitive()
+                    ? o.get("progression_mode").getAsString() : "default";
+            if (mode.equals("default") && ch.defaults.has("progression_mode")
+                    && ch.defaults.get("progression_mode").isJsonPrimitive()) {
+                mode = ch.defaults.get("progression_mode").getAsString();
+            }
+            return mode.equals("flexible");
         }
 
         private void addReward(ItemStack stack, int index) {
@@ -746,10 +766,20 @@ public final class ClientModel {
         /** Click: open this node (global key), or open this URL (after the vanilla confirm screen). */
         public final String clickNode;
         public final String clickUrl;
+        /** FTB Quests' other click actions: a command, an addon event, or a recipe to look up. */
+        public final String clickCommand;
+        public final ResourceLocation clickEvent;
+        public final ResourceLocation clickRecipe;
         /** Tint (0xRRGGBB) and opacity (0..1) from FTB Quests' color / alpha. */
         public final int color;
         public final float alpha;
         public final List<Component> hover = new ArrayList<>();
+        /** FTB Quests' text_on_image: the hover text is drawn on the picture, aligned inside it. */
+        public final boolean textOnImage;
+        public final String textHAlign;
+        public final String textVAlign;
+        public final int textInset;
+        public final boolean textShadow;
 
         Decoration(Chapter ch, JsonObject o) {
             ResourceLocation img = null;
@@ -773,11 +803,66 @@ public final class ClientModel {
             JsonObject click = obj(o, "click");
             String type = click.has("type") ? click.get("type").getAsString() : "";
             String target = click.has("target") ? click.get("target").getAsString() : "";
-            this.clickNode = type.equals("node") && !target.isEmpty() ? ch.keyOf(target) : null;
-            this.clickUrl = type.equals("url") && (target.startsWith("https://") || target.startsWith("http://")) ? target : null;
+            String command = null;
+            ResourceLocation event = null;
+            ResourceLocation recipe = null;
+            String node = type.equals("node") && !target.isEmpty() ? ch.keyOf(target) : null;
+            String url = type.equals("url") && (target.startsWith("https://") || target.startsWith("http://")) ? target : null;
+            // FTB Quests writes click_action as "type:data"; the imported older shape is {"type","target"}
+            if (o.has("click_action") && o.get("click_action").isJsonPrimitive()) {
+                String action = o.get("click_action").getAsString();
+                int colon = action.indexOf(':');
+                String actionType = colon < 0 ? "" : action.substring(0, colon);
+                String data = colon < 0 ? "" : action.substring(colon + 1);
+                switch (actionType) {
+                    case "open_quest" -> node = !data.isEmpty() ? ch.keyOf(data.split("/", 2)[0]) : null;
+                    case "open_uri" -> url = data.startsWith("https://") || data.startsWith("http://") ? data : null;
+                    case "run_command" -> command = data;
+                    case "custom_event" -> event = ResourceLocation.tryParse(data);
+                    case "show_recipe" -> recipe = ResourceLocation.tryParse(data);
+                    default -> { }
+                }
+            } else if (o.has("click_action") && o.get("click_action").isJsonObject()) {
+                JsonObject a = o.getAsJsonObject("click_action");
+                String at = a.has("type") ? a.get("type").getAsString() : "";
+                String data = a.has("data") ? a.get("data").getAsString()
+                        : a.has("target") ? a.get("target").getAsString() : "";
+                switch (at) {
+                    case "node", "open_quest" -> node = !data.isEmpty() ? ch.keyOf(data) : null;
+                    case "url", "open_uri" -> url = data.startsWith("https://") || data.startsWith("http://") ? data : null;
+                    case "run_command" -> command = data;
+                    case "custom_event" -> event = ResourceLocation.tryParse(data);
+                    case "show_recipe" -> recipe = ResourceLocation.tryParse(data);
+                    default -> { }
+                }
+            } else if (o.has("click") && o.get("click").isJsonPrimitive()) {
+                // a hand-written pack may still use the old string form: http(s), #node, custom:event, command:line
+                String legacy = o.get("click").getAsString();
+                if (legacy.startsWith("http://") || legacy.startsWith("https://")) {
+                    url = legacy;
+                } else if (legacy.startsWith("#")) {
+                    node = ch.keyOf(legacy.substring(1));
+                } else if (legacy.startsWith("custom:")) {
+                    event = ResourceLocation.tryParse(legacy.substring(7));
+                } else if (legacy.startsWith("command:")) {
+                    command = legacy.substring(8);
+                }
+            }
+            this.clickNode = node;
+            this.clickUrl = url;
+            this.clickCommand = command;
+            this.clickEvent = event;
+            this.clickRecipe = recipe;
             this.color = PackNumbers.intOr(o.get("color"), 0xFFFFFF) & 0xFFFFFF;
             this.alpha = Math.max(0, Math.min(255,
                 PackNumbers.intOr(o.get("alpha"), 255))) / 255f;
+            this.textOnImage = ProgressModel.boolOf(o, "text_on_image");
+            this.textHAlign = o.has("text_h_align") && o.get("text_h_align").isJsonPrimitive()
+                    ? o.get("text_h_align").getAsString() : "middle";
+            this.textVAlign = o.has("text_v_align") && o.get("text_v_align").isJsonPrimitive()
+                    ? o.get("text_v_align").getAsString() : "middle";
+            this.textInset = Math.max(0, PackNumbers.intOr(o.get("text_inset"), 0));
+            this.textShadow = ProgressModel.boolOf(o, "text_shadow");
             for (JsonElement e : arr(o, "hover")) {
                 if (e.isJsonPrimitive()) {
                     String text = e.getAsString();
@@ -852,7 +937,14 @@ public final class ClientModel {
         }
         Item item = BuiltInRegistries.ITEM.get(rl);
         if (item == Items.AIR) {
-            return ItemStack.EMPTY;
+            // an id the pack names but this game does not have (a mod it was written for, or a typo): FTB Quests
+            // shows its own missing-item block; we show a barrier named as such, with the raw id underneath
+            ItemStack missing = new ItemStack(Items.BARRIER);
+            missing.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                    Component.translatable("item.kuronami_quest_tree.missing"));
+            missing.set(net.minecraft.core.component.DataComponents.LORE,
+                    new net.minecraft.world.item.component.ItemLore(List.of(Component.literal(id))));
+            return missing;
         }
         int count = e.isJsonObject()
                 ? PackNumbers.intOr(e.getAsJsonObject().get("count"), 1) : 1;
