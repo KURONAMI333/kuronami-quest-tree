@@ -1659,7 +1659,7 @@ public class ProgressScreen extends Screen {
                 Tiles.ring(g, shape, x - oo - 2, y - oo - 2, os + 4, os + 4, Ui.OPTIONAL_OUTLINE);
             }
             Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)),
-                    ClientProgress.iconFor(n), false);
+                    ClientProgress.iconFor(n), false, n.key);
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
             if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
@@ -1693,7 +1693,7 @@ public class ProgressScreen extends Screen {
             int x = (int) Math.round(l.x * UNIT) - s / 2;
             int y = (int) Math.round(l.y * UNIT) - s / 2;
             String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
-            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), ClientProgress.iconFor(target), false);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), ClientProgress.iconFor(target), false, target.key);
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -2278,7 +2278,7 @@ public class ProgressScreen extends Screen {
                     y += 20;
                     continue;
                 }
-                Tiles.tile(g, req.shape, x, y, 16, ClientProgress.look(req.key), ClientProgress.fraction(req.key), ClientProgress.iconFor(req), false);
+                Tiles.tile(g, req.shape, x, y, 16, ClientProgress.look(req.key), ClientProgress.fraction(req.key), ClientProgress.iconFor(req), false, req.key);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 ClientModel.Chapter other = reqChapter;
@@ -2313,7 +2313,7 @@ public class ProgressScreen extends Screen {
                 Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.leads_to"), x, y, Ui.DIM);
                 y += 12;
                 for (ClientModel.Node d : leads) {
-                    Tiles.tile(g, d.shape, x, y, 16, ClientProgress.look(d.key), ClientProgress.fraction(d.key), ClientProgress.iconFor(d), false);
+                    Tiles.tile(g, d.shape, x, y, 16, ClientProgress.look(d.key), ClientProgress.fraction(d.key), ClientProgress.iconFor(d), false, d.key);
                     g.pose().pushPose();
                     g.pose().translate(0, 0, OVERLAY_Z);
                     ClientModel.Chapter other = m.chapterOf.get(d.key);

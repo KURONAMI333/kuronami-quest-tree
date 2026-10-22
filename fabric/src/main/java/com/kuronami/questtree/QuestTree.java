@@ -42,6 +42,7 @@ import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.fabricmc.fabric.api.transfer.v1.fluid.FluidStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -168,6 +169,10 @@ public class QuestTree implements ModInitializer {
         ItemStorage.SIDED.registerForBlockEntity((be, side) -> FabricTaskScreenStorages.item(be), SCREEN_AUX_BE);
         FluidStorage.SIDED.registerForBlockEntity((be, side) -> FabricTaskScreenStorages.fluid(be), SCREEN_BE);
         FluidStorage.SIDED.registerForBlockEntity((be, side) -> FabricTaskScreenStorages.fluid(be), SCREEN_AUX_BE);
+        // energy is Team Reborn Energy's API and stays optional: never touch its classes when it is not loaded
+        if (FabricLoader.getInstance().isModLoaded("team_reborn_energy")) {
+            FabricEnergyStorages.register(SCREEN_BE, SCREEN_AUX_BE);
+        }
         ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.TOOLS_AND_UTILITIES).register(e -> {
             e.accept(QUEST_BOOK);
             e.accept(QUEST_TASK_ITEM);

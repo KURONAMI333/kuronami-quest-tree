@@ -147,6 +147,10 @@ final class Ui {
     }
 
     private static final ResourceLocation PALETTE = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "gui/palette.json");
+    private static final ResourceLocation THEME = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "gui/theme.json");
+
+    /** Per-chapter and per-quest colour overrides, empty unless a pack supplies {@code gui/theme.json}. */
+    private static ThemeOverrides theme = ThemeOverrides.EMPTY;
 
     /**
      * Reads {@code assets/kuronami_quest_tree/gui/palette.json} so a resource pack can recolour the whole screen
@@ -156,6 +160,17 @@ final class Ui {
      */
     static void loadPalette(net.minecraft.server.packs.resources.ResourceManager rm) {
         restoreDefaults();
+        theme = ThemeOverrides.EMPTY;
+        try {
+            var res = rm.getResource(THEME);
+            if (res.isPresent()) {
+                try (var reader = res.get().openAsReader()) {
+                    theme = ThemeOverrides.parse(com.google.gson.JsonParser.parseReader(reader).getAsJsonObject());
+                }
+            }
+        } catch (Exception ex) {
+            Constants.LOG.warn("Could not read {}: {}", THEME, ex.toString());
+        }
         com.google.gson.JsonObject o = new com.google.gson.JsonObject();
         try {
             var res = rm.getResource(PALETTE);
@@ -326,6 +341,17 @@ final class Ui {
         GLASS_REGULAR = defaults[i++];
         ProgressScreen.LINE_REQUIRES = defaults[i++];
         ProgressScreen.LINE_UNLOCKS = defaults[i++];
+    }
+
+    /**
+     * A palette colour for one node: the palette's value, overridden by the node's chapter, then by the node itself
+     * ({@code gui/theme.json}). High contrast is a readability switch, so it wins over any pack override.
+     */
+    static int themed(String key, int fallback, String nodeKey) {
+        if (ClientConfig.highContrast()) {
+            return fallback;
+        }
+        return theme.resolve(key, fallback, nodeKey);
     }
 
     private static int color(com.google.gson.JsonObject o, String key, int fallback) {

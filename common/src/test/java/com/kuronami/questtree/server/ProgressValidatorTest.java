@@ -68,7 +68,7 @@ class ProgressValidatorTest {
     void anEnergyTaskWarnsOnALoaderWithoutEnergy() {
         String json = chapter("{\"type\": \"energy\", \"count\": 1000}", "{\"type\": \"xp\", \"amount\": 10}");
         ProgressValidator.Result neo = validate(json, ProgressValidator.Registry.NONE);
-        assertFalse(says(neo, "energy tasks are counted only on NeoForge"));
+        assertFalse(says(neo, "energy tasks need an energy API"));
         ProgressValidator.Registry fabric = new ProgressValidator.Registry() {
             @Override
             public boolean known(String kind, String id) {
@@ -82,7 +82,7 @@ class ProgressValidatorTest {
         };
         ProgressValidator.Result r = validate(json, fabric);
         assertEquals(0, errors(r));
-        assertTrue(says(r, "energy tasks are counted only on NeoForge"));
+        assertTrue(says(r, "energy tasks need an energy API"));
     }
 
     @Test

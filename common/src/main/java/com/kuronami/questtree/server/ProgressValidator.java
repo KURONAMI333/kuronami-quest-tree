@@ -78,7 +78,10 @@ public final class ProgressValidator {
             return true;
         }
 
-        /** Whether this loader has an energy API; false makes every energy task a warning (Fabric, 2026-10-22). */
+        /**
+         * Whether this loader has an energy API; false makes every energy task a warning. Fabric answers true only
+         * when Team Reborn Energy is loaded (2026-10-22).
+         */
         default boolean energyAvailable() {
             return true;
         }
@@ -916,7 +919,7 @@ public final class ProgressValidator {
             case "energy" -> {
                 if (!registry.energyAvailable()) {
                     problem(out, Severity.WARNING, ref, path + ".type",
-                            "energy tasks are counted only on NeoForge; this loader has no energy API, so the task never counts");
+                            "energy tasks need an energy API (NeoForge, or Team Reborn Energy on Fabric); this loader has none, so the task never counts");
                 }
             }
             case "stage" -> required(out, ref, path, t, "stage");

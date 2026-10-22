@@ -238,7 +238,7 @@ public final class ProgressHud {
             String line = progressLine(n);
             int iconY = y + (rowH - TrackerRules.ICON) / 2;
             Tiles.tile(g, n.shape, 2 + TrackerRules.PAD, iconY, TrackerRules.ICON, ClientProgress.look(n.key),
-                    ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
+                    ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false, n.key);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
             Ui.text(g, font, title, tx, y, Ui.MARK);

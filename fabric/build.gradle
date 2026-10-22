@@ -9,6 +9,8 @@ dependencies {
     compileOnly "maven.modrinth:jade:15.10.6+neoforge"
     compileOnly "me.shedaniel:RoughlyEnoughItems-neoforge:${rei_version}"
     compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
+    // Team Reborn Energy is optional (FTB Quests bundles it on Fabric); compiled against only, never required
+    modCompileOnly "teamreborn:energy:4.1.0"
     minecraft "com.mojang:minecraft:${minecraft_version}"
     mappings loom.layered {
         officialMojangMappings()
