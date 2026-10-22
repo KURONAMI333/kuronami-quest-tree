@@ -59,6 +59,8 @@ public class ProgressScreen extends Screen {
 
     private static final int UNIT = 24;      // GUI px per grid unit (FTB Quests positions)
     private static final int NODE = 20;      // GUI px of a size-1 node
+    /** An inline item in a description, near the 9px text's own height. */
+    private static final int ITEM_ICON = 10;
     /** Closed width of the chapter list: one column of icons. */
     private static final int RAIL = 24;
     private static final int RAIL_OPEN_MIN = 150;
@@ -764,6 +766,14 @@ public class ProgressScreen extends Screen {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 300);
             Ui.tooltipAt(g, font, railTip, railTipX, railTipY);
+            g.pose().popPose();
+        }
+        if (!hoverStack.isEmpty() && pendingTip == null && railTip == null && confirmPrompt == null) {
+            // the vanilla item tooltip (name, line, mod name) at the vanilla position, for every item icon and inline
+            // item in the sheet; it replaces no text: the rows already say what the item is for
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 300);
+            g.renderTooltip(font, hoverStack, lastMouseX, lastMouseY);
             g.pose().popPose();
         }
         renderConfirm(g, mouseX, mouseY);
@@ -3713,8 +3723,43 @@ public class ProgressScreen extends Screen {
                     lastImage = true;
                     continue;
                 }
-                boolean link = token.kind() != FtbText.Token.Kind.TEXT;
-                String text = token.text();
+                if (token.kind() == FtbText.Token.Kind.ITEM) {
+                    ItemStack stack = itemStack(token.target());
+                    if (!stack.isEmpty()) {
+                        int countW = token.count() > 1 ? 2 + Ui.textWidth(font, "x" + token.count()) : 0;
+                        int total = ITEM_ICON + countW;
+                        if (cx > x && cx + total > x + w) {
+                            cx = x;
+                            y += 12;
+                        }
+                        int top = y - 1;
+                        boolean visible = top + ITEM_ICON > contentTop && top < contentBottom;
+                        if (visible) {
+                            g.pose().pushPose();
+                            g.pose().translate(cx, top, 0);
+                            g.pose().scale(ITEM_ICON / 16f, ITEM_ICON / 16f, 1f);
+                            g.renderItem(stack, 0, 0);
+                            g.pose().popPose();
+                            int right = cx + ITEM_ICON;
+                            if (token.count() > 1) {
+                                String count = "x" + token.count();
+                                Ui.text(g, font, count, right + 2, y, Ui.DIM);
+                                right += 2 + Ui.textWidth(font, count);
+                            }
+                            if (lastMouseX >= cx && lastMouseX < right && lastMouseY >= top && lastMouseY < top + ITEM_ICON) {
+                                hoverStack = stack;
+                            }
+                            buttons.add(new Button(cx, top, Math.max(ITEM_ICON, right - cx), ITEM_ICON, () -> showRecipes(stack)));
+                        }
+                        cx += total;
+                        lastImage = false;
+                        continue;
+                    }
+                    // an item this pack does not have: the id as written, so a typo stays visible in the sentence
+                }
+                boolean itemText = token.kind() == FtbText.Token.Kind.ITEM;
+                boolean link = token.kind() != FtbText.Token.Kind.TEXT && !itemText;
+                String text = itemText ? token.target() : token.text();
                 int color = link ? Ui.ACCENT : Ui.TEXT;
                 // a word that does not fit at all moves to the next line first, so the old word wrap keeps its shape
                 int room = Math.max(1, x + w - cx);
@@ -3753,6 +3798,23 @@ public class ProgressScreen extends Screen {
             }
         }
         return y;
+    }
+
+    /** The stack an inline item token names, or EMPTY when this pack has no such item. */
+    private ItemStack itemStack(String id) {
+        ResourceLocation rl = ResourceLocation.tryParse(id);
+        if (rl == null) {
+            return ItemStack.EMPTY;
+        }
+        return net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(rl)
+                .map(ItemStack::new).orElse(ItemStack.EMPTY);
+    }
+
+    private void showRecipes(ItemStack stack) {
+        RecipeViewer viewer = RecipeViewer.Holder.get();
+        if (viewer != null) {
+            viewer.showRecipes(stack);
+        }
     }
 
     private void descriptionLink(FtbText.Token.Kind kind, String target) {

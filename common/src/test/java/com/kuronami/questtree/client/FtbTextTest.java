@@ -63,6 +63,35 @@ class FtbTextTest {
     }
 
     @Test
+    void anItemTokenCarriesItsIdAndCount() {
+        List<FtbText.Token> t = tokens("bring {item:minecraft:diamond} and {item:minecraft:iron_ingot 4} or {item:coal x8}");
+        assertEquals(FtbText.Token.Kind.ITEM, t.get(1).kind());
+        assertEquals("minecraft:diamond", t.get(1).target());
+        assertEquals(1, t.get(1).count());
+        assertEquals("minecraft:iron_ingot", t.get(3).target());
+        assertEquals(4, t.get(3).count());
+        assertEquals("coal", t.get(5).target());
+        assertEquals(8, t.get(5).count());
+    }
+
+    @Test
+    void anItemIdThatCouldNotParseStaysProse() {
+        for (String bad : List.of("{item:https://example.com/x}", "{item:Test:Diamond}", "{item:}", "{item:minecraft:}")) {
+            assertTrue(tokens("x " + bad + " y").stream().noneMatch(t -> t.kind() == FtbText.Token.Kind.ITEM),
+                    "not an item: " + bad);
+        }
+        assertEquals(9999, tokens("{item:minecraft:diamond 10000}").get(0).count());
+        assertEquals(1, tokens("{item:minecraft:diamond many}").get(0).count());
+    }
+
+    @Test
+    void anItemAloneIsNotABlankLine() {
+        List<FtbText.Line> lines = FtbText.descriptionLines("{item:minecraft:diamond}\\n\\ntext");
+        assertFalse(lines.get(0).blank());
+        assertTrue(lines.get(1).blank());
+    }
+
+    @Test
     void pageBreakIsAParagraphAndTrailingBlankLinesGo() {
         List<FtbText.Line> lines = FtbText.descriptionLines("first {@pagebreak} second\\n\\n");
         assertEquals(3, lines.size());
