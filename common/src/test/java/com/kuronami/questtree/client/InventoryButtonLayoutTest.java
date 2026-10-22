@@ -14,10 +14,9 @@ class InventoryButtonLayoutTest {
     }
 
     @Test
-    void sitsAboveThePanelWithAGap() {
-        assertEquals(80, InventoryButtonLayout.y(100));
-        assertTrue(InventoryButtonLayout.fits(20));
-        assertTrue(!InventoryButtonLayout.fits(19));
-        assertTrue(InventoryButtonLayout.y(100) + InventoryButtonLayout.HEIGHT < 100);
+    void sitsAtTheTopLeavingRoomForTabs() {
+        assertEquals(2, InventoryButtonLayout.y(100));
+        assertTrue(InventoryButtonLayout.fits(48));
+        assertTrue(!InventoryButtonLayout.fits(47));
     }
 }
