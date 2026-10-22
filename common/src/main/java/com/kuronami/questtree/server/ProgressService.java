@@ -72,6 +72,8 @@ import java.util.UUID;
 public final class ProgressService {
 
     private static ProgressRules rules = new ProgressRules(ProgressModel.of(new JsonObject()));
+    /** The file settings of the current bundle (lock text, team/auto defaults, detector delay). */
+    private static com.kuronami.questtree.data.FileSettings fileSettings = com.kuronami.questtree.data.FileSettings.EMPTY;
     private static ProgressModel rulesFor;
     /** Events collected during a tick, sent with the next progress packet. */
     private static final Map<UUID, List<String>> PENDING = new HashMap<>();
@@ -98,8 +100,13 @@ public final class ProgressService {
             rulesFor = m;
             ProgressRules.clearExchangeCurves();
             rules = new ProgressRules(m);
+            fileSettings = com.kuronami.questtree.data.FileSettings.of(ProgressData.settings());
         }
         return rules;
+    }
+
+    public static com.kuronami.questtree.data.FileSettings fileSettings() {
+        return fileSettings;
     }
 
     public static PlayerProgress progress(ServerPlayer player) {
@@ -1171,16 +1178,16 @@ public final class ProgressService {
     }
 
     private static void giveAuto(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, boolean actor) {
-        if (p.bookLocked()) {
+        if (p.bookLocked() || fileSettings().suppressAllAutoclaiming) {
             return;
         }
         for (int i = 0; i < n.rewards.size(); i++) {
             JsonObject rw = n.rewards.get(i);
             String key = n.key + "#" + i;
-            if (!ProgressModel.boolOf(rw, "auto") || p.rewardClaimed(key) || !conditionsMet(player, p, n, rw, false)) {
+            if (!fileSettings().auto(rw) || p.rewardClaimed(key) || !conditionsMet(player, p, n, rw, false)) {
                 continue;
             }
-            if (ProgressModel.boolOf(rw, "team") && !actor) {
+            if (fileSettings().team(rw) && !actor) {
                 continue;
             }
             int rewardIndex = i;

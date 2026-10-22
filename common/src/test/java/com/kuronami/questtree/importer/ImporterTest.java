@@ -464,4 +464,48 @@ class ImporterTest {
         assertFalse(reward.has("category"));
         assertTrue(out.notes.containsKey("points_reward_chapter other:mining"), out.notes.toString());
     }
+
+    @Test
+    void ftbQuestsAppearanceKeysSurvive(@TempDir Path tmp) throws Exception {
+        Path chapters = Files.createDirectories(tmp.resolve("chapters"));
+        Files.writeString(chapters.resolve("c.snbt"), """
+                {
+                    id: "1000000000000001"
+                    filename: "c"
+                    autofocus_id: "1000000000000002"
+                    preset: "goal"
+                    icon: { id: "ftbquests:custom_icon", components: { "ftbquests:icon": "pack:textures/gui/chapter.png" } }
+                    quests: [
+                        {
+                            id: "1000000000000002"
+                            x: 1.0d
+                            y: 2.0d
+                            icon_scale: 1.4d
+                            min_width: 240
+                            hide_lock_icon: true
+                            disable_recipe_mod: true
+                            guide_page: "pack:guide/start"
+                            preset: "info"
+                            icon: { id: "ftbquests:custom_icon", components: { "ftbquests:entity_face": "minecraft:zombie" } }
+                        }
+                    ]
+                }
+                """);
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(tmp, out);
+        JsonObject chapter = out.chapters.get("c");
+        assertEquals("1000000000000002", chapter.get("autofocus").getAsString());
+        assertEquals("goal", chapter.get("preset").getAsString());
+        assertEquals("texture", chapter.getAsJsonObject("icon").get("type").getAsString());
+        JsonObject quest = chapter.getAsJsonObject("nodes").getAsJsonObject().entrySet().iterator().next()
+                .getValue().getAsJsonObject();
+        assertEquals(1.4, quest.get("icon_scale").getAsDouble(), 0.0001);
+        assertEquals(240, quest.get("detail_width").getAsInt());
+        assertTrue(quest.getAsJsonObject("visibility").get("hide_lock_icon").getAsBoolean());
+        assertTrue(quest.get("hide_from_recipe_viewer").getAsBoolean());
+        assertEquals("pack:guide/start", quest.get("guide_page").getAsString());
+        assertEquals("info", quest.get("preset").getAsString());
+        assertEquals("entity", quest.getAsJsonObject("icon").get("type").getAsString());
+        assertEquals("minecraft:zombie", quest.getAsJsonObject("icon").get("entity").getAsString());
+    }
 }

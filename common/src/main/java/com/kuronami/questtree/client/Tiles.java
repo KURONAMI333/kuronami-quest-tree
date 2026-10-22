@@ -356,15 +356,49 @@ final class Tiles {
         return shapeOf(shape).equals("diamond") ? Math.round(s * 1.25f / 2) * 2 : s;
     }
 
+    /**
+     * What a tile shows: an item, a drawn picture, or an entity's face. FTB Quests' custom icon item can carry either
+     * of the last two, and the importer keeps that choice instead of dropping the icon (2026-10-22).
+     */
+    record Glyph(ItemStack stack, ResourceLocation texture, ResourceLocation entity) {
+        static final Glyph EMPTY = new Glyph(ItemStack.EMPTY, null, null);
+
+        static Glyph item(ItemStack stack) {
+            return stack == null || stack.isEmpty() ? EMPTY : new Glyph(stack, null, null);
+        }
+
+        boolean empty() {
+            return stack.isEmpty() && texture == null && entity == null;
+        }
+    }
+
+    /** The face texture FTB Library/FTB Quests use for an entity icon ({@code textures/faces/<ns>/<path>.png}). */
+    static ResourceLocation faceTexture(ResourceLocation entity) {
+        return entity == null ? null
+                : ResourceLocation.fromNamespaceAndPath(entity.getNamespace(),
+                "textures/faces/" + entity.getNamespace() + "/" + entity.getPath() + ".png");
+    }
+
     static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon, boolean far) {
         tile(g, shape, x, y, s, look, fraction, icon, far, null);
+    }
+
+    static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon,
+                     boolean far, String themeKey) {
+        tile(g, shape, x, y, s, look, fraction, Glyph.item(icon), 1, far, themeKey);
+    }
+
+    static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, Glyph glyph,
+                     double iconScale, boolean far, String themeKey) {
+        tileBody(g, shape, x, y, s, look, fraction, glyph, iconScale, far, themeKey);
     }
 
     /**
      * A state tile with the node's own theme (2026-10-22, {@code gui/theme.json}): its chapter's and then its own
      * overrides recolour the face and the progress water. Without an override every colour is the palette's.
      */
-    static void tile(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction, ItemStack icon, boolean far, String themeKey) {
+    private static void tileBody(GuiGraphics g, String shape, int x, int y, int s, Look look, double fraction,
+                                 Glyph glyph, double iconScale, boolean far, String themeKey) {
         shape = shapeOf(shape);
         int big = drawnSize(shape, s);
         x -= (big - s) / 2;
@@ -387,19 +421,32 @@ final class Tiles {
             // zoomed out the surface colour is the information; nothing on top
             return;
         }
-        if (!icon.isEmpty()) {
+        if (glyph != null && !glyph.empty()) {
             // the icon fills the largest square that fits inside the shape's face, wherever that sits: a circle's or a
             // gear's is smaller than a square's, a heart's sits low. Worked out from the mask (Metrics), so every shape
             // and a resource pack's own shapes get an icon that stays inside them. Items leave a margin of their own,
-            // so the icon may reach a little past the square.
+            // so the icon may reach a little past the square. icon_scale (FTB Quests) multiplies that size.
             Metrics m = Metrics.of(shape);
-            float size = Math.min(s * 0.8f, s * m.inner * 1.25f);
-            float k = size / 16f;
-            g.pose().pushPose();
-            g.pose().translate(x + s / 2f - size / 2f, y + s * m.innerCentre - size / 2f, 0);
-            g.pose().scale(k, k, 1);
-            g.renderItem(icon, 0, 0);
-            g.pose().popPose();
+            float size = (float) (Math.min(s * 0.8f, s * m.inner * 1.25f) * Math.max(0.25, Math.min(4, iconScale)));
+            float cx = x + s / 2f - size / 2f;
+            float cy = y + s * m.innerCentre - size / 2f;
+            ResourceLocation tex = glyph.texture();
+            if (tex == null && glyph.entity() != null) {
+                ResourceLocation face = faceTexture(glyph.entity());
+                if (face != null && textureSize(face)[0] > 0) {
+                    tex = face;
+                }
+            }
+            if (tex != null) {
+                textureIcon(g, tex, cx, cy, size);
+            } else if (!glyph.stack().isEmpty()) {
+                float k = size / 16f;
+                g.pose().pushPose();
+                g.pose().translate(cx, cy, 0);
+                g.pose().scale(k, k, 1);
+                g.renderItem(glyph.stack(), 0, 0);
+                g.pose().popPose();
+            }
         }
         if (look == Look.DONE_REWARD) {
             // rewards waiting: the same yellow dot the chapter list and the claim badge use, on the tile's corner

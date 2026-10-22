@@ -1,11 +1,14 @@
 package com.kuronami.questtree.block;
 
+import com.kuronami.questtree.server.ProgressService;
 import com.mojang.serialization.MapCodec;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
@@ -63,9 +66,22 @@ public class QuestDetectorBlock extends BaseEntityBlock {
         boolean wasPowered = state.getValue(POWERED);
         if (wasPowered != level.hasNeighborSignal(pos)) {
             level.setBlock(pos, state.setValue(POWERED, !wasPowered), 2);
-            if (!wasPowered && level.getBlockEntity(pos) instanceof QuestDetectorBlockEntity detector) {
-                detector.pulse(level, pos);
+            if (!wasPowered) {
+                // detection_delay: FTB Quests waits a few ticks before a detector fires, so a passing player is seen
+                int delay = ProgressService.fileSettings().detectionDelay;
+                if (delay > 0 && level instanceof ServerLevel server) {
+                    server.scheduleTick(pos, this, delay);
+                } else if (level.getBlockEntity(pos) instanceof QuestDetectorBlockEntity detector) {
+                    detector.pulse(level, pos);
+                }
             }
+        }
+    }
+
+    @Override
+    protected void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+        if (level.getBlockEntity(pos) instanceof QuestDetectorBlockEntity detector) {
+            detector.pulse(level, pos);
         }
     }
 

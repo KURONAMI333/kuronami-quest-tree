@@ -40,6 +40,7 @@ public final class FtbQuestsImporter {
             Map.entry("require_sequential_tasks", "sequential_tasks"), Map.entry("min_width", "detail_width"),
             Map.entry("progression_mode", "progression_mode"), Map.entry("disable_recipe_mod", "hide_from_recipe_viewer"),
             Map.entry("ignore_reward_blocking", "ignore_reward_blocking"), Map.entry("guide_page", "guide_page"),
+            Map.entry("preset", "preset"),
             Map.entry("tasks_ignore_dependencies", "tasks_ignore_requires"), Map.entry("hide", "visibility.hidden_until"),
             Map.entry("optional_task", ""));
     private static final Map<String, String> TASK_COMMON = Map.of("id", "", "type", "", "icon", "icon", "title", "lang:title",
@@ -150,6 +151,7 @@ public final class FtbQuestsImporter {
                 case "order_index" -> o.add("order", v);
                 case "icon" -> o.add("icon", itemStack(v));
                 case "autofocus_id" -> o.addProperty("autofocus", v.getAsString().toLowerCase(Locale.ROOT));
+                case "preset" -> o.addProperty("preset", v.getAsString());
                 case "title" -> out.text("en_us", "progression." + ns + "." + cid + ".title", v);
                 case "subtitle" -> out.text("en_us", "progression." + ns + "." + cid + ".subtitle", v);
                 // 1.19 and earlier wrote "default" for "no chapter shape"; that is not a shape a node can use
@@ -659,7 +661,18 @@ public final class FtbQuestsImporter {
             o.addProperty("id", v.getAsString());
         } else if (v.isJsonObject()) {
             JsonObject s = v.getAsJsonObject();
-            o.addProperty("id", s.has("id") ? s.get("id").getAsString() : "minecraft:air");
+            String id = s.has("id") ? s.get("id").getAsString() : "minecraft:air";
+            if (id.endsWith(":custom_icon")) {
+                JsonObject components = s.has("components") && s.get("components").isJsonObject()
+                        ? s.getAsJsonObject("components")
+                        : s.has("tag") && s.get("tag").isJsonObject()
+                        ? s.getAsJsonObject("tag") : new JsonObject();
+                JsonObject icon = customIcon(components);
+                if (icon != null) {
+                    return icon;
+                }
+            }
+            o.addProperty("id", id);
             if (s.has("count") && s.get("count").getAsInt() != 1) {
                 o.add("count", s.get("count"));
             } else if (s.has("Count") && s.get("Count").getAsInt() != 1) {
@@ -674,6 +687,33 @@ public final class FtbQuestsImporter {
             o.addProperty("id", "minecraft:air");
         }
         return o;
+    }
+
+    /**
+     * FTB Quests' custom icon item carries either a texture ({@code ftbquests:icon}) or an entity face
+     * ({@code ftbquests:entity_face}) in its components. The book stores the drawn icon itself, so a pack that has no
+     * FTB Quests installed can still show it.
+     */
+    private static JsonObject customIcon(JsonObject components) {
+        for (Map.Entry<String, JsonElement> e : components.entrySet()) {
+            if (!e.getValue().isJsonPrimitive()) {
+                continue;
+            }
+            String key = e.getKey();
+            if (key.endsWith(":entity_face") || key.endsWith(":entity")) {
+                JsonObject icon = new JsonObject();
+                icon.addProperty("type", "entity");
+                icon.addProperty("entity", e.getValue().getAsString());
+                return icon;
+            }
+            if (key.endsWith(":icon")) {
+                JsonObject icon = new JsonObject();
+                icon.addProperty("type", "texture");
+                icon.addProperty("texture", e.getValue().getAsString());
+                return icon;
+            }
+        }
+        return null;
     }
 
     /** The 1.20.1 item NBT keys that have a direct 1.21 component, keyed by the component id. */

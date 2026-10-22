@@ -231,6 +231,10 @@ public class QuestTree {
                 e.accept(TASK_SCREEN_CONFIGURATOR);
                 e.accept(LOOT_CRATE_OPENER_ITEM);
                 e.accept(LOOT_CRATE);
+                for (net.minecraft.world.item.ItemStack crate
+                        : com.kuronami.questtree.server.LootCrates.creativeStacks()) {
+                    e.accept(crate);
+                }
             }
         });
         modBus.addListener(QuestTree::registerPayloads);

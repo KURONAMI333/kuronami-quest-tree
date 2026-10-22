@@ -162,7 +162,7 @@ public final class Rewards {
     private static void stage(ServerPlayer player, PlayerProgress p, JsonObject rw) {
         String stage = ProgressService.str(rw, "stage");
         boolean add = !ProgressModel.boolOf(rw, "remove");
-        if (!ProgressModel.boolOf(rw, "team")) {
+        if (!ProgressService.fileSettings().team(rw)) {
             if (add) {
                 p.stages.add(stage);
             } else {

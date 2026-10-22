@@ -43,6 +43,20 @@ data/<ns>/progression/
 | `emergency.items` | array | empty | Items given by the emergency button on the progression screen. Either `"minecraft:bread"` or `{"item":"minecraft:bread","count":3}`. |
 | `emergency.cooldown_seconds` | integer | 3600 | Seconds between emergency uses. `0` means no cooldown. The wait is saved per player and survives leaving and rejoining a team. |
 | `wiki_url` / `guide_url` | string | none | External links shown in the settings screen. Only `http` and `https` are accepted. |
+| `show_lock_icons` | boolean | `true` | Draw the padlock badge on a node whose chapter is locked. |
+| `lock_message` | string | none | The book's own refusal text, shown instead of the built-in "locked" message. |
+| `hide_excluded_quests` | boolean | `false` | Keep quests excluded by a dependency out of the recipe-viewer list, not only out of the book. |
+| `disable_gui` | boolean | `false` | The book refuses to open. |
+| `grid_scale` | number | `0.5` | Editor snapping step; FTB Quests' `1` is a coarse grid. |
+| `pause_game` | boolean | `false` | A single-player world pauses while the book is open. |
+| `detection_delay` | integer | `20` | Ticks a detector waits after it is triggered before accepting the player. |
+| `default_reward_team` | boolean | `false` | Team-wide rewards for rewards that do not say `team` themselves. |
+| `default_consume_items` | boolean | `false` | Item tasks consume their items unless the task says otherwise. |
+| `default_autoclaim_rewards` | `default` / `enabled` / `disabled` | `default` | Claim rewards as soon as the quest completes. `default` leaves each reward's own `auto` in charge. |
+| `suppress_all_autoclaiming` | boolean | `false` | Turns automatic claiming off for every reward. |
+| `default_quest_shape` | string | none | Shape for nodes that set none and have no role that decides one. |
+| `default_quest_disable_jei` | boolean | `false` | Hide quests from recipe viewers unless a quest sets `hide_from_recipe_viewer` itself. |
+| `preset` / `presets` | string / object | none | Named visual presets (`{"shape": "...", "size": ...}`) and the file-wide default. A node's `preset` wins over its chapter's, which wins over this one. |
 
 For compatibility, `items` and `cooldown_seconds` directly under the root are also read. Whether the quest book drops on death is not a pack setting; it is `drop_book_on_death` in `config/kuronami_quest_tree-server.json`.
 
@@ -77,9 +91,10 @@ Pack text is stored in the data pack's own language files, separate from the mod
   "layout": "free",
   "decorations": [{"image": "ftb:textures/quests/ars/scribetable.png", "x": 8, "y": -2.5, "w": 4.2, "h": 3, "rotation": 0, "order": 0,
                    "visible_after": "pick", "click": {"type": "node", "target": "pick"}, "hover": "progression.<ns>.<chapter>.deco.1"}],
-  "defaults": {"shape": "square", "size": 1, "hide_lines": false, "consume_items": false, "repeatable": false},
+  "defaults": {"shape": "square", "size": 1, "detail_width": null, "hide_lines": false, "consume_items": false, "repeatable": false},
   "visibility": {"always_hidden": false, "lock_hint": null},
   "autofocus": "pick",
+  "preset": null,
   "nodes": {"pick": {"...": "..."}}
 }
 ```
@@ -87,14 +102,16 @@ Pack text is stored in the data pack's own language files, separate from the mod
 - The title and subtitle come from `progression.<ns>.<chapter>.title` and `.subtitle`. A string written directly in the data is also accepted, but is then not translated.
 - A chapter with `points` is a skill chapter.
 - `visibility.lock_hint` is the text shown when a chapter closed by, for example, `points.unlocked_by_default: false` appears greyed out in the chapter list. It is either a language key or a literal string; when omitted it says "locked". `visibility.always_hidden` keeps a chapter out of the list entirely.
-- `defaults` supplies node defaults. `hide_lines`, `consume_items` and `repeatable` are the chapter-wide forms of the matching node fields.
+- `defaults` supplies node defaults. `hide_lines`, `consume_items`, `repeatable` and `detail_width` are the chapter-wide forms of the matching node fields.
+- `autofocus` is the id of the node the book opens on when the chapter is first opened.
+- `preset` names a file-wide visual preset; it applies to this chapter's nodes that name none of their own.
 
 ## Nodes
 
 ```json
 {
   "x": 2, "y": 0, "icon": {"id": "minecraft:iron_pickaxe"},
-  "shape": "square", "size": 1, "icon_scale": 1, "milestone": false,
+  "shape": "square", "size": 1, "icon_scale": 1, "preset": null, "guide_page": null, "milestone": false,
   "requires": {"nodes": ["ingot"], "mode": "all", "min": null,
                "points": 0, "spent_points": 0, "exclusions": 1, "mods": []},
   "exclusive": {"group": "hammer", "max": 1},
@@ -107,7 +124,8 @@ Pack text is stored in the data pack's own language files, separate from the mod
   "toggleable": false,
   "repeat": {"cooldown": 0, "max": null},
   "sequential_tasks": false,
-  "visibility": {"hidden_until": "deps_visible", "requires": null, "hide_details_until_startable": false, "hide_text_until_complete": false, "invisible_until_tasks": null},
+  "visibility": {"hidden_until": "deps_visible", "requires": null, "hide_details_until_startable": false, "hide_text_until_complete": false, "invisible_until_tasks": null, "hide_lock_icon": false},
+  "hide_from_recipe_viewer": null,
   "lines": {"hide_to_deps": false, "hide_to_dependents": false},
   "toast": true,
   "links": [],
@@ -117,6 +135,11 @@ Pack text is stored in the data pack's own language files, separate from the mod
 
 - A node without a title uses the display name of its first task. This matches FTB Quests, and DarkRPG depends on it for 1,777 of its 1,892 quests.
 - Title, subtitle and description are read from `progression.<ns>.<chapter>.<node>.title` / `.subtitle` / `.desc`. The description is a list of pages and may use `&a` colour codes, images (`{image:...}`), page breaks and links. ATM10 uses 1,552 lines of colour codes and 63 page breaks.
+- `icon` takes an item (`{"id": "minecraft:iron_pickaxe"}`), a texture (`{"type": "texture", "texture": "ftb:textures/gui/x.png"}`) or an entity face (`{"type": "entity", "entity": "minecraft:zombie"}`). The importer turns FTB Quests' custom icons into the last two.
+- `icon_scale` grows or shrinks the icon printed in the tile (default `1`, clamped to 0.25–4); `detail_width` is the detail panel's width in GUI pixels, overriding the chapter default.
+- `preset` names a visual preset from `settings.json`. When the preset or the pack's `default_quest_shape` sets a shape or size, it wins over the role-based shape.
+- `guide_page` opens a guide book page from the tile: a URL opens the browser, a leading `/` runs a command, and anything else asks Patchouli to open that entry. Without Patchouli the tile reports that the guide is missing.
+- `visibility.hide_lock_icon` keeps the padlock badge off this node. `hide_from_recipe_viewer` is `true` / `false` / unset; unset follows `default_quest_disable_jei`.
 - `shape` accepts the eleven FTB Quests shapes: `square`, `rsquare`, `circle`, `diamond`, `hexagon`, `octagon`, `pentagon`, `gear`, `heart`, `none`, and the default. It is the tile outline; the fill stays inside that outline. `hexagon` is drawn as a square.
 - When neither the node nor the chapter `defaults` sets `shape`, the node's role chooses it: `milestone: true` is a pentagon, a node with `exclusive` (or `exclusive_with`) is a diamond, a repeatable quest is a circle, and everything else is a square. If several apply, milestone wins, then exclusivity, then repetition. A milestone is drawn 1.5 times larger unless `size` is set. Chapters imported from FTB Quests always write `defaults.shape` so the original shape is preserved.
 - `mode` is `all`, `any`, `all_started` or `any_started`.

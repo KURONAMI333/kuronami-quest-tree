@@ -39,6 +39,13 @@ public final class ContentSchema {
                 new FieldSpec("shape", FieldSpec.Kind.ENUM, P + "shape", SHAPES, false),
                 FieldSpec.decimal("size", P + "size"),
                 FieldSpec.picker("icon", P + "icon", FieldSpec.Kind.ITEM),
+                FieldSpec.decimal("icon_scale", P + "icon_scale"),
+                FieldSpec.integer("detail_width", P + "detail_width"),
+                FieldSpec.bool("visibility.hide_lock_icon", P + "hide_lock_icon"),
+                new FieldSpec("hide_from_recipe_viewer", FieldSpec.Kind.ENUM, P + "hide_from_recipe_viewer",
+                        List.of("", "true", "false"), false),
+                FieldSpec.text("guide_page", P + "guide_page"),
+                FieldSpec.text("preset", P + "preset"),
                 FieldSpec.bool("milestone", P + "milestone"),
                 FieldSpec.bool("optional", P + "optional"),
                 FieldSpec.bool("root", P + "root"),
@@ -296,6 +303,9 @@ public final class ContentSchema {
                 FieldSpec.bool("defaults.sequential_tasks", P + "sequential_tasks"),
                 FieldSpec.bool("defaults.consume_items", P + "consume_items"),
                 FieldSpec.bool("defaults.repeatable", P + "default_repeatable"),
+                FieldSpec.integer("defaults.detail_width", P + "detail_width"),
+                FieldSpec.text("autofocus", P + "autofocus"),
+                FieldSpec.text("preset", P + "preset"),
                 FieldSpec.bool("visibility.always_hidden", P + "always_hidden"),
                 FieldSpec.text("background", P + "background"));
     }

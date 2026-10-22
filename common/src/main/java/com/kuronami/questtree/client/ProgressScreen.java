@@ -203,11 +203,17 @@ public class ProgressScreen extends Screen {
      * book already on screen keeps working, as progress keeps counting on the server.
      */
     public static void open() {
-        if (refuseLocked()) {
+        if (refuseDisabled() || refuseLocked()) {
             return;
         }
         query = "";
         net.minecraft.client.Minecraft.getInstance().setScreen(new ProgressScreen());
+    }
+
+    /** {@code disable_gui}: the pack turned the book off; every route in (item, key, sidebar) stays closed. */
+    private static boolean refuseDisabled() {
+        ClientModel m = ClientProgress.model();
+        return m != null && m.file.disableGui;
     }
 
     /** Tells the player the book is closed, with the same toast and sound everywhere it is refused. */
@@ -215,14 +221,18 @@ public class ProgressScreen extends Screen {
         if (!ClientProgress.bookLocked()) {
             return false;
         }
-        NoticeToast.show("lock", net.minecraft.network.chat.Component.translatable("screen.kuronami_quest_tree.book_locked"));
+        ClientModel m = ClientProgress.model();
+        String own = m == null ? "" : m.file.lockMessage;
+        NoticeToast.show("lock", own.isBlank()
+                ? net.minecraft.network.chat.Component.translatable("screen.kuronami_quest_tree.book_locked")
+                : ClientModel.parseText(own));
         ProgressFeedback.locked();
         return true;
     }
 
     /** Opens the screen on one quest (the open key over an item that a quest wants). */
     public static void openAt(String key) {
-        if (refuseLocked()) {
+        if (refuseDisabled() || refuseLocked()) {
             return;
         }
         ProgressScreen screen = new ProgressScreen();
@@ -268,7 +278,7 @@ public class ProgressScreen extends Screen {
 
     /** Opens the book at the chapter list only, for a giver whose chapter is not open yet. */
     public static void openRail() {
-        if (refuseLocked()) {
+        if (refuseDisabled() || refuseLocked()) {
             return;
         }
         ProgressScreen screen = new ProgressScreen();
@@ -291,9 +301,25 @@ public class ProgressScreen extends Screen {
                 railOnly = true;
             } else {
                 select(i);
+                focusAutofocus(m.chapters.get(i));
             }
             return;
         }
+    }
+
+    /** FTB Quests' chapter {@code autofocus_id}: opening the chapter centres the map on that node. */
+    private void focusAutofocus(ClientModel.Chapter ch) {
+        if (ch == null || ch.autofocus.isBlank()) {
+            return;
+        }
+        ClientModel.Node n = ch.nodes.get(ch.autofocus);
+        if (n == null || !ClientProgress.visible(n.key)) {
+            return;
+        }
+        float[] v = view(ch);
+        float z = v[2];
+        v[0] = (float) ((width - sheetWidth()) / 2.0 - n.x * UNIT * z);
+        v[1] = (float) (height / 2.0 - n.y * UNIT * z);
     }
 
     private boolean searching() {
@@ -609,12 +635,14 @@ public class ProgressScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() {
-        return false;
+        ClientModel m = model();
+        return m != null && m.file.pauseGame;
     }
 
     // ------------------------------------------------------------------ derived data
 
     private void refresh(ClientModel m) {
+        GridSnap.step(m.file.gridScale);
         PlayerProgress p = ClientProgress.progress();
         if (p == cachedFor && m == cachedModel && railPins == ClientConfig.railPinVersion() && railBuiltSearching == searching()
                 && railBuiltFilter.equals(railQuery)) {
@@ -1658,8 +1686,18 @@ public class ProgressScreen extends Screen {
                 int oo = (os - s) / 2;
                 Tiles.ring(g, shape, x - oo - 2, y - oo - 2, os + 4, os + 4, Ui.OPTIONAL_OUTLINE);
             }
-            Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, ClientProgress.look(n.key), Motion.fill(n.key, ClientProgress.fraction(n.key)),
-                    ClientProgress.iconFor(n), false, n.key);
+            Tiles.Look look = ClientProgress.look(n.key);
+            Tiles.tile(g, shape, x - grow / 2, y - grow / 2, s + grow, look, Motion.fill(n.key, ClientProgress.fraction(n.key)),
+                    ClientProgress.glyphFor(n), n.iconScale, false, n.key);
+            if (!far && !n.hideLockIcon && model() != null && model().file.lockIcons
+                    && (look == Tiles.Look.LOCKED_NEAR || look == Tiles.Look.LOCKED_FAR)) {
+                // show_lock_icons (FTB Quests): a small lock on a closed quest; hide_lock_icon removes it per quest
+                g.pose().pushPose();
+                g.pose().translate(0, 0, Tiles.OVERLAY_Z + 1);
+                float d = Math.max(6, s * 0.32f);
+                Tiles.icon(g, "lock", x + s - d * 0.85f, y + d * 0.05f, d, Ui.MARK);
+                g.pose().popPose();
+            }
             flash(g, n.key, x, y, s, now);
             resultMotion(g, n.key, shape, x, y, s);
             if (path().nodes().size() > 1 && pathSet.contains(n.key) && !n.key.equals(selected)) {
@@ -1693,7 +1731,8 @@ public class ProgressScreen extends Screen {
             int x = (int) Math.round(l.x * UNIT) - s / 2;
             int y = (int) Math.round(l.y * UNIT) - s / 2;
             String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
-            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)), ClientProgress.iconFor(target), false, target.key);
+            Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)),
+                    ClientProgress.glyphFor(target), target.iconScale, false, target.key);
             if (!far) {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
@@ -2158,7 +2197,13 @@ public class ProgressScreen extends Screen {
         // wider than before (ATM10's texts need the room), but never narrower than the old width on small screens
         // (GUI scale 4 on 1080p is 480 wide), where the map still needs most of the room
         int before = Math.min(200, Math.max(150, (int) (width * 0.34f)));
-        return Math.max(before, Math.min(280, (int) (width * 0.4f)));
+        int w = Math.max(before, Math.min(280, (int) (width * 0.4f)));
+        ClientModel.Node n = selected == null || model() == null ? null : model().nodesByKey.get(selected);
+        if (n != null && n.detailWidth > 0) {
+            // FTB Quests' min_width: the author asked for at least this many GUI pixels, still leaving the map room
+            w = Math.max(w, Math.min(n.detailWidth, Math.max(150, width - 2 * Ui.S3)));
+        }
+        return w;
     }
 
     private int sheetLeft() {
@@ -2236,6 +2281,13 @@ public class ProgressScreen extends Screen {
                                 .format(java.time.Instant.ofEpochMilli(at))).getString(), x, y, Ui.DIM);
                 y += 10;
             }
+        }
+        if (!n.guidePage.isBlank()) {
+            // FTB Quests' guide_page: only shown when the pack set one; the label is a command, not an explanation
+            Component label = Component.translatable("screen.kuronami_quest_tree.open_guide");
+            int bw = Math.min(w, Ui.textWidth(font, label) + 2 * Ui.S2);
+            button(g, label, x, y, bw, 0, true, mouseX, mouseY, () -> GuidePages.open(n.guidePage));
+            y += BTN + 4;
         }
         TeamStatus.Mark mark = TeamStatus.mark(ClientTeam.view().inTeam(), state, p, n.key);
         if (mark != TeamStatus.Mark.NONE) {
