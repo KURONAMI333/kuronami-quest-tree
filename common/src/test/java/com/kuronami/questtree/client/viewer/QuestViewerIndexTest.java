@@ -112,7 +112,7 @@ class QuestViewerIndexTest {
     @Test
     void aKeptLabelComponentIsCarriedSoTheViewerCanResolveItLater() {
         Need need = new Need(Kind.TASK, Spec.item("minecraft:stick"), 1, "Stick",
-                "{\"translate\":\"item.minecraft.stick\"}", 0, false);
+                "{\"translate\":\"item.minecraft.stick\"}", 0, false, "", "");
         Hit hit = QuestViewerIndex.build(List.of(quest("pack:q", "Quest", need)), quest1 -> true)
                 .uses(query("minecraft:stick")).get(0);
 
