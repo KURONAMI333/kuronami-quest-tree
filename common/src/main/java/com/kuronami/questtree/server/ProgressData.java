@@ -187,7 +187,7 @@ public final class ProgressData {
     }
 
     /**
-     * The pack side of a bundle, in the shape {@link #rebuild()} reads. Shared with {@link #installPack}, so a test
+     * The pack side of a bundle, in the shape {@link #rebuild(boolean)} reads. Shared with {@link #installPack}, so a test
      * can hand in exactly what a reload would have kept.
      */
     static JsonObject packOf(JsonObject chapters, JsonObject tables, JsonArray groups, JsonObject settings,
@@ -209,7 +209,7 @@ public final class ProgressData {
         packUnreadable = unreadable;
         packProblems = problems;
         langs = locales;
-        rebuild();
+        rebuild(true);
     }
 
     /**
@@ -218,9 +218,12 @@ public final class ProgressData {
      * This is the only path an edit takes to the clients. It reads no resource manager: the pack side is kept from the
      * last reload, so a save costs one read of the overlay chapters and one validation, not a Minecraft reload.
      *
+     * @param deepCheck whether to schedule the post-start achievability pass. Only a pack load (startup or
+     *                  {@code /reload}) asks for it; an editor save must not turn every save into a full check and a
+     *                  report write (2026-10-22 review, L2)
      * @return whether a new bundle was published (validation can reject it and leave the loaded one in place)
      */
-    private static boolean rebuild() {
+    private static boolean rebuild(boolean deepCheck) {
         JsonObject bundle = packBundle.deepCopy();
         if (!bundle.has("chapters") || !bundle.get("chapters").isJsonObject()) {
             bundle.add("chapters", new JsonObject());
@@ -305,8 +308,10 @@ public final class ProgressData {
             }
         }
         // the deeper pass needs the levels and bound tags; it runs on the next tick, after this reload has finished
-        achievableProblems = List.of();
-        achievablePending = true;
+        if (deepCheck) {
+            achievableProblems = List.of();
+            achievablePending = true;
+        }
         if (built == null) {
             return false;
         }
@@ -326,7 +331,7 @@ public final class ProgressData {
     /** Called once the server knows which world is open; the overlay lives inside it. */
     public static void setOverlayRoot(Path root) {
         overlayRoot = root;
-        rebuild();
+        rebuild(true);
     }
 
     /**
@@ -359,7 +364,7 @@ public final class ProgressData {
      */
     public static void rebuildOverlay() {
         JsonObject oldChapters = chaptersOf(base);
-        if (!rebuild()) {
+        if (!rebuild(false)) {
             return;
         }
         rewardRemap = com.kuronami.questtree.progress.RewardIndexRemap.between(oldChapters, chaptersOf(base));
@@ -384,7 +389,7 @@ public final class ProgressData {
                 ? packBundle.getAsJsonObject("chapters").deepCopy() : new JsonObject();
     }
 
-    /** The pack reward tables; the writable table overlay is applied on top in {@link #rebuild()}. */
+    /** The pack reward tables; the writable table overlay is applied on top in {@link #rebuild(boolean)}. */
     public static JsonObject packTables() {
         return packBundle.has("reward_tables") && packBundle.get("reward_tables").isJsonObject()
                 ? packBundle.getAsJsonObject("reward_tables").deepCopy() : new JsonObject();
