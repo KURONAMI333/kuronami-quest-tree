@@ -91,19 +91,25 @@ public final class QuestViewerIndex {
         }
     }
 
-    /** One item named by a task or reward. {@code index} is the task/reward index in its quest. */
-    public record Need(Kind kind, Spec spec, long count, String label, int index, boolean choice,
+    /**
+     * One item named by a task or reward. {@code index} is the task/reward index in its quest.
+     * <p>
+     * {@code label} is the plain fallback; {@code labelJson} is a serialized Component kept so the language is
+     * applied when the row is drawn, not when the bundle arrived.
+     */
+    public record Need(Kind kind, Spec spec, long count, String label, String labelJson, int index, boolean choice,
                        String itemJson, String matchMode) {
 
         public Need {
             label = label == null ? "" : label;
+            labelJson = labelJson == null ? "" : labelJson;
             itemJson = itemJson == null ? "" : itemJson;
             matchMode = matchMode == null ? "" : matchMode;
         }
 
-        /** A need without components (a tag, a plain item or a reward). */
+        /** A need with a plain label and no components (a tag, a plain item or a reward). */
         public Need(Kind kind, Spec spec, long count, String label, int index, boolean choice) {
-            this(kind, spec, count, label, index, choice, "", "");
+            this(kind, spec, count, label, "", index, choice, "", "");
         }
 
         /** Whether the stack named by {@code query} counts for this task or reward. */
@@ -283,6 +289,7 @@ public final class QuestViewerIndex {
                         .append(need.spec().id()).append('\u0001')
                         .append(need.count()).append('\u0001')
                         .append(need.label()).append('\u0001')
+                        .append(need.labelJson()).append('\u0001')
                         .append(need.index()).append('\u0001')
                         .append(need.choice()).append('\u0001')
                         .append(need.itemJson()).append('\u0001')

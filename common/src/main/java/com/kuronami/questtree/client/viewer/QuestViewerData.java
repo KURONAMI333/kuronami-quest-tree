@@ -17,6 +17,7 @@ import com.google.gson.JsonParser;
 import com.kuronami.questtree.progress.ItemFilter;
 import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PackNumbers;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -165,10 +166,10 @@ public final class QuestViewerData {
             if (task.filter != null) {
                 // one row per task, not one per example: the filter itself answers whether a stack counts
                 needs.add(new Need(Kind.TASK, Spec.filter(task.filter.expression()), task.count,
-                        task.name().getString(), i, false));
+                        task.name().getString(), componentJson(task.name()), i, false, "", ""));
             } else {
-                addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(), i, false,
-                        task.viewerItemJson(), task.viewerMatchMode());
+                addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(),
+                        componentJson(task.name()), i, false, task.viewerItemJson(), task.viewerMatchMode());
             }
         }
         JsonObject raw = ClientProgress.rawNode(chapter.id, node.id);
@@ -202,7 +203,7 @@ public final class QuestViewerData {
         }
         ItemStack icon = !node.icon.isEmpty() ? node.icon
                 : node.iconTask != null ? node.iconTask.shown() : ItemStack.EMPTY;
-        return new Quest(node.key, chapter.id, node.title.getString(), chapter.title.getString(),
+        return new Quest(node.key, chapter.id, componentJson(node.title), componentJson(chapter.title),
                 icon.isEmpty() ? "" : itemId(icon), needs);
     }
 
@@ -216,26 +217,26 @@ public final class QuestViewerData {
             return;
         }
         Spec parsed = specOf(item);
-        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), index, choice,
+        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), "", index, choice,
                 item.isJsonObject() ? item.toString() : "", "");
     }
 
     private static void addSpec(List<Need> needs, Kind kind, String spec, long count, String label,
-                                int index, boolean choice, String itemJson, String matchMode) {
+                                String labelJson, int index, boolean choice, String itemJson, String matchMode) {
         if (spec == null || spec.isEmpty()) {
             return;
         }
         Spec parsed = spec.startsWith("#") ? Spec.tag(spec.substring(1))
                 : spec.startsWith("~") ? Spec.filter(spec.substring(1)) : Spec.item(spec);
-        addSpec(needs, kind, parsed, count, label, index, choice, itemJson, matchMode);
+        addSpec(needs, kind, parsed, count, label, labelJson, index, choice, itemJson, matchMode);
     }
 
     private static void addSpec(List<Need> needs, Kind kind, Spec parsed, long count, String label,
-                                int index, boolean choice, String itemJson, String matchMode) {
+                                String labelJson, int index, boolean choice, String itemJson, String matchMode) {
         if (parsed == null || parsed.id().isEmpty()) {
             return;
         }
-        needs.add(new Need(kind, parsed, Math.max(1, count), label, index, choice, itemJson, matchMode));
+        needs.add(new Need(kind, parsed, Math.max(1, count), label, labelJson, index, choice, itemJson, matchMode));
     }
 
     private static Spec specOf(JsonElement item) {
@@ -281,6 +282,17 @@ public final class QuestViewerData {
         }
         var item = BuiltInRegistries.ITEM.get(location);
         return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
+    }
+
+    /** The text of a Component as JSON, so the viewer can apply the language when it draws the row. */
+    private static String componentJson(net.minecraft.network.chat.Component component) {
+        try {
+            var level = net.minecraft.client.Minecraft.getInstance().level;
+            return net.minecraft.network.chat.Component.Serializer.toJson(component,
+                    level == null ? RegistryAccess.EMPTY : level.registryAccess());
+        } catch (RuntimeException ex) {
+            return component.getString();
+        }
     }
 
     private static String itemId(ItemStack stack) {

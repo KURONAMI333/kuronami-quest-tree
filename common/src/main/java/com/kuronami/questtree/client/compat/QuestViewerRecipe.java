@@ -60,19 +60,61 @@ public final class QuestViewerRecipe {
         return hit.need().kind() == Kind.TASK;
     }
 
+    /** The quest title, resolved now so a language change or a translatable title follows the current language. */
+    public Component titleComponent() {
+        return text(hit.quest().title(), hit.quest().title());
+    }
+
     public String title() {
-        return hit.quest().title();
+        return titleComponent().getString();
+    }
+
+    public Component chapterComponent() {
+        return text(hit.quest().chapterTitle(), hit.quest().chapterTitle());
     }
 
     public String chapter() {
-        return hit.quest().chapterTitle();
+        return chapterComponent().getString();
+    }
+
+    /** The row's label with the real count, resolved when drawn rather than when the bundle arrived. */
+    public Component needLabelComponent() {
+        Need need = hit.need();
+        Component label;
+        if (!need.labelJson().isEmpty()) {
+            label = text(need.labelJson(), need.label());
+        } else if (!need.spec().tag() && !stacks.isEmpty()) {
+            label = stacks.get(0).getHoverName();
+        } else {
+            label = Component.literal(need.label().isEmpty() ? need.spec().id() : need.label());
+        }
+        if (need.choice()) {
+            label = Component.translatable("viewer.choice", label);
+        }
+        if (need.count() > 1) {
+            label = Component.empty().append(label).append(" × " + need.count());
+        }
+        return label;
     }
 
     public String needLabel() {
-        String label = hit.need().choice()
-                ? Component.translatable("viewer.choice", hit.need().label()).getString()
-                : hit.need().label();
-        return hit.need().count() > 1 ? label + " × " + hit.need().count() : label;
+        return needLabelComponent().getString();
+    }
+
+    /** Reads a Component serialized when the bundle arrived; plain text (a test or an old bundle) is literal. */
+    private static Component text(String json, String fallback) {
+        if (json == null || json.isEmpty()) {
+            return Component.literal(fallback == null ? "" : fallback);
+        }
+        var level = net.minecraft.client.Minecraft.getInstance().level;
+        if (level == null) {
+            return Component.literal(fallback == null ? json : fallback);
+        }
+        try {
+            return Component.Serializer.fromJson(json, level.registryAccess());
+        } catch (RuntimeException ex) {
+            return Component.literal(fallback == null ? json : fallback);
+        }
     }
 
     public ProgressRules.State state() {
