@@ -42,6 +42,8 @@ public final class QuestTreeClient {
         public static void layers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
             event.registerAboveAll(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "hud"),
                     (g, delta) -> com.kuronami.questtree.client.ProgressHud.render(g));
+            event.registerAboveAll(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "restriction"),
+                    (g, delta) -> com.kuronami.questtree.client.RestrictionCue.render(g));
         }
     }
 

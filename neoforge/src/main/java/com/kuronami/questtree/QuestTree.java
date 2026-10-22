@@ -176,13 +176,15 @@ public class QuestTree {
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {
         // the quest_book item is synced as a registry entry, so the client mod is required (like FTB Quests). The
         // version is bumped when a payload changes shape (2: ActionPayload gained its choice field; 3: the editor
-        // gained its state payload; 4: the team view; 5: quest givers), so an older client fails the handshake instead
-        // of silently missing a feature.
-        var r = event.registrar("5");
+        // gained its state payload; 4: the team view; 5: quest givers; 6: non-chat cues and restriction tooltips), so
+        // an older client fails the handshake instead of silently missing a feature.
+        var r = event.registrar("6");
         r.playToClient(SyncPayload.TYPE, SyncPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onSync(payload));
         r.playToClient(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onProgress(payload));
         r.playToClient(OpenPayload.TYPE, OpenPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onOpen(payload));
         r.playToClient(TeamPayload.TYPE, TeamPayload.STREAM_CODEC, (payload, context) -> com.kuronami.questtree.client.ClientTeam.onTeam(payload));
+        r.playToClient(com.kuronami.questtree.network.CuePayload.TYPE, com.kuronami.questtree.network.CuePayload.STREAM_CODEC,
+                (payload, context) -> com.kuronami.questtree.client.ClientCues.onCue(payload));
         r.playToClient(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC,
                 (payload, context) -> EditorSession.onReply(payload));
         r.playToClient(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC,

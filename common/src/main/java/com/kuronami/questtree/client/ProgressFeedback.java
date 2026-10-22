@@ -220,14 +220,13 @@ final class ProgressFeedback {
     }
 
     /**
-     * Announces a completion in the style the player picked (2026-10-20): a vanilla toast, a chat line, the action bar,
-     * or nothing. The toast frame keeps its own sound; chat and the action bar stay silent, as FTB Quests' do.
+     * Announces a completion in the style the player picked (2026-10-20): a vanilla toast, the action bar, or nothing.
+     * The toast frame keeps its own sound; the action bar stays silent, as FTB Quests' does.
      */
     private static void notifyCompletion(ClientModel.Node n, ProgressRules.State state, Component top) {
         switch (ClientConfig.notificationStyle()) {
             case TOAST -> QuestToast.show(n, state, top);
-            case CHAT -> chat(top, n.title, false);
-            case ACTION_BAR -> chat(top, n.title, true);
+            case ACTION_BAR -> actionBar(top, n.title);
             case NONE -> { }
         }
     }
@@ -261,10 +260,10 @@ final class ProgressFeedback {
         }
     }
 
-    private static void chat(Component top, Component title, boolean actionBar) {
+    private static void actionBar(Component top, Component title) {
         var player = Minecraft.getInstance().player;
         if (player != null) {
-            player.displayClientMessage(top.copy().append(" ").append(title), actionBar);
+            player.displayClientMessage(top.copy().append(" ").append(title), true);
         }
     }
 

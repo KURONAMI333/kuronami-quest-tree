@@ -5,7 +5,6 @@ import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.RestrictionRules;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
@@ -18,14 +17,15 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * Enforces the loaded {@link RestrictionRules} (DATA_MODEL.md "制限"). Every check is server-side and silent for a
- * rule whose conditions hold; an unmet rule refuses the action and shows the pack's reason in the action bar, at most
- * once a second per player, so holding the button down does not flood the chat.
+ * rule whose conditions hold; an unmet rule refuses the action and plays the lock cue at most once a second per player,
+ * so holding the button down does not repeat the sound. The reason is on the item's tooltip, not in chat.
  * <p>
  * The interaction mixins call {@link #blockedItem} and {@link #blockedBlock} before the action runs. Equipment is
  * checked every few ticks per player instead of through an equip event: Fabric 1.21.1 has no equipment-change
@@ -48,6 +48,8 @@ public final class Restrictions {
     /** Tag keys for the loaded rules, made when the data is published, not while a player is ticking. */
     private static Map<String, TagKey<Item>> itemTags = Map.of();
     private static Map<String, TagKey<Block>> blockTags = Map.of();
+    /** Every item and block id each rule covers, tags expanded once per load, for the tooltip hints. */
+    private static Map<String, List<String>> hintIds = Map.of();
 
     private Restrictions() {
     }
@@ -64,9 +66,54 @@ public final class Restrictions {
                 blocks.computeIfAbsent(tag, t -> TagKey.create(Registries.BLOCK, ResourceLocation.parse(t)));
             }
         }
+        Map<String, List<String>> hints = new LinkedHashMap<>();
+        for (RestrictionRules.Rule rule : rules.all()) {
+            LinkedHashSet<String> ids = new LinkedHashSet<>(rule.items());
+            ids.addAll(rule.blocks());
+            for (String tag : rule.itemTags()) {
+                BuiltInRegistries.ITEM.getTag(itemTag(tag)).ifPresent(set -> set.forEach(holder ->
+                        holder.unwrapKey().ifPresent(key -> ids.add(key.location().toString()))));
+            }
+            for (String tag : rule.blockTags()) {
+                BuiltInRegistries.BLOCK.getTag(blockTag(tag)).ifPresent(set -> set.forEach(holder ->
+                        holder.unwrapKey().ifPresent(key -> ids.add(key.location().toString()))));
+            }
+            hints.put(rule.id(), List.copyOf(ids));
+        }
         itemTags = Map.copyOf(items);
         blockTags = Map.copyOf(blocks);
+        hintIds = Map.copyOf(hints);
         SEEN.clear();
+    }
+
+    /**
+     * The item and block ids the player's unmet restrictions cover, encoded as {@code id|reason} for the progress
+     * packet. The client puts the first reason on the item's tooltip, so the requirement stays visible without text
+     * in chat or the action bar (2026-10-22).
+     */
+    public static List<String> lockedHints(ServerPlayer player) {
+        RestrictionRules rules = ProgressData.restrictions();
+        if (rules.isEmpty()) {
+            return List.of();
+        }
+        PlayerProgress progress = ProgressService.progress(player);
+        Map<String, String> byId = new LinkedHashMap<>();
+        for (RestrictionRules.Rule rule : rules.all()) {
+            if (ProgressService.conditionsMet(player, progress, null, rule.json(), true)) {
+                continue;
+            }
+            String message = rule.message().isBlank() ? ""
+                    : rule.message().replace('\n', ' ').replace('|', '/');
+            if (message.length() > 256) {
+                message = message.substring(0, 256);
+            }
+            for (String id : hintIds.getOrDefault(rule.id(), List.of())) {
+                byId.putIfAbsent(id, message);
+            }
+        }
+        List<String> out = new ArrayList<>(byId.size());
+        byId.forEach((id, message) -> out.add(id + "|" + message));
+        return List.copyOf(out);
     }
 
     private static TagKey<Item> itemTag(String tag) {
@@ -183,24 +230,21 @@ public final class Restrictions {
                 progress = ProgressService.progress(player);
             }
             if (!ProgressService.conditionsMet(player, progress, null, rule.json(), true)) {
-                notice(player, rule);
+                notice(player);
                 return true;
             }
         }
         return false;
     }
 
-    /** Shows the rule's own reason, or a generic one when the pack wrote none. */
-    private static void notice(ServerPlayer player, RestrictionRules.Rule rule) {
+    /** Plays the lock cue, at most once a second; the reason is on the item's tooltip. */
+    private static void notice(ServerPlayer player) {
         long now = System.currentTimeMillis();
         Long last = LAST_NOTICE.get(player.getUUID());
         if (last != null && now - last < NOTICE_INTERVAL_MS) {
             return;
         }
         LAST_NOTICE.put(player.getUUID(), now);
-        String message = rule.message();
-        player.displayClientMessage(message.isBlank()
-                ? Component.translatable("message.kuronami_quest_tree.restricted")
-                : Component.literal(message), true);
+        Cues.restricted(player);
     }
 }

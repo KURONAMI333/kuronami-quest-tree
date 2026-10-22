@@ -1,8 +1,10 @@
 package com.kuronami.questtree;
 
+import com.kuronami.questtree.client.ClientCues;
 import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.ClientTeam;
 import com.kuronami.questtree.client.EditorSession;
+import com.kuronami.questtree.network.CuePayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.network.OpenPayload;
@@ -22,11 +24,13 @@ public class QuestTreeClient implements ClientModInitializer {
         KeyBindingHelper.registerKeyBinding(ClientProgress.OPEN_KEY);
         KeyBindingHelper.registerKeyBinding(ClientProgress.TRACK_KEY);
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register((g, delta) -> com.kuronami.questtree.client.ProgressHud.render(g));
+        net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register((g, delta) -> com.kuronami.questtree.client.RestrictionCue.render(g));
         ClientTickEvents.END_CLIENT_TICK.register(mc -> ClientProgress.onClientTick());
         ClientPlayNetworking.registerGlobalReceiver(SyncPayload.TYPE, (payload, context) -> ClientProgress.onSync(payload));
         ClientPlayNetworking.registerGlobalReceiver(ProgressPayload.TYPE, (payload, context) -> ClientProgress.onProgress(payload));
         ClientPlayNetworking.registerGlobalReceiver(OpenPayload.TYPE, (payload, context) -> ClientProgress.onOpen(payload));
         ClientPlayNetworking.registerGlobalReceiver(TeamPayload.TYPE, (payload, context) -> ClientTeam.onTeam(payload));
+        ClientPlayNetworking.registerGlobalReceiver(CuePayload.TYPE, (payload, context) -> ClientCues.onCue(payload));
         ClientPlayNetworking.registerGlobalReceiver(EditorReplyPayload.TYPE,
                 (payload, context) -> EditorSession.onReply(payload));
         ClientPlayNetworking.registerGlobalReceiver(EditorStatePayload.TYPE,

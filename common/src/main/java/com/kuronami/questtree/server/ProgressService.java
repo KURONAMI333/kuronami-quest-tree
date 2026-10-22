@@ -710,10 +710,9 @@ public final class ProgressService {
     private static void refuseSharedAction(ServerPlayer player) {
         boolean known = !TeamResolver.managedByFtbTeams()
                 || TeamResolver.teamOwner(player.server, TeamResolver.teamId(player.server, player.getUUID())) != null;
-        player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
-                known ? "message.kuronami_quest_tree.team_owner_only" : "message.kuronami_quest_tree.owner_unknown",
-                known ? "Only the team owner can use this."
-                        : "The team owner could not be read, so this is refused."));
+        Cues.notice(player, known
+                ? "message.kuronami_quest_tree.team_owner_only"
+                : "message.kuronami_quest_tree.owner_unknown", "team");
     }
 
     /**
@@ -1146,9 +1145,7 @@ public final class ProgressService {
         }
         for (JsonObject rw : n.rewards) {
             if (Rewards.blocked(p, rw) && com.kuronami.questtree.progress.RewardLedger.blockedChoice(true, rw)) {
-                player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
-                        "message.kuronami_quest_tree.choice_blocked",
-                        "This reward cannot be taken while rewards are blocked: its choice is not kept."));
+                Cues.notice(player, "message.kuronami_quest_tree.choice_blocked", "gift");
                 return;
             }
             if (choiceMissing(rw, choice)) {
@@ -1185,9 +1182,7 @@ public final class ProgressService {
         }
         JsonObject rw = n.rewards.get(index);
         if (Rewards.blocked(p, rw) && com.kuronami.questtree.progress.RewardLedger.blockedChoice(true, rw)) {
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
-                    "message.kuronami_quest_tree.choice_blocked",
-                    "This reward cannot be taken while rewards are blocked: its choice is not kept."));
+            Cues.notice(player, "message.kuronami_quest_tree.choice_blocked", "gift");
             return;
         }
         if (choiceMissing(rw, choice) || !conditionsMet(player, p, n, rw, false)) {
@@ -1275,21 +1270,12 @@ public final class ProgressService {
         long now = System.currentTimeMillis();
         long until = p.emergencyReadyAt();
         if (until > now) {
-            if (!p.emergencyWaitNotice()) {
-                // one notice per wait: a player pressing again must not fill the chat
-                long minutes = Math.max(1, (until - now + 59_999) / 60_000);
-                player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
-                        "message.kuronami_quest_tree.emergency_wait", "Emergency items are ready in %s min", minutes));
-                p.setEmergencyWaitNotice(true);
-                ProgressStore.get(player.server).setDirty();
-                markDirty(player);
-            }
+            // the rail button already shows the remaining minutes; no text
             return;
         }
         java.util.List<JsonObject> items = ProgressData.emergencyItems();
         if (items.isEmpty()) {
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
-                    "message.kuronami_quest_tree.emergency_none", "This pack has no emergency items."));
+            // the button is hidden when there is nothing to hand out; no text
             return;
         }
         boolean given = false;
@@ -1349,7 +1335,8 @@ public final class ProgressService {
         } else if (events.size() > 64) {
             events = events.subList(events.size() - 64, events.size());
         }
-        ProgressPayload payload = ProgressPayload.of(ProgressJson.write(progress(player)).toString(), List.copyOf(events));
+        ProgressPayload payload = ProgressPayload.of(ProgressJson.write(progress(player)).toString(), List.copyOf(events),
+                Restrictions.lockedHints(player));
         if (payload.data().length > ProgressPayload.MAX) {
             Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)", player.getGameProfile().getName(), payload.data().length);
             return;

@@ -66,8 +66,7 @@ public final class PartyActions {
             return new Outcome(Kind.INVITE_FAILED, to.getGameProfile().getName());
         }
         dirty(server);
-        to.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.party.invited_you",
-                "%s invited you to a party", from.getGameProfile().getName()));
+        Cues.partyInvite(to, from.getGameProfile().getName());
         // the target's rail shows the invitation now, without waiting for their next progress update
         TeamSync.send(to);
         return new Outcome(Kind.INVITED, to.getGameProfile().getName());
@@ -145,8 +144,7 @@ public final class PartyActions {
         detach(server, target, old.id, before);
         ServerPlayer online = server.getPlayerList().getPlayer(target);
         if (online != null) {
-            online.sendSystemMessage(Component.translatableWithFallback("commands.kuronami_quest_tree.party.kicked_you",
-                    "You were removed from the party"));
+            Cues.partyKick(online);
         }
         return new Outcome(Kind.KICKED, TeamSync.nameOf(server, target));
     }
@@ -177,7 +175,8 @@ public final class PartyActions {
             try {
                 target = UUID.fromString(action.node());
             } catch (RuntimeException ex) {
-                player.sendSystemMessage(message(new Outcome(Kind.TARGET_UNKNOWN, "")));
+                Outcome unknown = new Outcome(Kind.TARGET_UNKNOWN, "");
+                Cues.partyResult(player, key(unknown.kind()), unknown.name());
                 return;
             }
         }
@@ -194,7 +193,7 @@ public final class PartyActions {
         if (outcome == null) {
             return;
         }
-        player.sendSystemMessage(message(outcome));
+        Cues.partyResult(player, key(outcome.kind()), outcome.name());
         if (outcome.ok()) {
             TeamSync.broadcast(player.server);
         } else {
@@ -204,28 +203,48 @@ public final class PartyActions {
     }
 
     public static Component message(Outcome outcome) {
-        return switch (outcome.kind()) {
-            case CREATED -> tr("commands.kuronami_quest_tree.party.created", "Party created");
-            case INVITED -> tr("commands.kuronami_quest_tree.party.invited", "Invited %s", outcome.name());
-            case ACCEPTED -> tr("commands.kuronami_quest_tree.party.joined", "Joined the party");
-            case DECLINED -> tr("commands.kuronami_quest_tree.party.declined", "Invitation declined");
-            case LEFT -> tr("commands.kuronami_quest_tree.party.left", "Left the party");
-            case KICKED -> tr("commands.kuronami_quest_tree.party.kicked", "Removed %s", outcome.name());
-            case DISBANDED -> tr("commands.kuronami_quest_tree.party.disbanded", "Party disbanded");
-            case ALREADY_IN -> tr("commands.kuronami_quest_tree.party.already", "You are already in a party");
-            case NOT_INVITED -> tr("commands.kuronami_quest_tree.party.no_invite", "No valid invite");
-            case NOT_IN -> tr("commands.kuronami_quest_tree.party.not_in", "You are not in a party");
-            case INVITE_FAILED -> tr("commands.kuronami_quest_tree.party.invite_failed", "Cannot invite %s", outcome.name());
-            case KICK_FAILED -> tr("commands.kuronami_quest_tree.party.kick_failed", "Only the owner can kick");
-            case DISBAND_FAILED -> tr("commands.kuronami_quest_tree.party.disband_failed", "Only the owner can disband");
-            case TARGET_UNKNOWN -> tr("commands.kuronami_quest_tree.party.target_unknown", "That player is not online");
-            case FTB_MANAGED -> tr("commands.kuronami_quest_tree.party.ftb",
-                    "Parties are managed by FTB Teams. Use /ftbteams party instead.");
+        return Component.translatableWithFallback(key(outcome.kind()), fallback(outcome.kind()), outcome.name());
+    }
+
+    /** The language key for an outcome, also used by the party screen's status line. */
+    static String key(Kind kind) {
+        return switch (kind) {
+            case CREATED -> "commands.kuronami_quest_tree.party.created";
+            case INVITED -> "commands.kuronami_quest_tree.party.invited";
+            case ACCEPTED -> "commands.kuronami_quest_tree.party.joined";
+            case DECLINED -> "commands.kuronami_quest_tree.party.declined";
+            case LEFT -> "commands.kuronami_quest_tree.party.left";
+            case KICKED -> "commands.kuronami_quest_tree.party.kicked";
+            case DISBANDED -> "commands.kuronami_quest_tree.party.disbanded";
+            case ALREADY_IN -> "commands.kuronami_quest_tree.party.already";
+            case NOT_INVITED -> "commands.kuronami_quest_tree.party.no_invite";
+            case NOT_IN -> "commands.kuronami_quest_tree.party.not_in";
+            case INVITE_FAILED -> "commands.kuronami_quest_tree.party.invite_failed";
+            case KICK_FAILED -> "commands.kuronami_quest_tree.party.kick_failed";
+            case DISBAND_FAILED -> "commands.kuronami_quest_tree.party.disband_failed";
+            case TARGET_UNKNOWN -> "commands.kuronami_quest_tree.party.target_unknown";
+            case FTB_MANAGED -> "commands.kuronami_quest_tree.party.ftb";
         };
     }
 
-    private static Component tr(String key, String fallback, Object... args) {
-        return Component.translatableWithFallback(key, fallback, args);
+    private static String fallback(Kind kind) {
+        return switch (kind) {
+            case CREATED -> "Party created";
+            case INVITED -> "Invited %s";
+            case ACCEPTED -> "Joined the party";
+            case DECLINED -> "Invitation declined";
+            case LEFT -> "Left the party";
+            case KICKED -> "Removed %s";
+            case DISBANDED -> "Party disbanded";
+            case ALREADY_IN -> "You are already in a party";
+            case NOT_INVITED -> "No valid invite";
+            case NOT_IN -> "You are not in a party";
+            case INVITE_FAILED -> "Cannot invite %s";
+            case KICK_FAILED -> "Only the owner can kick";
+            case DISBAND_FAILED -> "Only the owner can disband";
+            case TARGET_UNKNOWN -> "That player is not online";
+            case FTB_MANAGED -> "Parties are managed by FTB Teams. Use /ftbteams party instead.";
+        };
     }
 
     private static void dirty(MinecraftServer server) {

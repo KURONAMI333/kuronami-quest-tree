@@ -74,9 +74,19 @@ public final class RestrictionRules {
             return message;
         }
 
+        /** The item ids the rule names. */
+        public List<String> items() {
+            return items;
+        }
+
         /** The item tag ids the rule names, without a leading {@code #}. */
         public List<String> itemTags() {
             return itemTags;
+        }
+
+        /** The block ids the rule names. */
+        public List<String> blocks() {
+            return blocks;
         }
 
         /** The block tag ids the rule names, without a leading {@code #}. */
