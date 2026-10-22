@@ -539,7 +539,25 @@ public final class ClientModel {
                     case "item" -> addReward(stack(ro.get("item")), ri);
                     case "xp", "xp_levels" -> addReward(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64,
                             PackNumbers.intOr(ro.get("amount"), 1)))), ri);
-                    case "table" -> addReward(new ItemStack(Items.CHEST), ri);
+                    case "table" -> {
+                        addReward(new ItemStack(Items.CHEST), ri);
+                        // the table's own title, unless the author hid it: the chest icon alone says nothing about
+                        // which table this reward rolls (2026-10-22, p6-editor)
+                        JsonObject table = ro.has("table") ? obj(m.tables, ro.get("table").getAsString())
+                                : new JsonObject();
+                        boolean hidden = table.has("hide_tooltip")
+                                && table.get("hide_tooltip").getAsJsonPrimitive().isBoolean()
+                                && table.get("hide_tooltip").getAsBoolean();
+                        if (!hidden && table.has("title") && table.get("title").isJsonPrimitive()) {
+                            String title = table.get("title").getAsString();
+                            if (!title.isBlank()) {
+                                // a title may be a lang key; the map reads it in the client's own language, and a title
+                                // that is ordinary text comes back unchanged
+                                String translated = m.lookup(title);
+                                rewardLines.add(parseText(translated != null ? translated : title).getString());
+                            }
+                        }
+                    }
                     case "attribute" -> rewardLines.add(attributeLine(ro));
                     default -> { }
                 }

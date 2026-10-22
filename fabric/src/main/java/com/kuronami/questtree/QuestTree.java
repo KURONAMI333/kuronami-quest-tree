@@ -230,6 +230,8 @@ public class QuestTree implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(CuePayload.TYPE, CuePayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(com.kuronami.questtree.network.EditorChangePayload.TYPE,
+                com.kuronami.questtree.network.EditorChangePayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(com.kuronami.questtree.network.CrateLootPayload.TYPE,
                 com.kuronami.questtree.network.CrateLootPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(ActionPayload.TYPE, ActionPayload.STREAM_CODEC);

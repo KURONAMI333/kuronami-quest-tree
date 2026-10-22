@@ -348,6 +348,8 @@ public final class ContentSchema {
 
     public static List<FieldSpec> tableFields() {
         return List.of(
+                FieldSpec.text("title", P + "table_title"),
+                FieldSpec.bool("hide_tooltip", P + "hide_tooltip"),
                 FieldSpec.integer("rolls", P + "rolls"),
                 FieldSpec.decimal("empty_weight", P + "empty_weight"),
                 FieldSpec.flag("loot_crate", P + "loot_crate"),

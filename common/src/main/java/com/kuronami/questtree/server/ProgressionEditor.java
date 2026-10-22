@@ -52,7 +52,22 @@ public final class ProgressionEditor {
                           List<String> messages) {
     }
 
-    private record Snapshot(String text) {
+    /**
+     * One change as the changelog names it (2026-10-22, p6-editor). {@code node} is the id the change is about (the
+     * target of a link, the first of a batch) and {@code count} how many nodes a batch touched; both are values, the
+     * client turns the op into a word and looks the id up in the book it already has.
+     */
+    public record Change(String op, String chapterId, String node, int count) {
+    }
+
+    /**
+     * The change just written and the history around it. The client shows the change and what undo/redo would do next,
+     * which is the hint FTB Quests sends with {@code SendChangeDescPacket}; a null hint means that stack is empty.
+     */
+    public record Activity(Change change, Change undo, Change redo) {
+    }
+
+    private record Snapshot(String text, Change change) {
     }
 
     private static final class History {
@@ -66,6 +81,8 @@ public final class ProgressionEditor {
     private final Map<String, History> histories = new LinkedHashMap<>();
     /** Table undo steps, kept apart from {@link #histories} so a table and a chapter that share an id never mix. */
     private final Map<String, History> tableHistories = new LinkedHashMap<>();
+    /** The last successful write, for the changelog broadcast; guarded by the server thread that calls {@link #apply}. */
+    private Activity lastActivity;
 
     public ProgressionEditor(Path worldRoot) {
         this(worldRoot, ProgressionEditor::randomId, ProgressValidator.Registry.NONE);
@@ -85,6 +102,11 @@ public final class ProgressionEditor {
 
     public Path overlayRoot() {
         return overlayRoot;
+    }
+
+    /** The change of the last accepted {@link #apply}, or null when the last attempt was refused or wrote nothing. */
+    public Activity lastActivity() {
+        return lastActivity;
     }
 
     /**
@@ -112,13 +134,15 @@ public final class ProgressionEditor {
     public Outcome apply(JsonObject packChapters, JsonObject tables, Map<String, ProgressValidator.Source> packSources,
                          String chapterId, long revision, String op, JsonObject args, Set<String> unreadable,
                          int writerPermissionLevel) {
+        lastActivity = null;
         // A chapter does not exist yet when it is being created, so it has no id to carry: the request sends an empty
         // chapterId and the namespace in the args, and the server mints the id. Every other op needs a real one.
         boolean creatingChapter = op.equals("create_chapter");
         boolean tableOp = op.equals("update_table") || op.equals("delete_table") || op.equals("restore_table");
         boolean restrictionsOp = op.equals("update_restrictions");
         boolean settingsOp = op.equals("update_settings");
-        if (!creatingChapter && !tableOp && !restrictionsOp && !settingsOp && !validChapterId(chapterId)) {
+        boolean langOp = op.equals("update_lang");
+        if (!creatingChapter && !tableOp && !restrictionsOp && !settingsOp && !langOp && !validChapterId(chapterId)) {
             return fail("chapter id is not <namespace>:<chapter>", 0);
         }
         ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(overlayRoot);
@@ -133,6 +157,9 @@ public final class ProgressionEditor {
         }
         if (settingsOp) {
             return updateSettings(overlay, revision, args);
+        }
+        if (langOp) {
+            return updateLang(chapterId, overlay, revision, args);
         }
         if (tableOp) {
             return applyTable(overlay, packChapters, tables, packSources, chapterId, revision, op, args, unreadable,
@@ -188,6 +215,7 @@ public final class ProgressionEditor {
         } catch (IOException ex) {
             return fail("could not write restrictions: " + ex.getMessage(), current);
         }
+        lastActivity = new Activity(new Change("update_restrictions", "", "", 1), null, null);
         return new Outcome(true, false, true, "", next, List.copyOf(messages));
     }
 
@@ -219,7 +247,60 @@ public final class ProgressionEditor {
         } catch (IOException ex) {
             return fail("could not write settings: " + ex.getMessage(), current);
         }
+        lastActivity = new Activity(new Change("update_settings", "", "", 1), null, null);
         return new Outcome(true, false, true, "", next, List.copyOf(messages));
+    }
+
+    /**
+     * Writes one locale's whole translation object (2026-10-22, p6-editor). The revision is per locale file, so two
+     * editors on different languages never refuse each other; keys are sorted so a diff of the file reads by key.
+     */
+    private Outcome updateLang(String targetId, ProgressionOverlay.Overlay overlay, long revision, JsonObject args) {
+        String locale = text(args, "locale", "").toLowerCase(java.util.Locale.ROOT);
+        if (!ProgressionOverlay.validLocale(locale)) {
+            return fail("locale is not a language code like ja_jp", 0);
+        }
+        if (!locale.equals(targetId)) {
+            return fail("the translations must be saved under the locale they name", overlay.langRevision(locale));
+        }
+        long current = overlay.langRevision(locale);
+        if (revision != current) {
+            return new Outcome(false, true, false, "", current,
+                    List.of("these translations changed while you were editing them; reload them and try again"));
+        }
+        JsonElement entriesArg = args.get("entries");
+        if (entriesArg == null || !entriesArg.isJsonObject()) {
+            return fail("update_lang needs an entries object", current);
+        }
+        JsonObject entries = entriesArg.getAsJsonObject();
+        if (entries.size() > 20000) {
+            return fail("translation file has too many keys", current);
+        }
+        java.util.TreeMap<String, String> sorted = new java.util.TreeMap<>();
+        for (Map.Entry<String, JsonElement> e : entries.entrySet()) {
+            String key = e.getKey();
+            if (key.isBlank() || key.length() > 512) {
+                return fail("translation key is empty or too long", current);
+            }
+            JsonElement value = e.getValue();
+            if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                return fail("translation " + key + " is not a string", current);
+            }
+            if (value.getAsString().isBlank()) {
+                return fail("translation " + key + " is empty; remove the key to fall back to English", current);
+            }
+            sorted.put(key, value.getAsString());
+        }
+        JsonObject clean = new JsonObject();
+        sorted.forEach(clean::addProperty);
+        long next = current + 1;
+        try {
+            ProgressionOverlay.writeLang(overlayRoot, locale, next, clean);
+        } catch (IOException ex) {
+            return fail("could not write translations: " + ex.getMessage(), current);
+        }
+        lastActivity = new Activity(new Change("update_lang", locale, "", 1), null, null);
+        return new Outcome(true, false, true, "", next, List.of());
     }
 
     // ------------------------------------------------------------------ operations
@@ -396,6 +477,50 @@ public final class ProgressionEditor {
                     }
                 }
                 if (!moved) {
+                    return ok("", List.of(), current, false);
+                }
+            }
+            case "resize_nodes" -> {
+                if (currentChapter == null) {
+                    return fail("chapter does not exist", current);
+                }
+                JsonElement list = args.get("nodes");
+                if (list == null || !list.isJsonArray()) {
+                    return fail("resize_nodes needs a nodes array", current);
+                }
+                overlayChapter = ensure(overlay, chapterId, packHasChapter);
+                boolean resized = false;
+                for (JsonElement entry : list.getAsJsonArray()) {
+                    if (!entry.isJsonObject()) {
+                        return fail("resize_nodes needs a node object in its array", current);
+                    }
+                    JsonObject change = entry.getAsJsonObject();
+                    String id = requiredText(change, "id");
+                    if (!validNodeId(id)) {
+                        return fail("node id must use only a-z, 0-9 and _", current);
+                    }
+                    JsonObject existing = node(currentChapter, id);
+                    if (existing == null) {
+                        ProgressionOverlay.NodeChange tomb = overlayChapter.nodes.get(id);
+                        if (tomb != null && tomb.action() == ProgressionOverlay.Action.REMOVE) {
+                            return fail("node " + id + " is deleted; restore it first", current);
+                        }
+                        return fail("node " + id + " does not exist", current);
+                    }
+                    Double size = number(change, "size");
+                    if (size == null || !Double.isFinite(size) || size <= 0) {
+                        return fail("resize_nodes needs a positive size", current);
+                    }
+                    JsonObject updated = existing.deepCopy();
+                    updated.addProperty("size", size);
+                    if (!updated.equals(existing)) {
+                        ProgressionOverlay.Action action = packNode(packChapters, chapterId, id) != null
+                                ? ProgressionOverlay.Action.REPLACE : ProgressionOverlay.Action.ADD;
+                        overlayChapter.nodes.put(id, new ProgressionOverlay.NodeChange(action, updated, false));
+                        resized = true;
+                    }
+                }
+                if (!resized) {
                     return ok("", List.of(), current, false);
                 }
             }
@@ -613,7 +738,9 @@ public final class ProgressionEditor {
                 write(overlayChapter);
                 overlay.revisions.put(chapterId, newRevision);
                 ProgressionOverlay.writeRevisions(overlayRoot, overlay.revisions);
-                pushChapterHistory(chapterId, new Snapshot(previous));
+                Change change = changeOf(op, chapterId, args, createdId);
+                pushChapterHistory(chapterId, new Snapshot(previous, change));
+                lastActivity = new Activity(change, change, null);
             } catch (IOException ex) {
                 Constants.LOG.error("Could not write the progression overlay for {}", chapterId, ex);
                 return fail("could not write the overlay: " + ex.getMessage(), current);
@@ -715,7 +842,9 @@ public final class ProgressionEditor {
             overlay.tableRevisions.put(id, table.revision);
             ProgressionOverlay.writeTableRevisions(overlayRoot, overlay.tableRevisions);
             // a table's write is undoable like a chapter's: the snapshot is the table file the write replaced
-            pushTableHistory(id, new Snapshot(previous));
+            Change change = new Change("update_table", id, "", 1);
+            pushTableHistory(id, new Snapshot(previous, change));
+            lastActivity = new Activity(change, change, null);
         } catch (IOException ex) {
             Constants.LOG.error("Could not write the progression table overlay for {}", id, ex);
             return fail("could not write the overlay: " + ex.getMessage(), current);
@@ -776,7 +905,9 @@ public final class ProgressionEditor {
             tomb.raw = GSON.toJson(tomb.toJson());
             overlay.tableRevisions.put(id, tomb.revision);
             ProgressionOverlay.writeTableRevisions(overlayRoot, overlay.tableRevisions);
-            pushTableHistory(id, new Snapshot(previous));
+            Change change = new Change("delete_table", id, "", 1);
+            pushTableHistory(id, new Snapshot(previous, change));
+            lastActivity = new Activity(change, change, null);
         } catch (IOException ex) {
             Constants.LOG.error("Could not write the progression table overlay for {}", id, ex);
             return fail("could not write the overlay: " + ex.getMessage(), current);
@@ -840,7 +971,9 @@ public final class ProgressionEditor {
             }
             overlay.tableRevisions.put(id, newRevision);
             ProgressionOverlay.writeTableRevisions(overlayRoot, overlay.tableRevisions);
-            pushTableHistory(id, new Snapshot(previous));
+            Change change = new Change("restore_table", id, "", 1);
+            pushTableHistory(id, new Snapshot(previous, change));
+            lastActivity = new Activity(change, change, null);
         } catch (IOException ex) {
             Constants.LOG.error("Could not write the progression table overlay for {}", id, ex);
             return fail("could not write the overlay: " + ex.getMessage(), current);
@@ -915,7 +1048,11 @@ public final class ProgressionEditor {
             return fail("could not write the overlay: " + ex.getMessage(), current);
         }
         from.pollLast();
-        push(to, new Snapshot(currentText));
+        Change undone = target.change();
+        push(to, new Snapshot(currentText, undone));
+        Change change = new Change(op, chapterId, undone == null ? "" : undone.node(),
+                undone == null ? 1 : undone.count());
+        lastActivity = new Activity(change, peekChange(history.undo), peekChange(history.redo));
         return new Outcome(true, false, true, "", newRevision, List.of());
     }
 
@@ -993,7 +1130,11 @@ public final class ProgressionEditor {
             return fail("could not write the overlay: " + ex.getMessage(), current);
         }
         from.pollLast();
-        push(to, new Snapshot(currentText));
+        Change undone = target.change();
+        push(to, new Snapshot(currentText, undone));
+        Change change = new Change(op, tableId, undone == null ? "" : undone.node(),
+                undone == null ? 1 : undone.count());
+        lastActivity = new Activity(change, peekChange(history.undo), peekChange(history.redo));
         return new Outcome(true, false, true, "", newRevision, List.of());
     }
 
@@ -1403,6 +1544,45 @@ public final class ProgressionEditor {
         while (stack.size() > HISTORY_LIMIT) {
             stack.removeFirst();
         }
+    }
+
+    private static Change peekChange(Deque<Snapshot> stack) {
+        Snapshot top = stack.peekLast();
+        return top == null ? null : top.change();
+    }
+
+    /** The change one accepted op made, in the values the changelog shows: the node and how many a batch touched. */
+    private static Change changeOf(String op, String chapterId, JsonObject args, String createdId) {
+        String node = "";
+        int count = 1;
+        switch (op) {
+            case "create_node" -> node = createdId;
+            case "update_node", "move_node", "delete_node", "restore_node" -> node = text(args, "id", "");
+            case "link", "unlink" -> node = text(args, "to", "");
+            case "move_nodes", "resize_nodes" -> {
+                JsonElement list = args.get("nodes");
+                if (list != null && list.isJsonArray()) {
+                    JsonArray nodes = list.getAsJsonArray();
+                    count = Math.max(1, nodes.size());
+                    if (!nodes.isEmpty() && nodes.get(0).isJsonObject()) {
+                        node = text(nodes.get(0).getAsJsonObject(), "id", "");
+                    }
+                }
+            }
+            case "delete_nodes" -> {
+                JsonElement list = args.get("ids");
+                if (list != null && list.isJsonArray()) {
+                    JsonArray ids = list.getAsJsonArray();
+                    count = Math.max(1, ids.size());
+                    if (!ids.isEmpty() && ids.get(0).isJsonPrimitive()) {
+                        node = ids.get(0).getAsString();
+                    }
+                }
+            }
+            default -> {
+            }
+        }
+        return new Change(op, chapterId, node, count);
     }
 
     // ------------------------------------------------------------------ ids and JSON helpers

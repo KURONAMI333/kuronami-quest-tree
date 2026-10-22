@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.network.EditorChangePayload;
 import com.kuronami.questtree.network.EditorOpAssembler;
 import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
@@ -169,11 +170,36 @@ public final class EditorService {
             replyChapter = outcome.createdId();
         }
         reply(player, payload, replyChapter, outcome.ok(), outcome.createdId(), outcome.messages(), outcome.revision());
+        if (outcome.changed()) {
+            broadcastChange(player.server, player, editor.lastActivity(), false);
+        }
         if (outcome.stale() && !dirty) {
             // another operator wrote this chapter first: give the client the new bundle now, so its next op is not
             // refused against a revision it can no longer see; with a rebuild already pending the tick-end sync sends the
             // fresh bundle, and this one would be the outdated cached copy
             ProgressData.sync(player);
+        }
+    }
+
+    /**
+     * Tells the other operators what one edit did, for the map's changelog (2026-10-22, p6-editor). Only the values
+     * travel: the receiver turns the op into a word and the id into a title. The author is skipped, because its own
+     * reply already carries the revision and a refusal; a player who has no editing mode has no changelog to feed.
+     */
+    private static void broadcastChange(MinecraftServer server, ServerPlayer author, ProgressionEditor.Activity activity,
+                                        boolean includeAuthor) {
+        if (activity == null || activity.change() == null || server == null) {
+            return;
+        }
+        ProgressionEditor.Change change = activity.change();
+        EditorChangePayload payload = new EditorChangePayload(change.op(), change.chapterId(), change.node(),
+                change.count(), activity.undo() == null ? "" : activity.undo().op(),
+                activity.redo() == null ? "" : activity.redo().op());
+        for (ServerPlayer other : server.getPlayerList().getPlayers()) {
+            if (!includeAuthor && other == author || !editing.contains(other.getUUID()) || !other.hasPermissions(2)) {
+                continue;
+            }
+            Services.PLATFORM.sendToPlayer(other, payload);
         }
     }
 
@@ -239,6 +265,7 @@ public final class EditorService {
             dirty = true;
             publishAt = server.getTickCount();
             publish(server);
+            broadcastChange(server, null, editor.lastActivity(), true);
         }
         return outcome;
     }

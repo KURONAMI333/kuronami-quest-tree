@@ -6,6 +6,7 @@ import com.kuronami.questtree.client.edit.EditorClipboard;
 import com.kuronami.questtree.client.edit.EditorSelection;
 import com.kuronami.questtree.client.edit.GridSnap;
 import com.kuronami.questtree.client.edit.MoveBatch;
+import com.kuronami.questtree.client.editor.ContentSchema;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.giver.GiverOpen;
 import com.kuronami.questtree.giver.GiverTarget;
@@ -895,6 +896,7 @@ public class ProgressScreen extends Screen {
         renderRailField(g, mouseX, mouseY, partialTick);
         g.pose().popPose();
         renderEditorNotices(g);
+        renderEditorChangelog(g);
         renderEditorMenu(g, mouseX, mouseY);
         if (pendingTip != null && confirmPrompt == null) {
             g.pose().pushPose();
@@ -3032,6 +3034,80 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
     }
 
+    /**
+     * Other operators' accepted edits, newest at the bottom (2026-10-22, p6-editor). Values only: the op becomes a word
+     * and the id a title from the book this client already holds. Under the newest line sit the next undo and redo
+     * steps, when the server named any, which is the hint FTB Quests sends with its change packet.
+     */
+    private void renderEditorChangelog(GuiGraphics g) {
+        if (!editActive()) {
+            return;
+        }
+        List<EditorChangelog.Entry> all = EditorChangelog.recent();
+        if (all.isEmpty()) {
+            return;
+        }
+        String prefix = "screen.kuronami_quest_tree.editor.change.";
+        long now = Util.getMillis();
+        int shown = Math.min(EditorChangelog.SHOWN, all.size());
+        ClientModel cm = model();
+        List<Component> lines = new ArrayList<>();
+        List<Boolean> dim = new ArrayList<>();
+        List<Long> stamps = new ArrayList<>();
+        for (int i = all.size() - shown; i < all.size(); i++) {
+            EditorChangelog.Entry e = all.get(i);
+            Component action = Component.translatable(prefix + EditorChangelog.action(e.op()));
+            String where;
+            if (!e.node().isEmpty()) {
+                ClientModel.Node n = cm == null ? null : cm.nodesByKey.get(e.chapterId() + "/" + e.node());
+                where = n != null ? n.title.getString() : e.node();
+            } else {
+                String id = e.chapterId();
+                ClientModel.Chapter chapter = null;
+                if (cm != null) {
+                    for (ClientModel.Chapter c : cm.chapters) {
+                        if (c.id.equals(id)) {
+                            chapter = c;
+                            break;
+                        }
+                    }
+                }
+                where = chapter != null ? chapter.title.getString() : id;
+            }
+            String text = Component.translatable(prefix + "line", action, where).getString();
+            if (e.count() > 1) {
+                text = text + Component.translatable(prefix + "count", e.count()).getString();
+            }
+            lines.add(Component.literal(text));
+            dim.add(false);
+            stamps.add(e.at());
+            if (i == all.size() - 1) {
+                if (!e.undoOp().isEmpty()) {
+                    lines.add(Component.translatable(prefix + "undo_hint",
+                            Component.translatable(prefix + EditorChangelog.action(e.undoOp()))));
+                    dim.add(true);
+                    stamps.add(e.at());
+                }
+                if (!e.redoOp().isEmpty()) {
+                    lines.add(Component.translatable(prefix + "redo_hint",
+                            Component.translatable(prefix + EditorChangelog.action(e.redoOp()))));
+                    dim.add(true);
+                    stamps.add(e.at());
+                }
+            }
+        }
+        int y = height - 24 - lines.size() * 11;
+        g.pose().pushPose();
+        g.pose().translate(0, 0, OVERLAY_Z + 280);
+        for (int i = 0; i < lines.size(); i++) {
+            long left = EditorChangelog.LIFE_MS - (now - stamps.get(i));
+            float alpha = left < 900 ? Math.max(0, left / 900f) : 1f;
+            Ui.textRight(g, font, lines.get(i), width - 8, y, Tiles.withAlpha(dim.get(i) ? Ui.DIM : Ui.TEXT, alpha));
+            y += 11;
+        }
+        g.pose().popPose();
+    }
+
     private void renderEditorMapOverlay(GuiGraphics g, ClientModel.Chapter ch, float[] v, int mouseX, int mouseY) {
         if (editDrag == EditDrag.BOX) {
             double x0 = v[0] + Math.min(editBoxX0, editBoxX1) * UNIT * v[2];
@@ -3082,11 +3158,124 @@ public class ProgressScreen extends Screen {
                 true, this::openRestrictions));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.deleted.title"), true,
                 this::openDeleted));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.translations"), true,
+                this::openTranslations));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.paste_image"), true,
+                () -> pasteImage(ch, x, y)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.export"), true,
                 () -> exportChapter(ch)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.test"), true,
                 () -> confirmTest(ch)));
         openEditorMenu(mx, my, entries);
+    }
+
+    /**
+     * Copies the node id as the map's own values use it (2026-10-22, p6-editor): FTB Quests copies a quest's code id
+     * from the same menu, and KQT names nodes by the same id in requirement refs and translation keys.
+     */
+    private void copyId(ClientModel.Node n) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.keyboardHandler.setClipboard(n.id);
+        EditorSession.note(Component.translatable("screen.kuronami_quest_tree.editor.copy_id.done").getString());
+    }
+
+    /**
+     * Adds a chapter image from a path in the clipboard (2026-10-22, p6-editor). FTB Quests' "paste image" also only
+     * takes a location, not pixels: the path is written into a decoration at the clicked map spot and the chapter is
+     * saved whole for that array, so the change is one revision and one undo step.
+     */
+    private void pasteImage(ClientModel.Chapter ch, double x, double y) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        String image = mc.keyboardHandler.getClipboard().trim();
+        if (image.isEmpty()) {
+            EditorSession.note(Component.translatable("screen.kuronami_quest_tree.editor.paste_image.empty").getString());
+            return;
+        }
+        JsonObject chapter = ClientProgress.rawChapter(ch.id);
+        if (chapter == null) {
+            return;
+        }
+        JsonArray decorations = chapter.has("decorations") && chapter.get("decorations").isJsonArray()
+                ? chapter.getAsJsonArray("decorations").deepCopy() : new JsonArray();
+        JsonObject decoration = ContentSchema.newDecoration();
+        decoration.addProperty("image", image);
+        decoration.addProperty("x", GridSnap.snap(x));
+        decoration.addProperty("y", GridSnap.snap(y));
+        decorations.add(decoration);
+        JsonObject patch = new JsonObject();
+        patch.add("decorations", decorations);
+        JsonObject args = new JsonObject();
+        args.add("patch", patch);
+        EditorSession.send(ch.id, "update_chapter", args, EditorSession.revision(ch.id), reply -> { });
+    }
+
+    /**
+     * Every node a link can name, across the namespace's chapters (2026-10-22, p6-editor). A reference is
+     * {@code <chapter path>/<node id>} inside one namespace, so the list is what the server's own rule accepts.
+     */
+    private void openLinkPicker(ClientModel.Chapter ch, ClientModel.Node from) {
+        ClientModel cm = model();
+        if (cm == null) {
+            return;
+        }
+        int colon = ch.id.indexOf(':');
+        String namespace = colon < 0 ? ch.id : ch.id.substring(0, colon);
+        List<EditPickers.Option> options = new ArrayList<>();
+        for (ClientModel.Chapter target : cm.chapters) {
+            if (!target.namespace.equals(namespace) || target == ch) {
+                continue;
+            }
+            for (ClientModel.Node node : target.nodes.values()) {
+                options.add(new EditPickers.Option(target.path + "/" + node.id,
+                        Component.literal(target.title.getString() + " · " + node.title.getString()),
+                        ItemStack.EMPTY));
+            }
+        }
+        // the current chapter is offered too, with the same chapter-relative refs the server resolves
+        for (ClientModel.Node node : ch.nodes.values()) {
+            if (node.id.equals(from.id)) {
+                continue;
+            }
+            options.add(new EditPickers.Option(ch.path + "/" + node.id,
+                    Component.literal(ch.title.getString() + " · " + node.title.getString()), ItemStack.EMPTY));
+        }
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new EditPickerScreen(this, Component.translatable("screen.kuronami_quest_tree.editor.link_to"),
+                options, false, ref -> link(ch.id, from.id, ref)));
+    }
+
+    private void link(String chapterId, String from, String to) {
+        JsonObject args = new JsonObject();
+        args.addProperty("from", from);
+        args.addProperty("to", to);
+        EditorSession.send(chapterId, "link", args);
+    }
+
+    private void openBulkSize(ClientModel.Chapter ch, ClientModel.Node node) {
+        List<String> ids = new ArrayList<>();
+        for (String key : editSelection.ids()) {
+            int slash = key.indexOf('/');
+            if (slash > 0 && key.substring(0, slash).equals(ch.id)) {
+                ids.add(key.substring(slash + 1));
+            }
+        }
+        if (!ids.contains(node.id)) {
+            ids.clear();
+            ids.add(node.id);
+        }
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new BulkSizeScreen(this, ch.id, ids));
+    }
+
+    private void openTranslations() {
+        JsonObject langs = ClientProgress.langs();
+        List<EditPickers.Option> options = new ArrayList<>();
+        for (String locale : langs.keySet()) {
+            options.add(new EditPickers.Option(locale, Component.literal(locale), ItemStack.EMPTY));
+        }
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mc.setScreen(new EditPickerScreen(this, Component.translatable("screen.kuronami_quest_tree.editor.translations"),
+                options, false, locale -> mc.setScreen(new TranslationEditScreen(this, locale))));
     }
 
     private void openRestrictions() {
@@ -3186,10 +3375,16 @@ public class ProgressScreen extends Screen {
                 () -> duplicateSelection(ch)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.copy"), true,
                 () -> copySelection(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.copy_id"), true,
+                () -> copyId(n)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.delete"), true,
                 () -> deleteSelection(ch)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.link"), true,
                 () -> beginLink(n.key)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.link_to"), true,
+                () -> openLinkPicker(ch, n)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.size_menu"), true,
+                () -> openBulkSize(ch, n)));
         if (!n.requires.isEmpty()) {
             entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.unlink"), true,
                     () -> editorUnlinkMenu(n, ch, mx, my)));

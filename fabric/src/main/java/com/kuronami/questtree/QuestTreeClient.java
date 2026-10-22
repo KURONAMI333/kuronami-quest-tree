@@ -62,6 +62,8 @@ public class QuestTreeClient implements ClientModInitializer {
                 (payload, context) -> EditorSession.onReply(payload));
         ClientPlayNetworking.registerGlobalReceiver(EditorStatePayload.TYPE,
                 (payload, context) -> EditorSession.setAllowed(payload.canEdit()));
+        ClientPlayNetworking.registerGlobalReceiver(com.kuronami.questtree.network.EditorChangePayload.TYPE,
+                (payload, context) -> com.kuronami.questtree.client.EditorChangelog.on(payload));
         ClientPlayNetworking.registerGlobalReceiver(ScreenBindOpenPayload.TYPE,
                 (payload, context) -> ClientTaskScreens.onOpen(payload));
         ClientProgress.sender = a -> {
