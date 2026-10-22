@@ -77,14 +77,46 @@ public final class ItemRequirement {
         if (!it.isJsonObject()) {
             return new ItemRequirement("", Match.NONE, null, null);
         }
-        JsonObject o = it.getAsJsonObject();
+        return ofItem(it.getAsJsonObject(), Match.of(task));
+    }
+
+    /** The requirement of an item JSON the viewer already holds (a task or a reward). */
+    private static ItemRequirement ofItem(JsonObject o, Match match) {
         String filter = ItemFilter.filterExpression(o);
         String spec = filter != null ? "~" + filter
                 : o.has("tag") ? "#" + o.get("tag").getAsString()
                 : o.has("id") ? o.get("id").getAsString() : "";
         JsonObject comps = o.has("components") && o.get("components").isJsonObject()
                 ? o.getAsJsonObject("components") : null;
-        return new ItemRequirement(spec, Match.of(task), comps, o);
+        return new ItemRequirement(spec, match, comps, o);
+    }
+
+    /**
+     * Whether a stack satisfies an item JSON with the given component mode ({@code NONE}, {@code FUZZY} or
+     * {@code STRICT}), for the viewer's live lookup. Unreadable JSON or an unknown mode matches nothing.
+     */
+    public static boolean matches(ItemStack stack, JsonObject itemJson, String matchMode,
+                                  HolderLookup.Provider registries) {
+        if (itemJson == null) {
+            return false;
+        }
+        Match match;
+        try {
+            match = matchMode == null || matchMode.isEmpty() ? Match.NONE : Match.valueOf(matchMode);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        return ofItem(itemJson, match).matches(stack, registries);
+    }
+
+    /** The item JSON (components included) this requirement was read from, or empty for a plain id. */
+    public String itemJson() {
+        return itemJson == null ? "" : itemJson.toString();
+    }
+
+    /** The component mode as a stable name ({@code NONE}, {@code FUZZY}, {@code STRICT}). */
+    public String matchMode() {
+        return match.name();
     }
 
     /** The matcher as it was before components were considered (an id, {@code #tag}, or {@code ~filter}). */

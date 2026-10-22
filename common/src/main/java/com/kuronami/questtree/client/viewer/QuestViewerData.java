@@ -13,7 +13,9 @@ import com.kuronami.questtree.client.viewer.QuestViewerIndex.Query;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Quest;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Visibility;
+import com.google.gson.JsonParser;
 import com.kuronami.questtree.progress.ItemFilter;
+import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PackNumbers;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -65,6 +67,17 @@ public final class QuestViewerData {
             public boolean inFilter(String expression) {
                 var level = net.minecraft.client.Minecraft.getInstance().level;
                 return ItemFilter.parse(expression).test(stack, level == null ? null : level.registryAccess());
+            }
+
+            @Override
+            public boolean accepts(String itemJson, String matchMode) {
+                try {
+                    var level = net.minecraft.client.Minecraft.getInstance().level;
+                    return ItemRequirement.matches(stack, JsonParser.parseString(itemJson).getAsJsonObject(),
+                            matchMode, level == null ? null : level.registryAccess());
+                } catch (RuntimeException ex) {
+                    return false;
+                }
             }
         };
     }
@@ -142,7 +155,8 @@ public final class QuestViewerData {
                 needs.add(new Need(Kind.TASK, Spec.filter(task.filter.expression()), task.count,
                         task.name().getString(), i, false));
             } else {
-                addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(), i, false);
+                addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(), i, false,
+                        task.viewerItemJson(), task.viewerMatchMode());
             }
         }
         JsonObject raw = ClientProgress.rawNode(chapter.id, node.id);
@@ -190,25 +204,26 @@ public final class QuestViewerData {
             return;
         }
         Spec parsed = specOf(item);
-        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), index, choice);
+        addSpec(needs, Kind.REWARD, parsed, countOf(item), labelOf(parsed, item), index, choice,
+                item.isJsonObject() ? item.toString() : "", "");
     }
 
     private static void addSpec(List<Need> needs, Kind kind, String spec, long count, String label,
-                                int index, boolean choice) {
+                                int index, boolean choice, String itemJson, String matchMode) {
         if (spec == null || spec.isEmpty()) {
             return;
         }
         Spec parsed = spec.startsWith("#") ? Spec.tag(spec.substring(1))
                 : spec.startsWith("~") ? Spec.filter(spec.substring(1)) : Spec.item(spec);
-        addSpec(needs, kind, parsed, count, label, index, choice);
+        addSpec(needs, kind, parsed, count, label, index, choice, itemJson, matchMode);
     }
 
     private static void addSpec(List<Need> needs, Kind kind, Spec parsed, long count, String label,
-                                int index, boolean choice) {
+                                int index, boolean choice, String itemJson, String matchMode) {
         if (parsed == null || parsed.id().isEmpty()) {
             return;
         }
-        needs.add(new Need(kind, parsed, Math.max(1, count), label, index, choice));
+        needs.add(new Need(kind, parsed, Math.max(1, count), label, index, choice, itemJson, matchMode));
     }
 
     private static Spec specOf(JsonElement item) {

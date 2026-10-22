@@ -7,6 +7,7 @@ import com.kuronami.questtree.client.QuestViewerStyle;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Hit;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Kind;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex.Need;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.progress.ItemFilter;
@@ -39,7 +40,7 @@ public final class QuestViewerRecipe {
 
     public QuestViewerRecipe(Hit hit) {
         this.hit = hit;
-        this.stacks = List.copyOf(stacksOf(hit.need().spec(), hit.need().count()));
+        this.stacks = List.copyOf(stacksOf(hit.need()));
         this.icon = iconOf(hit);
     }
 
@@ -100,11 +101,12 @@ public final class QuestViewerRecipe {
                 "quest/" + key + "/" + kind + "/" + hit.need().index() + "/" + Integer.toHexString(hash));
     }
 
-    private static List<ItemStack> stacksOf(Spec spec, long count) {
+    private static List<ItemStack> stacksOf(Need need) {
+        Spec spec = need.spec();
         if (spec == null || spec.id().isEmpty()) {
             return List.of();
         }
-        int amount = (int) Math.max(1, Math.min(99, count));
+        int amount = (int) Math.max(1, Math.min(99, need.count()));
         List<ItemStack> out = new ArrayList<>();
         if (spec.tag()) {
             ResourceLocation tagId = ResourceLocation.tryParse(spec.id());
@@ -127,15 +129,38 @@ public final class QuestViewerRecipe {
                 }
             }
         } else {
-            ResourceLocation id = ResourceLocation.tryParse(spec.id());
-            if (id != null) {
-                Item item = BuiltInRegistries.ITEM.get(id);
-                if (item != Items.AIR) {
-                    out.add(new ItemStack(item, amount));
+            ItemStack withComponents = stackFromJson(need.itemJson(), amount);
+            if (!withComponents.isEmpty()) {
+                out.add(withComponents);
+            } else {
+                ResourceLocation id = ResourceLocation.tryParse(spec.id());
+                if (id != null) {
+                    Item item = BuiltInRegistries.ITEM.get(id);
+                    if (item != Items.AIR) {
+                        out.add(new ItemStack(item, amount));
+                    }
                 }
             }
         }
         return out;
+    }
+
+    /** The task's or reward's item JSON as a display stack, components included; empty when it cannot be read. */
+    private static ItemStack stackFromJson(String json, int amount) {
+        if (json == null || json.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        try {
+            com.google.gson.JsonObject object = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+            object.remove("count");
+            object.addProperty("count", amount);
+            var level = net.minecraft.client.Minecraft.getInstance().level;
+            var ops = level == null ? com.mojang.serialization.JsonOps.INSTANCE
+                    : level.registryAccess().createSerializationContext(com.mojang.serialization.JsonOps.INSTANCE);
+            return ItemStack.CODEC.parse(ops, object).result().orElse(ItemStack.EMPTY);
+        } catch (RuntimeException ex) {
+            return ItemStack.EMPTY;
+        }
     }
 
     private static ItemStack iconOf(Hit hit) {

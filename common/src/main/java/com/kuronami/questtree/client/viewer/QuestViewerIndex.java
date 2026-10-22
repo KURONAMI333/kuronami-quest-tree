@@ -75,14 +75,41 @@ public final class QuestViewerIndex {
         default boolean inFilter(String expression) {
             return false;
         }
+
+        /**
+         * Whether the stack satisfies the task's component check. {@code itemJson} is the item JSON the task wrote
+         * (components included) and {@code matchMode} is {@code NONE}, {@code FUZZY} or {@code STRICT}; viewers
+         * without game access accept everything, because the mode already says whether components matter.
+         */
+        default boolean accepts(String itemJson, String matchMode) {
+            return true;
+        }
     }
 
     /** One item named by a task or reward. {@code index} is the task/reward index in its quest. */
-    public record Need(Kind kind, Spec spec, long count, String label, int index, boolean choice) {
+    public record Need(Kind kind, Spec spec, long count, String label, int index, boolean choice,
+                       String itemJson, String matchMode) {
+
+        public Need {
+            label = label == null ? "" : label;
+            itemJson = itemJson == null ? "" : itemJson;
+            matchMode = matchMode == null ? "" : matchMode;
+        }
+
+        /** A need without components (a tag, a plain item or a reward). */
+        public Need(Kind kind, Spec spec, long count, String label, int index, boolean choice) {
+            this(kind, spec, count, label, index, choice, "", "");
+        }
 
         /** Whether the stack named by {@code query} counts for this task or reward. */
         public boolean matches(Query query) {
-            return spec.matches(query);
+            if (!spec.matches(query)) {
+                return false;
+            }
+            if (itemJson.isEmpty() || matchMode.isEmpty() || matchMode.equals("NONE")) {
+                return true;
+            }
+            return query.accepts(itemJson, matchMode);
         }
     }
 

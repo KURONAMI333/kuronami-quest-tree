@@ -89,6 +89,27 @@ class QuestViewerIndexTest {
     }
 
     @Test
+    void aComponentSpecificTaskOnlyMatchesTheVariantItNames() {
+        String itemJson = "{\"id\":\"minecraft:potion\",\"components\":{\"minecraft:potion_contents\":\"minecraft:healing\"}}";
+        Quest quest = quest("pack:healing", "Healing",
+                new Need(Kind.TASK, Spec.item("minecraft:potion"), 1, "Healing Potion", 0, false,
+                        itemJson, "FUZZY"));
+        Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
+
+        assertEquals(List.of("pack:healing"), keys(index.uses(componentQuery(itemJson, true))));
+        assertTrue(index.uses(componentQuery(itemJson, false)).isEmpty());
+    }
+
+    @Test
+    void aTaskWithoutAComponentModeIgnoresTheComponentCheck() {
+        Quest quest = quest("pack:plain", "Plain", new Need(Kind.TASK, Spec.item("minecraft:potion"), 1,
+                "Potion", 0, false, "{\"id\":\"minecraft:potion\"}", "NONE"));
+        Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
+
+        assertEquals(List.of("pack:plain"), keys(index.uses(componentQuery("", false))));
+    }
+
+    @Test
     void tagEntriesAreNotCapped() {
         List<String> members = new java.util.ArrayList<>();
         for (int i = 0; i < 100; i++) {
@@ -131,6 +152,25 @@ class QuestViewerIndexTest {
             @Override
             public boolean inTag(String tagId) {
                 return tagSet.contains(tagId);
+            }
+        };
+    }
+
+    private static Query componentQuery(String expectedJson, boolean passes) {
+        return new Query() {
+            @Override
+            public String itemId() {
+                return "minecraft:potion";
+            }
+
+            @Override
+            public boolean inTag(String tagId) {
+                return false;
+            }
+
+            @Override
+            public boolean accepts(String itemJson, String matchMode) {
+                return passes && itemJson.equals(expectedJson);
             }
         };
     }
