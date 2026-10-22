@@ -98,9 +98,14 @@ final class Ui {
      * 1px border that runs from #383838 at the top to #242424 at the bottom. The tones are ours, the structure is
      * Jade's (see {@link #frame}). Read from {@code gui/palette.json}, so a pack can restyle it.
      */
-    static int HUD_TRACKER = 0xB3111214;
-    static int HUD_TRACKER_EDGE = 0xB3383838;
-    static int HUD_TRACKER_EDGE_BOTTOM = 0xB3242424;
+    /**
+     * The tracker card's Jade-matching frame (2026-10-22, the player: still too dark). Jade's dark theme is #131313
+     * with the tooltip alpha of 0.7, and Jade applies it as 0.7 * 255 / 256, so the drawn alpha is 0.697 = 0xB1:
+     * #B1131313 inside, #B1383838 at the top and sides, #B1242424 at the bottom.
+     */
+    static int HUD_TRACKER = 0xB1131313;
+    static int HUD_TRACKER_EDGE = 0xB1383838;
+    static int HUD_TRACKER_EDGE_BOTTOM = 0xB1242424;
     /** A toast's level line (yellow), and its title (white). */
     static int TOAST_LEVEL = 0xFFFFFF55;
     static int TOAST_TITLE = 0xFFFFFFFF;

@@ -23,6 +23,7 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
 | `selection`, `optional_outline`, `mark`, `flash`, `scrollbar`, `scrollbar_hover`, `minimap_view`, `minimap_open` | Selection ring, optional quests' dashed outline, small marks on tiles, state-change flash, scrollbars, minimap |
 | `glass_regular`, `glass_clear`, `glass_tint` | Liquid Glass: the tone the blurred picture behind the chapter list, details, search, zoom buttons and tooltips is pulled towards (alpha = how far); the minimap's dimming layer (alpha = how much) and its tint. With glass turned off (`"glass": false` in `config/kuronami_quest_tree-client.json`) the flat `panel_translucent`, `rail_closed` and `floating` are used instead |
 | `hud_back`, `hud_text`, `hud_muted`, `toast_track`, `toast_fill`, `toast_edge` | The pinned-quest overlay over the world; the experience toast's bar, its body and its 1-pixel frame (the advancement toast's own sprite is fixed at a 2-pixel corner, so the mod draws the frame from these) |
+| `hud_tracker`, `hud_tracker_edge`, `hud_tracker_edge_bottom` | The tracker card's frame. The defaults match Jade's dark tooltip at its default 0.7 alpha: `#B1131313` inside, `#B1383838` at the top and sides, `#B1242424` at the bottom |
 
 ### Corner radius: `corner_radius`
 
