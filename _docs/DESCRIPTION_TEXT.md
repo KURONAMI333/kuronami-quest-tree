@@ -29,6 +29,18 @@ The target cannot contain spaces; the display text can.
 "description": "Materials: {recipe:minecraft:iron_ingot Iron ingot}. Next: {quest:two/iron The Iron Age}."
 ```
 
+## Inline items
+
+`{item:<id>}` draws the item's icon in the sentence, and hovering it shows the vanilla item tooltip (name, line, mod). Click it to open its recipes when JEI / REI / EMI is installed.
+
+```json
+"description": "Bring {item:minecraft:diamond} and {item:minecraft:iron_ingot 4}."
+```
+
+- The id may leave out `minecraft:`; an id this pack does not have is shown as written, so a typo stays visible.
+- A second word is the stack size (`4` or `x4`); it is shown as `x4` beside the icon and is only a label.
+- The icon is 10px and wraps with the line; a line holding only an item is not a paragraph break.
+
 ## Images
 
 ```json

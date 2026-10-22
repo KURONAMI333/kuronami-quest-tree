@@ -15,7 +15,8 @@ import net.minecraft.network.chat.Component;
  * <p>
  * Besides the markup FTB Quests already writes ({@code &x} colours, {@code \n}, {@code {@pagebreak}},
  * {@code {image:path width:150 height:150}}), this understands three link tokens of its own:
- * {@code {open_url:url label}}, {@code {quest:chapter/node label}} and {@code {recipe:namespace:item label}}.
+ * {@code {open_url:url label}}, {@code {quest:chapter/node label}} and {@code {recipe:namespace:item label}},
+ * plus an inline item token: {@code {item:namespace:item}} / {@code {item:namespace:item 4}}.
  * A token this parser does not know stays in the text as written, so a pack that uses a newer ftb-quests token loses
  * nothing (2026-10-21).
  */
@@ -23,23 +24,32 @@ final class FtbText {
 
     /** A texture path and nothing else: no scheme, no backslash, no leading slash, no upper case. */
     private static final Pattern IMAGE_TARGET = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_.-][a-z0-9/._-]*");
+    /** An item id, with the namespace optional (Minecraft's own default is {@code minecraft}). */
+    private static final Pattern ITEM_TARGET = Pattern.compile("(?:[a-z0-9_.-]+:)?[a-z0-9_.-][a-z0-9/._-]*");
 
-    /** One run of a description line. TEXT carries markup colour codes; links carry their target. */
-    record Token(Kind kind, String text, String target, int width, int height) {
+    /**
+     * One run of a description line. TEXT carries markup colour codes; links carry their target. An ITEM token
+     * carries the id in {@code target} and its stack size in {@code count} (1 when the description gives none).
+     */
+    record Token(Kind kind, String text, String target, int width, int height, int count) {
         enum Kind {
-            TEXT, IMAGE, OPEN_URL, QUEST, RECIPE
+            TEXT, IMAGE, OPEN_URL, QUEST, RECIPE, ITEM
         }
 
         static Token text(String text) {
-            return new Token(Kind.TEXT, text, "", 0, 0);
+            return new Token(Kind.TEXT, text, "", 0, 0, 1);
         }
 
         static Token image(String target, int width, int height) {
-            return new Token(Kind.IMAGE, "", target, width, height);
+            return new Token(Kind.IMAGE, "", target, width, height, 1);
         }
 
         static Token link(Kind kind, String target, String label) {
-            return new Token(kind, label, target, 0, 0);
+            return new Token(kind, label, target, 0, 0, 1);
+        }
+
+        static Token item(String target, int count) {
+            return new Token(Kind.ITEM, "", target, 0, 0, count);
         }
     }
 
@@ -47,7 +57,7 @@ final class FtbText {
     record Line(List<Token> tokens) {
         boolean blank() {
             for (Token t : tokens) {
-                if (t.kind() == Token.Kind.IMAGE || !t.text().isBlank()) {
+                if (t.kind() == Token.Kind.IMAGE || t.kind() == Token.Kind.ITEM || !t.text().isBlank()) {
                     return false;
                 }
             }
@@ -371,6 +381,24 @@ final class FtbText {
                 }
             }
             return Token.image(parts[0], width, height);
+        }
+        if (body.startsWith("item:")) {
+            String[] parts = body.substring("item:".length()).strip().split("\\s+");
+            if (parts.length == 0 || !ITEM_TARGET.matcher(parts[0]).matches()) {
+                // an id the game could never parse would draw nothing; keep the braces as prose instead
+                return null;
+            }
+            int count = 1;
+            if (parts.length > 1) {
+                String value = parts[1].startsWith("x") || parts[1].startsWith("X")
+                        ? parts[1].substring(1) : parts[1];
+                try {
+                    count = Math.max(1, Math.min(9999, Integer.parseInt(value)));
+                } catch (NumberFormatException notANumber) {
+                    count = 1;
+                }
+            }
+            return Token.item(parts[0], count);
         }
         if (body.startsWith("open_url:")) {
             return link(Token.Kind.OPEN_URL, "open_url:", body.substring("open_url:".length()));

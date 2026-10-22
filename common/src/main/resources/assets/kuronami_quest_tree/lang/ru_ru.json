@@ -110,6 +110,8 @@
   "screen.kuronami_quest_tree.unlock_path": "Разблокировать %s (%s)",
   "hud.kuronami_quest_tree.held": "В наличии: %s",
   "commands.kuronami_quest_tree.validate.summary": "Ошибок: %s, предупреждений: %s в данных прогресса",
+  "commands.kuronami_quest_tree.validate.group": "%s: ошибок %s, предупреждений %s",
+  "commands.kuronami_quest_tree.validate.report": "Полный отчёт: %s",
   "commands.kuronami_quest_tree.validate.none": "В данных прогресса проблем не найдено",
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...и ещё %s (см. журнал)",

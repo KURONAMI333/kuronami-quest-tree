@@ -421,7 +421,9 @@ Not implemented:
 
 ## Validation
 
-Every pack file is checked once at load. The check does not depend on the game (registry lookup is the only injected entry point, so it runs in JUnit). Problems are logged as `ERROR` or `WARNING` in the form `file:line path - message`. A one-line summary is printed, and `/quest_tree validate` shows the first 20 to an operator (permission level 2). When an operator joins, one line reports whether errors exist. An error never stops the whole pack.
+Every pack file is checked once at load. The check does not depend on the game (registry lookup is the only injected entry point, so it runs in JUnit). Problems are logged as `ERROR` or `WARNING` in the form `file:line path - message`. A one-line summary is printed, and `/quest_tree validate` (permission level 2) shows the totals plus the first five problems of each chapter. When an operator joins, one line reports whether errors exist. An error never stops the whole pack.
+
+A second pass runs on the tick after the server starts and after each `/reload`, once the levels exist and the tags are bound. It asks the loaded world about the content that the reload pass cannot see: tags (missing, or defined but empty), biomes, structures, dimensions, advancements, recipes, observation block states and block/entity tags. These findings are always `WARNING`s, because this pass runs after the book is already published and must never remove a node. They are grouped by chapter in the log and in `/quest_tree validate`; the full list is written to `quest_tree_validation.txt` in the world folder (disable with `validation_report: false` in `config/kuronami_quest_tree-server.json`).
 
 If validation itself throws, that one failure is recorded as `ERROR` and loading continues. If building the model throws after validation (a shape validation missed), that one failure is recorded as `ERROR` and the previous contents stay in use: publishing something the server cannot model would give clients progress the server does not have.
 

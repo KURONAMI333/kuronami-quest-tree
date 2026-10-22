@@ -110,6 +110,8 @@
   "screen.kuronami_quest_tree.unlock_path": "%s 해제 (%s)",
   "hud.kuronami_quest_tree.held": "보유 %s",
   "commands.kuronami_quest_tree.validate.summary": "진행 데이터에 오류 %s개, 경고 %s개",
+  "commands.kuronami_quest_tree.validate.group": "%s: 오류 %s개, 경고 %s개",
+  "commands.kuronami_quest_tree.validate.report": "전체 보고서: %s",
   "commands.kuronami_quest_tree.validate.none": "진행 데이터에 문제가 없습니다",
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...외 %s개 (로그 참조)",

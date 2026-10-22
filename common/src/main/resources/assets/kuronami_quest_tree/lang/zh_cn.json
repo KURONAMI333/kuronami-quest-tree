@@ -110,6 +110,8 @@
   "screen.kuronami_quest_tree.unlock_path": "解锁%s（%s）",
   "hud.kuronami_quest_tree.held": "已持有%s",
   "commands.kuronami_quest_tree.validate.summary": "进度数据中有%s个错误、%s个警告",
+  "commands.kuronami_quest_tree.validate.group": "%s：%s 个错误，%s 个警告",
+  "commands.kuronami_quest_tree.validate.report": "完整报告：%s",
   "commands.kuronami_quest_tree.validate.none": "进度数据中未发现问题",
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "……另有%s项（见日志）",

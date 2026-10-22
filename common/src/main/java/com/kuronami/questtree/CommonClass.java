@@ -57,8 +57,12 @@ public final class CommonClass {
         EditorService.onServerStopped();
     }
 
-    /** End of a server tick: publish at most one editor rebuild for the edits made during the tick. */
+    /**
+     * End of a server tick: publish at most one editor rebuild for the edits made during the tick, and run the deeper
+     * validation once the data pack reload (and the tag binding that follows it) has finished.
+     */
     public static void onServerTick(MinecraftServer server) {
+        ProgressData.runPendingAchievability(server);
         EditorService.onServerTick(server);
     }
 

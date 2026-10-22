@@ -25,7 +25,7 @@ Commands a pack author uses most:
 - `/quest_tree import ftbquests [namespace]` and `/quest_tree import puffish [namespace]` — write the converted book into the world's data packs and reload.
 - `/quest_tree edit` — turn the in-game editor on or off for yourself.
 - `/quest_tree migrate ftbquests [namespace] dry_run` then `apply` — copy existing player progress into the team records. The same pair exists for Pufferfish's Skills.
-- `/quest_tree validate` — list problems found by the last reload.
+- `/quest_tree validate` — list errors and warnings, including quests this pack cannot complete, grouped by chapter.
 
 The original FTB Quests and Pufferfish's Skills files are only read. The import writes a separate data pack, and migration keeps a backup of the progress file before it changes anything.
 

@@ -110,6 +110,8 @@
   "screen.kuronami_quest_tree.unlock_path": "Desbloquear %s (%s)",
   "hud.kuronami_quest_tree.held": "Tienes %s",
   "commands.kuronami_quest_tree.validate.summary": "%s errores, %s advertencias en los datos de progresión",
+  "commands.kuronami_quest_tree.validate.group": "%s: %s errores, %s advertencias",
+  "commands.kuronami_quest_tree.validate.report": "Informe completo: %s",
   "commands.kuronami_quest_tree.validate.none": "No se encontraron problemas en los datos de progresión",
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...y %s más (consulta el registro)",
