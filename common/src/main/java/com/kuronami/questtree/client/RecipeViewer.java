@@ -17,6 +17,11 @@ public interface RecipeViewer {
 
     void showUses(ItemStack stack);
 
+    /** The uses of {@code stack} in the quest category only; viewers without one fall back to all uses. */
+    default void showQuestUses(ItemStack stack) {
+        showUses(stack);
+    }
+
     /** Whether the viewer's own search field is being typed in. */
     boolean typing();
 

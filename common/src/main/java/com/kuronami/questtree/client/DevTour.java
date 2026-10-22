@@ -486,7 +486,7 @@ final class DevTour {
             Minecraft.getInstance().setScreen(null);
             RecipeViewer v = RecipeViewer.Holder.get();
             if (v != null) {
-                v.showUses(new ItemStack(Items.DIAMOND));
+                v.showQuestUses(new ItemStack(Items.DIAMOND));
             } else {
                 Constants.LOG.warn("Dev tour: no recipe viewer for the quest category photo");
             }

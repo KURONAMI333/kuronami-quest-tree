@@ -64,6 +64,20 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
 
             @Override
+            public void showQuestUses(ItemStack stack) {
+                if (stack.isEmpty()) {
+                    return;
+                }
+                var focus = runtime.getJeiHelpers().getFocusFactory()
+                        .createFocus(RecipeIngredientRole.INPUT, VanillaTypes.ITEM_STACK, stack.copyWithCount(1));
+                var manager = runtime.getRecipeManager();
+                var category = manager.getRecipeCategory(QuestViewerJeiCategory.TYPE);
+                List<QuestViewerRecipe> recipes = manager.createRecipeLookup(QuestViewerJeiCategory.TYPE)
+                        .limitFocus(List.of(focus)).get().toList();
+                runtime.getRecipesGui().showRecipes(category, recipes, List.of(focus));
+            }
+
+            @Override
             public boolean typing() {
                 return runtime.getIngredientListOverlay().hasKeyboardFocus();
             }
