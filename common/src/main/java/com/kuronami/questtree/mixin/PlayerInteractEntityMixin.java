@@ -24,13 +24,15 @@ public abstract class PlayerInteractEntityMixin {
     @Inject(method = "interactOn", at = @At("HEAD"), cancellable = true)
     private void questTree$beforeInteractOn(Entity entity, InteractionHand hand,
                                             CallbackInfoReturnable<InteractionResult> cir) {
+        // a quest giver answers first: a held item that a "use" rule refuses must not take the book away from it
+        // (2026-10-22 review, L4)
+        if ((Object) this instanceof ServerPlayer sp && GiverService.onInteract(sp, entity)) {
+            cir.setReturnValue(InteractionResult.SUCCESS);
+            return;
+        }
         if ((Object) this instanceof ServerPlayer sp
                 && Restrictions.blockedItem(sp, sp.getItemInHand(hand), "use")) {
             cir.setReturnValue(InteractionResult.FAIL);
-            return;
-        }
-        if ((Object) this instanceof ServerPlayer sp && GiverService.onInteract(sp, entity)) {
-            cir.setReturnValue(InteractionResult.SUCCESS);
         }
     }
 

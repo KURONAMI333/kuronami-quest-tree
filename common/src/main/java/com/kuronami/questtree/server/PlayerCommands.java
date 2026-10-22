@@ -102,12 +102,12 @@ final class PlayerCommands {
                 .then(Commands.literal("block").requires(s -> s.hasPermission(2))
                         .then(Commands.literal("task")
                                 .then(Commands.argument("players", EntityArgument.players())
-                                        .then(Commands.argument("node", StringArgumentType.word()).suggests(NODES)
+                                        .then(Commands.argument("node", ResourceLocationArgument.id()).suggests(NODES)
                                                 .executes(c -> giveBlock(c, true)))))
                         .then(Commands.literal("barrier")
                                 .then(Commands.argument("players", EntityArgument.players())
                                         .then(Commands.literal("node")
-                                                .then(Commands.argument("node", StringArgumentType.word()).suggests(NODES)
+                                                .then(Commands.argument("node", ResourceLocationArgument.id()).suggests(NODES)
                                                         .executes(c -> giveBlock(c, false))))
                                         .then(Commands.literal("stage")
                                                 .then(Commands.argument("stage", StringArgumentType.word())
@@ -148,6 +148,10 @@ final class PlayerCommands {
 
     private static String id(CommandContext<CommandSourceStack> c) {
         return ResourceLocationArgument.getId(c, "id").toString();
+    }
+
+    private static String id(CommandContext<CommandSourceStack> c, String name) {
+        return ResourceLocationArgument.getId(c, name).toString();
     }
 
     private static ProgressModel.Chapter chapter(CommandContext<CommandSourceStack> c) {
@@ -302,15 +306,15 @@ final class PlayerCommands {
 
     private static int giveBlock(CommandContext<CommandSourceStack> c, boolean task) throws CommandSyntaxException {
         Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
-        String key = StringArgumentType.getString(c, task ? "node" : c.getNodes().stream()
-                .anyMatch(n -> "node".equals(n.getNode().getName())) ? "node" : "stage");
-        if (task && !ProgressService.rules().model().nodes.containsKey(key)) {
-            c.getSource().sendFailure(Component.literal("Unknown quest " + key));
+        boolean stage = !task && c.getNodes().stream().anyMatch(n -> "stage".equals(n.getNode().getName()));
+        String key = stage ? StringArgumentType.getString(c, "stage") : id(c, "node");
+        if (!stage && !ProgressService.rules().model().nodes.containsKey(key)) {
+            // a chapter id is not a node: the gate asks whether the quest itself was completed
+            c.getSource().sendFailure(Component.translatable("commands.kuronami_quest_tree.giver.unknown", key));
             return 0;
         }
         var stack = task ? com.kuronami.questtree.block.ModBlocks.taskItem(key)
-                : com.kuronami.questtree.block.ModBlocks.barrierItem(
-                        c.getNodes().stream().anyMatch(n -> "stage".equals(n.getNode().getName())) ? "stage" : "node", key);
+                : com.kuronami.questtree.block.ModBlocks.barrierItem(stage ? "stage" : "node", key);
         for (ServerPlayer p : players) {
             var copy = stack.copy();
             if (!p.getInventory().add(copy)) {

@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "已将 %s 链接到 %s",
   "commands.kuronami_quest_tree.giver.cleared": "已清除 %s 的任务链接",
   "commands.kuronami_quest_tree.giver.none": "%s 没有任务链接",
-  "commands.kuronami_quest_tree.giver.player_only": "只有玩家可以更改任务发放者"
+  "commands.kuronami_quest_tree.giver.player_only": "只有玩家可以更改任务发放者",
+  "commands.kuronami_quest_tree.giver.list.header": "任务给予者: %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "没有已链接的任务给予者",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "已移除 %s 的任务给予者链接",
+  "commands.kuronami_quest_tree.giver.uuid.none": "%s 没有任务给予者链接",
+  "message.kuronami_quest_tree.giver.missing": "此任务给予者指向 %s，但它已不在书中"
 }

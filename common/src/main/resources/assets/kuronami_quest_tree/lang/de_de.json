@@ -506,5 +506,11 @@
   "commands.kuronami_quest_tree.giver.set": "%s wurde mit %s verknüpft",
   "commands.kuronami_quest_tree.giver.cleared": "Quest-Verknüpfung von %s entfernt",
   "commands.kuronami_quest_tree.giver.none": "%s hat keine Quest-Verknüpfung",
-  "commands.kuronami_quest_tree.giver.player_only": "Nur ein Spieler kann einen Questgeber ändern"
+  "commands.kuronami_quest_tree.giver.player_only": "Nur ein Spieler kann einen Questgeber ändern",
+  "commands.kuronami_quest_tree.giver.list.header": "Questgeber: %s",
+  "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
+  "commands.kuronami_quest_tree.giver.list.empty": "Kein Questgeber ist verknüpft",
+  "commands.kuronami_quest_tree.giver.uuid.cleared": "Questgeber-Verknüpfung für %s entfernt",
+  "commands.kuronami_quest_tree.giver.uuid.none": "Keine Questgeber-Verknüpfung für %s",
+  "message.kuronami_quest_tree.giver.missing": "Dieser Questgeber verweist auf %s, das nicht mehr im Buch ist"
 }

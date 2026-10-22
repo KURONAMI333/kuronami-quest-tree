@@ -914,4 +914,44 @@ class ProgressValidatorTest {
         assertEquals(0, errors(r));
         assertTrue(says(r, "does not exist"));
     }
+
+    /** A restriction is not a node, so its targets and conditions are checked but only warn (2026-10-22 review, M1). */
+    @Test
+    void restrictionTargetsAndConditionsAreCheckedWithoutDroppingNodes() {
+        ProgressValidator.Registry registry = new ProgressValidator.Registry() {
+            @Override
+            public boolean known(String kind, String id) {
+                return !id.contains("notreal");
+            }
+
+            @Override
+            public ProgressValidator.TagStatus tag(String kind, String id) {
+                return id.contains("missing")
+                        ? ProgressValidator.TagStatus.MISSING : ProgressValidator.TagStatus.OK;
+            }
+        };
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "restrictions": [
+                  {"id": "r", "items": ["minecraft:notreal"], "blocks": ["minecraft:notreal_block"],
+                   "item_tags": ["missing_tag"], "block_tags": ["missing_block_tag"],
+                   "conditions": [{"type": "stage"}]}]}
+                """, registry);
+        assertEquals(0, errors(r), r.problems.toString());
+        assertTrue(r.droppedNodes.isEmpty());
+        assertTrue(says(r, "item \"minecraft:notreal\" does not exist"));
+        assertTrue(says(r, "block \"minecraft:notreal_block\" does not exist"));
+        assertTrue(says(r, "tag \"#missing_tag\" does not exist in this pack"));
+        assertTrue(says(r, "tag \"#missing_block_tag\" does not exist in this pack"), r.problems.toString());
+        assertTrue(says(r, "stage condition has no stage"));
+    }
+
+    @Test
+    void aWellFormedRestrictionHasNoProblems() {
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "restrictions": [
+                  {"id": "r", "items": ["minecraft:stone"], "item_tags": ["minecraft:logs"],
+                   "conditions": [{"type": "stage", "stage": "chapter_one"}]}]}
+                """);
+        assertEquals(List.of(), r.problems);
+    }
 }

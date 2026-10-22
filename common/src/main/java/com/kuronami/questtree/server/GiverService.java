@@ -4,6 +4,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.giver.GiverTarget;
 import com.kuronami.questtree.network.OpenPayload;
 import com.kuronami.questtree.platform.Services;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -31,9 +32,29 @@ public final class GiverService {
         return resolved != null && send(player, resolved);
     }
 
-    /** Opens an already-resolved link, for a block or an entity whose target is stored. */
+    /**
+     * Opens an already-resolved link, for a block or an entity whose target is stored. A stored link can outlive its
+     * quest when a pack removes or renames it, so the id is looked up again and the player is told why nothing opened
+     * (2026-10-22 review, L5).
+     */
     public static boolean openTarget(ServerPlayer player, GiverTarget target) {
-        return target != null && send(player, target);
+        if (target == null) {
+            return false;
+        }
+        GiverTarget resolved = GiverTarget.resolve(target.id(), ProgressService.rules().model());
+        if (resolved == null || resolved.chapter() != target.chapter()) {
+            if (player != null) {
+                player.displayClientMessage(Component.translatable(
+                        "message.kuronami_quest_tree.giver.missing", target.id()), true);
+            }
+            return false;
+        }
+        return send(player, target);
+    }
+
+    /** Whether this removal reason means the entity is gone for good, so its giver link must go too. */
+    public static boolean forgetsLink(Entity.RemovalReason reason) {
+        return reason == Entity.RemovalReason.KILLED || reason == Entity.RemovalReason.DISCARDED;
     }
 
     /** Opens the book where it normally opens (last-viewed chapter); used by a quest block with no link. */

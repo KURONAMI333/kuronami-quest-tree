@@ -76,6 +76,8 @@ public final class ProgressService {
     private static final Map<UUID, List<String>> PENDING = new HashMap<>();
     /** true = send this tick; false = only experience changed, sent at most every 10 ticks (mining gives XP per block). */
     private static final Map<UUID, Boolean> DIRTY = new HashMap<>();
+    /** Bumped when a player's progress changes, so the restriction check knows its cached equipment answer is stale. */
+    private static final Map<UUID, Long> REVISIONS = new HashMap<>();
     /** Observation tasks being watched right now: player → {@code <node key>#<task index>} → consecutive ticks. */
     private static final Map<UUID, Map<String, Integer>> OBSERVED = new HashMap<>();
     /** Player progress already migrated for one loaded data model, so a save is not folded into its pool twice. */
@@ -100,6 +102,10 @@ public final class ProgressService {
     }
 
     public static PlayerProgress progress(ServerPlayer player) {
+        if (ServerPlayers.isFake(player)) {
+            // a machine stand-in gets no record at all; the caller may read an empty progress and write nothing
+            return new PlayerProgress();
+        }
         // build the rule index before any view is made, so personal-node keys are current for the first joiner
         // after a data reload (2026-10-21 review)
         rules();
@@ -141,6 +147,7 @@ public final class ProgressService {
                 continue;
             }
             DIRTY.put(id, true);
+            REVISIONS.merge(id, 1L, Long::sum);
             Rewards.refreshAttributes(online, progress(online));
         }
         for (UUID id : ids) {
@@ -155,6 +162,9 @@ public final class ProgressService {
 
     /** Join or data reload: re-check everything and send the full state. */
     public static void onJoin(ServerPlayer player) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         // the client starts with no team: never skip the first view because a previous session had the same one
         TeamSync.forget(player.getUUID());
         PlayerProgress p = progress(player);
@@ -229,6 +239,9 @@ public final class ProgressService {
     }
 
     public static void onPlayerTick(ServerPlayer player) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         long t = player.server.getTickCount();
         // "observation" counts consecutive ticks of looking at the target, so it is read every tick and only written
         // every 10 ticks (writing every tick would send a progress packet every tick)
@@ -255,6 +268,9 @@ public final class ProgressService {
     }
 
     public static void onKill(ServerPlayer player, Entity killed) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         PlayerProgress p = progress(player);
         ProgressRules r = rules();
         // Only kill tasks can move. The old loop walked every node before finding that out, and rechecked even for a
@@ -285,6 +301,9 @@ public final class ProgressService {
 
     /** A block was broken (survival or creative). Counts "break" tasks, capped at the target. */
     public static void onBlockBreak(ServerPlayer player, BlockState state) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
         ProgressRules r = rules();
         List<TaskRef> refs = tasksOfType(r, "break");
         if (refs.isEmpty()) {
@@ -390,7 +409,7 @@ public final class ProgressService {
      */
     private static void interaction(ServerPlayer player, String kind, ItemStack stack, BlockState state,
                                     Entity entity, Entity other, int amount, String recipe) {
-        if (amount <= 0) {
+        if (amount <= 0 || ServerPlayers.isFake(player)) {
             return;
         }
         ProgressRules r = rules();
@@ -1292,14 +1311,21 @@ public final class ProgressService {
     static void markDirty(ServerPlayer player) {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             DIRTY.put(member.getUUID(), true);
+            REVISIONS.merge(member.getUUID(), 1L, Long::sum);
             BARRIERS.clear(member.getUUID());
         }
+    }
+
+    /** How many times this player's progress changed, for the restriction check's equipment cache. */
+    static long revision(UUID player) {
+        return REVISIONS.getOrDefault(player, 0L);
     }
 
     /** Experience is shared too: every member is marked, but only for the 10-tick (non-urgent) send. */
     static void markExperienceDirty(ServerPlayer player) {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             DIRTY.putIfAbsent(member.getUUID(), false);
+            REVISIONS.merge(member.getUUID(), 1L, Long::sum);
         }
     }
 
@@ -1337,6 +1363,7 @@ public final class ProgressService {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
+        REVISIONS.remove(player.getUUID());
         BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
@@ -1348,6 +1375,7 @@ public final class ProgressService {
         SkillExperience.clearState();
         PENDING.clear();
         DIRTY.clear();
+        REVISIONS.clear();
         OBSERVED.clear();
         MIGRATED.clear();
         TeamSync.clear();

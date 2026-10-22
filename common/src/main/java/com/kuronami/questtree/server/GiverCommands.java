@@ -4,13 +4,14 @@ import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.giver.GiverTarget;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.UuidArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -22,15 +23,19 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
- * {@code /quest_tree giver set <quest|chapter>} and {@code /quest_tree giver clear}: links the entity (or quest block)
+ * {@code /quest_tree giver set <quest|chapter>}, {@code list} and {@code clear}: links the entity (or quest block)
  * the player is looking at to a quest or chapter, so a right click on it opens the book there (2026-10-22, G3).
  * <pre>
  * /quest_tree giver set aa_pack:basics/start
  * /quest_tree giver set aa_pack:basics
+ * /quest_tree giver list
  * /quest_tree giver clear
+ * /quest_tree giver clear <uuid>
  * </pre>
  * An entity link is saved by UUID in {@link GiverStore}; a block keeps its target in the block entity. Both need
  * permission level 2, and the source must be a player because the target is what that player is looking at.
@@ -52,9 +57,12 @@ final class GiverCommands {
                         src.hasPermission(com.kuronami.questtree.giver.GiverPolicy.PERMISSION),
                         src.getPlayer() != null))
                 .then(Commands.literal("set")
-                        .then(Commands.argument("target", StringArgumentType.word()).suggests(TARGETS)
+                        .then(Commands.argument("target", ResourceLocationArgument.id()).suggests(TARGETS)
                                 .executes(GiverCommands::set)))
-                .then(Commands.literal("clear").executes(GiverCommands::clear))
+                .then(Commands.literal("list").executes(GiverCommands::list))
+                .then(Commands.literal("clear")
+                        .executes(GiverCommands::clear)
+                        .then(Commands.argument("uuid", UuidArgument.uuid()).executes(GiverCommands::clearUuid)))
                 .build();
     }
 
@@ -65,7 +73,7 @@ final class GiverCommands {
             src.sendFailure(playerOnly());
             return 0;
         }
-        String raw = StringArgumentType.getString(c, "target");
+        String raw = ResourceLocationArgument.getId(c, "target").toString();
         GiverTarget target = GiverTarget.resolve(raw, ProgressService.rules().model());
         if (target == null) {
             src.sendFailure(Component.translatable("commands.kuronami_quest_tree.giver.unknown", raw));
@@ -90,6 +98,34 @@ final class GiverCommands {
         }
         src.sendFailure(Component.translatable("commands.kuronami_quest_tree.giver.no_target"));
         return 0;
+    }
+
+    private static int list(CommandContext<CommandSourceStack> c) {
+        CommandSourceStack src = c.getSource();
+        Map<UUID, GiverTarget> links = GiverStore.get(src.getServer()).links().all();
+        if (links.isEmpty()) {
+            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.giver.list.empty"), false);
+            return 0;
+        }
+        src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.giver.list.header",
+                links.size()), false);
+        for (Map.Entry<UUID, GiverTarget> e : links.entrySet()) {
+            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.giver.list.entry",
+                    e.getKey().toString(), e.getValue().encode()), false);
+        }
+        return links.size();
+    }
+
+    private static int clearUuid(CommandContext<CommandSourceStack> c) {
+        CommandSourceStack src = c.getSource();
+        UUID id = UuidArgument.getUuid(c, "uuid");
+        if (!GiverStore.get(src.getServer()).unlink(id)) {
+            src.sendFailure(Component.translatable("commands.kuronami_quest_tree.giver.uuid.none", id.toString()));
+            return 0;
+        }
+        src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.giver.uuid.cleared",
+                id.toString()), true);
+        return 1;
     }
 
     private static int clear(CommandContext<CommandSourceStack> c) {

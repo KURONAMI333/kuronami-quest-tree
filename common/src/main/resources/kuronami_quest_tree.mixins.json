@@ -9,6 +9,7 @@
         "AnimalBreedingMixin",
         "BlockItemPlaceMixin",
         "EnchantedItemCriterionMixin",
+        "EntityRemoveMixin",
         "EntityStartRidingMixin",
         "FishingTriggerMixin",
         "FurnaceResultSlotMixin",
