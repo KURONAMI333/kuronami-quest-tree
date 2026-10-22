@@ -22,6 +22,10 @@ public interface RecipeViewer {
         showUses(stack);
     }
 
+    /** Opens the crate category (one crate and its possible rewards); viewers without one do nothing. */
+    default void showCrates() {
+    }
+
     /** Whether the viewer's own search field is being typed in. */
     boolean typing();
 

@@ -92,6 +92,11 @@ abstract class EditorScreen extends Screen {
         statusError = false;
     }
 
+    /** Dev tour only ({@link DevTour}): scroll the form to its last row, so the lower rows are photographed. */
+    void tourScrollEnd() {
+        form.scrollToEnd();
+    }
+
     /** The working copy this screen writes; a refusal's snapshot is compared with it on the next leave attempt. */
     protected JsonObject content() {
         return null;
