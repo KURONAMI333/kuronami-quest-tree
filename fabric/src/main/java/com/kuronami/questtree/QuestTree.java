@@ -10,6 +10,7 @@ import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
+import com.kuronami.questtree.network.CuePayload;
 import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
@@ -86,6 +87,7 @@ public class QuestTree implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(OpenPayload.TYPE, OpenPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(TeamPayload.TYPE, TeamPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(CuePayload.TYPE, CuePayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorReplyPayload.TYPE, EditorReplyPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(EditorStatePayload.TYPE, EditorStatePayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(ActionPayload.TYPE, ActionPayload.STREAM_CODEC);
