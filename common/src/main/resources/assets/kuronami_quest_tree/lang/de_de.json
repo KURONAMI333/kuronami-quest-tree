@@ -110,6 +110,8 @@
   "screen.kuronami_quest_tree.unlock_path": "%s freischalten (%s)",
   "hud.kuronami_quest_tree.held": "Im Inventar: %s",
   "commands.kuronami_quest_tree.validate.summary": "%s Fehler, %s Warnungen in den Fortschrittsdaten",
+  "commands.kuronami_quest_tree.validate.group": "%s: %s Fehler, %s Warnungen",
+  "commands.kuronami_quest_tree.validate.report": "Vollständiger Bericht: %s",
   "commands.kuronami_quest_tree.validate.none": "Keine Probleme in den Fortschrittsdaten gefunden",
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...und %s weitere (siehe Log)",

@@ -290,6 +290,106 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void contentTheLoadedWorldDoesNotHaveIsAWarningAndTheNodeStays() {
+        ProgressValidator.Registry registry = (kind, id) -> !id.endsWith("notreal");
+        ProgressValidator.Result r = validate(chapter("""
+                {"type": "biome", "biome": "minecraft:notreal"},
+                {"type": "structure", "structure": "minecraft:notreal"},
+                {"type": "dimension", "dimension": "minecraft:notreal"},
+                {"type": "advancement", "advancement": "minecraft:notreal"},
+                {"type": "craft", "item": "minecraft:stone", "recipe": "minecraft:notreal"}
+                """, ""), registry);
+        assertEquals(0, errors(r), r.problems.toString());
+        assertEquals(5, warnings(r), r.problems.toString());
+        assertTrue(says(r, "biome \"minecraft:notreal\" does not exist"));
+        assertTrue(says(r, "structure \"minecraft:notreal\" does not exist"));
+        assertTrue(says(r, "dimension \"minecraft:notreal\" does not exist"));
+        assertTrue(says(r, "advancement \"minecraft:notreal\" does not exist"));
+        assertTrue(says(r, "recipe \"minecraft:notreal\" does not exist"));
+        assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
+    void anAdvancementConditionAndRewardAreChecked() {
+        ProgressValidator.Registry registry = (kind, id) -> !id.endsWith("notreal");
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"item\", \"count\": 1, \"item\": \"minecraft:stone\", \"conditions\": ["
+                        + "{\"type\": \"advancement\", \"advancement\": \"minecraft:notreal\"}]}",
+                "{\"type\": \"advancement\", \"advancement\": \"minecraft:notreal\"}"), registry);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "advancement \"minecraft:notreal\" does not exist"));
+        assertEquals(2, warnings(r));
+    }
+
+    @Test
+    void aMissingOrEmptyTagIsAWarning() {
+        ProgressValidator.Registry registry = new ProgressValidator.Registry() {
+            @Override
+            public boolean known(String kind, String id) {
+                return true;
+            }
+
+            @Override
+            public ProgressValidator.TagStatus tag(String kind, String id) {
+                if (id.equals("minecraft:missing_tag")) {
+                    return ProgressValidator.TagStatus.MISSING;
+                }
+                if (id.equals("minecraft:empty_tag")) {
+                    return ProgressValidator.TagStatus.EMPTY;
+                }
+                return ProgressValidator.TagStatus.OK;
+            }
+        };
+        ProgressValidator.Result r = validate(chapter("""
+                {"type": "break", "count": 1, "block": "#missing_tag"},
+                {"type": "break", "count": 1, "block": "#empty_tag"},
+                {"type": "item", "count": 1, "item": {"tag": "missing_tag"}}
+                """, ""), registry);
+        assertEquals(0, errors(r), r.problems.toString());
+        assertEquals(3, warnings(r), r.problems.toString());
+        assertTrue(says(r, "tag \"#missing_tag\" does not exist in this pack"));
+        assertTrue(says(r, "tag \"#empty_tag\" is empty, so it never matches"));
+        assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
+    void observationTargetsAreCheckedIncludingBlockStatesAndTags() {
+        ProgressValidator.Registry registry = new ProgressValidator.Registry() {
+            @Override
+            public boolean known(String kind, String id) {
+                return !id.endsWith("notreal");
+            }
+
+            @Override
+            public ProgressValidator.TagStatus tag(String kind, String id) {
+                return id.endsWith("missing_tag")
+                        ? ProgressValidator.TagStatus.MISSING : ProgressValidator.TagStatus.OK;
+            }
+        };
+        ProgressValidator.Result r = validate(chapter("""
+                {"type": "observation", "observe_type": "block_state", "target": "minecraft:notreal[lit=true]"},
+                {"type": "observation", "observe_type": "block_tag", "target": "missing_tag"},
+                {"type": "observation", "observe_type": "entity_type_tag", "target": "#missing_tag"}
+                """, ""), registry);
+        assertEquals(0, errors(r), r.problems.toString());
+        assertEquals(3, warnings(r), r.problems.toString());
+        assertTrue(says(r, "block \"minecraft:notreal\" does not exist"));
+        assertTrue(says(r, "tag \"#missing_tag\" does not exist in this pack"));
+        assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
+    void problemsAreGroupedByChapterOrTable() {
+        assertEquals("chapters.basics",
+                ProgressValidator.chapterOfPath("chapters.basics.nodes.a.tasks[0].item"));
+        assertEquals("chapters.dimensions",
+                ProgressValidator.chapterOfPath("chapters.dimensions.points.exchange"));
+        assertEquals("reward_tables", ProgressValidator.chapterOfPath("reward_tables.t:loot.rolls[0]"));
+        assertEquals("settings", ProgressValidator.chapterOfPath("settings.emergency.items[0]"));
+        assertEquals("progression", ProgressValidator.chapterOfPath(""));
+    }
+
+    @Test
     void anUnknownRequireIsAnError() {
         String json = """
                 {"chapters": {"t:basics": {"nodes": {

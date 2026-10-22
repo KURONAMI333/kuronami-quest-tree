@@ -18,7 +18,7 @@ Most commands need permission level 2. `migrate` needs level 4 (or the server co
 | `/quest_tree import ftbquests [namespace]` | Convert `config/ftbquests/quests` into the world data pack `quest_tree_import` and reload |
 | `/quest_tree import puffish [namespace]` | Convert every Pufferfish's Skills category found in data packs and `config/puffish_skills` |
 | `/quest_tree status` | Number of loaded chapters |
-| `/quest_tree validate` | Problems found by the last data pack reload |
+| `/quest_tree validate` | Errors, warnings and content this pack cannot complete, grouped by chapter |
 | `/quest_tree reset <players> [chapter or node]` | Forget progress (everything, one chapter, or one node) |
 | `/quest_tree complete <players> <node>` | Finish a quest's tasks; rewards stay claimable |
 | `/quest_tree respec <players> <chapter>` | Give back every point spent in a skill chapter |

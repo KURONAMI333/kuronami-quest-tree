@@ -55,14 +55,23 @@ public final class ProgressValidator {
         }
     }
 
+    /** Whether a tag is defined in this pack ({@code OK}), defined but empty, or not defined at all. */
+    public enum TagStatus {
+        OK, EMPTY, MISSING
+    }
+
     /**
      * Whether an id exists in the running game. Kinds with no cheap check return true (unknown, so never a false
-     * WARNING); the game-side implementation lives in {@code GameRegistry}. Only plain ids are ever asked about: a
-     * tag ({@code #minecraft:logs}) and a dynamic registry (biome, structure, dimension, stat) cannot be answered
-     * while the data is being read.
+     * WARNING); the game-side implementation lives in {@code GameRegistry}. Plain ids and tags ({@code #minecraft:logs})
+     * are both asked about; the {@link #tag} default keeps a test that only cares about ids free of tag lookups.
      */
     public interface Registry {
         boolean known(String kind, String id);
+
+        /** Whether a tag exists and has members; the default says "assume yes", so tests only see id checks. */
+        default TagStatus tag(String kind, String id) {
+            return TagStatus.OK;
+        }
 
         /** Whether an economy mod registered with FTB Library; the game side answers this, tests keep the default. */
         default boolean economyAvailable() {
@@ -74,7 +83,17 @@ public final class ProgressValidator {
             return true;
         }
 
-        Registry NONE = (kind, id) -> true;
+        Registry NONE = new Registry() {
+            @Override
+            public boolean known(String kind, String id) {
+                return true;
+            }
+
+            @Override
+            public TagStatus tag(String kind, String id) {
+                return TagStatus.OK;
+            }
+        };
     }
 
     /** A parsed file kept as text, so problems can point at a line: {@code data/ns/progression/chapters/basics.json}. */
@@ -789,9 +808,18 @@ public final class ProgressValidator {
                 }
                 id(out, ref, path + ".entity", "entity", str(t, "entity"), registry);
             }
-            case "advancement" -> required(out, ref, path, t, "advancement");
-            case "structure" -> required(out, ref, path, t, "structure");
-            case "biome" -> required(out, ref, path, t, "biome");
+            case "advancement" -> {
+                required(out, ref, path, t, "advancement");
+                id(out, ref, path + ".advancement", "advancement", str(t, "advancement"), registry);
+            }
+            case "structure" -> {
+                required(out, ref, path, t, "structure");
+                id(out, ref, path + ".structure", "structure", str(t, "structure"), registry);
+            }
+            case "biome" -> {
+                required(out, ref, path, t, "biome");
+                id(out, ref, path + ".biome", "biome", str(t, "biome"), registry);
+            }
             case "dimension" -> {
                 required(out, ref, path, t, "dimension");
                 id(out, ref, path + ".dimension", "dimension", str(t, "dimension"), registry);
@@ -1003,6 +1031,8 @@ public final class ProgressValidator {
                 case "advancement" -> {
                     if (str(o, "advancement").isEmpty()) {
                         problem(out, Severity.ERROR, ref, at + ".advancement", "advancement condition has no advancement");
+                    } else {
+                        id(out, ref, at + ".advancement", "advancement", str(o, "advancement"), registry);
                     }
                 }
                 case "party_size" -> whole(out, ref, at, o, "min");
@@ -1046,15 +1076,21 @@ public final class ProgressValidator {
             return;
         }
         switch (kind) {
-            case "block" -> {
-                if (!target.startsWith("#")) {
-                    id(out, ref, path + ".target", "block", target, registry);
-                }
-            }
+            case "block" -> id(out, ref, path + ".target", "block", target, registry);
+            case "block_tag" -> id(out, ref, path + ".target", "block",
+                    target.startsWith("#") ? target : "#" + target, registry);
             case "entity_type" -> id(out, ref, path + ".target", "entity", target, registry);
-            // "block_tag" and "entity_type_tag" hold a tag (with or without "#"), and what is in a tag cannot be seen
-            // while the data is being read. "block_state" is "minecraft:furnace[lit=true]", which only the command
-            // parser reads. None of them is checked here, so none of them gets a false warning
+            case "entity_type_tag" -> id(out, ref, path + ".target", "entity",
+                    target.startsWith("#") ? target : "#" + target, registry);
+            case "block_state" -> {
+                // "minecraft:furnace[lit=true]": the state is parsed by the command parser, the block id is not
+                String block = target;
+                int bracket = block.indexOf('[');
+                if (bracket >= 0) {
+                    block = block.substring(0, bracket);
+                }
+                id(out, ref, path + ".target", "block", block, registry);
+            }
             default -> {
             }
         }
@@ -1099,7 +1135,10 @@ public final class ProgressValidator {
                 // read with getAsString inside Rewards.give, which catches it and loses the reward, so it only warns
                 textShape(out, ref, path, rw, "mode", Severity.WARNING);
             }
-            case "advancement" -> needs(out, ref, path, rw, "advancement");
+            case "advancement" -> {
+                needs(out, ref, path, rw, "advancement");
+                id(out, ref, path + ".advancement", "advancement", str(rw, "advancement"), registry);
+            }
             case "stage" -> needs(out, ref, path, rw, "stage");
             case "attribute" -> {
                 needs(out, ref, path, rw, "attribute");
@@ -1579,8 +1618,21 @@ public final class ProgressValidator {
             return;
         }
         if (spec.startsWith("#")) {
-            // a tag: every tag reader parses the name with ResourceLocation.tryParse (namespace defaults), and what is
-            // inside the tag cannot be checked here (see GameRegistry)
+            // a tag: every tag reader parses the name with ResourceLocation.tryParse, so a missing namespace is
+            // "minecraft". Whether the tag exists is only known after the tags are bound (GameRegistry attaches the
+            // server for the post-start pass); until then the registry answers OK.
+            String tag = spec.substring(1);
+            if (!tag.contains(":")) {
+                tag = "minecraft:" + tag;
+            }
+            switch (registry.tag(kind, tag)) {
+                case MISSING -> problem(out, Severity.WARNING, ref, path,
+                        "tag " + quote(spec) + " does not exist in this pack");
+                case EMPTY -> problem(out, Severity.WARNING, ref, path,
+                        "tag " + quote(spec) + " is empty, so it never matches");
+                case OK -> {
+                }
+            }
             return;
         }
         String full = spec;
@@ -1642,6 +1694,31 @@ public final class ProgressValidator {
     private static String chapterOf(String key) {
         int slash = key.lastIndexOf('/');
         return slash < 0 ? key : key.substring(0, slash);
+    }
+
+    /**
+     * The group a problem belongs to for the load log, {@code /quest_tree validate} and the report: a chapter
+     * ({@code chapters.<name>}), the reward tables, pack settings, or everything else.
+     */
+    public static String chapterOfPath(String path) {
+        if (path == null || path.isEmpty()) {
+            return "progression";
+        }
+        if (path.startsWith("chapters.")) {
+            String rest = path.substring("chapters.".length());
+            int node = rest.indexOf(".nodes.");
+            if (node < 0) {
+                node = rest.indexOf(".points");
+            }
+            return "chapters." + (node < 0 ? rest : rest.substring(0, node));
+        }
+        if (path.startsWith("reward_tables.")) {
+            return "reward_tables";
+        }
+        if (path.startsWith("settings")) {
+            return "settings";
+        }
+        return "progression";
     }
 
     private record ChapterRef(String file, Scan scan, String prefix) {

@@ -110,6 +110,8 @@
   "screen.kuronami_quest_tree.unlock_path": "Déverrouiller %s (%s)",
   "hud.kuronami_quest_tree.held": "Tenu : %s",
   "commands.kuronami_quest_tree.validate.summary": "%s erreurs, %s avertissements dans les données de progression",
+  "commands.kuronami_quest_tree.validate.group": "%s : %s erreurs, %s avertissements",
+  "commands.kuronami_quest_tree.validate.report": "Rapport complet : %s",
   "commands.kuronami_quest_tree.validate.none": "Aucun problème dans les données de progression",
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...et %s de plus (voir le journal)",

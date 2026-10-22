@@ -9,6 +9,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.platform.Services;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -87,8 +89,17 @@ public final class ProgressData {
         return o.has(key) && o.get(key).isJsonArray() ? o.getAsJsonArray(key) : new JsonArray();
     }
 
-    /** What the last rebuild found wrong (DATA_MODEL.md "検査"), for the log, {@code /quest_tree validate} and the join hint. */
+    /** What the last rebuild found wrong (DATA_MODEL.md "Validation"), for the log, {@code /quest_tree validate} and the join hint. */
     private static List<ProgressValidator.Problem> problems = List.of();
+    /**
+     * Existence findings from the post-start pass (unknown tags, biomes, structures, dimensions, advancements and
+     * recipes): they need the levels and bound tags, so they are found after the data is already published. They are
+     * always WARNINGs and never remove a node.
+     */
+    private static List<ProgressValidator.Problem> achievableProblems = List.of();
+    private static boolean achievablePending;
+    /** Where the last report was written, for the command's "full report" line. */
+    private static Path lastReport;
     private static int errorCount;
     private static int warningCount;
     /** Problems found while reading files; filled during {@link #reload} and drained into {@link #packProblems}. */
@@ -287,6 +298,9 @@ public final class ProgressData {
                 Constants.LOG.warn("{}", p.format());
             }
         }
+        // the deeper pass needs the levels and bound tags; it runs on the next tick, after this reload has finished
+        achievableProblems = List.of();
+        achievablePending = true;
         if (built == null) {
             return false;
         }
@@ -315,6 +329,10 @@ public final class ProgressData {
         overlayRoot = null;
         base = new JsonObject();
         rewardRemap = Map.of();
+        achievableProblems = List.of();
+        achievablePending = false;
+        lastReport = null;
+        GameRegistry.INSTANCE.detach();
     }
 
     /** The reward moves of the last rebuild, cleared once the store has applied them. */
@@ -415,9 +433,14 @@ public final class ProgressData {
         }
     }
 
-    /** Problems the last reload found (DATA_MODEL.md "検査"), newest first is not needed: the order is the walk order. */
+    /** Problems the last reload found (DATA_MODEL.md "Validation"), newest first is not needed: the order is the walk order. */
     public static List<ProgressValidator.Problem> problems() {
-        return problems;
+        if (achievableProblems.isEmpty()) {
+            return problems;
+        }
+        List<ProgressValidator.Problem> all = new ArrayList<>(problems);
+        all.addAll(achievableProblems);
+        return List.copyOf(all);
     }
 
     public static int errorCount() {
@@ -425,7 +448,132 @@ public final class ProgressData {
     }
 
     public static int warningCount() {
-        return warningCount;
+        return warningCount + achievableProblems.size();
+    }
+
+    /** Where the last validation report was written, or null when there was none (no world, no problems, config off). */
+    public static Path lastReport() {
+        return lastReport;
+    }
+
+    /** Runs the post-start validation on the tick after a reload, once the levels and tags are ready. */
+    public static void runPendingAchievability(MinecraftServer server) {
+        if (achievablePending) {
+            refreshAchievability(server);
+        }
+    }
+
+    /**
+     * The post-start validation: asks the dynamic registries, the advancement and recipe managers, and the bound tags.
+     * It runs after the data was published, so it never drops a node; findings it did not already have become
+     * WARNINGs, and the grouped report goes to the log and (when enabled) the world folder.
+     */
+    public static void refreshAchievability(MinecraftServer server) {
+        achievablePending = false;
+        achievableProblems = List.of();
+        lastReport = null;
+        if (registry != GameRegistry.INSTANCE) {
+            // a test has replaced the registry; there is no game to ask
+            return;
+        }
+        GameRegistry.INSTANCE.attach(server);
+        ProgressValidator.Result result;
+        try {
+            result = ProgressValidator.validate(base, packSources, registry, packUnreadable);
+        } catch (RuntimeException ex) {
+            Constants.LOG.error("Could not check the progression data against the loaded world", ex);
+            return;
+        } finally {
+            GameRegistry.INSTANCE.detach();
+        }
+        Set<String> known = new java.util.HashSet<>();
+        for (ProgressValidator.Problem p : problems) {
+            known.add(problemKey(p));
+        }
+        List<ProgressValidator.Problem> added = new ArrayList<>();
+        for (ProgressValidator.Problem p : result.problems) {
+            // only WARNINGs: this pass must never change what the model contains
+            if (p.severity() == ProgressValidator.Severity.WARNING && known.add(problemKey(p))) {
+                added.add(p);
+            }
+        }
+        achievableProblems = List.copyOf(added);
+        if (!added.isEmpty()) {
+            logAchievability(added);
+        }
+        writeReport();
+    }
+
+    private static String problemKey(ProgressValidator.Problem p) {
+        return p.path() + "\u0000" + p.message();
+    }
+
+    /** A grouped line for each chapter instead of the whole list, which the report file carries. */
+    private static void logAchievability(List<ProgressValidator.Problem> added) {
+        Constants.LOG.warn("{} quests cannot be completed in this pack (run /quest_tree validate for the list)",
+                added.size());
+        for (Map.Entry<String, List<ProgressValidator.Problem>> e : groups(added).entrySet()) {
+            List<ProgressValidator.Problem> ps = e.getValue();
+            Constants.LOG.warn("{}: {} problem(s)", e.getKey(), ps.size());
+            for (int i = 0; i < Math.min(REPORT_LINES_PER_GROUP, ps.size()); i++) {
+                Constants.LOG.warn("  {}", ps.get(i).format());
+            }
+            if (ps.size() > REPORT_LINES_PER_GROUP) {
+                Constants.LOG.warn("  ...and {} more", ps.size() - REPORT_LINES_PER_GROUP);
+            }
+        }
+    }
+
+    private static final int REPORT_LINES_PER_GROUP = 5;
+
+    /** Problems grouped by chapter, in the order the command prints them (groups with errors first). */
+    public static Map<String, List<ProgressValidator.Problem>> groups(List<ProgressValidator.Problem> all) {
+        Map<String, List<ProgressValidator.Problem>> out = new LinkedHashMap<>();
+        for (ProgressValidator.Problem p : all) {
+            out.computeIfAbsent(ProgressValidator.chapterOfPath(p.path()), k -> new ArrayList<>()).add(p);
+        }
+        out.values().forEach(ps -> ps.sort(Comparator
+                .comparing(ProgressValidator.Problem::severity)
+                .thenComparing(ProgressValidator.Problem::file)
+                .thenComparing(ProgressValidator.Problem::path)));
+        List<String> keys = new ArrayList<>(out.keySet());
+        keys.sort(Comparator
+                .comparing((String k) -> out.get(k).get(0).severity() == ProgressValidator.Severity.ERROR ? 0 : 1)
+                .thenComparing(k -> k));
+        Map<String, List<ProgressValidator.Problem>> sorted = new LinkedHashMap<>();
+        keys.forEach(k -> sorted.put(k, out.get(k)));
+        return sorted;
+    }
+
+    /** Writes the grouped report into the world folder; a server owner reads what the chat shortened. */
+    private static void writeReport() {
+        if (overlayRoot == null || !com.kuronami.questtree.config.ServerConfig.validationReport()) {
+            return;
+        }
+        List<ProgressValidator.Problem> all = problems();
+        if (all.isEmpty()) {
+            return;
+        }
+        StringBuilder b = new StringBuilder();
+        b.append("Kuronami's Quest Tree validation\n");
+        b.append(errorCount()).append(" errors, ").append(warningCount()).append(" warnings\n\n");
+        for (Map.Entry<String, List<ProgressValidator.Problem>> e : groups(all).entrySet()) {
+            List<ProgressValidator.Problem> ps = e.getValue();
+            long errors = ps.stream().filter(p -> p.severity() == ProgressValidator.Severity.ERROR).count();
+            b.append('[').append(e.getKey()).append("] ").append(errors).append(" errors, ")
+                    .append(ps.size() - errors).append(" warnings\n");
+            for (ProgressValidator.Problem p : ps) {
+                b.append("  ").append(p.format()).append('\n');
+            }
+            b.append('\n');
+        }
+        Path file = overlayRoot.resolve("quest_tree_validation.txt");
+        try {
+            java.nio.file.Files.writeString(file, b.toString(), StandardCharsets.UTF_8);
+            lastReport = file;
+        } catch (IOException ex) {
+            Constants.LOG.warn("Could not write the validation report to {}", file, ex);
+        }
     }
 
     /** Patch files carry {"target": "<ns>:<chapter>", ...fields}; nodes merge by id, other fields replace. */

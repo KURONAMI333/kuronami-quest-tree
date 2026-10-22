@@ -22,6 +22,8 @@ public final class ServerConfig {
     private static Boolean dropBook;
     /** The highest permission level a reward's command may run with; a data pack cannot raise it (2026-10-22). */
     private static Integer rewardCommandPermission;
+    /** Write the grouped validation report into the world folder at load (2026-10-22). */
+    private static Boolean validationReport;
 
     private ServerConfig() {
     }
@@ -46,13 +48,23 @@ public final class ServerConfig {
         return rewardCommandPermission;
     }
 
+    /**
+     * Whether loading the pack writes {@code quest_tree_validation.txt} into the world folder. Default on: the chat
+     * and log only carry the first lines of each chapter, and a pack author needs the whole list.
+     */
+    public static boolean validationReport() {
+        load();
+        return validationReport;
+    }
+
     private static void load() {
-        if (giveBook != null && dropBook != null && rewardCommandPermission != null) {
+        if (giveBook != null && dropBook != null && rewardCommandPermission != null && validationReport != null) {
             return;
         }
         Path file = Services.PLATFORM.getGameDir().resolve("config").resolve("kuronami_quest_tree-server.json");
         boolean give = true;
         boolean drop = false;
+        boolean report = true;
         int rewardPermission = com.kuronami.questtree.progress.RewardPermission.DEFAULT;
         try {
             if (Files.isRegularFile(file)) {
@@ -69,6 +81,9 @@ public final class ServerConfig {
                                 o.get("reward_command_permission_level").getAsInt(),
                                 com.kuronami.questtree.progress.RewardPermission.MAX);
                     }
+                    if (o.has("validation_report")) {
+                        report = o.get("validation_report").getAsBoolean();
+                    }
                 }
             } else {
                 // write the defaults so every option is discoverable
@@ -76,6 +91,7 @@ public final class ServerConfig {
                 o.addProperty("give_book_on_first_join", give);
                 o.addProperty("drop_book_on_death", drop);
                 o.addProperty("reward_command_permission_level", rewardPermission);
+                o.addProperty("validation_report", report);
                 Files.createDirectories(file.getParent());
                 Files.writeString(file, GSON.toJson(o));
             }
@@ -85,6 +101,7 @@ public final class ServerConfig {
         giveBook = give;
         dropBook = drop;
         rewardCommandPermission = rewardPermission;
+        validationReport = report;
     }
 
     /** Data packs or a new world are not a reason to re-read; only the next game start is. */
@@ -92,5 +109,6 @@ public final class ServerConfig {
         giveBook = null;
         dropBook = null;
         rewardCommandPermission = null;
+        validationReport = null;
     }
 }

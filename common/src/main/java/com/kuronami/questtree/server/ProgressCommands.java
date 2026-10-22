@@ -26,7 +26,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,12 +76,18 @@ public final class ProgressCommands {
         PlayerCommands.register(dispatcher);
     }
 
+    /** How many of a chapter's problems {@code /quest_tree validate} prints before pointing at the report. */
+    private static final int VALIDATE_LINES_PER_GROUP = 5;
+
     /**
-     * Reports what the last data pack reload found wrong (ERRORs drop the node; see DATA_MODEL.md "検査"). Shows the
-     * count and the first 20 problems; the full list is in the log.
+     * Reports what the pack validation found wrong (ERRORs drop the node; see DATA_MODEL.md "Validation"). Runs the
+     * post-start pass first, so tags and the loaded world's registries are answered, then prints counts and the first
+     * few problems of each chapter. The full grouped list is in the log and in the world report.
      */
     private static int validate(CommandContext<CommandSourceStack> c) {
         CommandSourceStack src = c.getSource();
+        // the command is the on-demand way to see the deeper findings without waiting for the next tick
+        ProgressData.refreshAchievability(src.getServer());
         List<ProgressValidator.Problem> problems = new ArrayList<>(ProgressData.problems());
         int errors = ProgressData.errorCount();
         int warnings = ProgressData.warningCount();
@@ -91,17 +96,31 @@ public final class ProgressCommands {
             return 1;
         }
         src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.summary", errors, warnings), false);
-        // ERRORs first: they are the ones a pack author has to act on
-        problems.sort(Comparator.comparing(ProgressValidator.Problem::severity)
-                .thenComparing(ProgressValidator.Problem::file)
-                .thenComparing(ProgressValidator.Problem::path));
-        int shown = Math.min(20, problems.size());
-        for (int i = 0; i < shown; i++) {
-            String line = problems.get(i).format();
-            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.problem", line), false);
+        for (Map.Entry<String, List<ProgressValidator.Problem>> e : ProgressData.groups(problems).entrySet()) {
+            List<ProgressValidator.Problem> ps = e.getValue();
+            int groupErrors = 0;
+            for (ProgressValidator.Problem p : ps) {
+                if (p.severity() == ProgressValidator.Severity.ERROR) {
+                    groupErrors++;
+                }
+            }
+            int groupErrorsFinal = groupErrors;
+            int groupWarnings = ps.size() - groupErrors;
+            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.group",
+                    e.getKey(), groupErrorsFinal, groupWarnings), false);
+            int shown = Math.min(VALIDATE_LINES_PER_GROUP, ps.size());
+            for (int i = 0; i < shown; i++) {
+                String line = ps.get(i).format();
+                src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.problem", line), false);
+            }
+            if (ps.size() > shown) {
+                src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.more", ps.size() - shown), false);
+            }
         }
-        if (problems.size() > shown) {
-            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.more", problems.size() - shown), false);
+        var report = ProgressData.lastReport();
+        if (report != null) {
+            src.sendSuccess(() -> Component.translatable("commands.kuronami_quest_tree.validate.report",
+                    report.getFileName().toString()), false);
         }
         return Math.max(0, errors);
     }
