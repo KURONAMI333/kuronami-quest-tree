@@ -20,6 +20,7 @@ import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
+import com.kuronami.questtree.progress.ScreenCompletion;
 import com.kuronami.questtree.progress.TeamProgress;
 import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -1090,22 +1091,20 @@ public final class ProgressService {
 
     /**
      * A task screen changed the owner's progress (2026-10-22): write it through the owner's current team, complete any
-     * node the insertion finished, and send the change to everyone online in that team. The screen itself may be used
-     * by another member, or while the owner is offline, so the actor is the owner when present and any online member
-     * otherwise.
+     * node the insertion finished, and send the change to everyone online in that team. If the owner is offline only
+     * the save is marked dirty: completing with another member as the actor would pay the owner's rewards into that
+     * member's inventory, and {@link #onJoin} rechecks the owner at their next login anyway (2026-10-23 review).
      */
     public static void screenChanged(MinecraftServer server, UUID owner) {
         ProgressStore.get(server).setDirty();
-        PlayerProgress p = ProgressStore.get(server).view(server, owner);
         ServerPlayer actor = server.getPlayerList().getPlayer(owner);
-        if (actor == null) {
-            actor = TeamResolver.onlineMembers(server, owner).stream().findFirst().orElse(null);
+        if (!ScreenCompletion.shouldCompleteNow(actor != null)) {
+            return;
         }
-        if (actor != null) {
-            recheck(actor, p);
-            markDirty(actor);
-            flush(actor);
-        }
+        PlayerProgress p = ProgressStore.get(server).view(server, owner);
+        recheck(actor, p);
+        markDirty(actor);
+        flush(actor);
     }
 
     /**
