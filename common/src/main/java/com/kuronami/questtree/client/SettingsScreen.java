@@ -256,6 +256,22 @@ public final class SettingsScreen extends Screen {
                 ClientConfig.autoPin = !ClientConfig.autoPin;
             }
         });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.inventory_button");
+            }
+
+            @Override
+            public Component value() {
+                return onOff(ClientConfig.inventoryButton());
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.inventoryButton = !ClientConfig.inventoryButton;
+            }
+        });
     }
 
     /** A pack-defined Wiki / Guide address, opened through the vanilla "are you sure" card. */

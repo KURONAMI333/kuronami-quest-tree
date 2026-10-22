@@ -9,6 +9,7 @@ import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.item.QuestBlockItem;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.network.ActionPayload;
@@ -78,12 +79,14 @@ public class QuestTree {
             });
 
     public static final DeferredItem<BlockItem> QUEST_TASK_ITEM = ITEMS.register("quest_task_block", () -> {
-        BlockItem item = new BlockItem(QUEST_TASK_BLOCK.get(), new Item.Properties());
+        BlockItem item = new QuestBlockItem(QUEST_TASK_BLOCK.get(), new Item.Properties(),
+                "block.kuronami_quest_tree.quest_task_block.desc");
         ModBlocks.setTask(QUEST_TASK_BLOCK.get(), item);
         return item;
     });
     public static final DeferredItem<BlockItem> QUEST_BARRIER_ITEM = ITEMS.register("quest_barrier", () -> {
-        BlockItem item = new BlockItem(QUEST_BARRIER_BLOCK.get(), new Item.Properties());
+        BlockItem item = new QuestBlockItem(QUEST_BARRIER_BLOCK.get(), new Item.Properties(),
+                "block.kuronami_quest_tree.quest_barrier.desc");
         ModBlocks.setBarrier(QUEST_BARRIER_BLOCK.get(), item);
         return item;
     });

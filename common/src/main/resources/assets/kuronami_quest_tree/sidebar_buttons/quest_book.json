@@ -1,0 +1,7 @@
+{
+  "icon": "item:kuronami_quest_tree:quest_book",
+  "sort_index": 576,
+  "click": [
+    "static_method:com.kuronami.questtree.client.FtbSidebarButton:openQuestBook"
+  ]
+}

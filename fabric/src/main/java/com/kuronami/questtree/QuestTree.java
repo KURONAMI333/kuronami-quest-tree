@@ -8,6 +8,7 @@ import com.kuronami.questtree.block.QuestTaskBlock;
 import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.server.Restrictions;
+import com.kuronami.questtree.item.QuestBlockItem;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.CuePayload;
@@ -36,7 +37,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
@@ -58,10 +58,12 @@ public class QuestTree implements ModInitializer {
 
     public static final Item QUEST_TASK_ITEM = Registry.register(BuiltInRegistries.ITEM,
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_task_block"),
-            new BlockItem(QUEST_TASK_BLOCK, new Item.Properties()));
+            new QuestBlockItem(QUEST_TASK_BLOCK, new Item.Properties(),
+                    "block.kuronami_quest_tree.quest_task_block.desc"));
     public static final Item QUEST_BARRIER_ITEM = Registry.register(BuiltInRegistries.ITEM,
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_barrier"),
-            new BlockItem(QUEST_BARRIER_BLOCK, new Item.Properties()));
+            new QuestBlockItem(QUEST_BARRIER_BLOCK, new Item.Properties(),
+                    "block.kuronami_quest_tree.quest_barrier.desc"));
 
     @Override
     public void onInitialize() {
