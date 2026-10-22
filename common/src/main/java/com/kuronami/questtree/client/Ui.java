@@ -93,6 +93,14 @@ final class Ui {
     static int HUD_TASK = 0xFFFFFFFF;
     static int HUD_COUNT_DOT = 0xFF888888;
     static int HUD_QUEST = 0xFFC8C8C8;
+    /**
+     * The J tracker's frame (2026-10-22, after Jade's tooltip): Jade's dark theme is #131313 at 70% opacity, with a
+     * 1px border that runs from #383838 at the top to #242424 at the bottom. The tones are ours, the structure is
+     * Jade's (see {@link #frame}). Read from {@code gui/palette.json}, so a pack can restyle it.
+     */
+    static int HUD_TRACKER = 0xB3111214;
+    static int HUD_TRACKER_EDGE = 0xB3383838;
+    static int HUD_TRACKER_EDGE_BOTTOM = 0xB3242424;
     /** A toast's level line (yellow), and its title (white). */
     static int TOAST_LEVEL = 0xFFFFFF55;
     static int TOAST_TITLE = 0xFFFFFFFF;
@@ -201,6 +209,9 @@ final class Ui {
         HUD_BACK = color(o, "hud_back", HUD_BACK);
         HUD_TEXT = color(o, "hud_text", HUD_TEXT);
         HUD_MUTED = color(o, "hud_muted", HUD_MUTED);
+        HUD_TRACKER = color(o, "hud_tracker", HUD_TRACKER);
+        HUD_TRACKER_EDGE = color(o, "hud_tracker_edge", HUD_TRACKER_EDGE);
+        HUD_TRACKER_EDGE_BOTTOM = color(o, "hud_tracker_edge_bottom", HUD_TRACKER_EDGE_BOTTOM);
         TOAST_TRACK = color(o, "toast_track", TOAST_TRACK);
         if (ClientConfig.highContrast()) {
             // readability over the pack's palette: white text on a near-black ground, and a warmer selection
@@ -219,6 +230,9 @@ final class Ui {
             SELECTION = 0xFFFFFFFF;
             HUD_TEXT = 0xFFFFFFFF;
             HUD_MUTED = 0xFFE0E0E0;
+            HUD_TRACKER = 0xFA0B0C0E;
+            HUD_TRACKER_EDGE = 0x66FFFFFF;
+            HUD_TRACKER_EDGE_BOTTOM = 0x33FFFFFF;
         }
         ProgressScreen.paletteChanged();
     }
@@ -227,7 +241,7 @@ final class Ui {
     private static int[] defaults;
 
     private static int[] current() {
-        return new int[]{TEXT, MUTED, DIM, BRIGHT, GROUND, PANEL, PANEL_TRANSLUCENT, RAIL_CLOSED, FLOATING, ACCENT, BADGE, BADGE_TEXT, OVERLAY_1, OVERLAY_2, OVERLAY_3, HAIRLINE, DIVIDER, FOCUS, DISABLED, Tiles.GREEN, Tiles.GREEN_DARK, Tiles.GREEN_TEXT, Tiles.TILE_LOCKED, Tiles.INK, Tiles.WHITE, Tiles.GREEN_BRIGHT, Tiles.GREEN_SETTLED, Tiles.GREY, Tiles.BLUE, Tiles.BLUE_DARK, Tiles.GOLD, Tiles.RED, ProgressScreen.LINE_OPEN, ProgressScreen.LINE_CLOSED, ProgressScreen.LINE_CLOSED_ON, TEXT_ERROR, SCROLLBAR, SCROLLBAR_HOVER, MARK, SELECTION, OPTIONAL_OUTLINE, FLASH, MINIMAP_VIEW, MINIMAP_OPEN, LINE_OPEN_HOVER, HUD_BACK, HUD_TEXT, HUD_MUTED, TOAST_TRACK, GLASS_TINT, GLASS_CLEAR, GLASS_REGULAR, ProgressScreen.LINE_REQUIRES, ProgressScreen.LINE_UNLOCKS};
+        return new int[]{TEXT, MUTED, DIM, BRIGHT, GROUND, PANEL, PANEL_TRANSLUCENT, RAIL_CLOSED, FLOATING, ACCENT, BADGE, BADGE_TEXT, OVERLAY_1, OVERLAY_2, OVERLAY_3, HAIRLINE, DIVIDER, FOCUS, DISABLED, Tiles.GREEN, Tiles.GREEN_DARK, Tiles.GREEN_TEXT, Tiles.TILE_LOCKED, Tiles.INK, Tiles.WHITE, Tiles.GREEN_BRIGHT, Tiles.GREEN_SETTLED, Tiles.GREY, Tiles.BLUE, Tiles.BLUE_DARK, Tiles.GOLD, Tiles.RED, ProgressScreen.LINE_OPEN, ProgressScreen.LINE_CLOSED, ProgressScreen.LINE_CLOSED_ON, TEXT_ERROR, SCROLLBAR, SCROLLBAR_HOVER, MARK, SELECTION, OPTIONAL_OUTLINE, FLASH, MINIMAP_VIEW, MINIMAP_OPEN, LINE_OPEN_HOVER, HUD_BACK, HUD_TEXT, HUD_MUTED, HUD_TRACKER, HUD_TRACKER_EDGE, HUD_TRACKER_EDGE_BOTTOM, TOAST_TRACK, GLASS_TINT, GLASS_CLEAR, GLASS_REGULAR, ProgressScreen.LINE_REQUIRES, ProgressScreen.LINE_UNLOCKS};
     }
 
     private static void restoreDefaults() {
@@ -284,6 +298,9 @@ final class Ui {
         HUD_BACK = defaults[i++];
         HUD_TEXT = defaults[i++];
         HUD_MUTED = defaults[i++];
+        HUD_TRACKER = defaults[i++];
+        HUD_TRACKER_EDGE = defaults[i++];
+        HUD_TRACKER_EDGE_BOTTOM = defaults[i++];
         TOAST_TRACK = defaults[i++];
         GLASS_TINT = defaults[i++];
         GLASS_CLEAR = defaults[i++];
@@ -361,6 +378,26 @@ final class Ui {
         g.blit(EDGE, x, y + h - r, r, r, 0, e, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
         g.blit(EDGE, x + w - r, y + h - r, r, r, e, e, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
         g.setColor(1, 1, 1, 1);
+    }
+
+    /**
+     * A thin border around a fill, both rounded on the same mask (2026-10-22, the in-game tracker after Jade's
+     * tooltip): the fill is inset by the 1px line. Jade's border is a vertical gradient, #383838 at the top to
+     * #242424 at the bottom; the bottom edge carries the darker tone and the sides keep the lighter one, which reads
+     * the same without a scissor (a scissor would use screen coordinates and break under the HUD's own pose).
+     */
+    static void frame(GuiGraphics g, int x, int y, int w, int h, int radius, int edge, int edgeBottom, int fill) {
+        if (w <= 2 || h <= 2) {
+            return;
+        }
+        int r = Math.min(Math.min(radius, Math.min(w, h) / 2), EDGE_CORNER);
+        surface(g, x, y, w, h, radius, edge);
+        if (r > 0) {
+            g.fill(x + r, y + h - 1, x + w - r, y + h, edgeBottom);
+        } else {
+            g.fill(x, y + h - 1, x + w, y + h, edgeBottom);
+        }
+        surface(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, radius - 1), fill);
     }
 
     /** A panel: a rounded fill with a hairline, the treatment every container in the screen shares. */

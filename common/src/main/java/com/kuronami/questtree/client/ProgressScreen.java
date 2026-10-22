@@ -1003,6 +1003,10 @@ public class ProgressScreen extends Screen {
     }
 
     private int railFootH() {
+        // open, the four buttons share one row of icons; folded, they keep the labelled stack (2026-10-22)
+        if (railT > 0.6f) {
+            return RAIL_FOOT_ROW;
+        }
         int rows = railFootRows();
         return rows * RAIL_FOOT_ROW + (rows - 1) * 4;
     }
@@ -1130,138 +1134,110 @@ public class ProgressScreen extends Screen {
         renderRailFooter(g, mouseX, mouseY);
     }
 
+    /** One footer button. The tip is a label (and, for the emergency, the items it hands out). */
+    private record RailFoot(String icon, List<Component> tip, int color, int badge, boolean dot,
+                            boolean clickable, Runnable action) {
+    }
+
     /**
-     * The fixed rows under the chapter list: collect every claimable reward, the party while it is relevant, and the
-     * client settings (2026-10-20/21).
-     * Closed, they are icons with the same gold dot the chapters use for waiting rewards.
+     * The fixed buttons under the chapter list: collect every claimable reward, the party while it is relevant, the
+     * pack's emergency items, and the client settings (2026-10-20/21). Open, they share one row of icons; folded, they
+     * keep the labelled stack. Their labels are the hover tooltips either way (2026-10-22).
      */
     private void renderRailFooter(GuiGraphics g, int mouseX, int mouseY) {
         int w = railWidth();
         int left = 4 + Ui.S1;
         int rowW = w - 2 * Ui.S1;
         int top = height - 8 - railFootH();
-        int waiting = ClientProgress.claimableCount();
-        boolean open = railT > 0.6f;
-
         int cy = top + 2;
-        boolean collectHover = mouseX >= left && mouseX < left + rowW && mouseY >= cy && mouseY < cy + RAIL_FOOT_ROW;
-        if (!open) {
-            collectHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= cy && mouseY < cy + RAIL_FOOT_ROW;
-        }
-        if (collectHover && waiting > 0) {
-            Ui.surface(g, left, cy, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
-        }
-        int giftColor = waiting > 0 ? Tiles.GOLD : Ui.DIM;
-        Tiles.icon(g, "gift", RAIL_ICON_X, cy + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
-                collectHover && waiting > 0 ? Ui.TEXT : giftColor);
-        if (waiting > 0) {
-            Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, cy, 6, Tiles.GOLD);
-        }
-        if (open) {
-            int countW = waiting > 0 ? Ui.badge(g, font, String.valueOf(waiting), left + rowW - Ui.S1, cy + (RAIL_FOOT_ROW - Ui.BADGE_H) / 2) + 4 : 0;
-            Ui.text(g, font, trim(Component.translatable("screen.kuronami_quest_tree.collect_all").getString(),
-                    rowW - RAIL_TEXT_X - countW), RAIL_TEXT_X, cy + (RAIL_FOOT_ROW - 8) / 2,
-                    waiting > 0 ? Ui.TEXT : Ui.DIM);
-        }
-        if (waiting > 0) {
-            buttons.add(new Button(left, cy, rowW, RAIL_FOOT_ROW, () -> {
-                ClientProgress.send("claim_all", "", -1);
-                ProgressFeedback.click();
-            }));
-            if (collectHover) {
-                pendingTip = List.of(Component.translatable("screen.kuronami_quest_tree.collect_all"));
-            }
-        }
+        boolean open = railT > 0.6f;
+        int waiting = ClientProgress.claimableCount();
+        boolean invites = ClientTeam.view().hasActiveInvites(System.currentTimeMillis());
 
-        int sy = cy + RAIL_FOOT_ROW + 4;
-        if (partyRow()) {
-            int py = sy;
-            boolean invites = ClientTeam.view().hasActiveInvites(System.currentTimeMillis());
-            boolean partyHover = mouseX >= left && mouseX < left + rowW && mouseY >= py && mouseY < py + RAIL_FOOT_ROW;
-            if (!open) {
-                partyHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= py && mouseY < py + RAIL_FOOT_ROW;
-            }
-            if (partyHover) {
-                Ui.surface(g, left, py, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
-            }
-            Tiles.icon(g, "team", RAIL_ICON_X, py + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
-                    partyHover ? Ui.TEXT : invites ? Tiles.GOLD : Ui.DIM);
-            if (invites) {
-                Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, py, 6, Tiles.GOLD);
-            }
-            if (open) {
-                Ui.text(g, font, trim(Component.translatable("screen.kuronami_quest_tree.party.title").getString(),
-                        rowW - RAIL_TEXT_X), RAIL_TEXT_X, py + (RAIL_FOOT_ROW - 8) / 2,
-                        partyHover ? Ui.TEXT : Ui.DIM);
-            }
-            buttons.add(new Button(left, py, rowW, RAIL_FOOT_ROW, () -> {
-                if (minecraft != null) {
-                    minecraft.setScreen(new PartyScreen(this));
-                }
-            }));
-            if (partyHover) {
-                pendingTip = List.of(ClientTeam.title());
-            }
-            sy = py + RAIL_FOOT_ROW + 4;
-        }
-        if (emergencyRow()) {
-            int ey = sy;
-            ClientModel m = model();
-            long until = ClientProgress.progress().emergencyReadyAt();
-            long leftMs = Math.max(0, until - System.currentTimeMillis());
-            boolean ready = leftMs <= 0;
-            boolean hover = mouseX >= left && mouseX < left + rowW && mouseY >= ey && mouseY < ey + RAIL_FOOT_ROW;
-            if (!open) {
-                hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= ey && mouseY < ey + RAIL_FOOT_ROW;
-            }
-            if (hover) {
-                Ui.surface(g, left, ey, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
-            }
-            Tiles.icon(g, "plus", RAIL_ICON_X, ey + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
-                    ready ? Tiles.GOLD : Ui.DIM);
-            if (open) {
-                String label = Component.translatable("screen.kuronami_quest_tree.emergency").getString();
-                Ui.text(g, font, trim(label, rowW - RAIL_TEXT_X - 42), RAIL_TEXT_X, ey + (RAIL_FOOT_ROW - 8) / 2,
-                        ready ? Ui.TEXT : Ui.DIM);
-                if (!ready) {
-                    Ui.textRight(g, font, Math.max(1, (leftMs + 59_999) / 60_000) + "m", left + rowW - Ui.S2,
-                            ey + (RAIL_FOOT_ROW - 8) / 2, Ui.DIM);
-                }
-            }
-            if (ready) {
-                buttons.add(new Button(left, ey, rowW, RAIL_FOOT_ROW, () -> {
-                    ClientProgress.send("emergency", "", -1);
+        List<RailFoot> feet = new ArrayList<>(4);
+        feet.add(new RailFoot("gift", List.of(Component.translatable("screen.kuronami_quest_tree.collect_all")),
+                waiting > 0 ? Tiles.GOLD : Ui.DIM, waiting, waiting > 0, waiting > 0, () -> {
+                    ClientProgress.send("claim_all", "", -1);
                     ProgressFeedback.click();
                 }));
+        if (partyRow()) {
+            feet.add(new RailFoot("team", List.of(ClientTeam.title()), invites ? Tiles.GOLD : Ui.DIM, 0, invites,
+                    true, () -> {
+                        if (minecraft != null) {
+                            minecraft.setScreen(new PartyScreen(this));
+                        }
+                    }));
+        }
+        long until = ClientProgress.progress().emergencyReadyAt();
+        long leftMs = Math.max(0, until - System.currentTimeMillis());
+        boolean ready = leftMs <= 0;
+        if (emergencyRow()) {
+            java.util.List<Component> tip = new java.util.ArrayList<>();
+            tip.add(Component.translatable("screen.kuronami_quest_tree.emergency"));
+            if (!ready) {
+                tip.add(Component.literal(Math.max(1, (leftMs + 59_999) / 60_000) + "m"));
+            }
+            ClientModel m = model();
+            m.emergencyItems.forEach(it -> tip.add(it.getHoverName()));
+            feet.add(new RailFoot("plus", tip, ready ? Tiles.GOLD : Ui.DIM, 0, false, ready, () -> {
+                ClientProgress.send("emergency", "", -1);
+                ProgressFeedback.click();
+            }));
+        }
+        feet.add(new RailFoot("gear", List.of(Component.translatable("screen.kuronami_quest_tree.settings")),
+                Ui.DIM, 0, false, true, () -> {
+                    if (minecraft != null) {
+                        minecraft.setScreen(new SettingsScreen(this));
+                    }
+                }));
+
+        if (open) {
+            int slotW = rowW / feet.size();
+            int start = left + (rowW - slotW * feet.size()) / 2;
+            for (int i = 0; i < feet.size(); i++) {
+                RailFoot foot = feet.get(i);
+                int sx = start + i * slotW;
+                boolean hover = mouseX >= sx && mouseX < sx + slotW && mouseY >= cy && mouseY < cy + RAIL_FOOT_ROW;
+                if (hover && foot.clickable()) {
+                    Ui.surface(g, sx + 2, cy, Math.max(RAIL_ICON + 8, slotW - 4), RAIL_FOOT_ROW,
+                            RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
+                }
+                int ix = sx + (slotW - RAIL_ICON) / 2;
+                int iy = cy + (RAIL_FOOT_ROW - RAIL_ICON) / 2;
+                Tiles.icon(g, foot.icon(), ix, iy, RAIL_ICON, hover && foot.clickable() ? Ui.TEXT : foot.color());
+                if (foot.badge() > 0) {
+                    Ui.badge(g, font, String.valueOf(foot.badge()), ix + RAIL_ICON + 4, cy + 1);
+                } else if (foot.dot()) {
+                    Tiles.icon(g, "dot", ix + RAIL_ICON - 4, cy, 6, Tiles.GOLD);
+                }
+                if (foot.clickable()) {
+                    buttons.add(new Button(sx, cy, slotW, RAIL_FOOT_ROW, foot.action()));
+                }
+                if (hover) {
+                    pendingTip = foot.tip();
+                }
+            }
+            return;
+        }
+
+        int y = cy;
+        for (RailFoot foot : feet) {
+            boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + RAIL_FOOT_ROW;
+            if (hover && foot.clickable()) {
+                Ui.surface(g, left, y, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
+            }
+            Tiles.icon(g, foot.icon(), RAIL_ICON_X, y + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
+                    hover && foot.clickable() ? Ui.TEXT : foot.color());
+            if (foot.badge() > 0 || foot.dot()) {
+                Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, y, 6, Tiles.GOLD);
+            }
+            if (foot.clickable()) {
+                buttons.add(new Button(left, y, rowW, RAIL_FOOT_ROW, foot.action()));
             }
             if (hover) {
-                java.util.List<Component> tip = new java.util.ArrayList<>();
-                tip.add(Component.translatable("screen.kuronami_quest_tree.emergency"));
-                m.emergencyItems.forEach(it -> tip.add(it.getHoverName()));
-                pendingTip = tip;
+                pendingTip = foot.tip();
             }
-            sy = ey + RAIL_FOOT_ROW + 4;
-        }
-        boolean settingsHover = mouseX >= left && mouseX < left + rowW && mouseY >= sy && mouseY < sy + RAIL_FOOT_ROW;
-        if (!open) {
-            settingsHover = mouseX >= 4 && mouseX < 4 + w && mouseY >= sy && mouseY < sy + RAIL_FOOT_ROW;
-        }
-        if (settingsHover) {
-            Ui.surface(g, left, sy, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
-        }
-        Tiles.icon(g, "gear", RAIL_ICON_X, sy + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
-                settingsHover ? Ui.TEXT : Ui.DIM);
-        if (open) {
-            Ui.text(g, font, trim(Component.translatable("screen.kuronami_quest_tree.settings").getString(),
-                    rowW - RAIL_TEXT_X), RAIL_TEXT_X, sy + (RAIL_FOOT_ROW - 8) / 2, settingsHover ? Ui.TEXT : Ui.DIM);
-        }
-        buttons.add(new Button(left, sy, rowW, RAIL_FOOT_ROW, () -> {
-            if (minecraft != null) {
-                minecraft.setScreen(new SettingsScreen(this));
-            }
-        }));
-        if (settingsHover) {
-            pendingTip = List.of(Component.translatable("screen.kuronami_quest_tree.settings"));
+            y += RAIL_FOOT_ROW + 4;
         }
     }
 
@@ -3735,16 +3711,30 @@ public class ProgressScreen extends Screen {
         return null;
     }
 
+    /** Dev tour only: the centre of footer button {@code index} (0 is collect all), or null when it is not there. */
+    int[] tourRailFoot(int index) {
+        int count = 2 + (partyRow() ? 1 : 0) + (emergencyRow() ? 1 : 0);
+        if (index < 0 || index >= count) {
+            return null;
+        }
+        int w = railWidth();
+        int left = 4 + Ui.S1;
+        int rowW = w - 2 * Ui.S1;
+        int cy = height - 8 - railFootH() + 2;
+        if (railT > 0.6f) {
+            int slotW = rowW / count;
+            int start = left + (rowW - slotW * count) / 2;
+            return new int[]{start + index * slotW + slotW / 2, cy + RAIL_FOOT_ROW / 2};
+        }
+        return new int[]{left + 24, cy + index * (RAIL_FOOT_ROW + 4) + RAIL_FOOT_ROW / 2};
+    }
+
     /** Dev tour only: the centre of the emergency row, or null when the pack hands nothing out. */
     int[] tourEmergencyRow() {
         if (!emergencyRow()) {
             return null;
         }
-        int sy = height - 8 - railFootH() + 2 + RAIL_FOOT_ROW + 4;
-        if (partyRow()) {
-            sy += RAIL_FOOT_ROW + 4;
-        }
-        return new int[]{4 + Ui.S1 + 24, sy + RAIL_FOOT_ROW / 2};
+        return tourRailFoot(1 + (partyRow() ? 1 : 0));
     }
 
 

@@ -22,6 +22,11 @@ public final class ProgressHud {
     private static final long FADE_IN = 150;
     private static final long HOLD = 2200;
     private static final long FADE_OUT = 300;
+    /** Jade's tooltip box: 4px padding, a 16px icon, 3px after it. */
+    private static final int TRACKER_PAD = 4;
+    private static final int TRACKER_ICON = 16;
+    private static final int TRACKER_GAP = 3;
+    private static final int TRACKER_TEXT_W = 110;
 
     private static ItemStack noticeIcon = ItemStack.EMPTY;
     private static Component noticeTask;
@@ -167,7 +172,11 @@ public final class ProgressHud {
         g.pose().popPose();
     }
 
-    /** Pinned quests at the left edge, vertically centred; the closest unfinished quests when nothing is pinned. */
+    /**
+     * Pinned quests at the left edge, vertically centred; the closest unfinished quests when nothing is pinned. The
+     * frame follows Jade's tooltip (2026-10-22): one card, 4px padding, a 16px icon with a 3px gap to the text, and
+     * lines 2px apart. Our text scale still applies, so the settings do not silently stop working.
+     */
     private static void renderTracker(GuiGraphics g, Font font) {
         ClientModel m = ClientProgress.model();
         shownKeys.clear();
@@ -206,23 +215,33 @@ public final class ProgressHud {
                 shownKeys.add(n.key);
             }
         }
+        int lineH = trackerLineH();
+        int rowH = lineH * 2;
+        int matH = lineH + 2;
+        int textX = TRACKER_PAD + TRACKER_ICON + TRACKER_GAP;
         int total = 0;
         int bw = 0;
-        for (ClientModel.Node n : rows) {
+        for (int i = 0; i < rows.size(); i++) {
+            ClientModel.Node n = rows.get(i);
             List<long[]> mats = materials(n);
-            String title = font.plainSubstrByWidth(n.title.getString(), 110);
-            int w = Math.max(26 + font.width(title), 26 + font.width(progressLine(n)));
+            String title = clipped(font, n.title.getString());
+            String line = progressLine(n);
+            int w = Math.max(Ui.textWidth(font, title), Ui.textWidth(font, line));
             for (long[] mat : mats) {
-                w = Math.max(w, 38 + font.width(Math.min(mat[1], mat[2]) + "/" + mat[2]));
+                w = Math.max(w, 12 + Ui.textWidth(font, Math.min(mat[1], mat[2]) + "/" + mat[2]));
             }
-            bw = Math.max(bw, w);
-            total += 22 + 12 * mats.size();
+            bw = Math.max(bw, TRACKER_ICON + TRACKER_GAP + w);
+            if (i > 0) {
+                total += 2;
+            }
+            total += rowH + matH * mats.size();
         }
+        int cardW = bw + 2 * TRACKER_PAD;
         int y = g.guiHeight() / 2 - total / 2;
         // side and scale from the client settings (2026-10-20); the tracker is centred either way
         float scale = ClientConfig.trackerScale();
         // the right margin shrinks with the scale, or 125%/150% would push the card off the screen
-        float dx = ClientConfig.trackerRight() ? g.guiWidth() - (bw + 8) * scale : 0;
+        float dx = ClientConfig.trackerRight() ? g.guiWidth() - (cardW + 4) * scale : 0;
         g.pose().pushPose();
         if (dx != 0) {
             g.pose().translate(dx, 0, 0);
@@ -234,43 +253,51 @@ public final class ProgressHud {
         }
         g.pose().translate(ClientConfig.trackerOffsetX() / scale, ClientConfig.trackerOffsetY() / scale, 0);
         if (total > 0) {
-            // one card behind every entry: a band per entry, advanced by 22 less its 2px overhang, overlapped its
-            // neighbour by 4px and doubled the edge there, which read as stacked boxes (the player, 2026-10-19)
-            Ui.surface(g, 2, y - 3, bw + 4, total + 6, Ui.R3, Ui.HUD_BACK);
+            Ui.frame(g, 2, y - TRACKER_PAD, cardW, total + 2 * TRACKER_PAD, Ui.R2,
+                    Ui.HUD_TRACKER_EDGE, Ui.HUD_TRACKER_EDGE_BOTTOM, Ui.HUD_TRACKER);
         }
-        for (int row = 0; row < rows.size(); row++) {
-            ClientModel.Node n = rows.get(row);
+        int tx = 2 + textX;
+        for (ClientModel.Node n : rows) {
             State s = ClientProgress.state(n.key);
             List<long[]> mats = materials(n);
-            String title = font.plainSubstrByWidth(n.title.getString(), 110);
+            String title = clipped(font, n.title.getString());
             String line = progressLine(n);
-            if (row > 0) {
-                g.fill(4, y - 3, bw + 2, y - 3 + 1, Ui.HAIRLINE);
-            }
-            Tiles.tile(g, n.shape, 4, y, 18, ClientProgress.look(n.key), ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
+            int iconY = y + (rowH - TRACKER_ICON) / 2;
+            Tiles.tile(g, n.shape, 2 + TRACKER_PAD, iconY, TRACKER_ICON, ClientProgress.look(n.key),
+                    ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
-            g.drawString(font, title, 26, y + 1, Ui.MARK, true);
-            g.drawString(font, line, 26, y + 10, s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT, true);
+            Ui.text(g, font, title, tx, y, Ui.MARK);
+            Ui.text(g, font, line, tx, y + lineH, s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT);
             g.pose().popPose();
-            y += 22;
+            y += rowH;
             // the items still needed, with what is in the inventory now (Satisfactory's to-do list, kept per quest)
             for (long[] mat : mats) {
                 ClientModel.Task t = n.tasks.get((int) mat[0]);
                 g.pose().pushPose();
-                g.pose().translate(26, y, 0);
+                g.pose().translate(tx, y, 0);
                 g.pose().scale(0.625f, 0.625f, 1);
                 g.renderItem(t.icon(), 0, 0);
                 g.pose().popPose();
                 g.pose().pushPose();
                 g.pose().translate(0, 0, Tiles.OVERLAY_Z);
                 String c = Math.min(mat[1], mat[2]) + "/" + mat[2];
-                g.drawString(font, c, 38, y + 1, mat[1] >= mat[2] ? Tiles.GREEN_TEXT : Ui.HUD_MUTED, true);
+                Ui.text(g, font, c, tx + 12, y + 1, mat[1] >= mat[2] ? Tiles.GREEN_TEXT : Ui.HUD_MUTED);
                 g.pose().popPose();
-                y += 12;
+                y += matH;
             }
+            y += 2;
         }
         g.pose().popPose();
+    }
+
+    /** Jade's own text pitch is 10px at 100%; scale it with our text, since Ui.text scales too. */
+    private static int trackerLineH() {
+        return Math.max(10, (int) Math.ceil(10 * ClientConfig.textScale()));
+    }
+
+    private static String clipped(Font font, String s) {
+        return font.plainSubstrByWidth(s, Math.max(20, Ui.textRoom(TRACKER_TEXT_W)));
     }
 
     /**

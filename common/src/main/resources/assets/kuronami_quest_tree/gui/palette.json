@@ -52,5 +52,8 @@
   "hud_back": "#66111214",
   "hud_text": "#FFE0E0E0",
   "hud_muted": "#FFB0B0B0",
+  "hud_tracker": "#B3111214",
+  "hud_tracker_edge": "#B3383838",
+  "hud_tracker_edge_bottom": "#B3242424",
   "toast_track": "#FF2A2A2A"
 }
