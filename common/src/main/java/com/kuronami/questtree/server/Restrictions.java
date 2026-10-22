@@ -1,5 +1,6 @@
 package com.kuronami.questtree.server;
 
+import com.kuronami.questtree.progress.EquipmentPoll;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.RestrictionRules;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -9,10 +10,14 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -23,8 +28,10 @@ import java.util.UUID;
  * once a second per player, so holding the button down does not flood the chat.
  * <p>
  * The interaction mixins call {@link #blockedItem} and {@link #blockedBlock} before the action runs. Equipment is
- * checked once per player tick instead of through an equip event: Fabric 1.21.1 has no equipment-change callback, and
- * a worn item that should not be worn is put back the same tick.
+ * checked every few ticks per player instead of through an equip event: Fabric 1.21.1 has no equipment-change
+ * callback, a UUID spreads the players' checks over the interval, and an unchanged signature skips the rules and
+ * their conditions (2026-10-22 review, L1). The item and block tags the rules name are turned into {@link TagKey}s
+ * once per load.
  */
 public final class Restrictions {
 
@@ -36,8 +43,40 @@ public final class Restrictions {
     };
 
     private static final Map<UUID, Long> LAST_NOTICE = new HashMap<>();
+    /** The last equipment signature checked, per player. */
+    private static final Map<UUID, Long> SEEN = new HashMap<>();
+    /** Tag keys for the loaded rules, made when the data is published, not while a player is ticking. */
+    private static Map<String, TagKey<Item>> itemTags = Map.of();
+    private static Map<String, TagKey<Block>> blockTags = Map.of();
 
     private Restrictions() {
+    }
+
+    /** The rules were (re)loaded: turn every tag they name into a key once. */
+    public static void reload(RestrictionRules rules) {
+        Map<String, TagKey<Item>> items = new LinkedHashMap<>();
+        Map<String, TagKey<Block>> blocks = new LinkedHashMap<>();
+        for (RestrictionRules.Rule rule : rules.all()) {
+            for (String tag : rule.itemTags()) {
+                items.computeIfAbsent(tag, t -> TagKey.create(Registries.ITEM, ResourceLocation.parse(t)));
+            }
+            for (String tag : rule.blockTags()) {
+                blocks.computeIfAbsent(tag, t -> TagKey.create(Registries.BLOCK, ResourceLocation.parse(t)));
+            }
+        }
+        itemTags = Map.copyOf(items);
+        blockTags = Map.copyOf(blocks);
+        SEEN.clear();
+    }
+
+    private static TagKey<Item> itemTag(String tag) {
+        TagKey<Item> key = itemTags.get(tag);
+        return key != null ? key : TagKey.create(Registries.ITEM, ResourceLocation.parse(tag));
+    }
+
+    private static TagKey<Block> blockTag(String tag) {
+        TagKey<Block> key = blockTags.get(tag);
+        return key != null ? key : TagKey.create(Registries.BLOCK, ResourceLocation.parse(tag));
     }
 
     /** Whether using (or attacking with, placing) this stack is refused for the player. */
@@ -50,8 +89,7 @@ public final class Restrictions {
             return false;
         }
         String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-        List<RestrictionRules.Rule> hits = rules.forItem(action, id,
-                tag -> stack.is(TagKey.create(Registries.ITEM, ResourceLocation.parse(tag))));
+        List<RestrictionRules.Rule> hits = rules.forItem(action, id, tag -> stack.is(itemTag(tag)));
         return refuse(player, hits);
     }
 
@@ -77,8 +115,7 @@ public final class Restrictions {
             return false;
         }
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
-        List<RestrictionRules.Rule> hits = rules.forBlock(action, id,
-                tag -> state.is(TagKey.create(Registries.BLOCK, ResourceLocation.parse(tag))));
+        List<RestrictionRules.Rule> hits = rules.forBlock(action, id, tag -> state.is(blockTag(tag)));
         return refuse(player, hits);
     }
 
@@ -89,12 +126,26 @@ public final class Restrictions {
     }
 
     /**
-     * Puts back a worn or offhand item that a rule now refuses. Called once per player tick: moving the stack fires
-     * no second check because the slot is empty afterwards.
+     * Puts back a worn or offhand item that a rule now refuses. Called from the player tick; the tick itself is
+     * skipped unless it is this player's turn and the worn items, the rules and the progress revision all match the
+     * last check, so a player with nothing restricted costs almost nothing.
      */
     public static void tick(ServerPlayer player) {
+        if (!EquipmentPoll.due(player.server.getTickCount(), player.getUUID())) {
+            return;
+        }
         RestrictionRules rules = ProgressData.restrictions();
         if (rules.isEmpty() || player.isSpectator()) {
+            return;
+        }
+        List<String> wornIds = new ArrayList<>(WORN.length);
+        for (EquipmentSlot slot : WORN) {
+            ItemStack worn = player.getItemBySlot(slot);
+            wornIds.add(worn.isEmpty() ? "" : BuiltInRegistries.ITEM.getKey(worn.getItem()).toString());
+        }
+        long signature = EquipmentPoll.signature(wornIds, System.identityHashCode(rules),
+                ProgressService.revision(player.getUUID()));
+        if (Long.valueOf(signature).equals(SEEN.put(player.getUUID(), signature))) {
             return;
         }
         for (EquipmentSlot slot : WORN) {
@@ -104,7 +155,7 @@ public final class Restrictions {
             }
             String id = BuiltInRegistries.ITEM.getKey(worn.getItem()).toString();
             List<RestrictionRules.Rule> hits = rules.forItem(RestrictionRules.EQUIP, id,
-                    tag -> worn.is(TagKey.create(Registries.ITEM, ResourceLocation.parse(tag))));
+                    tag -> worn.is(itemTag(tag)));
             if (!refuse(player, hits)) {
                 continue;
             }
@@ -116,9 +167,10 @@ public final class Restrictions {
         }
     }
 
-    /** The player logged out: the next session starts with a fresh notice window. */
+    /** The player logged out: the next session starts with fresh notice and equipment caches. */
     public static void forget(UUID player) {
         LAST_NOTICE.remove(player);
+        SEEN.remove(player);
     }
 
     private static boolean refuse(ServerPlayer player, List<RestrictionRules.Rule> hits) {

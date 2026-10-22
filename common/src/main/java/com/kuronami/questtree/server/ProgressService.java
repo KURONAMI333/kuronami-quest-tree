@@ -76,6 +76,8 @@ public final class ProgressService {
     private static final Map<UUID, List<String>> PENDING = new HashMap<>();
     /** true = send this tick; false = only experience changed, sent at most every 10 ticks (mining gives XP per block). */
     private static final Map<UUID, Boolean> DIRTY = new HashMap<>();
+    /** Bumped when a player's progress changes, so the restriction check knows its cached equipment answer is stale. */
+    private static final Map<UUID, Long> REVISIONS = new HashMap<>();
     /** Observation tasks being watched right now: player → {@code <node key>#<task index>} → consecutive ticks. */
     private static final Map<UUID, Map<String, Integer>> OBSERVED = new HashMap<>();
     /** Player progress already migrated for one loaded data model, so a save is not folded into its pool twice. */
@@ -1292,8 +1294,14 @@ public final class ProgressService {
     static void markDirty(ServerPlayer player) {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             DIRTY.put(member.getUUID(), true);
+            REVISIONS.merge(member.getUUID(), 1L, Long::sum);
             BARRIERS.clear(member.getUUID());
         }
+    }
+
+    /** How many times this player's progress changed, for the restriction check's equipment cache. */
+    static long revision(UUID player) {
+        return REVISIONS.getOrDefault(player, 0L);
     }
 
     /** Experience is shared too: every member is marked, but only for the 10-tick (non-urgent) send. */
@@ -1337,6 +1345,7 @@ public final class ProgressService {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
+        REVISIONS.remove(player.getUUID());
         BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
@@ -1348,6 +1357,7 @@ public final class ProgressService {
         SkillExperience.clearState();
         PENDING.clear();
         DIRTY.clear();
+        REVISIONS.clear();
         OBSERVED.clear();
         MIGRATED.clear();
         TeamSync.clear();

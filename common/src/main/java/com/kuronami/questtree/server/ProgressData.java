@@ -315,6 +315,7 @@ public final class ProgressData {
         COMPRESSED.clear();
         model = built;
         restrictions = RestrictionRules.of(bundle);
+        Restrictions.reload(restrictions);
         generation++;
         chapterCount = chapters.size();
         Constants.LOG.info("Loaded {} progression chapters ({} KB for en_us, {} locales)", chapterCount,

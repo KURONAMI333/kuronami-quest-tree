@@ -74,6 +74,16 @@ public final class RestrictionRules {
             return message;
         }
 
+        /** The item tag ids the rule names, without a leading {@code #}. */
+        public List<String> itemTags() {
+            return itemTags;
+        }
+
+        /** The block tag ids the rule names, without a leading {@code #}. */
+        public List<String> blockTags() {
+            return blockTags;
+        }
+
         /** The actions the rule names, or every action when it names none. */
         public Set<String> actions() {
             return actions == null ? Set.copyOf(ACTIONS) : Collections.unmodifiableSet(actions);
