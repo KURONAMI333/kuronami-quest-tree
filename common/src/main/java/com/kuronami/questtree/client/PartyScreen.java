@@ -83,7 +83,8 @@ public final class PartyScreen extends Screen {
         int maxRows = Math.max(1, (height - 16 - 92) / ROW_H);
         int shown = Math.min(rows.size(), maxRows);
         scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.size() - shown)));
-        int ph = 48 + Math.max(1, shown) * ROW_H + 30;
+        Component status = PartyStatus.text(now);
+        int ph = 48 + Math.max(1, shown) * ROW_H + 30 + (status == null ? 0 : 12);
         int py = Math.max(8, (height - ph) / 2);
 
         Ui.surface(g, px, py, pw, ph, Ui.R4, Ui.PANEL_TRANSLUCENT);
@@ -164,6 +165,9 @@ public final class PartyScreen extends Screen {
         }
 
         int ay = py + ph - 24;
+        if (status != null) {
+            Ui.textCenter(g, font, status, px + pw / 2, ay - 12, Ui.MUTED);
+        }
         if (picking) {
             button(g, Component.translatable("screen.kuronami_quest_tree.party.back"), px + 12, ay, 70, mouseX, mouseY,
                     () -> picking = false);

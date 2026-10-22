@@ -1152,7 +1152,7 @@ public class ProgressScreen extends Screen {
         int cy = top + 2;
         boolean open = railT > 0.6f;
         int waiting = ClientProgress.claimableCount();
-        boolean invites = ClientTeam.view().hasActiveInvites(System.currentTimeMillis());
+        int invites = ClientTeam.view().activeInvites(System.currentTimeMillis()).size();
 
         List<RailFoot> feet = new ArrayList<>(4);
         feet.add(new RailFoot("gift", List.of(Component.translatable("screen.kuronami_quest_tree.collect_all")),
@@ -1161,7 +1161,7 @@ public class ProgressScreen extends Screen {
                     ProgressFeedback.click();
                 }));
         if (partyRow()) {
-            feet.add(new RailFoot("team", List.of(ClientTeam.title()), invites ? Tiles.GOLD : Ui.DIM, 0, invites,
+            feet.add(new RailFoot("team", List.of(ClientTeam.title()), invites > 0 ? Tiles.GOLD : Ui.DIM, invites, false,
                     true, () -> {
                         if (minecraft != null) {
                             minecraft.setScreen(new PartyScreen(this));
@@ -1228,7 +1228,9 @@ public class ProgressScreen extends Screen {
             }
             Tiles.icon(g, foot.icon(), RAIL_ICON_X, y + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
                     hover && foot.clickable() ? Ui.TEXT : foot.color());
-            if (foot.badge() > 0 || foot.dot()) {
+            if (foot.badge() > 0) {
+                Ui.badge(g, font, String.valueOf(foot.badge()), RAIL_ICON_X + RAIL_ICON + 2, y + 1);
+            } else if (foot.dot()) {
                 Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, y, 6, Tiles.GOLD);
             }
             if (foot.clickable()) {
