@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "方块标签",
   "screen.kuronami_quest_tree.editor.field.actions": "操作",
   "screen.kuronami_quest_tree.editor.field.conditions": "条件",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "消息"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "消息",
+  "commands.kuronami_quest_tree.giver.unknown": "找不到任务或章节 %s",
+  "commands.kuronami_quest_tree.giver.no_target": "请看向一个实体或任务方块",
+  "commands.kuronami_quest_tree.giver.set": "已将 %s 链接到 %s",
+  "commands.kuronami_quest_tree.giver.cleared": "已清除 %s 的任务链接",
+  "commands.kuronami_quest_tree.giver.none": "%s 没有任务链接",
+  "commands.kuronami_quest_tree.giver.player_only": "只有玩家可以更改任务发放者"
 }

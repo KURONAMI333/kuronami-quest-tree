@@ -34,6 +34,15 @@ On the data side, write the registered id as-is.
 - **Conditions**: a task advances and a reward is given only when every entry in `conditions` is true. The five built-in types (`stage`, `score`, `item`, `advancement`, `party_size`) and registered types are evaluated by the same check. A type counts as built-in only when it has no namespace (`item`) or uses `kuronami_quest_tree:item`; any other namespace (`example:item`) always looks in the registry even when the id matches a built-in. Registered types are matched by their full namespaced id, and a type found in neither place is false (fail closed). `QuestTreeApi.conditionsMet(player, node, data, task)` is the public entry point that runs the same check.
 - Registered types are excluded from `ProgressValidator`'s unknown-type warnings and errors. Conditions treat built-ins and registered types as known; anything else is a warning (the node is not dropped).
 
+## Opening a quest or chapter
+
+```java
+QuestTreeApi.open(player, "example:basics/start"); // one quest
+QuestTreeApi.open(player, "example:basics");       // one chapter
+```
+
+The target is a quest key (`<namespace>:<chapter>/<node>`) or a chapter id (`<namespace>:<chapter>`); a value that is not in the loaded book returns false and sends nothing. The player's client applies its own hidden and locked rules, so this is the same path a quest giver uses and cannot reveal a hidden quest or a locked chapter's map. Safe to call from a server-side interaction handler; an NPC mod can open its own dialogue this way without touching Quest Tree's screens.
+
 ## Progression events
 
 ```java
@@ -62,6 +71,7 @@ QuestTreeEvents.taskCompleted(event => console.info(event.quest + ' #' + event.t
 
 QuestTree.registerTask('example:held_level', context => context.player().experienceLevel)
 QuestTree.registerCondition('example:level_30', context => context.player().experienceLevel >= 30)
+QuestTree.open(player, 'example:basics/start')
 ```
 
 A type registered with `QuestTree.registerCondition` is written in the same `conditions` array as the five built-in types (`stage`, `score`, `item`, `advancement`, `party_size`), using its namespaced id. Built-in types work without any script registration.

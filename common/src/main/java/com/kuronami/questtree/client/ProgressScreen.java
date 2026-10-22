@@ -7,6 +7,8 @@ import com.kuronami.questtree.client.edit.EditorSelection;
 import com.kuronami.questtree.client.edit.GridSnap;
 import com.kuronami.questtree.client.edit.MoveBatch;
 import com.kuronami.questtree.data.ProgressModel;
+import com.kuronami.questtree.giver.GiverOpen;
+import com.kuronami.questtree.giver.GiverTarget;
 import com.kuronami.questtree.network.EditorReplies;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
@@ -183,6 +185,15 @@ public class ProgressScreen extends Screen {
             goTo(pendingGoTo);
             pendingGoTo = null;
         }
+        if (model() != null) {
+            if (pendingRail) {
+                railOnly = true;
+                pendingRail = false;
+            } else if (pendingChapter != null) {
+                openChapter(pendingChapter);
+                pendingChapter = null;
+            }
+        }
     }
 
     /** Opens the screen on one quest (the open key over an item that a quest wants). */
@@ -191,6 +202,65 @@ public class ProgressScreen extends Screen {
         screen.pendingGoTo = key;
         query = "";
         net.minecraft.client.Minecraft.getInstance().setScreen(screen);
+    }
+
+    /**
+     * Opens a target the server sent for a quest giver or quest block (2026-10-22, G3). The player's own view decides
+     * what may be shown: a hidden quest or chapter stays hidden, and a locked chapter opens at the chapter list with
+     * its hint instead of its map.
+     */
+    public static void openTarget(String encoded) {
+        GiverTarget target = GiverTarget.decode(encoded);
+        ClientModel m = ClientProgress.model();
+        if (target == null || m == null) {
+            return;
+        }
+        ClientModel.Chapter chapter = target.chapter()
+                ? m.chapters.stream().filter(c -> c.id.equals(target.id())).findFirst().orElse(null)
+                : m.chapterOf.get(target.id());
+        if (chapter == null) {
+            return;
+        }
+        boolean visible = !target.chapter() && ClientProgress.visible(target.id());
+        switch (GiverOpen.mode(target, ClientProgress.chapterAlwaysHidden(chapter.id),
+                !ClientProgress.chapterLocked(chapter.id), visible)) {
+            case NODE -> openAt(target.id());
+            case CHAPTER -> {
+                ProgressScreen screen = new ProgressScreen();
+                screen.pendingChapter = chapter.id;
+                query = "";
+                net.minecraft.client.Minecraft.getInstance().setScreen(screen);
+            }
+            case RAIL -> openRail();
+            case NONE -> ProgressFeedback.locked();
+        }
+    }
+
+    /** Opens the book at the chapter list only, for a giver whose chapter is not open yet. */
+    public static void openRail() {
+        ProgressScreen screen = new ProgressScreen();
+        screen.pendingRail = true;
+        query = "";
+        net.minecraft.client.Minecraft.getInstance().setScreen(screen);
+    }
+
+    /** Selects the chapter a giver named, or shows the rail with that chapter's hint when it is locked. */
+    private void openChapter(String id) {
+        ClientModel m = model();
+        if (m == null) {
+            return;
+        }
+        for (int i = 0; i < m.chapters.size(); i++) {
+            if (!m.chapters.get(i).id.equals(id)) {
+                continue;
+            }
+            if (ClientProgress.chapterLocked(id)) {
+                railOnly = true;
+            } else {
+                select(i);
+            }
+            return;
+        }
     }
 
     private boolean searching() {
@@ -465,6 +535,11 @@ public class ProgressScreen extends Screen {
     private int lastMouseY;
     /** A quest to show once the screen is laid out (opened from an item, see {@link #openAt}). */
     private String pendingGoTo;
+    /** A chapter to open once the book is laid out (a quest giver, see {@link #openTarget}). */
+    private String pendingChapter;
+    /** Open at the chapter list only, with no chapter entered (a locked chapter's hint is read in the rail). */
+    private boolean pendingRail;
+    private boolean railOnly;
     /** Back through the quests and chapters looked at, newest first (Backspace, 2026-10-20). */
     private final Deque<String> nodeHistory = new ArrayDeque<>();
     private final Deque<Integer> chapterHistory = new ArrayDeque<>();
@@ -711,7 +786,8 @@ public class ProgressScreen extends Screen {
         }
         // icon, gaps and a count like "12/127" beside the longest name, within two fifths of the screen
         railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width * 2 / 5));
-        if (chapter() == null || ClientProgress.chapterLocked(chapter().id)) {
+        ClientModel.Chapter ch = chapter();
+        if (!railOnly && (ch == null || ClientProgress.chapterLocked(ch.id))) {
             // no overview screen any more: open on the last chapter, or the first one the player may enter
             ClientModel.Chapter first = null;
             for (ClientModel.Chapter c : railChapters) {
@@ -725,28 +801,31 @@ public class ProgressScreen extends Screen {
                 return;
             }
             select(m.chapters.indexOf(first));
+            ch = chapter();
         }
-        ClientModel.Chapter ch = chapter();
-        if (ch == null) {
+        if (ch == null && !railOnly) {
             return;
         }
         boolean overRail = mouseX < (railT > 0.5f ? railOpenW : RAIL) + 8;
         // timed, not stepped per frame: the same smooth 180ms slide at any frame rate (it jumped in 4 frames before)
         float dt = lastFrame == 0 ? 0 : Math.min(100, nowMs - lastFrame);
         lastFrame = nowMs;
-        railT = tourRailOpen || ClientConfig.keepRailOpen() ? 1
+        // a giver that opens at a locked chapter keeps the list open, so the pack's hint can be read there
+        railT = railOnly || tourRailOpen || ClientConfig.keepRailOpen() ? 1
                 : Mth.clamp(railT + (overRail || (railBox != null && railBox.isFocused()) ? dt : -dt) / RAIL_MS, 0, 1);
         sheetT = Mth.clamp(sheetT + (selected != null ? dt : -dt) / SHEET_MS, 0, 1);
         hoverGrow.replaceAll((k, t) -> Mth.clamp(t + (k.equals(hoveredNode) ? dt : -dt) / HOVER_MS, 0, 1));
         hoverGrow.values().removeIf(t -> t <= 0);
 
-        renderChapter(g, ch, mouseX, mouseY, partialTick);
-        g.pose().pushPose();
-        g.pose().translate(0, 0, OVERLAY_Z + 50);
-        if (sheetT > 0) {
-            renderSheet(g, m, mouseX, mouseY, dt);
+        if (ch != null) {
+            renderChapter(g, ch, mouseX, mouseY, partialTick);
+            g.pose().pushPose();
+            g.pose().translate(0, 0, OVERLAY_Z + 50);
+            if (sheetT > 0) {
+                renderSheet(g, m, mouseX, mouseY, dt);
+            }
+            g.pose().popPose();
         }
-        g.pose().popPose();
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z + 100);
         renderRail(g, m, mouseX, mouseY, dt);
@@ -3842,6 +3921,7 @@ public class ProgressScreen extends Screen {
     }
 
     private void select(int index) {
+        railOnly = false;
         ClientModel m = model();
         if (m != null && index >= 0 && index < m.chapters.size() && ClientProgress.chapterLocked(m.chapters.get(index).id)) {
             // a locked chapter is listed to show the hint, not to be entered

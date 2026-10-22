@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "Block-Tags",
   "screen.kuronami_quest_tree.editor.field.actions": "Aktionen",
   "screen.kuronami_quest_tree.editor.field.conditions": "Bedingungen",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "Meldung"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Meldung",
+  "commands.kuronami_quest_tree.giver.unknown": "Quest oder Kapitel %s wurde nicht gefunden",
+  "commands.kuronami_quest_tree.giver.no_target": "Sieh eine Entität oder einen Questblock an",
+  "commands.kuronami_quest_tree.giver.set": "%s wurde mit %s verknüpft",
+  "commands.kuronami_quest_tree.giver.cleared": "Quest-Verknüpfung von %s entfernt",
+  "commands.kuronami_quest_tree.giver.none": "%s hat keine Quest-Verknüpfung",
+  "commands.kuronami_quest_tree.giver.player_only": "Nur ein Spieler kann einen Questgeber ändern"
 }

@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "ブロックタグ",
   "screen.kuronami_quest_tree.editor.field.actions": "操作",
   "screen.kuronami_quest_tree.editor.field.conditions": "条件",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "メッセージ"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "メッセージ",
+  "commands.kuronami_quest_tree.giver.unknown": "クエストまたはチャプター %s が見つかりません",
+  "commands.kuronami_quest_tree.giver.no_target": "エンティティまたはクエストブロックを見てください",
+  "commands.kuronami_quest_tree.giver.set": "%s を %s にリンクしました",
+  "commands.kuronami_quest_tree.giver.cleared": "%s のクエストリンクを解除しました",
+  "commands.kuronami_quest_tree.giver.none": "%s にはクエストリンクがありません",
+  "commands.kuronami_quest_tree.giver.player_only": "クエストギバーを変更できるのはプレイヤーだけです"
 }

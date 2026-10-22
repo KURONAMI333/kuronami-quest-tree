@@ -7,6 +7,8 @@ import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -384,6 +386,35 @@ final class DevTour {
         at(et + 157, () -> onScreen("43_restrictions", ProgressScreen::tourOpenRestrictions));
         shot(et + 163, "43_restrictions");
         at(et + 165, () -> {
+            Minecraft.getInstance().setScreen(null);
+            ProgressScreen.tourPointerClear();
+        });
+        // a quest giver: link the first chapter to a villager, then right-click it and photograph the opened book
+        if (quests != null) {
+            cmd(et + 166, "kill @e[type=minecraft:villager,tag=questtree_tour_giver]");
+            cmd(et + 167, "summon minecraft:villager ^ ^ ^3 {Tags:[\"questtree_tour_giver\"],NoAI:1b,Silent:1b,"
+                    + "Invulnerable:1b,PersistenceRequired:1b}");
+            cmd(et + 168, "tp @s ~ ~ ~ facing entity @e[type=minecraft:villager,tag=questtree_tour_giver,limit=1]");
+            cmd(et + 169, "quest_tree giver set " + quests.id);
+            at(et + 172, () -> {
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.player == null || mc.level == null || mc.gameMode == null) {
+                    return;
+                }
+                Entity giver = mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(8),
+                        e -> e.getTags().contains("questtree_tour_giver")).stream().findFirst().orElse(null);
+                if (giver == null) {
+                    Constants.LOG.warn("Dev tour: the giver villager is gone");
+                    return;
+                }
+                mc.gameMode.interact(mc.player, giver, InteractionHand.MAIN_HAND);
+            });
+            shot(et + 178, "44_giver_chapter");
+            cmd(et + 182, "kill @e[type=minecraft:villager,tag=questtree_tour_giver]");
+        } else {
+            Constants.LOG.warn("Dev tour: no chapter for the quest giver photo");
+        }
+        at(et + 186, () -> {
             Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
             ClientConfig.textScale = textScaleBefore;

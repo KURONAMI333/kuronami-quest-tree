@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "Tags de blocs",
   "screen.kuronami_quest_tree.editor.field.actions": "Actions",
   "screen.kuronami_quest_tree.editor.field.conditions": "Conditions",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "Message"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Message",
+  "commands.kuronami_quest_tree.giver.unknown": "La quête ou le chapitre %s est introuvable",
+  "commands.kuronami_quest_tree.giver.no_target": "Regardez une entité ou un bloc de quête",
+  "commands.kuronami_quest_tree.giver.set": "%s a été lié à %s",
+  "commands.kuronami_quest_tree.giver.cleared": "Le lien de quête de %s a été retiré",
+  "commands.kuronami_quest_tree.giver.none": "%s n'a aucun lien de quête",
+  "commands.kuronami_quest_tree.giver.player_only": "Seul un joueur peut modifier un donneur de quêtes"
 }

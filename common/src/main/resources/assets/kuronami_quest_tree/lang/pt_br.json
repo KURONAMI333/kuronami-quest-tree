@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "Tags de blocos",
   "screen.kuronami_quest_tree.editor.field.actions": "Ações",
   "screen.kuronami_quest_tree.editor.field.conditions": "Condições",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "Mensagem"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Mensagem",
+  "commands.kuronami_quest_tree.giver.unknown": "A missão ou o capítulo %s não existe",
+  "commands.kuronami_quest_tree.giver.no_target": "Olhe para uma entidade ou um bloco de missão",
+  "commands.kuronami_quest_tree.giver.set": "%s foi vinculado a %s",
+  "commands.kuronami_quest_tree.giver.cleared": "O vínculo de missão de %s foi removido",
+  "commands.kuronami_quest_tree.giver.none": "%s não tem vínculo de missão",
+  "commands.kuronami_quest_tree.giver.player_only": "Só um jogador pode alterar um provedor de missões"
 }

@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "Теги блоков",
   "screen.kuronami_quest_tree.editor.field.actions": "Действия",
   "screen.kuronami_quest_tree.editor.field.conditions": "Условия",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "Сообщение"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Сообщение",
+  "commands.kuronami_quest_tree.giver.unknown": "Квест или глава %s не найдены",
+  "commands.kuronami_quest_tree.giver.no_target": "Посмотрите на сущность или квестовый блок",
+  "commands.kuronami_quest_tree.giver.set": "%s привязан к %s",
+  "commands.kuronami_quest_tree.giver.cleared": "Привязка квеста у %s снята",
+  "commands.kuronami_quest_tree.giver.none": "У %s нет привязки квеста",
+  "commands.kuronami_quest_tree.giver.player_only": "Менять выдающего квесты может только игрок"
 }

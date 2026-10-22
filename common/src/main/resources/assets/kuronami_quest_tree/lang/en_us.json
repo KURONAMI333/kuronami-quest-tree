@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "Block tags",
   "screen.kuronami_quest_tree.editor.field.actions": "Actions",
   "screen.kuronami_quest_tree.editor.field.conditions": "Conditions",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "Message"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Message",
+  "commands.kuronami_quest_tree.giver.unknown": "Unknown quest or chapter %s",
+  "commands.kuronami_quest_tree.giver.no_target": "Look at an entity or a quest block",
+  "commands.kuronami_quest_tree.giver.set": "Linked %s to %s",
+  "commands.kuronami_quest_tree.giver.cleared": "Cleared the quest link from %s",
+  "commands.kuronami_quest_tree.giver.none": "%s has no quest link",
+  "commands.kuronami_quest_tree.giver.player_only": "Only a player can change a quest giver"
 }

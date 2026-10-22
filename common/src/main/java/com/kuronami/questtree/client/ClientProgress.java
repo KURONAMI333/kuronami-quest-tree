@@ -6,6 +6,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
+import com.kuronami.questtree.network.OpenPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.progress.PlayerProgress;
@@ -96,6 +97,16 @@ public final class ClientProgress {
                 Constants.LOG.error("Could not read progression data from server", ex);
             }
             buffer = null;
+        }
+    }
+
+    /** A quest giver, a quest block or an addon asked the server to open the book on one target. */
+    public static void onOpen(OpenPayload p) {
+        String target = p.target() == null ? "" : p.target();
+        if (target.isEmpty()) {
+            Minecraft.getInstance().setScreen(new ProgressScreen());
+        } else {
+            ProgressScreen.openTarget(target);
         }
     }
 

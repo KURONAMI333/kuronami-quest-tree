@@ -498,5 +498,11 @@
   "screen.kuronami_quest_tree.editor.field.block_tags": "Etiquetas de bloques",
   "screen.kuronami_quest_tree.editor.field.actions": "Acciones",
   "screen.kuronami_quest_tree.editor.field.conditions": "Condiciones",
-  "screen.kuronami_quest_tree.editor.field.rule_message": "Mensaje"
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Mensaje",
+  "commands.kuronami_quest_tree.giver.unknown": "La búsqueda o el capítulo %s no existe",
+  "commands.kuronami_quest_tree.giver.no_target": "Mira una entidad o un bloque de búsqueda",
+  "commands.kuronami_quest_tree.giver.set": "%s se ha vinculado a %s",
+  "commands.kuronami_quest_tree.giver.cleared": "Se ha quitado el vínculo de búsqueda de %s",
+  "commands.kuronami_quest_tree.giver.none": "%s no tiene ningún vínculo de búsqueda",
+  "commands.kuronami_quest_tree.giver.player_only": "Solo un jugador puede cambiar un dador de búsquedas"
 }

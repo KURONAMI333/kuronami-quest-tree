@@ -1,5 +1,6 @@
 package com.kuronami.questtree.block;
 
+import com.kuronami.questtree.giver.GiverTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentMap;
@@ -8,14 +9,18 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.item.component.CustomData;
 
-/** Remembers which quest a task block shows. The key is sent with the block so the client can open that quest. */
+/**
+ * Remembers what a task block opens: one quest or, since 2026-10-22, one chapter. The target is kept with the block
+ * so the server can open the book for the player who clicked it.
+ */
 public class QuestTaskBlockEntity extends BlockEntity {
 
     private String node = "";
+    private String chapter = "";
 
     public QuestTaskBlockEntity(BlockPos pos, BlockState state) {
         this(ModBlockEntities.task(), pos, state);
@@ -29,20 +34,43 @@ public class QuestTaskBlockEntity extends BlockEntity {
         return node;
     }
 
+    public String chapter() {
+        return chapter;
+    }
+
+    /** The quest or chapter this block opens, or null when it is unlinked. */
+    public GiverTarget target() {
+        if (!chapter.isEmpty()) {
+            return GiverTarget.chapter(chapter);
+        }
+        return node.isEmpty() ? null : GiverTarget.node(node);
+    }
+
     public void setNode(String node) {
         this.node = node == null ? "" : node;
+        this.chapter = "";
         setChanged();
     }
 
-    /** Creative pick and middle-click keep the quest this block shows. */
+    public void setTarget(GiverTarget target) {
+        this.node = target == null || target.chapter() ? "" : target.id();
+        this.chapter = target == null || !target.chapter() ? "" : target.id();
+        setChanged();
+    }
+
+    /** Creative pick and middle-click keep the target this block opens. */
     @Override
     protected void collectImplicitComponents(DataComponentMap.Builder components) {
         super.collectImplicitComponents(components);
-        if (node.isEmpty()) {
+        if (node.isEmpty() && chapter.isEmpty()) {
             return;
         }
         CompoundTag tag = new CompoundTag();
-        tag.putString(QuestNodeKey.KEY, node);
+        if (!chapter.isEmpty()) {
+            tag.putString(QuestNodeKey.CHAPTER_KEY, chapter);
+        } else {
+            tag.putString(QuestNodeKey.KEY, node);
+        }
         components.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
@@ -52,7 +80,12 @@ public class QuestTaskBlockEntity extends BlockEntity {
         CustomData data = input.get(DataComponents.CUSTOM_DATA);
         if (data != null) {
             CompoundTag tag = data.copyTag();
-            setNode(QuestNodeKey.read(tag::contains, tag::getString));
+            String savedChapter = tag.getString(QuestNodeKey.CHAPTER_KEY);
+            if (!savedChapter.isEmpty()) {
+                setTarget(GiverTarget.chapter(savedChapter));
+            } else {
+                setNode(QuestNodeKey.read(tag::contains, tag::getString));
+            }
         }
     }
 
@@ -60,12 +93,16 @@ public class QuestTaskBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString(QuestNodeKey.KEY, node);
+        if (!chapter.isEmpty()) {
+            tag.putString(QuestNodeKey.CHAPTER_KEY, chapter);
+        }
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         node = QuestNodeKey.read(tag::contains, tag::getString);
+        chapter = tag.getString(QuestNodeKey.CHAPTER_KEY);
     }
 
     @Override

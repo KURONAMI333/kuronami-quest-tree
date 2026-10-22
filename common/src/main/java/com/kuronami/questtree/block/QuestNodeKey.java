@@ -4,12 +4,14 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * The key a task block saves its quest under. {@code quest_node} is the current key; {@code node} is read as a
- * fallback so blocks placed by an earlier build keep their quest (2026-10-21 review).
+ * The keys a task block saves its target under. {@code quest_node} is the current quest key; {@code node} is read as
+ * a fallback so blocks placed by an earlier build keep their quest (2026-10-21 review). {@code quest_chapter} holds a
+ * chapter target (2026-10-22, G3); it wins when both are present.
  */
 public final class QuestNodeKey {
 
     public static final String KEY = "quest_node";
+    public static final String CHAPTER_KEY = "quest_chapter";
     public static final String LEGACY_KEY = "node";
 
     private QuestNodeKey() {

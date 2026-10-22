@@ -342,13 +342,35 @@ Whether the quest book drops on death is the server config `drop_book_on_death`.
 
 ## Blocks
 
-`quest_task_block` (quest board) opens the quest recorded on it when right-clicked. `quest_barrier` (quest barrier) lets through only a player who has completed the recorded quest or holds the recorded stage; other entities never pass. Both move their key from the placed item's custom data to the block entity. Operators can hand them out with:
+`quest_task_block` (quest board) opens the quest or chapter recorded on it when right-clicked. `quest_barrier` (quest barrier) lets through only a player who has completed the recorded quest or holds the recorded stage; other entities never pass. Both move their key from the placed item's custom data to the block entity. Operators can hand them out with:
 
 ```
 /quest_tree block task <players> <node>
 /quest_tree block barrier <players> node <node>
 /quest_tree block barrier <players> stage <stage>
 ```
+
+A chapter on a quest board is written with `/quest_tree giver set <chapter>` while looking at it; the block entity keeps it as `quest_chapter` next to the old `quest_node`.
+
+## Quest givers
+
+A quest giver opens the book on one quest or chapter when a player right-clicks it. The server only sends the target; the client applies its own hidden and locked rules, so a giver never reveals something the player may not see.
+
+| Kind | Stored in | Link it with |
+|---|---|---|
+| Entity | `<world>/data/kuronami_quest_tree_givers.dat`, by entity UUID | `/quest_tree giver set <quest\|chapter>` while looking at it |
+| Quest board | the block entity's `quest_node` / `quest_chapter` | `/quest_tree giver set <quest\|chapter>` while looking at it |
+
+```
+/quest_tree giver set <namespace>:<chapter>/<node>
+/quest_tree giver set <namespace>:<chapter>
+/quest_tree giver clear
+```
+
+- Both need permission level 2 and a player source, because the target is what that player is looking at. `/quest_tree giver clear` on an entity removes its link; on a quest board it empties the block.
+- `quest_task_block` without a link opens the book where it would normally open. A linked entity keeps its ordinary interaction while the player sneaks, so a villager can still trade.
+- A hidden chapter opens nothing. A locked chapter opens at the chapter list with that pack's hint, not its map. A visible quest opens on its node and a visible chapter opens on its chapter.
+- A giver target survives a restart. The entity list is its own file so a broken link cannot take player progress with it; a board's link travels with the block.
 
 ## Overlay and editor
 
