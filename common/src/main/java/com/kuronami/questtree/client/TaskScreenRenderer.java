@@ -42,7 +42,11 @@ public class TaskScreenRenderer implements BlockEntityRenderer<TaskScreenBlockEn
         if (screen.node().isEmpty() || Minecraft.getInstance().level == null) {
             return;
         }
-        ClientModel.Node node = ClientProgress.model().nodesByKey.get(screen.node());
+        ClientModel model = ClientProgress.model();
+        if (model == null) {
+            return;
+        }
+        ClientModel.Node node = model.nodesByKey.get(screen.node());
         if (node == null || screen.taskIndex() < 0 || screen.taskIndex() >= node.tasks.size()) {
             return;
         }

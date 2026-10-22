@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.client.QuestViewerStyle;
 import me.shedaniel.math.Point;
 import me.shedaniel.math.Rectangle;
 import me.shedaniel.rei.api.client.gui.Renderer;
@@ -59,13 +60,13 @@ public final class CrateViewerReiCategory implements DisplayCategory<CrateViewer
                 .entry(EntryStacks.of(recipe.crate())).markInput());
         widgets.add(Widgets.createLabel(new Point(bounds.x + 30, bounds.y + 4),
                 recipe.crate().getHoverName().copy().withStyle(ChatFormatting.UNDERLINE)
-                        .withStyle(style -> style.withColor(0xFF404040))));
+                        .withStyle(style -> style.withColor(QuestViewerStyle.textColor()))));
         widgets.add(Widgets.createLabel(new Point(bounds.x + 30, bounds.y + 16),
                 Component.literal(trim(recipe.tableId(), bounds.width - 40, font))
-                        .withStyle(style -> style.withColor(0xFF808080))));
+                        .withStyle(style -> style.withColor(QuestViewerStyle.dimColor()))));
         widgets.add(Widgets.createLabel(new Point(bounds.x + 30, bounds.y + 26),
                 Component.translatable("kuronami_quest_tree.viewer.crate.rewards", recipe.contents().size())
-                        .withStyle(style -> style.withColor(0xFF404040))));
+                        .withStyle(style -> style.withColor(QuestViewerStyle.textColor()))));
 
         for (int i = 0; i < Math.min(recipe.contents().size(), COLUMNS * ROWS); i++) {
             int x = bounds.x + 10 + (i % COLUMNS) * 18;

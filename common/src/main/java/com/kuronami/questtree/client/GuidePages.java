@@ -1,11 +1,12 @@
 package com.kuronami.questtree.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.lang.reflect.Method;
-import java.net.URI;
 
 /**
  * Opens a quest's {@code guide_page} (FTB Quests). Patchouli is asked directly when it is installed; a page written as
@@ -17,18 +18,15 @@ final class GuidePages {
     private GuidePages() {
     }
 
-    static void open(String page) {
+    static void open(Screen parent, String page) {
         String value = page == null ? "" : page.trim();
         if (value.isEmpty()) {
             return;
         }
         if (value.startsWith("http://") || value.startsWith("https://")) {
-            try {
-                net.minecraft.Util.getPlatform().openUri(new URI(value));
-                return;
-            } catch (Exception ignored) {
-                // fall through to the in-game options
-            }
+            // the description's links ask first too: a pack's data is not trusted to open a browser on one click
+            ConfirmLinkScreen.confirmLinkNow(parent, value);
+            return;
         }
         if (value.startsWith("/") && Minecraft.getInstance().player != null) {
             Minecraft.getInstance().player.connection.sendCommand(value.substring(1));

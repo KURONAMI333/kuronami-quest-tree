@@ -25,14 +25,15 @@ public final class ClientTaskScreens {
 
     public static void onOpen(ScreenBindOpenPayload payload) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null) {
+        ClientModel model = ClientProgress.model();
+        if (minecraft.level == null || model == null) {
             return;
         }
         BlockPos pos = payload.pos();
         List<EditPickers.Option> options = new ArrayList<>();
         options.add(new EditPickers.Option("", Component.translatable("screen.kuronami_quest_tree.task_screen.none"),
                 ItemStack.EMPTY));
-        for (ClientModel.Chapter chapter : ClientProgress.model().chapters) {
+        for (ClientModel.Chapter chapter : model.chapters) {
             for (ClientModel.Node node : chapter.nodes.values()) {
                 for (int i = 0; i < node.tasks.size(); i++) {
                     ClientModel.Task task = node.tasks.get(i);

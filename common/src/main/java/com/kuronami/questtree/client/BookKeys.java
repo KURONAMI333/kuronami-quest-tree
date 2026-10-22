@@ -29,6 +29,7 @@ public final class BookKeys {
     public static final KeyMapping SELECT_ALL = key("editor_select_all", GLFW.GLFW_KEY_A);
     public static final KeyMapping COPY = key("editor_copy", GLFW.GLFW_KEY_C);
     public static final KeyMapping PASTE = key("editor_paste", GLFW.GLFW_KEY_V);
+    public static final KeyMapping DUPLICATE = key("editor_duplicate", GLFW.GLFW_KEY_D);
     public static final KeyMapping DELETE = key("editor_delete", GLFW.GLFW_KEY_DELETE);
     public static final KeyMapping LINK = key("editor_link", GLFW.GLFW_KEY_L);
 

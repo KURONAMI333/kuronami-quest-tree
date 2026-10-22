@@ -2,21 +2,24 @@ package com.kuronami.questtree.client;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.client.editor.EditorDoc;
 import com.kuronami.questtree.client.editor.FieldSpec;
+import com.kuronami.questtree.client.editor.TranslationDraft;
 import com.kuronami.questtree.client.editor.TranslationKeys;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * One locale's text for this pack (2026-10-22, p6-editor). FTB Quests keeps its translations in a sidecar next to the
  * quest files; KQT has a writable {@code lang/<locale>.json} overlay, so this screen edits that file and never the mod's
  * own lang files. An empty box means "no translation": the key is dropped on save and the English text is used, which
  * is also what an absent key in the overlay means.
+ * <p>
+ * The working copy is {@link TranslationDraft}'s wrapper, because a locale key contains dots that a field path would
+ * read as levels; each row addresses its value by its position in {@link #keys}.
  */
 final class TranslationEditScreen extends EditorScreen {
 
@@ -33,7 +36,8 @@ final class TranslationEditScreen extends EditorScreen {
                 ClientProgress.langs());
         JsonObject all = ClientProgress.langs();
         JsonElement mine = all.get(locale);
-        this.root = mine != null && mine.isJsonObject() ? mine.getAsJsonObject().deepCopy() : new JsonObject();
+        JsonObject localeObject = mine != null && mine.isJsonObject() ? mine.getAsJsonObject() : new JsonObject();
+        this.root = TranslationDraft.wrap(localeObject, keys);
     }
 
     @Override
@@ -43,30 +47,25 @@ final class TranslationEditScreen extends EditorScreen {
         if (keys.isEmpty()) {
             lines.add(new EditForm.CardLine(Component.translatable(PREFIX + "translation.empty"), null, List.of()));
         }
-        for (String key : keys) {
-            boolean missing = !root.has(key) || text(key).isEmpty();
-            FieldSpec spec = FieldSpec.text("entries[" + key + "]", "");
+        for (int i = 0; i < keys.size(); i++) {
+            int index = i;
+            String key = keys.get(index);
+            String path = TranslationDraft.path(index);
+            boolean missing = EditorDoc.text(root, path).isEmpty();
+            FieldSpec spec = FieldSpec.text(path, "");
             lines.add(new EditForm.FieldLine(font, spec, root,
                     Component.literal((missing ? "* " : "") + key),
                     () -> { }, null,
-                    Component.literal("×"), () -> remove(key),
-                    EditorScreen::optionName, path -> { }));
+                    Component.literal("×"), () -> remove(index),
+                    EditorScreen::optionName, edited -> { }));
         }
         lines.add(new EditForm.CardLine(Component.translatable(PREFIX + "translation.save"), this::requestClose,
                 List.of()));
         form.set(lines);
     }
 
-    private String text(String key) {
-        try {
-            return root.has(key) && root.get(key).isJsonPrimitive() ? root.get(key).getAsString() : "";
-        } catch (RuntimeException ex) {
-            return "";
-        }
-    }
-
-    private void remove(String key) {
-        root.remove(key);
+    private void remove(int index) {
+        TranslationDraft.remove(root, index);
         build();
     }
 
@@ -80,12 +79,7 @@ final class TranslationEditScreen extends EditorScreen {
         if (sending) {
             return;
         }
-        JsonObject entries = new JsonObject();
-        for (Map.Entry<String, JsonElement> e : new TreeMap<>(asMap(root)).entrySet()) {
-            if (e.getValue().isJsonPrimitive() && !e.getValue().getAsString().isBlank()) {
-                entries.add(e.getKey(), e.getValue());
-            }
-        }
+        JsonObject entries = TranslationDraft.collect(root, keys);
         JsonObject args = new JsonObject();
         args.addProperty("locale", locale);
         args.add("entries", entries);
@@ -98,13 +92,5 @@ final class TranslationEditScreen extends EditorScreen {
                 showReply(reply, locale, null);
             }
         });
-    }
-
-    private static Map<String, JsonElement> asMap(JsonObject object) {
-        Map<String, JsonElement> out = new TreeMap<>();
-        for (Map.Entry<String, JsonElement> e : object.entrySet()) {
-            out.put(e.getKey(), e.getValue());
-        }
-        return out;
     }
 }

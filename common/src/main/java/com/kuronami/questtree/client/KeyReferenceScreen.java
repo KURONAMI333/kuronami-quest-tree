@@ -46,6 +46,7 @@ public final class KeyReferenceScreen extends Screen {
         add("editor_select_all", withCtrl(BookKeys.SELECT_ALL.getTranslatedKeyMessage()));
         add("editor_copy", withCtrl(BookKeys.COPY.getTranslatedKeyMessage()));
         add("editor_paste", withCtrl(BookKeys.PASTE.getTranslatedKeyMessage()));
+        add("editor_duplicate", withCtrl(BookKeys.DUPLICATE.getTranslatedKeyMessage()));
         add("editor_delete", BookKeys.DELETE.getTranslatedKeyMessage());
         add("editor_link", BookKeys.LINK.getTranslatedKeyMessage());
         add("debug", Component.literal("F3"));
