@@ -1,8 +1,11 @@
 package com.kuronami.questtree.block;
 
+import com.kuronami.questtree.server.BarrierTeleports;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -62,9 +65,25 @@ public class QuestBarrierBlock extends BaseEntityBlock {
         CustomData data = stack.get(DataComponents.CUSTOM_DATA);
         if (data != null) {
             be.setGate(data.copyTag().getString("quest_mode"), data.copyTag().getString("quest_key"));
+            be.readTeleport(data.copyTag());
         }
         if (!level.isClientSide) {
             level.sendBlockUpdated(pos, state, state, 3);
+        }
+    }
+
+    /**
+     * A player who is let through steps inside the block; queue the gate's destination for the next tick. Reaching
+     * this method does not bypass the collision rule: only a player the barrier already allows gets here.
+     */
+    @Override
+    protected void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
+        if (level.isClientSide || !(entity instanceof ServerPlayer player)) {
+            return;
+        }
+        if (level.getBlockEntity(pos) instanceof QuestBarrierBlockEntity be
+                && be.teleport() != null && be.allows(player)) {
+            BarrierTeleports.queue(player, be.teleport(), pos);
         }
     }
 }

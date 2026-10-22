@@ -29,6 +29,9 @@
         ],
         "emi": [
             "com.kuronami.questtree.client.compat.QuestTreeEmiPlugin"
+        ],
+        "jade": [
+            "com.kuronami.questtree.client.compat.QuestTreeJadePlugin"
         ]
     },
     "mixins": [
@@ -47,6 +50,7 @@
         "roughlyenoughitems": "*",
         "emi": "*",
         "jei": "*",
+        "jade": "*",
         "kuronami_trophies": "*"
     }
 }

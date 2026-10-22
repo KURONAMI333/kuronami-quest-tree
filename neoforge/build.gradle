@@ -85,6 +85,7 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 dependencies {
     // JEI / REI / EMI are optional: compiled against their APIs only, never required at runtime
     compileOnly "mezz.jei:jei-1.21.1-common-api:19.57.0.447"
+    compileOnly "maven.modrinth:jade:15.10.6+neoforge"
     compileOnly "me.shedaniel:RoughlyEnoughItems-neoforge:${rei_version}"
     compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
     // KubeJS is optional and NeoForge-only on 1.21.1.

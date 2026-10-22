@@ -19,6 +19,8 @@ neoForge {
 dependencies {
     // JEI is optional: compiled against its API only, never required at runtime (client/RecipeViewer)
     compileOnly "mezz.jei:jei-1.21.1-common-api:19.57.0.447"
+    // Jade is optional: the block overlay is registered only when Jade loads (client/QuestTreeJadePlugin).
+    compileOnly "maven.modrinth:jade:15.10.6+neoforge"
     // REI / EMI are optional too. The -neoforge artifacts carry mojmap names (the same reason as FTB Quests above);
     // loader modules compile the common sources again, so both loader files declare them as well.
     compileOnly "me.shedaniel:RoughlyEnoughItems-neoforge:${rei_version}"

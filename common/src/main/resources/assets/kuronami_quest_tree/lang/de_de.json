@@ -519,5 +519,12 @@
   "kuronami_quest_tree.viewer.state.open": "Offen",
   "kuronami_quest_tree.viewer.state.locked": "Gesperrt",
   "kuronami_quest_tree.viewer.choice": "%s (Auswahl)",
-  "kuronami_quest_tree.viewer.random": "%s (zufällig)"
+  "kuronami_quest_tree.viewer.random": "%s (zufällig)",
+  "block.kuronami_quest_tree.quest_detector": "Quest Detector",
+  "block.kuronami_quest_tree.quest_detector.desc": "A pack tool: a redstone pulse completes its quest for nearby players",
+  "commands.kuronami_quest_tree.unknown_dimension": "Unknown dimension: %s",
+  "jade.kuronami_quest_tree.barrier.locked": "Locked",
+  "jade.kuronami_quest_tree.barrier.open": "Open",
+  "jade.kuronami_quest_tree.barrier.quest": "Quest: %s",
+  "jade.kuronami_quest_tree.barrier.stage": "Stage: %s"
 }

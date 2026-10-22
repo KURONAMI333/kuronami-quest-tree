@@ -343,15 +343,21 @@ Whether the quest book drops on death is the server config `drop_book_on_death`.
 
 ## Blocks
 
-`quest_task_block` (quest board) opens the quest or chapter recorded on it when right-clicked. `quest_barrier` (quest barrier) lets through only a player who has completed the recorded quest or holds the recorded stage; other entities never pass. Both move their key from the placed item's custom data to the block entity. Operators can hand them out with:
+`quest_task_block` (quest board) opens the quest or chapter recorded on it when right-clicked. `quest_barrier` (quest barrier) lets through only a player who has completed the recorded quest or holds the recorded stage; other entities never pass. Both move their key from the placed item's custom data to the block entity. `quest_detector` force-progresses a quest (or one task, as `<node>#<index>`) for every player within its radius on a redstone rising edge. Operators can hand them out with:
 
 ```
 /quest_tree block task <players> <node>
 /quest_tree block barrier <players> node <node>
 /quest_tree block barrier <players> stage <stage>
+/quest_tree block barrier <players> node|stage <key> teleport <dimension> <pos> [relative] [facing <yaw> <pitch>]
+/quest_tree block detector <players> <node|node#index> [radius]
 ```
 
+A barrier destination is absolute by default; `relative` measures it from the barrier block. `facing` keeps the player's current rotation when omitted. A missing or unknown dimension falls back to the player's current level. The detector radius defaults to 8 and is capped at 64. Both blocks keep their settings on the dropped item.
+
 A chapter on a quest board is written with `/quest_tree giver set <chapter>` while looking at it; the block entity keeps it as `quest_chapter` next to the old `quest_node`.
+
+When Jade is installed, a quest barrier's overlay shows its quest or stage and whether the local player may pass. Jade is optional; the mod works without it.
 
 ## Quest givers
 

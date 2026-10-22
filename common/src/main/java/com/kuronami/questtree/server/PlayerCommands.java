@@ -1,14 +1,18 @@
 package com.kuronami.questtree.server;
 
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.block.BarrierTeleport;
+import com.kuronami.questtree.block.DetectorTarget;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -19,12 +23,19 @@ import com.mojang.authlib.GameProfile;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
@@ -58,6 +69,17 @@ final class PlayerCommands {
                     ProgressService.rules().model().nodes.keySet().stream()), b);
     private static final SuggestionProvider<CommandSourceStack> NODES = (c, b) ->
             SharedSuggestionProvider.suggest(ProgressService.rules().model().nodes.keySet(), b);
+    /** Quests and each of their tasks, in the {@code node#index} form the detector stores. */
+    private static final SuggestionProvider<CommandSourceStack> DETECTOR_TARGETS = (c, b) -> {
+        List<String> targets = new ArrayList<>();
+        for (ProgressModel.Node n : ProgressService.rules().model().nodes.values()) {
+            targets.add(n.key);
+            for (int i = 0; i < n.tasks.size(); i++) {
+                targets.add(n.key + "#" + i);
+            }
+        }
+        return SharedSuggestionProvider.suggest(targets, b);
+    };
 
     private PlayerCommands() {
     }
@@ -108,10 +130,24 @@ final class PlayerCommands {
                                 .then(Commands.argument("players", EntityArgument.players())
                                         .then(Commands.literal("node")
                                                 .then(Commands.argument("node", ResourceLocationArgument.id()).suggests(NODES)
-                                                        .executes(c -> giveBlock(c, false))))
+                                                        .executes(c -> giveBarrier(c, "node", id(c, "node"), null))
+                                                        .then(teleport((c, destination) ->
+                                                                giveBarrier(c, "node", id(c, "node"), destination)))))
                                         .then(Commands.literal("stage")
                                                 .then(Commands.argument("stage", StringArgumentType.word())
-                                                        .executes(c -> giveBlock(c, false)))))))
+                                                        .executes(c -> giveBarrier(c, "stage",
+                                                                StringArgumentType.getString(c, "stage"), null))
+                                                        .then(teleport((c, destination) -> giveBarrier(c, "stage",
+                                                                StringArgumentType.getString(c, "stage"), destination)))))))
+                        .then(Commands.literal("detector")
+                                .then(Commands.argument("players", EntityArgument.players())
+                                        .then(Commands.argument("target", StringArgumentType.word()).suggests(DETECTOR_TARGETS)
+                                                .executes(c -> giveDetector(c,
+                                                        StringArgumentType.getString(c, "target"), 8))
+                                                .then(Commands.argument("radius", IntegerArgumentType.integer(1, 64))
+                                                        .executes(c -> giveDetector(c,
+                                                                StringArgumentType.getString(c, "target"),
+                                                                IntegerArgumentType.getInteger(c, "radius"))))))))
                 .then(Commands.literal("rewards").requires(s -> s.hasPermission(2))
                         .then(Commands.literal("block")
                                 .then(Commands.argument("players", GameProfileArgument.gameProfile())
@@ -305,16 +341,54 @@ final class PlayerCommands {
     }
 
     private static int giveBlock(CommandContext<CommandSourceStack> c, boolean task) throws CommandSyntaxException {
-        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
         boolean stage = !task && c.getNodes().stream().anyMatch(n -> "stage".equals(n.getNode().getName()));
         String key = stage ? StringArgumentType.getString(c, "stage") : id(c, "node");
         if (!stage && !ProgressService.rules().model().nodes.containsKey(key)) {
             // a chapter id is not a node: the gate asks whether the quest itself was completed
-            c.getSource().sendFailure(Component.translatable("commands.kuronami_quest_tree.giver.unknown", key));
-            return 0;
+            return unknown(c, key);
         }
         var stack = task ? com.kuronami.questtree.block.ModBlocks.taskItem(key)
                 : com.kuronami.questtree.block.ModBlocks.barrierItem(stage ? "stage" : "node", key);
+        return give(c, stack, key);
+    }
+
+    private static int giveBarrier(CommandContext<CommandSourceStack> c, String mode, String key,
+                                   BarrierTeleport teleport) throws CommandSyntaxException {
+        if ("node".equals(mode) && !ProgressService.rules().model().nodes.containsKey(key)) {
+            return unknown(c, key);
+        }
+        if (teleport != null && !dimensionExists(c, teleport.dimension())) {
+            c.getSource().sendFailure(Component.translatable("commands.kuronami_quest_tree.unknown_dimension",
+                    teleport.dimension()));
+            return 0;
+        }
+        return give(c, com.kuronami.questtree.block.ModBlocks.barrierItem(mode, key, teleport), key);
+    }
+
+    private static int giveDetector(CommandContext<CommandSourceStack> c, String target, int radius)
+            throws CommandSyntaxException {
+        DetectorTarget parsed;
+        try {
+            parsed = DetectorTarget.parse(target);
+        } catch (IllegalArgumentException ex) {
+            return unknown(c, target);
+        }
+        ProgressModel.Node n = ProgressService.rules().model().nodes.get(parsed.node());
+        if (n == null || parsed.isTask() && parsed.task() >= n.tasks.size()) {
+            return unknown(c, target);
+        }
+        String label = parsed.isTask() ? parsed.node() + "#" + parsed.task() : parsed.node();
+        return give(c, com.kuronami.questtree.block.ModBlocks.detectorItem(label, radius), label);
+    }
+
+    private static int unknown(CommandContext<CommandSourceStack> c, String key) {
+        c.getSource().sendFailure(Component.translatable("commands.kuronami_quest_tree.giver.unknown", key));
+        return 0;
+    }
+
+    private static int give(CommandContext<CommandSourceStack> c, net.minecraft.world.item.ItemStack stack, String label)
+            throws CommandSyntaxException {
+        Collection<ServerPlayer> players = EntityArgument.getPlayers(c, "players");
         for (ServerPlayer p : players) {
             var copy = stack.copy();
             if (!p.getInventory().add(copy)) {
@@ -322,8 +396,45 @@ final class PlayerCommands {
             }
         }
         c.getSource().sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.block_given",
-                "Gave %s block(s) for %s", players.size(), key), true);
+                "Gave %s block(s) for %s", players.size(), label), true);
         return players.size();
+    }
+
+    private static boolean dimensionExists(CommandContext<CommandSourceStack> c, String dimension) {
+        ResourceLocation id = ResourceLocation.tryParse(dimension);
+        return id != null && c.getSource().getServer().getLevel(ResourceKey.create(Registries.DIMENSION, id)) != null;
+    }
+
+    @FunctionalInterface
+    private interface TeleportAction {
+        int apply(CommandContext<CommandSourceStack> c, BarrierTeleport destination) throws CommandSyntaxException;
+    }
+
+    /** {@code ... teleport <dimension> <pos> [relative] [facing <yaw> <pitch>]}; the plain form is absolute. */
+    private static LiteralArgumentBuilder<CommandSourceStack> teleport(TeleportAction action) {
+        return Commands.literal("teleport")
+                .then(Commands.argument("dimension", ResourceLocationArgument.id())
+                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .executes(c -> action.apply(c, destination(c, false, false)))
+                                .then(facing(action, false))
+                                .then(Commands.literal("relative")
+                                        .executes(c -> action.apply(c, destination(c, true, false)))
+                                        .then(facing(action, true)))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> facing(TeleportAction action, boolean relative) {
+        return Commands.literal("facing")
+                .then(Commands.argument("yaw", FloatArgumentType.floatArg(-180F, 180F))
+                        .then(Commands.argument("pitch", FloatArgumentType.floatArg(-90F, 90F))
+                                .executes(c -> action.apply(c, destination(c, relative, true)))));
+    }
+
+    private static BarrierTeleport destination(CommandContext<CommandSourceStack> c, boolean relative, boolean withFacing) {
+        BlockPos pos = BlockPosArgument.getBlockPos(c, "pos");
+        String dimension = ResourceLocationArgument.getId(c, "dimension").toString();
+        Float yaw = withFacing ? FloatArgumentType.getFloat(c, "yaw") : null;
+        Float pitch = withFacing ? FloatArgumentType.getFloat(c, "pitch") : null;
+        return new BarrierTeleport(relative, dimension, pos.getX(), pos.getY(), pos.getZ(), yaw, pitch);
     }
 
     /** The reward flag belongs to one player, so this does not fold players of one team together like {@link #each}. */

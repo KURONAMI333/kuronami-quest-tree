@@ -519,5 +519,12 @@
   "kuronami_quest_tree.viewer.state.open": "受付中",
   "kuronami_quest_tree.viewer.state.locked": "ロック",
   "kuronami_quest_tree.viewer.choice": "%s（選択）",
-  "kuronami_quest_tree.viewer.random": "%s（ランダム）"
+  "kuronami_quest_tree.viewer.random": "%s（ランダム）",
+  "block.kuronami_quest_tree.quest_detector": "クエスト検出器",
+  "block.kuronami_quest_tree.quest_detector.desc": "パック用ツール：レッドストーンの入力で近くのプレイヤーのクエストを進める",
+  "commands.kuronami_quest_tree.unknown_dimension": "不明なディメンション: %s",
+  "jade.kuronami_quest_tree.barrier.locked": "通過不可",
+  "jade.kuronami_quest_tree.barrier.open": "通過可",
+  "jade.kuronami_quest_tree.barrier.quest": "クエスト：%s",
+  "jade.kuronami_quest_tree.barrier.stage": "ステージ：%s"
 }

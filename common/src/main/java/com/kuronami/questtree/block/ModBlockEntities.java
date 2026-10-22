@@ -7,6 +7,7 @@ public final class ModBlockEntities {
 
     private static BlockEntityType<QuestTaskBlockEntity> task;
     private static BlockEntityType<QuestBarrierBlockEntity> barrier;
+    private static BlockEntityType<QuestDetectorBlockEntity> detector;
 
     private ModBlockEntities() {
     }
@@ -25,5 +26,13 @@ public final class ModBlockEntities {
 
     public static void setBarrier(BlockEntityType<QuestBarrierBlockEntity> type) {
         barrier = type;
+    }
+
+    public static BlockEntityType<QuestDetectorBlockEntity> detector() {
+        return detector;
+    }
+
+    public static void setDetector(BlockEntityType<QuestDetectorBlockEntity> type) {
+        detector = type;
     }
 }

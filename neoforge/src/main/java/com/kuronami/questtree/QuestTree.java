@@ -4,6 +4,8 @@ import com.kuronami.questtree.block.ModBlockEntities;
 import com.kuronami.questtree.block.ModBlocks;
 import com.kuronami.questtree.block.QuestBarrierBlock;
 import com.kuronami.questtree.block.QuestBarrierBlockEntity;
+import com.kuronami.questtree.block.QuestDetectorBlock;
+import com.kuronami.questtree.block.QuestDetectorBlockEntity;
 import com.kuronami.questtree.block.QuestTaskBlock;
 import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.client.ClientProgress;
@@ -62,6 +64,8 @@ public class QuestTree {
             () -> new QuestTaskBlock(BlockBehaviour.Properties.of().strength(1.5F)));
     public static final DeferredBlock<QuestBarrierBlock> QUEST_BARRIER_BLOCK = BLOCKS.register("quest_barrier",
             () -> new QuestBarrierBlock(BlockBehaviour.Properties.of().strength(-1.0F, 3600000.0F).noOcclusion()));
+    public static final DeferredBlock<QuestDetectorBlock> QUEST_DETECTOR_BLOCK = BLOCKS.register("quest_detector",
+            () -> new QuestDetectorBlock(BlockBehaviour.Properties.of().strength(0.3F)));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuestTaskBlockEntity>> QUEST_TASK_BE =
             BLOCK_ENTITIES.register("quest_task_block", () -> {
@@ -77,6 +81,13 @@ public class QuestTree {
                 ModBlockEntities.setBarrier(type);
                 return type;
             });
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuestDetectorBlockEntity>> QUEST_DETECTOR_BE =
+            BLOCK_ENTITIES.register("quest_detector", () -> {
+                BlockEntityType<QuestDetectorBlockEntity> type = BlockEntityType.Builder
+                        .of(QuestDetectorBlockEntity::new, QUEST_DETECTOR_BLOCK.get()).build(null);
+                ModBlockEntities.setDetector(type);
+                return type;
+            });
 
     public static final DeferredItem<BlockItem> QUEST_TASK_ITEM = ITEMS.register("quest_task_block", () -> {
         BlockItem item = new QuestBlockItem(QUEST_TASK_BLOCK.get(), new Item.Properties(),
@@ -88,6 +99,12 @@ public class QuestTree {
         BlockItem item = new QuestBlockItem(QUEST_BARRIER_BLOCK.get(), new Item.Properties(),
                 "block.kuronami_quest_tree.quest_barrier.desc");
         ModBlocks.setBarrier(QUEST_BARRIER_BLOCK.get(), item);
+        return item;
+    });
+    public static final DeferredItem<BlockItem> QUEST_DETECTOR_ITEM = ITEMS.register("quest_detector", () -> {
+        BlockItem item = new QuestBlockItem(QUEST_DETECTOR_BLOCK.get(), new Item.Properties(),
+                "block.kuronami_quest_tree.quest_detector.desc");
+        ModBlocks.setDetector(QUEST_DETECTOR_BLOCK.get(), item);
         return item;
     });
 
@@ -108,6 +125,7 @@ public class QuestTree {
                 e.accept(QUEST_BOOK);
                 e.accept(QUEST_TASK_ITEM);
                 e.accept(QUEST_BARRIER_ITEM);
+                e.accept(QUEST_DETECTOR_ITEM);
             }
         });
         modBus.addListener(QuestTree::registerPayloads);

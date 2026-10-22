@@ -22,6 +22,8 @@ public class QuestBarrierBlockEntity extends BlockEntity {
 
     private String mode = "node";
     private String key = "";
+    /** Null until the barrier is given a teleport destination. */
+    private BarrierTeleport teleport;
 
     public QuestBarrierBlockEntity(BlockPos pos, BlockState state) {
         this(ModBlockEntities.barrier(), pos, state);
@@ -42,6 +44,15 @@ public class QuestBarrierBlockEntity extends BlockEntity {
     public void setGate(String mode, String key) {
         this.mode = "stage".equals(mode) ? "stage" : "node";
         this.key = key == null ? "" : key;
+        setChanged();
+    }
+
+    public BarrierTeleport teleport() {
+        return teleport;
+    }
+
+    public void setTeleport(BarrierTeleport teleport) {
+        this.teleport = teleport;
         setChanged();
     }
 
@@ -66,6 +77,7 @@ public class QuestBarrierBlockEntity extends BlockEntity {
         CompoundTag tag = new CompoundTag();
         tag.putString("quest_key", key);
         tag.putString("quest_mode", mode);
+        writeTeleport(tag);
         components.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
@@ -74,8 +86,45 @@ public class QuestBarrierBlockEntity extends BlockEntity {
         super.applyImplicitComponents(input);
         CustomData data = input.get(DataComponents.CUSTOM_DATA);
         if (data != null) {
-            setGate(data.copyTag().getString("quest_mode"), data.copyTag().getString("quest_key"));
+            CompoundTag tag = data.copyTag();
+            setGate(tag.getString("quest_mode"), tag.getString("quest_key"));
+            setTeleport(teleportFrom(tag));
         }
+    }
+
+    /** Copies only the teleport part of an item's data, so the gate key and destination travel together. */
+    public void readTeleport(CompoundTag tag) {
+        setTeleport(teleportFrom(tag));
+    }
+
+    private void writeTeleport(CompoundTag tag) {
+        if (teleport == null) {
+            return;
+        }
+        CompoundTag saved = new CompoundTag();
+        saved.putBoolean("relative", teleport.relative());
+        saved.putString("dimension", teleport.dimension());
+        saved.putInt("x", teleport.x());
+        saved.putInt("y", teleport.y());
+        saved.putInt("z", teleport.z());
+        if (teleport.yaw() != null) {
+            saved.putFloat("yaw", teleport.yaw());
+        }
+        if (teleport.pitch() != null) {
+            saved.putFloat("pitch", teleport.pitch());
+        }
+        tag.put("teleport", saved);
+    }
+
+    private static BarrierTeleport teleportFrom(CompoundTag tag) {
+        if (!tag.contains("teleport")) {
+            return null;
+        }
+        CompoundTag saved = tag.getCompound("teleport");
+        return new BarrierTeleport(saved.getBoolean("relative"), saved.getString("dimension"),
+                saved.getInt("x"), saved.getInt("y"), saved.getInt("z"),
+                saved.contains("yaw") ? saved.getFloat("yaw") : null,
+                saved.contains("pitch") ? saved.getFloat("pitch") : null);
     }
 
     @Override
@@ -83,6 +132,7 @@ public class QuestBarrierBlockEntity extends BlockEntity {
         super.saveAdditional(tag, registries);
         tag.putString("mode", mode);
         tag.putString("key", key);
+        writeTeleport(tag);
     }
 
     @Override
@@ -90,6 +140,7 @@ public class QuestBarrierBlockEntity extends BlockEntity {
         super.loadAdditional(tag, registries);
         mode = "stage".equals(tag.getString("mode")) ? "stage" : "node";
         key = tag.getString("key");
+        teleport = teleportFrom(tag);
     }
 
     @Override

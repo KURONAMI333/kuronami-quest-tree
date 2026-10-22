@@ -7,6 +7,7 @@ import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.api.QuestConditionType;
 import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.api.QuestTaskType;
+import com.kuronami.questtree.block.DetectorTarget;
 import com.kuronami.questtree.config.ServerConfig;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.item.ModItems;
@@ -1586,6 +1587,51 @@ public final class ProgressService {
             return 0;
         }
         return player.getStats().getValue(Stats.CUSTOM.get(BuiltInRegistries.CUSTOM_STAT.get(rl)));
+    }
+
+    /**
+     * The force-progress path behind the detector block: fills a quest's tasks (or one task named by
+     * {@code <node>#<index>}) like {@code /quest_tree complete}, then runs the normal completion check so rewards and
+     * notifications follow the same route as a hand-in. Returns false for an unknown target or a fake player.
+     */
+    public static boolean forceProgress(ServerPlayer player, String target) {
+        if (ServerPlayers.isFake(player)) {
+            return false;
+        }
+        DetectorTarget parsed;
+        try {
+            parsed = DetectorTarget.parse(target);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+        ProgressModel.Node n = rules().model().nodes.get(parsed.node());
+        if (n == null) {
+            return false;
+        }
+        if (parsed.isTask() && parsed.task() >= n.tasks.size()) {
+            return false;
+        }
+        PlayerProgress p = progress(player);
+        if (parsed.isTask()) {
+            bump(player, p, n, parsed.task(), ProgressRules.target(n.tasks.get(parsed.task())));
+        } else {
+            for (int i = 0; i < n.tasks.size(); i++) {
+                bump(player, p, n, i, ProgressRules.target(n.tasks.get(i)));
+            }
+            if (n.tasks.isEmpty() && !n.chapter.isSkills() && !p.completed.contains(n.key)) {
+                // task-less quests complete on their own, like the complete command
+                p.completed.add(n.key);
+                p.completedAt.put(n.key, System.currentTimeMillis());
+                event(player, p, "complete", n.key);
+                autoRewards(player, p, n);
+            }
+        }
+        recheck(player, p);
+        Rewards.refreshTeamAttributes(player);
+        ProgressStore.get(player.server).setDirty();
+        markDirty(player);
+        flushTeam(player);
+        return true;
     }
 
     /**

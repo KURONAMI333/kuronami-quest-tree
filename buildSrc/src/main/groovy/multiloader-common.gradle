@@ -50,6 +50,8 @@ repositories {
     maven { url = 'https://maven.shedaniel.me/' }
     maven { url = 'https://maven.terraformersmc.com/releases/' }
     maven { url = 'https://maven.latvian.dev/releases' }
+    // Jade (WAILA) is optional: compiled against its API only, never required at runtime.
+    maven { url = 'https://api.modrinth.com/maven' }
 }
 
 dependencies {

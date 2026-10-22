@@ -5,6 +5,8 @@ plugins {
 dependencies {
     // JEI is optional: compiled against its API only, never required at runtime (client/RecipeViewer)
     compileOnly "mezz.jei:jei-1.21.1-common-api:19.57.0.447"
+    // the -neoforge artifact carries mojmap names, like the REI / EMI lines above
+    compileOnly "maven.modrinth:jade:15.10.6+neoforge"
     compileOnly "me.shedaniel:RoughlyEnoughItems-neoforge:${rei_version}"
     compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
     minecraft "com.mojang:minecraft:${minecraft_version}"

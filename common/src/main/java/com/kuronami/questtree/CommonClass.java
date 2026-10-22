@@ -1,5 +1,6 @@
 package com.kuronami.questtree;
 
+import com.kuronami.questtree.server.BarrierTeleports;
 import com.kuronami.questtree.server.EditorService;
 import com.kuronami.questtree.server.ProgressCommands;
 import com.kuronami.questtree.server.ProgressData;
@@ -55,6 +56,7 @@ public final class CommonClass {
 
     /** The server stopped: forget the world and every editing session. */
     public static void onServerStopped() {
+        BarrierTeleports.clear();
         EditorService.onServerStopped();
     }
 
@@ -65,6 +67,7 @@ public final class CommonClass {
     public static void onServerTick(MinecraftServer server) {
         ProgressData.runPendingAchievability(server);
         EditorService.onServerTick(server);
+        BarrierTeleports.tick(server);
     }
 
     /** Server-side player tick (end of tick). */
