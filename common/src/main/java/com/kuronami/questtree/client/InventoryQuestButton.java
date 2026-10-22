@@ -55,6 +55,7 @@ public final class InventoryQuestButton extends ImageButton {
         AbstractContainerScreenAccessor a = (AbstractContainerScreenAccessor) screen;
         setX(InventoryButtonLayout.x(a.questTree$leftPos()));
         setY(InventoryButtonLayout.y(a.questTree$topPos()));
+        visible = InventoryButtonLayout.fits(a.questTree$topPos());
     }
 
     @Override

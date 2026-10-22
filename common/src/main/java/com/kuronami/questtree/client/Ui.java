@@ -228,7 +228,7 @@ final class Ui {
         TOAST_TRACK = color(o, "toast_track", TOAST_TRACK);
         TOAST_FILL = color(o, "toast_fill", TOAST_FILL);
         TOAST_EDGE = color(o, "toast_edge", TOAST_EDGE);
-        applyCornerRadius(integer(o, "corner_radius", CORNER));
+        applyCornerRadius(cornerOverride != null ? cornerOverride : integer(o, "corner_radius", CORNER));
         if (ClientConfig.highContrast()) {
             // readability over the pack's palette: white text on a near-black ground, and a warmer selection
             TEXT = 0xFFFFFFFF;
@@ -362,9 +362,18 @@ final class Ui {
         R1 = R2 = R3 = R4 = CORNER;
     }
 
-    /** Dev tour and tests: set the radius for this session; the next palette load takes the file's value again. */
+    /** Dev tour only: a radius that outlives palette reloads (the screen reloads the palette when it opens). */
+    private static Integer cornerOverride;
+
+    /** Dev tour only: hold the radius at {@code guiPixels} until {@link #clearCornerRadius()}. */
     static void setCornerRadius(int guiPixels) {
+        cornerOverride = guiPixels;
         applyCornerRadius(guiPixels);
+    }
+
+    /** Dev tour only: go back to the palette's radius at the next load. */
+    static void clearCornerRadius() {
+        cornerOverride = null;
     }
 
     private static ResourceLocation texture(String path) {
@@ -463,6 +472,9 @@ final class Ui {
         int d = Math.min(i, h - 1 - i);
         if (d >= r) {
             return 0;
+        }
+        if (r == 1) {
+            return 1; // the slightest rounding: the four corner pixels are left out, as Ui.surface does at radius 1
         }
         double dy = r - d - 0.5;
         return r - (int) Math.round(Math.sqrt(Math.max(0.0, (double) r * r - dy * dy)));

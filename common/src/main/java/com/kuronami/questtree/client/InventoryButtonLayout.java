@@ -21,6 +21,11 @@ final class InventoryButtonLayout {
     }
 
     static int y(int topPos) {
-        return Math.max(2, topPos - HEIGHT - GAP);
+        return topPos - HEIGHT - GAP;
+    }
+
+    /** False on a screen too short to leave room above the panel; the button hides rather than cover the preview. */
+    static boolean fits(int topPos) {
+        return y(topPos) >= 0;
     }
 }

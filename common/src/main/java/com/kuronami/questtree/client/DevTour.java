@@ -478,6 +478,7 @@ final class DevTour {
         });
         shot(et + 210, "46_corners_2_hud");
         at(et + 214, () -> {
+            Ui.clearCornerRadius();
             Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
             if (tourPin != null) {
