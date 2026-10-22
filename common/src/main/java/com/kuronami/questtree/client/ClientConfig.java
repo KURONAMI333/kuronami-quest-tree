@@ -24,7 +24,7 @@ public final class ClientConfig {
 
     /** Where a quest or skill completion is announced (FTB Quests' completion style, 2026-10-20). */
     public enum NotificationStyle {
-        TOAST("toast"), CHAT("chat"), ACTION_BAR("action_bar"), NONE("none");
+        TOAST("toast"), ACTION_BAR("action_bar"), NONE("none");
 
         final String id;
 
@@ -76,7 +76,7 @@ public final class ClientConfig {
     /** Liquid Glass on the screen's controls and panels; off draws them as flat panels (less to look through). */
     public static boolean glass = true;
 
-    /** Completion notice: toast, chat, action bar, or nothing. */
+    /** Completion notice: toast, action bar, or nothing. Gameplay notices never use chat. */
     public static NotificationStyle notificationStyle = NotificationStyle.TOAST;
     /** The mod's completion, claim, unlock and level-up sounds. */
     public static boolean completionSounds = true;

@@ -141,9 +141,7 @@ public final class Rewards {
         }
         Constants.LOG.warn("A currency reward of {} failed to pay", amount);
         // the claim stays open, so the player can try again once the economy mod is back
-        player.sendSystemMessage(net.minecraft.network.chat.Component.translatableWithFallback(
-                "message.kuronami_quest_tree.currency_failed",
-                "The currency reward could not be paid; it stays unclaimed."));
+        Cues.notice(player, "message.kuronami_quest_tree.currency_failed", "gift");
         return false;
     }
 
