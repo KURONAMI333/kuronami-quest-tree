@@ -8,11 +8,18 @@ import com.kuronami.questtree.block.QuestDetectorBlock;
 import com.kuronami.questtree.block.QuestDetectorBlockEntity;
 import com.kuronami.questtree.block.QuestTaskBlock;
 import com.kuronami.questtree.block.QuestTaskBlockEntity;
+import com.kuronami.questtree.block.TaskScreenAuxBlockEntity;
+import com.kuronami.questtree.block.TaskScreenBlock;
+import com.kuronami.questtree.block.TaskScreenBlockEntity;
 import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.item.QuestBlockItem;
 import com.kuronami.questtree.item.QuestBookItem;
+import com.kuronami.questtree.item.TaskScreenConfiguratorItem;
+import com.kuronami.questtree.network.ScreenBindOpenPayload;
+import com.kuronami.questtree.network.ScreenBindPayload;
+import com.kuronami.questtree.server.TaskScreenService;
 import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
@@ -35,6 +42,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
@@ -66,6 +75,20 @@ public class QuestTree {
             () -> new QuestBarrierBlock(BlockBehaviour.Properties.of().strength(-1.0F, 3600000.0F).noOcclusion()));
     public static final DeferredBlock<QuestDetectorBlock> QUEST_DETECTOR_BLOCK = BLOCKS.register("quest_detector",
             () -> new QuestDetectorBlock(BlockBehaviour.Properties.of().strength(0.3F)));
+    public static final DeferredBlock<TaskScreenBlock> TASK_SCREEN_1 = BLOCKS.register("task_screen_1",
+            () -> new TaskScreenBlock(screenProps(), 1));
+    public static final DeferredBlock<TaskScreenBlock> TASK_SCREEN_3 = BLOCKS.register("task_screen_3",
+            () -> new TaskScreenBlock(screenProps(), 3));
+    public static final DeferredBlock<TaskScreenBlock> TASK_SCREEN_5 = BLOCKS.register("task_screen_5",
+            () -> new TaskScreenBlock(screenProps(), 5));
+    public static final DeferredBlock<TaskScreenBlock> TASK_SCREEN_7 = BLOCKS.register("task_screen_7",
+            () -> new TaskScreenBlock(screenProps(), 7));
+    public static final DeferredBlock<TaskScreenBlock.Aux> TASK_SCREEN_AUX = BLOCKS.register("task_screen_aux",
+            () -> new TaskScreenBlock.Aux(screenProps()));
+
+    private static BlockBehaviour.Properties screenProps() {
+        return BlockBehaviour.Properties.of().noOcclusion().strength(0.3F);
+    }
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuestTaskBlockEntity>> QUEST_TASK_BE =
             BLOCK_ENTITIES.register("quest_task_block", () -> {
@@ -88,6 +111,21 @@ public class QuestTree {
                 ModBlockEntities.setDetector(type);
                 return type;
             });
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TaskScreenBlockEntity>> TASK_SCREEN_BE =
+            BLOCK_ENTITIES.register("task_screen", () -> {
+                BlockEntityType<TaskScreenBlockEntity> type = BlockEntityType.Builder
+                        .of(TaskScreenBlockEntity::new, TASK_SCREEN_1.get(), TASK_SCREEN_3.get(),
+                                TASK_SCREEN_5.get(), TASK_SCREEN_7.get()).build(null);
+                ModBlockEntities.setTaskScreen(type);
+                return type;
+            });
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TaskScreenAuxBlockEntity>> TASK_SCREEN_AUX_BE =
+            BLOCK_ENTITIES.register("task_screen_aux", () -> {
+                BlockEntityType<TaskScreenAuxBlockEntity> type = BlockEntityType.Builder
+                        .of(TaskScreenAuxBlockEntity::new, TASK_SCREEN_AUX.get()).build(null);
+                ModBlockEntities.setTaskScreenAux(type);
+                return type;
+            });
 
     public static final DeferredItem<BlockItem> QUEST_TASK_ITEM = ITEMS.register("quest_task_block", () -> {
         BlockItem item = new QuestBlockItem(QUEST_TASK_BLOCK.get(), new Item.Properties(),
@@ -107,6 +145,26 @@ public class QuestTree {
         ModBlocks.setDetector(QUEST_DETECTOR_BLOCK.get(), item);
         return item;
     });
+    public static final DeferredItem<BlockItem> TASK_SCREEN_1_ITEM = screenItem(1, TASK_SCREEN_1);
+    public static final DeferredItem<BlockItem> TASK_SCREEN_3_ITEM = screenItem(3, TASK_SCREEN_3);
+    public static final DeferredItem<BlockItem> TASK_SCREEN_5_ITEM = screenItem(5, TASK_SCREEN_5);
+    public static final DeferredItem<BlockItem> TASK_SCREEN_7_ITEM = screenItem(7, TASK_SCREEN_7);
+
+    private static DeferredItem<BlockItem> screenItem(int size, DeferredBlock<TaskScreenBlock> block) {
+        return ITEMS.register("task_screen_" + size, () -> {
+            BlockItem item = new QuestBlockItem(block.get(), new Item.Properties(),
+                    "block.kuronami_quest_tree.task_screen.desc");
+            ModBlocks.setTaskScreen(size, block.get(), item);
+            return item;
+        });
+    }
+
+    public static final DeferredItem<TaskScreenConfiguratorItem> TASK_SCREEN_CONFIGURATOR =
+            ITEMS.register("task_screen_configurator", () -> {
+                TaskScreenConfiguratorItem item = new TaskScreenConfiguratorItem(new Item.Properties().stacksTo(1));
+                ModItems.setTaskScreenConfigurator(item);
+                return item;
+            });
 
     /** The quest book. The supplier also fills the common holder, so common code needs no loader reference. */
     public static final DeferredItem<QuestBookItem> QUEST_BOOK = ITEMS.register("quest_book", () -> {
@@ -126,9 +184,15 @@ public class QuestTree {
                 e.accept(QUEST_TASK_ITEM);
                 e.accept(QUEST_BARRIER_ITEM);
                 e.accept(QUEST_DETECTOR_ITEM);
+                e.accept(TASK_SCREEN_1_ITEM);
+                e.accept(TASK_SCREEN_3_ITEM);
+                e.accept(TASK_SCREEN_5_ITEM);
+                e.accept(TASK_SCREEN_7_ITEM);
+                e.accept(TASK_SCREEN_CONFIGURATOR);
             }
         });
         modBus.addListener(QuestTree::registerPayloads);
+        modBus.addListener(QuestTree::registerCapabilities);
         NeoForge.EVENT_BUS.addListener(QuestTree::addReloadListener);
         NeoForge.EVENT_BUS.addListener((OnDatapackSyncEvent e) -> e.getRelevantPlayers().forEach(CommonClass::onSyncToPlayer));
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent e) -> CommonClass.registerCommands(e.getDispatcher()));
@@ -199,7 +263,7 @@ public class QuestTree {
         // version is bumped when a payload changes shape (2: ActionPayload gained its choice field; 3: the editor
         // gained its state payload; 4: the team view; 5: quest givers; 6: non-chat cues and restriction tooltips), so
         // an older client fails the handshake instead of silently missing a feature.
-        var r = event.registrar("6");
+        var r = event.registrar("7");
         r.playToClient(SyncPayload.TYPE, SyncPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onSync(payload));
         r.playToClient(ProgressPayload.TYPE, ProgressPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onProgress(payload));
         r.playToClient(OpenPayload.TYPE, OpenPayload.STREAM_CODEC, (payload, context) -> ClientProgress.onOpen(payload));
@@ -220,6 +284,28 @@ public class QuestTree {
                 CommonClass.onEditorOp(sp, payload);
             }
         });
+        r.playToClient(ScreenBindOpenPayload.TYPE, ScreenBindOpenPayload.STREAM_CODEC,
+                (payload, context) -> com.kuronami.questtree.client.ClientTaskScreens.onOpen(payload));
+        r.playToServer(ScreenBindPayload.TYPE, ScreenBindPayload.STREAM_CODEC, (payload, context) -> {
+            if (context.player() instanceof ServerPlayer sp) {
+                TaskScreenService.bind(sp, payload.pos(), payload.node(), payload.index());
+            }
+        });
+    }
+
+    private static void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, TASK_SCREEN_BE.get(),
+                (be, side) -> NeoForgeTaskScreenCapabilities.item(be));
+        event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, TASK_SCREEN_BE.get(),
+                (be, side) -> NeoForgeTaskScreenCapabilities.fluid(be));
+        event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, TASK_SCREEN_BE.get(),
+                (be, side) -> NeoForgeTaskScreenCapabilities.energy(be));
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, TASK_SCREEN_AUX_BE.get(),
+                (be, side) -> NeoForgeTaskScreenCapabilities.item(be));
+        event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, TASK_SCREEN_AUX_BE.get(),
+                (be, side) -> NeoForgeTaskScreenCapabilities.fluid(be));
+        event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, TASK_SCREEN_AUX_BE.get(),
+                (be, side) -> NeoForgeTaskScreenCapabilities.energy(be));
     }
 
     private static void addReloadListener(AddReloadListenerEvent event) {

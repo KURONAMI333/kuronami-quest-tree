@@ -526,5 +526,17 @@
   "jade.kuronami_quest_tree.barrier.locked": "Locked",
   "jade.kuronami_quest_tree.barrier.open": "Open",
   "jade.kuronami_quest_tree.barrier.quest": "Quest: %s",
-  "jade.kuronami_quest_tree.barrier.stage": "Stage: %s"
+  "jade.kuronami_quest_tree.barrier.stage": "Stage: %s",
+  "block.kuronami_quest_tree.task_screen_1": "任务屏幕 (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "任务屏幕 (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "任务屏幕 (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "任务屏幕 (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "整合包工具：显示一个任务并收取所需物品",
+  "item.kuronami_quest_tree.task_screen_configurator": "任务屏幕配置器",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "整合包工具：将任务绑定到屏幕",
+  "screen.kuronami_quest_tree.task_screen.pick": "绑定任务",
+  "screen.kuronami_quest_tree.task_screen.none": "无任务",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "不是你的屏幕",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "此任务没有屏幕",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "仅任务屏幕"
 }

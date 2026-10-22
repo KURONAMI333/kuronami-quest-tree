@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "kuronami_quest_tree:block/task_screen_aux",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "kuronami_quest_tree:block/task_screen_aux",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "kuronami_quest_tree:block/task_screen_aux",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "kuronami_quest_tree:block/task_screen_aux",
+      "y": 270
+    }
+  }
+}

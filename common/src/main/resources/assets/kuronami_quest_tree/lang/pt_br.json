@@ -526,5 +526,17 @@
   "jade.kuronami_quest_tree.barrier.locked": "Locked",
   "jade.kuronami_quest_tree.barrier.open": "Open",
   "jade.kuronami_quest_tree.barrier.quest": "Quest: %s",
-  "jade.kuronami_quest_tree.barrier.stage": "Stage: %s"
+  "jade.kuronami_quest_tree.barrier.stage": "Stage: %s",
+  "block.kuronami_quest_tree.task_screen_1": "Tela de tarefa (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "Tela de tarefa (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "Tela de tarefa (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "Tela de tarefa (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "Ferramenta de pacote: mostra uma tarefa e recebe o que ela precisa",
+  "item.kuronami_quest_tree.task_screen_configurator": "Configurador de tela de tarefa",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "Ferramenta de pacote: liga uma tarefa a uma tela",
+  "screen.kuronami_quest_tree.task_screen.pick": "Ligar uma tarefa",
+  "screen.kuronami_quest_tree.task_screen.none": "Sem tarefa",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "Não é a sua tela",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "Esta tarefa não tem tela",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "Somente telas de tarefa"
 }

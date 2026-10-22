@@ -46,8 +46,8 @@ public final class FtbQuestsImporter {
             "optional_task", "optional", "disable_toast", "toast");
     private static final Map<String, Map<String, String>> TASK = Map.ofEntries(
             Map.entry("item", Map.of("item", "item", "count", "count", "consume_items", "consume",
-                    "only_from_crafting", "only_from_crafting", "match_components", "", "match_nbt", "",
-                    "weak_nbt_match", "")),
+                    "only_from_crafting", "only_from_crafting", "task_screen_only", "task_screen_only",
+                    "match_components", "", "match_nbt", "", "weak_nbt_match", "")),
             Map.entry("checkmark", Map.of()), Map.entry("kill", Map.of("entity", "entity", "value", "count", "custom_name", "custom_name")),
             Map.entry("advancement", Map.of("advancement", "advancement", "criterion", "criterion")),
             Map.entry("structure", Map.of("structure", "structure", "tags", "")), Map.entry("biome", Map.of("biome", "biome")),

@@ -526,5 +526,17 @@
   "jade.kuronami_quest_tree.barrier.locked": "Locked",
   "jade.kuronami_quest_tree.barrier.open": "Open",
   "jade.kuronami_quest_tree.barrier.quest": "Quest: %s",
-  "jade.kuronami_quest_tree.barrier.stage": "Stage: %s"
+  "jade.kuronami_quest_tree.barrier.stage": "Stage: %s",
+  "block.kuronami_quest_tree.task_screen_1": "과제 화면 (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "과제 화면 (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "과제 화면 (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "과제 화면 (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "팩 도구: 과제 하나를 표시하고 필요한 것을 받습니다",
+  "item.kuronami_quest_tree.task_screen_configurator": "과제 화면 설정 도구",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "팩 도구: 과제를 화면에 연결합니다",
+  "screen.kuronami_quest_tree.task_screen.pick": "과제 연결",
+  "screen.kuronami_quest_tree.task_screen.none": "과제 없음",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "당신의 화면이 아닙니다",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "이 과제는 화면을 지원하지 않습니다",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "과제 화면 전용"
 }

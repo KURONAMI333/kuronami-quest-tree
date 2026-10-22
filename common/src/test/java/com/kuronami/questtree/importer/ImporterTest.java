@@ -36,6 +36,40 @@ class ImporterTest {
     }
 
     @Test
+    void ftbQuestsTaskScreenOnlySurvives(@TempDir Path tmp) throws Exception {
+        Path chapters = Files.createDirectories(tmp.resolve("chapters"));
+        Files.writeString(chapters.resolve("c.snbt"), """
+                {
+                    id: "1000000000000001"
+                    filename: "c"
+                    quests: [
+                        {
+                            id: "1000000000000002"
+                            x: 0.0d
+                            y: 0.0d
+                            tasks: [
+                                {
+                                    id: "1000000000000003"
+                                    type: "item"
+                                    item: "minecraft:stone"
+                                    count: 2
+                                    task_screen_only: true
+                                }
+                            ]
+                        }
+                    ]
+                }
+                """);
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(tmp, out);
+        JsonObject task = out.chapters.get("c").getAsJsonObject("nodes")
+                .getAsJsonObject().entrySet().iterator().next().getValue().getAsJsonObject()
+                .getAsJsonArray("tasks").get(0).getAsJsonObject();
+        assertTrue(task.has("task_screen_only"));
+        assertTrue(task.get("task_screen_only").getAsBoolean());
+    }
+
+    @Test
     void snbtReadsPrettyFormat() {
         JsonObject o = Snbt.parse("{\n\tid: \"A\"\n\tx: 1.5d\n\tn: 5L\n\tlist: [I; 1, 2]\n\tflag: true\n\tnested: { k: \"v\" }\n}").getAsJsonObject();
         assertEquals("A", o.get("id").getAsString());
