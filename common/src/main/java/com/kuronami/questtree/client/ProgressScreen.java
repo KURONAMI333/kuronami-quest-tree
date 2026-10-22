@@ -985,6 +985,8 @@ public class ProgressScreen extends Screen {
 
     /** Rows kept under the list: "collect all", the party while it is relevant, and the gear (2026-10-20/21). */
     private static final int RAIL_FOOT_ROW = 18;
+    /** The divider above the footer, plus the gap before its first row. */
+    private static final int RAIL_FOOT_SEP = Ui.S1;
 
     private int railFootRows() {
         return (partyRow() ? 3 : 2) + (emergencyRow() ? 1 : 0);
@@ -1005,10 +1007,10 @@ public class ProgressScreen extends Screen {
     private int railFootH() {
         // open, the four buttons share one row of icons; folded, they keep the labelled stack (2026-10-22)
         if (railT > 0.6f) {
-            return RAIL_FOOT_ROW;
+            return RAIL_FOOT_SEP + RAIL_FOOT_ROW;
         }
         int rows = railFootRows();
-        return rows * RAIL_FOOT_ROW + (rows - 1) * 4;
+        return RAIL_FOOT_SEP + rows * RAIL_FOOT_ROW + (rows - 1) * 4;
     }
 
     private int railListBottom() {
@@ -1149,7 +1151,7 @@ public class ProgressScreen extends Screen {
         int left = 4 + Ui.S1;
         int rowW = w - 2 * Ui.S1;
         int top = height - 8 - railFootH();
-        int cy = top + 2;
+        int cy = top + RAIL_FOOT_SEP;
         boolean open = railT > 0.6f;
         int waiting = ClientProgress.claimableCount();
         int invites = ClientTeam.view().activeInvites(System.currentTimeMillis()).size();
@@ -1191,6 +1193,7 @@ public class ProgressScreen extends Screen {
                     }
                 }));
 
+        Ui.divider(g, left, top, rowW);
         if (open) {
             int slotW = rowW / feet.size();
             int start = left + (rowW - slotW * feet.size()) / 2;
@@ -1199,16 +1202,15 @@ public class ProgressScreen extends Screen {
                 int sx = start + i * slotW;
                 boolean hover = mouseX >= sx && mouseX < sx + slotW && mouseY >= cy && mouseY < cy + RAIL_FOOT_ROW;
                 if (hover && foot.clickable()) {
-                    Ui.surface(g, sx + 2, cy, Math.max(RAIL_ICON + 8, slotW - 4), RAIL_FOOT_ROW,
-                            RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
+                    Ui.surface(g, sx, cy, slotW, RAIL_FOOT_ROW, Ui.CORNER, Ui.OVERLAY_1);
                 }
                 int ix = sx + (slotW - RAIL_ICON) / 2;
                 int iy = cy + (RAIL_FOOT_ROW - RAIL_ICON) / 2;
                 Tiles.icon(g, foot.icon(), ix, iy, RAIL_ICON, hover && foot.clickable() ? Ui.TEXT : foot.color());
                 if (foot.badge() > 0) {
-                    Ui.badge(g, font, String.valueOf(foot.badge()), ix + RAIL_ICON + 4, cy + 1);
+                    Ui.cornerBadge(g, font, String.valueOf(foot.badge()), ix + RAIL_ICON, iy);
                 } else if (foot.dot()) {
-                    Tiles.icon(g, "dot", ix + RAIL_ICON - 4, cy, 6, Tiles.GOLD);
+                    Tiles.icon(g, "dot", ix + RAIL_ICON + 1, iy - 1, 6, Tiles.GOLD);
                 }
                 if (foot.clickable()) {
                     buttons.add(new Button(sx, cy, slotW, RAIL_FOOT_ROW, foot.action()));
@@ -1224,14 +1226,13 @@ public class ProgressScreen extends Screen {
         for (RailFoot foot : feet) {
             boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + RAIL_FOOT_ROW;
             if (hover && foot.clickable()) {
-                Ui.surface(g, left, y, rowW, RAIL_FOOT_ROW, RAIL_FOOT_ROW / 2, Ui.OVERLAY_1);
+                Ui.surface(g, left, y, rowW, RAIL_FOOT_ROW, Ui.CORNER, Ui.OVERLAY_1);
             }
             Tiles.icon(g, foot.icon(), RAIL_ICON_X, y + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
                     hover && foot.clickable() ? Ui.TEXT : foot.color());
-            if (foot.badge() > 0) {
-                Ui.badge(g, font, String.valueOf(foot.badge()), RAIL_ICON_X + RAIL_ICON + 2, y + 1);
-            } else if (foot.dot()) {
-                Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON - 4, y, 6, Tiles.GOLD);
+            if (foot.badge() > 0 || foot.dot()) {
+                // folded, the 24px rail has no room for a count beside the mark: a dot, as the rows above use
+                Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON, y + (RAIL_FOOT_ROW - 6) / 2, 6, Tiles.GOLD);
             }
             if (foot.clickable()) {
                 buttons.add(new Button(left, y, rowW, RAIL_FOOT_ROW, foot.action()));
@@ -3722,7 +3723,7 @@ public class ProgressScreen extends Screen {
         int w = railWidth();
         int left = 4 + Ui.S1;
         int rowW = w - 2 * Ui.S1;
-        int cy = height - 8 - railFootH() + 2;
+        int cy = height - 8 - railFootH() + RAIL_FOOT_SEP;
         if (railT > 0.6f) {
             int slotW = rowW / count;
             int start = left + (rowW - slotW * count) / 2;
