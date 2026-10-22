@@ -481,7 +481,18 @@ final class DevTour {
         at(et + 211, () -> Minecraft.getInstance().setScreen(
                 new net.minecraft.client.gui.screens.inventory.InventoryScreen(Minecraft.getInstance().player)));
         shot(et + 213, "47_inventory_button");
+        // the recipe viewer's quest category: uses of a diamond, which the showcase quest asks for (2026-10-22)
         at(et + 214, () -> {
+            Minecraft.getInstance().setScreen(null);
+            RecipeViewer v = RecipeViewer.Holder.get();
+            if (v != null) {
+                v.showUses(new ItemStack(Items.DIAMOND));
+            } else {
+                Constants.LOG.warn("Dev tour: no recipe viewer for the quest category photo");
+            }
+        });
+        shot(et + 217, "48_viewer_uses");
+        at(et + 219, () -> {
             Ui.clearCornerRadius();
             Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
