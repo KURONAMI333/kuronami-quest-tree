@@ -6,6 +6,7 @@ import com.kuronami.questtree.block.TaskScreenBlockEntity;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.network.ScreenBindOpenPayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.progress.ActionRateLimiter;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ScreenRules;
@@ -19,6 +20,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
 
@@ -31,11 +33,18 @@ import java.util.UUID;
  */
 public final class TaskScreenService {
 
+    /** How far a player may stand from the core while opening or binding it. */
+    private static final double MAX_BIND_DISTANCE_SQR = 64.0 * 64.0;
+
     private TaskScreenService() {
     }
 
     /** The core block entity behind a core or aux position, or null. */
     public static TaskScreenBlockEntity coreAt(Level level, BlockPos pos) {
+        if (level == null || pos == null || !level.isLoaded(pos)) {
+            // never load a chunk because a modified client named a far position
+            return null;
+        }
         if (level.getBlockEntity(pos) instanceof TaskScreenBlockEntity core) {
             return core;
         }
@@ -43,6 +52,11 @@ public final class TaskScreenService {
             return aux.core().orElse(null);
         }
         return null;
+    }
+
+    /** True when the player is close enough to reach the core. */
+    private static boolean inRange(ServerPlayer player, TaskScreenBlockEntity core) {
+        return player.distanceToSqr(Vec3.atCenterOf(core.getBlockPos())) <= MAX_BIND_DISTANCE_SQR;
     }
 
     /** FTB Quests lets the owner and their team members edit a screen; everyone else may not even open the picker. */
@@ -61,7 +75,7 @@ public final class TaskScreenService {
             return;
         }
         TaskScreenBlockEntity core = coreAt(level, pos);
-        if (core == null) {
+        if (core == null || !inRange(player, core)) {
             return;
         }
         if (!canEdit(level.getServer(), core.owner(), player)) {
@@ -72,11 +86,15 @@ public final class TaskScreenService {
     }
 
     public static void bind(ServerPlayer player, BlockPos pos, String node, int index) {
+        // a modified client can repeat this packet as fast as it can write it
+        if (!ActionRateLimiter.allow(player.getUUID(), false, System.currentTimeMillis())) {
+            return;
+        }
         if (!(player.level() instanceof ServerLevel level)) {
             return;
         }
         TaskScreenBlockEntity core = coreAt(level, pos);
-        if (core == null) {
+        if (core == null || !inRange(player, core)) {
             return;
         }
         if (!canEdit(level.getServer(), core.owner(), player)) {

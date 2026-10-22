@@ -14,11 +14,13 @@ import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.progress.HintLimits;
 import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
+import com.kuronami.questtree.progress.ScreenCompletion;
 import com.kuronami.questtree.progress.TeamProgress;
 import com.kuronami.questtree.team.TeamResolver;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -90,6 +92,8 @@ public final class ProgressService {
             new com.kuronami.questtree.progress.BarrierCache<>(4, 8);
     /** Addon task types that already threw: a task is scanned every tick, so log one line per type, not per tick. */
     private static final Set<String> FAILED_ADDON_TASKS = new java.util.HashSet<>();
+    /** Players already told that their restriction hints were trimmed; one line per session, not per send. */
+    private static final Set<UUID> HINT_TRUNCATION_LOGGED = new java.util.HashSet<>();
 
     private ProgressService() {
     }
@@ -1087,22 +1091,20 @@ public final class ProgressService {
 
     /**
      * A task screen changed the owner's progress (2026-10-22): write it through the owner's current team, complete any
-     * node the insertion finished, and send the change to everyone online in that team. The screen itself may be used
-     * by another member, or while the owner is offline, so the actor is the owner when present and any online member
-     * otherwise.
+     * node the insertion finished, and send the change to everyone online in that team. If the owner is offline only
+     * the save is marked dirty: completing with another member as the actor would pay the owner's rewards into that
+     * member's inventory, and {@link #onJoin} rechecks the owner at their next login anyway (2026-10-23 review).
      */
     public static void screenChanged(MinecraftServer server, UUID owner) {
         ProgressStore.get(server).setDirty();
-        PlayerProgress p = ProgressStore.get(server).view(server, owner);
         ServerPlayer actor = server.getPlayerList().getPlayer(owner);
-        if (actor == null) {
-            actor = TeamResolver.onlineMembers(server, owner).stream().findFirst().orElse(null);
+        if (!ScreenCompletion.shouldCompleteNow(actor != null)) {
+            return;
         }
-        if (actor != null) {
-            recheck(actor, p);
-            markDirty(actor);
-            flush(actor);
-        }
+        PlayerProgress p = ProgressStore.get(server).view(server, owner);
+        recheck(actor, p);
+        markDirty(actor);
+        flush(actor);
     }
 
     /**
@@ -1401,8 +1403,15 @@ public final class ProgressService {
         } else if (events.size() > 64) {
             events = events.subList(events.size() - 64, events.size());
         }
-        ProgressPayload payload = ProgressPayload.of(ProgressJson.write(progress(player)).toString(), List.copyOf(events),
-                Restrictions.lockedHints(player));
+        List<String> hints = Restrictions.lockedHints(player);
+        byte[] data = ProgressPayload.compress(ProgressJson.write(progress(player)).toString());
+        HintLimits.Result limited = HintLimits.limit(hints, data.length,
+                HintLimits.eventBytes(events), ProgressPayload.MAX);
+        if ((limited.dropped() > 0 || limited.shortened() > 0) && HINT_TRUNCATION_LOGGED.add(player.getUUID())) {
+            Constants.LOG.warn("Restriction hints for {} were trimmed: {} sent, {} dropped, {} shortened",
+                    player.getGameProfile().getName(), limited.hints().size(), limited.dropped(), limited.shortened());
+        }
+        ProgressPayload payload = new ProgressPayload(data, List.copyOf(events), limited.hints());
         if (payload.data().length > ProgressPayload.MAX) {
             Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)", player.getGameProfile().getName(), payload.data().length);
             return;
@@ -1417,6 +1426,7 @@ public final class ProgressService {
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
         REVISIONS.remove(player.getUUID());
+        HINT_TRUNCATION_LOGGED.remove(player.getUUID());
         BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
@@ -1430,6 +1440,7 @@ public final class ProgressService {
         DIRTY.clear();
         REVISIONS.clear();
         OBSERVED.clear();
+        HINT_TRUNCATION_LOGGED.clear();
         MIGRATED.clear();
         TeamSync.clear();
     }
