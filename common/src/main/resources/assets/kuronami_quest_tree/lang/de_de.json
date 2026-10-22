@@ -486,5 +486,6 @@
   "message.kuronami_quest_tree.emergency_wait": "Notfallgegenstände in %s Min. bereit",
   "message.kuronami_quest_tree.emergency_none": "Dieses Paket hat keine Notfallgegenstände.",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "Der Editor konnte die Antwort des Servers nicht anwenden: %s",
-  "screen.kuronami_quest_tree.editor.notice.send_failed": "Die Änderung konnte nicht gesendet werden"
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "Die Änderung konnte nicht gesendet werden",
+  "message.kuronami_quest_tree.restricted": "Gesperrt, bis die Bedingung erfüllt ist"
 }

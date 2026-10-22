@@ -486,5 +486,6 @@
   "message.kuronami_quest_tree.emergency_wait": "Itens de emergência disponíveis em %s min",
   "message.kuronami_quest_tree.emergency_none": "Este pacote não tem itens de emergência.",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "O editor não conseguiu aplicar a resposta do servidor: %s",
-  "screen.kuronami_quest_tree.editor.notice.send_failed": "Não foi possível enviar a edição"
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "Não foi possível enviar a edição",
+  "message.kuronami_quest_tree.restricted": "Bloqueado até o requisito ser cumprido"
 }

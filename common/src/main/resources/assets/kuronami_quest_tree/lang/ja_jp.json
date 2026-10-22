@@ -486,5 +486,6 @@
   "message.kuronami_quest_tree.emergency_wait": "緊急アイテムはあと%s分で使えます",
   "message.kuronami_quest_tree.emergency_none": "このパックには緊急アイテムがありません。",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "エディタがサーバーの応答を反映できませんでした: %s",
-  "screen.kuronami_quest_tree.editor.notice.send_failed": "編集を送信できませんでした"
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "編集を送信できませんでした",
+  "message.kuronami_quest_tree.restricted": "条件を満たすまで使えない"
 }

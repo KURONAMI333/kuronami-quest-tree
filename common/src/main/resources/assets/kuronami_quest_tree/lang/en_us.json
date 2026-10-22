@@ -486,5 +486,6 @@
   "message.kuronami_quest_tree.emergency_wait": "Emergency items are ready in %s min",
   "message.kuronami_quest_tree.emergency_none": "This pack has no emergency items.",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "The editor could not apply the server's answer: %s",
-  "screen.kuronami_quest_tree.editor.notice.send_failed": "The edit could not be sent"
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "The edit could not be sent",
+  "message.kuronami_quest_tree.restricted": "Locked until its requirement is met"
 }

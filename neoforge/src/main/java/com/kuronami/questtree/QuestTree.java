@@ -10,6 +10,7 @@ import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.item.QuestBookItem;
+import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
@@ -133,6 +134,12 @@ public class QuestTree {
             if (e.getSource().getEntity() instanceof ServerPlayer sp && e.getEntity() != sp) {
                 // a player's own death is not a kill: do not count suicide as a kill task (2026-10-22 review)
                 CommonClass.onKill(sp, e.getEntity());
+            }
+        });
+        // a restricted block is refused before it breaks; the counting listener below only sees breaks that happen
+        NeoForge.EVENT_BUS.addListener((BlockEvent.BreakEvent e) -> {
+            if (e.getPlayer() instanceof ServerPlayer sp && Restrictions.blockedBreak(sp, e.getState())) {
+                e.setCanceled(true);
             }
         });
         // lowest priority and not canceled: only breaks that really happen give experience

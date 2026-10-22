@@ -33,6 +33,7 @@ data/<ns>/progression/
   chapters/<chapter>.json       one chapter (nodes, decoration, points)
   reward_tables/<table>.json    reward tables (random, choice, all, loot crate)
   patches/<anything>.json       replace only part of another data pack's chapter or node
+  restrictions.json             item and block use gated by conditions (merged across namespaces)
 ```
 
 `settings.json` holds pack-wide settings and is read from the first namespace that provides one. A missing key takes its default.
@@ -226,6 +227,34 @@ The five built-in kinds may be written without a namespace (`item`) or with Ques
 A registered kind is written as `<namespace>:<id>` and registered through the public API or KubeJS. Registered kinds are matched by the namespaced id, and their check is delegated to the handler. A kind that is in neither table counts as unmet, so a written gate fails closed. Validation reports an unregistered kind as `WARNING` and keeps the node.
 
 Conditions are evaluated once, when the reward is granted. Revocation (respec, reset) and login re-granting follow the team's paid record and do not re-evaluate conditions. A reward that was not paid because its conditions were unmet has no record and is never touched by revocation or re-granting. Skill `points` rewards count toward respec checks and revocation only when they are in the record. A skill reward's conditions are checked against the player who took it, while its effects (`attribute`, `tag` and so on) apply to every team member. The record is shared by the team.
+
+## Restrictions
+
+`restrictions.json` stops an item or a block until the rule's conditions hold. It is read from every namespace and merged in resource order, so an add-on pack can add its own rules beside the base pack's.
+
+```json
+{"rules": [
+  {"id": "iron_tools",
+   "items": ["minecraft:iron_sword"],
+   "item_tags": ["minecraft:swords"],
+   "blocks": ["minecraft:iron_ore"],
+   "block_tags": ["minecraft:ores"],
+   "actions": ["use", "attack", "place", "break", "equip"],
+   "message": "Finish the trial first",
+   "conditions": [{"type": "stage", "stage": "trial/one"}]}
+]}
+```
+
+- `id` is required and global across namespaces. A second namespace writing the same id is ignored with a `WARNING`; the first one wins.
+- At least one of `items`, `item_tags`, `blocks`, `block_tags` is required. Tags are written as ordinary tag ids (`minecraft:swords`, no leading `#`).
+- `actions` is any of `equip`, `use`, `attack`, `place`, `break`. Omitted or null means all five; an empty list or an unknown name is reported (`WARNING`) and applies to nothing.
+- `conditions` uses the same five built-in kinds and registered kinds as tasks and rewards. A rule with no conditions is reported (`WARNING`): it would keep its items shut forever.
+- `message` is the reason shown in the action bar; it is shown as written (not translated). Without it the mod shows its own line. A refusal is shown at most once a second per player.
+- `equip` covers the armour slots and the offhand. A restricted item there is put back into the inventory (or dropped when full) on the same tick. The main hand is not checked, because moving an item into it happens constantly.
+- `use` covers using the item in the air, on a block, or on an entity; it also covers using a restricted block (a chest, a door, and so on).
+- `place` matches the item being placed and the block it would become. `break` matches the block and the item held to break it. A refused action never drops anything or counts toward a task.
+- Restrictions are enforced on the server only. The client mod does not need to know them; the synced bundle carries the rules for the editor.
+- Problems in the file (a missing id, an unreadable target, an unknown action, a missing condition) are `WARNING`s and appear in `/quest_tree validate`. Item and block ids are not checked against the registries here; see the validation notes below.
 
 ## Skills
 

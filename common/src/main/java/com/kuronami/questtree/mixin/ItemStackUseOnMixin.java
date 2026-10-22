@@ -1,6 +1,7 @@
 package com.kuronami.questtree.mixin;
 
 import com.kuronami.questtree.server.ProgressService;
+import com.kuronami.questtree.server.Restrictions;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
@@ -22,9 +23,13 @@ public abstract class ItemStackUseOnMixin {
     @Unique
     private static final ThreadLocal<ItemStack> QUEST_TREE_USE_ON_STACK = new ThreadLocal<>();
 
-    @Inject(method = "useOn", at = @At("HEAD"))
+    @Inject(method = "useOn", at = @At("HEAD"), cancellable = true)
     private void questTree$beforeUseOn(UseOnContext context, CallbackInfoReturnable<InteractionResult> cir) {
-        if (context.getPlayer() instanceof ServerPlayer) {
+        if (context.getPlayer() instanceof ServerPlayer sp) {
+            if (Restrictions.blockedItem(sp, context.getItemInHand(), "use")) {
+                cir.setReturnValue(InteractionResult.FAIL);
+                return;
+            }
             QUEST_TREE_USE_ON_STACK.set(context.getItemInHand().copy());
         }
     }

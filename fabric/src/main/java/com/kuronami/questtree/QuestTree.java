@@ -7,6 +7,7 @@ import com.kuronami.questtree.block.QuestBarrierBlockEntity;
 import com.kuronami.questtree.block.QuestTaskBlock;
 import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.server.Restrictions;
 import com.kuronami.questtree.item.QuestBookItem;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.EditorOpPayload;
@@ -114,6 +115,9 @@ public class QuestTree implements ModInitializer {
                 CommonClass.onKill(sp, killed);
             }
         });
+        // a restricted block is refused before it breaks, so nothing drops and no break task counts it
+        PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, blockEntity) ->
+                !(player instanceof ServerPlayer sp) || !Restrictions.blockedBreak(sp, state));
         PlayerBlockBreakEvents.AFTER.register((level, player, pos, state, blockEntity) -> {
             if (player instanceof ServerPlayer sp) {
                 CommonClass.onBlockBroken(sp, state);

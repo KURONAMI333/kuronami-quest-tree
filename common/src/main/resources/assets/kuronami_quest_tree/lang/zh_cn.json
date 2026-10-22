@@ -486,5 +486,6 @@
   "message.kuronami_quest_tree.emergency_wait": "应急物品将在 %s 分钟后可用",
   "message.kuronami_quest_tree.emergency_none": "此整合包没有应急物品。",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "编辑器无法应用服务器的响应：%s",
-  "screen.kuronami_quest_tree.editor.notice.send_failed": "无法发送这次编辑"
+  "screen.kuronami_quest_tree.editor.notice.send_failed": "无法发送这次编辑",
+  "message.kuronami_quest_tree.restricted": "满足条件前无法使用"
 }
