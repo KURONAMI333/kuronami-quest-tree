@@ -17,37 +17,73 @@ public final class QuestViewerIndex {
         TASK, REWARD
     }
 
-    /** What a task or reward names: one item, or an item tag ({@code #tag}). */
-    public record Spec(String id, boolean tag) {
+    /** What a task or reward names: one item, an item tag ({@code #tag}), or a smart filter ({@code ~filter}). */
+    public record Spec(SpecKind kind, String id) {
+
+        public enum SpecKind {
+            ITEM, TAG, FILTER
+        }
+
         public Spec {
             id = id == null ? "" : id;
+            kind = kind == null ? SpecKind.ITEM : kind;
         }
 
         public static Spec item(String id) {
-            return new Spec(id, false);
+            return new Spec(SpecKind.ITEM, id);
         }
 
         public static Spec tag(String id) {
-            return new Spec(id, true);
+            return new Spec(SpecKind.TAG, id);
+        }
+
+        public static Spec filter(String expression) {
+            return new Spec(SpecKind.FILTER, expression);
+        }
+
+        /** Kept for the viewers: whether this is an item tag rather than a single item. */
+        public boolean tag() {
+            return kind == SpecKind.TAG;
+        }
+
+        public boolean filter() {
+            return kind == SpecKind.FILTER;
         }
 
         public boolean matches(Query query) {
             if (id.isEmpty() || query == null) {
                 return false;
             }
-            return tag ? query.inTag(id) : id.equals(query.itemId());
+            return switch (kind) {
+                case ITEM -> id.equals(query.itemId());
+                case TAG -> query.inTag(id);
+                case FILTER -> query.inFilter(id);
+            };
         }
     }
 
-    /** One item the viewer knows about. Tags are asked of the stack, so this never needs the tag registry. */
+    /**
+     * One item the viewer knows about. Tags and filters are asked of the stack, so this never needs the tag registry,
+     * and a filter is evaluated by the same {@code ItemFilter} the server uses to count the task.
+     */
     public interface Query {
         String itemId();
 
         boolean inTag(String tagId);
+
+        /** Whether the stack passes an FTB Filter System expression; viewers without game access answer false. */
+        default boolean inFilter(String expression) {
+            return false;
+        }
     }
 
     /** One item named by a task or reward. {@code index} is the task/reward index in its quest. */
     public record Need(Kind kind, Spec spec, long count, String label, int index, boolean choice) {
+
+        /** Whether the stack named by {@code query} counts for this task or reward. */
+        public boolean matches(Query query) {
+            return spec.matches(query);
+        }
     }
 
     /** A quest as the viewer shows it: its own icon and title, its chapter, and every item it needs or gives. */
@@ -129,12 +165,20 @@ public final class QuestViewerIndex {
             }
             List<Hit> out = new ArrayList<>();
             for (Hit hit : hits) {
-                if (hit.need().kind() == kind && hit.need().spec().matches(query)) {
+                if (hit.need().kind() == kind && hit.need().matches(query)) {
                     out.add(hit);
                 }
             }
             return List.copyOf(out);
         }
+    }
+
+    /**
+     * The entries of a tag in order, with no cap. The viewer used to keep the first 64, which hid the quest behind
+     * any item later in a large tag; a pure copy here lets the rule be tested without the game registries.
+     */
+    public static <T> List<T> tagEntries(List<T> entries) {
+        return entries == null ? List.of() : List.copyOf(entries);
     }
 
     /** Keeps only the quests {@code visibility} allows and flattens them to one hit per task/reward item. */

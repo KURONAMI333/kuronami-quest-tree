@@ -5,9 +5,11 @@ import com.kuronami.questtree.client.ClientProgress;
 import com.kuronami.questtree.client.ProgressScreen;
 import com.kuronami.questtree.client.QuestViewerStyle;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Hit;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Kind;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.progress.ItemFilter;
 import com.kuronami.questtree.progress.ProgressRules;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -109,14 +111,21 @@ public final class QuestViewerRecipe {
             if (tagId == null) {
                 return List.of();
             }
-            BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, tagId)).ifPresent(tag -> {
-                for (var holder : tag) {
-                    out.add(new ItemStack(holder.value(), amount));
-                    if (out.size() >= 64) {
-                        break;
-                    }
+            List<Item> members = new ArrayList<>();
+            BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, tagId))
+                    .ifPresent(tag -> tag.forEach(holder -> members.add(holder.value())));
+            // no cap: JEI hides a recipe whose slot lacks the focused item, so a big tag must list every member
+            for (Item item : QuestViewerIndex.tagEntries(members)) {
+                if (item != Items.AIR) {
+                    out.add(new ItemStack(item, amount));
                 }
-            });
+            }
+        } else if (spec.filter()) {
+            for (ItemStack example : ItemFilter.parse(spec.id()).examples()) {
+                if (!example.isEmpty()) {
+                    out.add(example.copyWithCount(amount));
+                }
+            }
         } else {
             ResourceLocation id = ResourceLocation.tryParse(spec.id());
             if (id != null) {

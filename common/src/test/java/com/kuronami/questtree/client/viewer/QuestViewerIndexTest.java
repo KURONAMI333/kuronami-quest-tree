@@ -79,6 +79,27 @@ class QuestViewerIndexTest {
     }
 
     @Test
+    void aFilterTaskMatchesThroughItsExpression() {
+        Quest quest = quest("pack:any_log", "Any Log",
+                need(Kind.TASK, Spec.filter("item_tag(minecraft:logs)"), 8));
+        Index index = QuestViewerIndex.build(List.of(quest), quest1 -> true);
+
+        assertEquals(List.of("pack:any_log"), keys(index.uses(filterQuery("minecraft:oak_log", "item_tag(minecraft:logs)"))));
+        assertTrue(index.uses(filterQuery("minecraft:stone", "item(minecraft:stone)")).isEmpty());
+    }
+
+    @Test
+    void tagEntriesAreNotCapped() {
+        List<String> members = new java.util.ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            members.add("minecraft:item_" + i);
+        }
+
+        assertEquals(100, QuestViewerIndex.tagEntries(members).size());
+        assertEquals("minecraft:item_99", QuestViewerIndex.tagEntries(members).get(99));
+    }
+
+    @Test
     void countAndLabelSurviveForTheViewerText() {
         Quest quest = quest("pack:q", "Quest",
                 new Need(Kind.TASK, Spec.item("minecraft:oak_log"), 32, "Oak Log", 2, false));
@@ -110,6 +131,25 @@ class QuestViewerIndexTest {
             @Override
             public boolean inTag(String tagId) {
                 return tagSet.contains(tagId);
+            }
+        };
+    }
+
+    private static Query filterQuery(String itemId, String passingExpression) {
+        return new Query() {
+            @Override
+            public String itemId() {
+                return itemId;
+            }
+
+            @Override
+            public boolean inTag(String tagId) {
+                return false;
+            }
+
+            @Override
+            public boolean inFilter(String expression) {
+                return expression.equals(passingExpression);
             }
         };
     }

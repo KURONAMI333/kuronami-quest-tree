@@ -13,6 +13,7 @@ import com.kuronami.questtree.client.viewer.QuestViewerIndex.Query;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Quest;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Spec;
 import com.kuronami.questtree.client.viewer.QuestViewerIndex.Visibility;
+import com.kuronami.questtree.progress.ItemFilter;
 import com.kuronami.questtree.progress.PackNumbers;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -58,6 +59,12 @@ public final class QuestViewerData {
             public boolean inTag(String tagId) {
                 ResourceLocation tag = ResourceLocation.tryParse(tagId);
                 return tag != null && stack.is(TagKey.create(Registries.ITEM, tag));
+            }
+
+            @Override
+            public boolean inFilter(String expression) {
+                var level = net.minecraft.client.Minecraft.getInstance().level;
+                return ItemFilter.parse(expression).test(stack, level == null ? null : level.registryAccess());
             }
         };
     }
@@ -131,12 +138,9 @@ public final class QuestViewerData {
         for (int i = 0; i < node.tasks.size(); i++) {
             ClientModel.Task task = node.tasks.get(i);
             if (task.filter != null) {
-                for (ItemStack example : task.filter.examples()) {
-                    if (!example.isEmpty()) {
-                        needs.add(new Need(Kind.TASK, Spec.item(itemId(example)), task.count,
-                                task.name().getString(), i, false));
-                    }
-                }
+                // one row per task, not one per example: the filter itself answers whether a stack counts
+                needs.add(new Need(Kind.TASK, Spec.filter(task.filter.expression()), task.count,
+                        task.name().getString(), i, false));
             } else {
                 addSpec(needs, Kind.TASK, task.itemSpec(), task.count, task.name().getString(), i, false);
             }
@@ -191,11 +195,12 @@ public final class QuestViewerData {
 
     private static void addSpec(List<Need> needs, Kind kind, String spec, long count, String label,
                                 int index, boolean choice) {
-        if (spec == null || spec.isEmpty() || spec.startsWith("~")) {
+        if (spec == null || spec.isEmpty()) {
             return;
         }
-        addSpec(needs, kind, spec.startsWith("#") ? Spec.tag(spec.substring(1)) : Spec.item(spec),
-                count, label, index, choice);
+        Spec parsed = spec.startsWith("#") ? Spec.tag(spec.substring(1))
+                : spec.startsWith("~") ? Spec.filter(spec.substring(1)) : Spec.item(spec);
+        addSpec(needs, kind, parsed, count, label, index, choice);
     }
 
     private static void addSpec(List<Need> needs, Kind kind, Spec parsed, long count, String label,
