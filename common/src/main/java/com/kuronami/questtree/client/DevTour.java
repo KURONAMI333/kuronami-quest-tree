@@ -477,6 +477,10 @@ final class DevTour {
             ProgressHud.tourTracker(tourPin);
         });
         shot(et + 210, "46_corners_2_hud");
+        // the quest book button above the player preview (2026-10-22)
+        at(et + 211, () -> Minecraft.getInstance().setScreen(
+                new net.minecraft.client.gui.screens.inventory.InventoryScreen(Minecraft.getInstance().player)));
+        shot(et + 213, "47_inventory_button");
         at(et + 214, () -> {
             Ui.clearCornerRadius();
             Minecraft.getInstance().setScreen(null);
