@@ -23,10 +23,12 @@ import java.util.zip.GZIPOutputStream;
  *
  * @param data   gzip of the progress JSON
  * @param events events since the last send
+ * @param hints  item and block ids the player's unmet restrictions cover, as {@code id|reason} (empty reason when
+ *               the pack wrote none), so the client can put the requirement on the tooltip without guessing
  */
-public record ProgressPayload(byte[] data, List<String> events) implements CustomPacketPayload {
+public record ProgressPayload(byte[] data, List<String> events, List<String> hints) implements CustomPacketPayload {
 
-    /** Vanilla's limit for a clientbound custom payload is 1 MiB; leave room for the events. */
+    /** Vanilla's limit for a clientbound custom payload is 1 MiB; leave room for events and hints. */
     public static final int MAX = 1000 * 1024;
 
     public static final Type<ProgressPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "progress"));
@@ -34,16 +36,17 @@ public record ProgressPayload(byte[] data, List<String> events) implements Custo
     public static final StreamCodec<ByteBuf, ProgressPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.byteArray(MAX), ProgressPayload::data,
             ByteBufCodecs.stringUtf8(1024).apply(ByteBufCodecs.list(64)), ProgressPayload::events,
+            ByteBufCodecs.stringUtf8(512).apply(ByteBufCodecs.list(4096)), ProgressPayload::hints,
             ProgressPayload::new);
 
-    public static ProgressPayload of(String json, List<String> events) {
+    public static ProgressPayload of(String json, List<String> events, List<String> hints) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (GZIPOutputStream gz = new GZIPOutputStream(out)) {
             gz.write(json.getBytes(StandardCharsets.UTF_8));
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-        return new ProgressPayload(out.toByteArray(), events);
+        return new ProgressPayload(out.toByteArray(), events, hints);
     }
 
     public String json() {

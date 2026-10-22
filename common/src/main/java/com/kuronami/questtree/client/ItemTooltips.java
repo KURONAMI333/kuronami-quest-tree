@@ -40,9 +40,13 @@ public final class ItemTooltips {
             return;
         }
         ClientConfig.ensureLoaded();
+        if (stack.isEmpty()) {
+            return;
+        }
+        appendRestriction(stack, lines);
         ProgressRules rules = ClientProgress.rules();
         ClientModel model = ClientProgress.model();
-        if (!ClientConfig.itemTooltips || rules == null || model == null || stack.isEmpty()) {
+        if (!ClientConfig.itemTooltips || rules == null || model == null) {
             return;
         }
         PlayerProgress p = ClientProgress.progress();
@@ -77,6 +81,18 @@ public final class ItemTooltips {
                     .append(Component.literal(" " + have + "/" + need).withStyle(net.minecraft.ChatFormatting.GRAY)));
             shown++;
         }
+    }
+
+    /** The reason an unmet restriction gives this item, or the generic line when the pack wrote none. */
+    private static void appendRestriction(ItemStack stack, List<Component> lines) {
+        String hint = ClientProgress.restrictionHint(stack);
+        if (hint == null) {
+            return;
+        }
+        lines.add(hint.isBlank()
+                ? Component.translatable("message.kuronami_quest_tree.restricted")
+                        .withStyle(net.minecraft.ChatFormatting.GRAY)
+                : Component.literal(hint).withStyle(net.minecraft.ChatFormatting.GRAY));
     }
 
     /**

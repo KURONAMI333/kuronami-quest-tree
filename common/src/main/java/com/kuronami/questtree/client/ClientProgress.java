@@ -15,11 +15,16 @@ import com.kuronami.questtree.progress.ProgressRules;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.zip.GZIPInputStream;
 
@@ -52,6 +57,8 @@ public final class ClientProgress {
     private static java.util.Set<String> barrierStages = java.util.Set.of();
     /** Quests "claim all" would take; read every frame, so it is worked out once per progress/rules pair. */
     private static final ProgressCountCache CLAIMABLE = new ProgressCountCache();
+    /** Item and block ids an unmet restriction covers, to their reason; replaced with each progress packet. */
+    private static Map<String, String> lockedHints = Map.of();
 
     private ClientProgress() {
     }
@@ -121,6 +128,14 @@ public final class ClientProgress {
         }
         PlayerProgress old = progress;
         progress = next;
+        Map<String, String> hints = new HashMap<>();
+        for (String raw : p.hints()) {
+            int cut = raw.indexOf('|');
+            if (cut > 0) {
+                hints.putIfAbsent(raw.substring(0, cut), raw.substring(cut + 1));
+            }
+        }
+        lockedHints = Map.copyOf(hints);
         barrierProg = null;
         if (haveProgress) {
             ProgressFeedback.onUpdate(old, next, p.events());
@@ -130,6 +145,18 @@ public final class ClientProgress {
 
     public static PlayerProgress progress() {
         return progress;
+    }
+
+    /** The reason an unmet restriction puts on this item's tooltip, or null when it is allowed. */
+    public static String restrictionHint(ItemStack stack) {
+        if (lockedHints.isEmpty() || stack == null || stack.isEmpty()) {
+            return null;
+        }
+        String hint = lockedHints.get(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        if (hint == null && stack.getItem() instanceof BlockItem blockItem) {
+            hint = lockedHints.get(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString());
+        }
+        return hint;
     }
 
     /** The restrictions array of the last bundle; replaced whole, so no other sync state has to know about it. */
@@ -429,12 +456,14 @@ public final class ClientProgress {
         barrierProg = null;
         barrierStages = java.util.Set.of();
         progress = new PlayerProgress();
+        lockedHints = Map.of();
         haveProgress = false;
         receivingGeneration = -1;
         buffer = null;
         CLAIMABLE.clear();
         EditorSession.onLogout();
         ClientTeam.onLogout();
+        ClientCues.clear();
         ProgressScreen.clearViews();
         ProgressHud.clear();
         Motion.clear();
