@@ -449,7 +449,35 @@ final class DevTour {
         } else {
             Constants.LOG.warn("Dev tour: no chapter for the quest giver photo");
         }
-        at(et + 186, () -> {
+        // the corner theme at both ends of its range, on the screen and on the HUD (2026-10-22)
+        at(et + 184, () -> {
+            ClientConfig.highContrast = contrastBefore;
+            Ui.loadPalette(Minecraft.getInstance().getResourceManager());
+            Ui.setCornerRadius(0);
+            ProgressScreen.tourRailOpen(true);
+            openId("aa_devtour:showcase");
+        });
+        at(et + 186, () -> onScreen("45_corners_0", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        shot(et + 190, "45_corners_0");
+        at(et + 192, () -> {
+            Minecraft.getInstance().setScreen(null);
+            ProgressScreen.tourPointerClear();
+            ProgressHud.tourTracker(tourPin);
+        });
+        shot(et + 196, "45_corners_0_hud");
+        at(et + 198, () -> {
+            Ui.setCornerRadius(2);
+            openId("aa_devtour:showcase");
+        });
+        at(et + 200, () -> onScreen("46_corners_2", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        shot(et + 204, "46_corners_2");
+        at(et + 206, () -> {
+            Minecraft.getInstance().setScreen(null);
+            ProgressScreen.tourPointerClear();
+            ProgressHud.tourTracker(tourPin);
+        });
+        shot(et + 210, "46_corners_2_hud");
+        at(et + 214, () -> {
             Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
             if (tourPin != null) {
