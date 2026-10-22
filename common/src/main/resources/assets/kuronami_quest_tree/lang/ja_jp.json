@@ -129,6 +129,7 @@
   "screen.kuronami_quest_tree.settings.right": "右",
   "screen.kuronami_quest_tree.settings.tracker_scale": "トラッカーの大きさ",
   "screen.kuronami_quest_tree.settings.keep_rail": "章一覧を開いたまま",
+  "screen.kuronami_quest_tree.settings.inventory_button": "インベントリのボタン",
   "screen.kuronami_quest_tree.settings.on": "オン",
   "screen.kuronami_quest_tree.settings.off": "オフ",
   "screen.kuronami_quest_tree.optional": "任意",
@@ -507,5 +508,6 @@
   "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
   "commands.kuronami_quest_tree.giver.list.empty": "リンクされたクエストギバーはありません",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "%s のクエストギバーのリンクを解除しました",
-  "commands.kuronami_quest_tree.giver.uuid.none": "%s にはクエストギバーのリンクがありません"
+  "commands.kuronami_quest_tree.giver.uuid.none": "%s にはクエストギバーのリンクがありません",
+  "sidebar_button.kuronami_quest_tree.quest_book": "クエストブック"
 }

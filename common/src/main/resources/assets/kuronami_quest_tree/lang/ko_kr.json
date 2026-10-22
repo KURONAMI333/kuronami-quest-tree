@@ -129,6 +129,7 @@
   "screen.kuronami_quest_tree.settings.right": "오른쪽",
   "screen.kuronami_quest_tree.settings.tracker_scale": "추적 표시 크기",
   "screen.kuronami_quest_tree.settings.keep_rail": "장 목록 계속 열기",
+  "screen.kuronami_quest_tree.settings.inventory_button": "인벤토리 버튼",
   "screen.kuronami_quest_tree.settings.on": "켬",
   "screen.kuronami_quest_tree.settings.off": "끔",
   "screen.kuronami_quest_tree.optional": "선택",
@@ -507,5 +508,6 @@
   "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
   "commands.kuronami_quest_tree.giver.list.empty": "연결된 퀘스트 지급자가 없습니다",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "%s의 퀘스트 지급자 연결을 해제했습니다",
-  "commands.kuronami_quest_tree.giver.uuid.none": "%s에 퀘스트 지급자 연결이 없습니다"
+  "commands.kuronami_quest_tree.giver.uuid.none": "%s에 퀘스트 지급자 연결이 없습니다",
+  "sidebar_button.kuronami_quest_tree.quest_book": "퀘스트 책"
 }

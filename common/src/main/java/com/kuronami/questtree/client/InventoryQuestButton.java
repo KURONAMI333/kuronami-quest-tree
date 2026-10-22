@@ -1,76 +1,72 @@
 package com.kuronami.questtree.client;
 
+import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.mixin.AbstractContainerScreenAccessor;
+import com.kuronami.questtree.platform.Services;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractButton;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.gui.components.ImageButton;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.WidgetSprites;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.function.Consumer;
 
 /**
- * The quest book button beside the inventory (2026-10-20): the screen players already open, so the book is one click
- * away without a key or an item. A gold dot marks claimable rewards, like the chapter list's gift row.
+ * The quest book button above the player preview in the survival inventory (2026-10-22), made the way vanilla's recipe
+ * book button is: a 20×18 {@link ImageButton} with a normal and a hover sprite. Packs can reskin it by replacing
+ * {@code textures/gui/sprites/quest_book_button.png} and
+ * {@code textures/gui/sprites/quest_book_button_highlighted.png}.
  * <p>
- * It sits on the panel's right edge and reads {@code leftPos}/{@code topPos} every frame, so opening the recipe book
- * (which moves the inventory) and resizing both keep it beside the panel instead of over the recipe book.
+ * It reads {@code leftPos}/{@code topPos} every frame, so opening the recipe book (which moves the inventory) and
+ * resizing keep it over the preview. With FTB Library installed its sidebar already puts a quest button on this screen,
+ * so this one is left out (FTB's own sidebar setting hides that one); the client setting
+ * {@code inventory_button} turns this one off in packs without it.
  */
-public final class InventoryQuestButton extends AbstractButton {
+public final class InventoryQuestButton extends ImageButton {
 
-    private static final int SIZE = 18;
-    private static final int GAP = 4;
+    private static final WidgetSprites SPRITES = new WidgetSprites(
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_book_button"),
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "quest_book_button_highlighted"));
     private final AbstractContainerScreen<?> screen;
-    private final Runnable action;
 
-    private InventoryQuestButton(AbstractContainerScreen<?> screen, Runnable action) {
-        super(0, 0, SIZE, SIZE, Component.translatable("item.kuronami_quest_tree.quest_book"));
+    private InventoryQuestButton(AbstractContainerScreen<?> screen) {
+        super(0, 0, InventoryButtonLayout.WIDTH, InventoryButtonLayout.HEIGHT, SPRITES,
+                button -> Minecraft.getInstance().setScreen(new ProgressScreen()),
+                Component.translatable("item.kuronami_quest_tree.quest_book"));
         this.screen = screen;
-        this.action = action;
+        setTooltip(Tooltip.create(Component.translatable("item.kuronami_quest_tree.quest_book")));
         followPanel();
     }
 
-    /** Adds the button to the player and creative inventories, once. Other screens are left alone. */
+    /** Adds the button to the survival inventory, once. Other screens, creative, and FTB Library are left alone. */
     public static void add(Screen screen, Consumer<AbstractButton> add) {
-        if (!(screen instanceof InventoryScreen) && !(screen instanceof CreativeModeInventoryScreen)) {
+        if (!(screen instanceof InventoryScreen) || !ClientConfig.inventoryButton()) {
             return;
         }
-        add.accept(new InventoryQuestButton((AbstractContainerScreen<?>) screen,
-                () -> Minecraft.getInstance().setScreen(new ProgressScreen())));
+        if (Services.PLATFORM.isModLoaded("ftblibrary")) {
+            return;
+        }
+        add.accept(new InventoryQuestButton((AbstractContainerScreen<?>) screen));
     }
 
-    /** The panel's right edge, clear of the recipe book (left), the tab rows (above) and the vanilla slots. */
     private void followPanel() {
         AbstractContainerScreenAccessor a = (AbstractContainerScreenAccessor) screen;
-        setX(a.questTree$leftPos() + a.questTree$imageWidth() + GAP);
-        setY(a.questTree$topPos() + 6);
+        setX(InventoryButtonLayout.x(a.questTree$leftPos()));
+        setY(InventoryButtonLayout.y(a.questTree$topPos()));
     }
 
     @Override
-    protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+    public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         followPanel();
-        boolean hover = isHoveredOrFocused();
-        Ui.surface(g, getX(), getY(), SIZE, SIZE, Ui.R3, hover ? Ui.OVERLAY_2 : Ui.OVERLAY_1);
-        Ui.outline(g, getX(), getY(), SIZE, SIZE, Ui.R3, Ui.HAIRLINE);
-        Tiles.icon(g, "book", getX() + (SIZE - 12) / 2f, getY() + (SIZE - 12) / 2f, 12,
-                hover ? Ui.TEXT : Ui.MUTED);
+        super.renderWidget(g, mouseX, mouseY, partialTick);
         if (ClientProgress.claimableCount() > 0) {
-            Tiles.icon(g, "dot", getX() + SIZE - 6, getY(), 6, Tiles.GOLD);
+            Tiles.icon(g, "dot", getX() + getWidth() - 6, getY(), 6, Tiles.GOLD);
         }
-    }
-
-    @Override
-    public void onPress() {
-        playDownSound(Minecraft.getInstance().getSoundManager());
-        action.run();
-    }
-
-    @Override
-    protected void updateWidgetNarration(NarrationElementOutput output) {
-        defaultButtonNarrationText(output);
     }
 }

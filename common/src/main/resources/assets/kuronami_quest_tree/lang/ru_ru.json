@@ -129,6 +129,7 @@
   "screen.kuronami_quest_tree.settings.right": "Справа",
   "screen.kuronami_quest_tree.settings.tracker_scale": "Размер трекера",
   "screen.kuronami_quest_tree.settings.keep_rail": "Не закрывать список глав",
+  "screen.kuronami_quest_tree.settings.inventory_button": "Кнопка в инвентаре",
   "screen.kuronami_quest_tree.settings.on": "Вкл.",
   "screen.kuronami_quest_tree.settings.off": "Выкл.",
   "screen.kuronami_quest_tree.optional": "Необязательно",
@@ -507,5 +508,6 @@
   "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
   "commands.kuronami_quest_tree.giver.list.empty": "Нет связанных выдач квестов",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Связь выдачи квеста удалена для %s",
-  "commands.kuronami_quest_tree.giver.uuid.none": "Нет связи выдачи квеста для %s"
+  "commands.kuronami_quest_tree.giver.uuid.none": "Нет связи выдачи квеста для %s",
+  "sidebar_button.kuronami_quest_tree.quest_book": "Книга заданий"
 }

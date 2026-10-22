@@ -129,6 +129,7 @@
   "screen.kuronami_quest_tree.settings.right": "Rechts",
   "screen.kuronami_quest_tree.settings.tracker_scale": "Tracker-Größe",
   "screen.kuronami_quest_tree.settings.keep_rail": "Kapitelliste offen halten",
+  "screen.kuronami_quest_tree.settings.inventory_button": "Inventar-Schaltfläche",
   "screen.kuronami_quest_tree.settings.on": "An",
   "screen.kuronami_quest_tree.settings.off": "Aus",
   "screen.kuronami_quest_tree.optional": "Optional",
@@ -507,5 +508,6 @@
   "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
   "commands.kuronami_quest_tree.giver.list.empty": "Kein Questgeber ist verknüpft",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Questgeber-Verknüpfung für %s entfernt",
-  "commands.kuronami_quest_tree.giver.uuid.none": "Keine Questgeber-Verknüpfung für %s"
+  "commands.kuronami_quest_tree.giver.uuid.none": "Keine Questgeber-Verknüpfung für %s",
+  "sidebar_button.kuronami_quest_tree.quest_book": "Questbuch"
 }

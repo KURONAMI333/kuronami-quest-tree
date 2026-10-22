@@ -256,6 +256,26 @@ public final class SettingsScreen extends Screen {
                 ClientConfig.autoPin = !ClientConfig.autoPin;
             }
         });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.inventory_button");
+            }
+
+            @Override
+            public Component value() {
+                // with FTB Library the inventory button comes from its sidebar, so this switch has nothing to show
+                return com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")
+                        ? Component.literal("FTB") : onOff(ClientConfig.inventoryButton());
+            }
+
+            @Override
+            public void click() {
+                if (!com.kuronami.questtree.platform.Services.PLATFORM.isModLoaded("ftblibrary")) {
+                    ClientConfig.inventoryButton = !ClientConfig.inventoryButton;
+                }
+            }
+        });
     }
 
     /** A pack-defined Wiki / Guide address, opened through the vanilla "are you sure" card. */

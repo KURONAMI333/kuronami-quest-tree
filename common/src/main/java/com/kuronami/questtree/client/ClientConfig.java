@@ -93,6 +93,8 @@ public final class ClientConfig {
     public static boolean keepRailOpen = false;
     /** Add the current chapter's next open quest to the tracker (2026-10-22). */
     public static boolean autoPin = true;
+    /** The quest book button above the player preview in the survival inventory (2026-10-22). */
+    public static boolean inventoryButton = true;
     /** Screen text scale: separate from Minecraft's GUI scale (2026-10-22). */
     public static float textScale = 1f;
     /** White-on-black text and stronger marks over any resource pack palette (2026-10-22). */
@@ -141,6 +143,7 @@ public final class ClientConfig {
                 trackerScale = number(o, "tracker_scale", trackerScale);
                 keepRailOpen = bool(o, "keep_rail_open", keepRailOpen);
                 autoPin = bool(o, "auto_pin", autoPin);
+                inventoryButton = bool(o, "inventory_button", inventoryButton);
                 if (o.has("text_scale") && o.get("text_scale").isJsonPrimitive() && o.get("text_scale").getAsJsonPrimitive().isNumber()) {
                     textScale = net.minecraft.util.Mth.clamp(o.get("text_scale").getAsFloat(), 0.8f, 1.2f);
                 }
@@ -260,6 +263,11 @@ public final class ClientConfig {
         return autoPin;
     }
 
+    public static boolean inventoryButton() {
+        ensureLoaded();
+        return inventoryButton;
+    }
+
     public static float textScale() {
         ensureLoaded();
         return textScale;
@@ -346,6 +354,7 @@ public final class ClientConfig {
             o.addProperty("tracker_scale", trackerScale);
             o.addProperty("keep_rail_open", keepRailOpen);
             o.addProperty("auto_pin", autoPin);
+            o.addProperty("inventory_button", inventoryButton);
             o.addProperty("text_scale", textScale);
             o.addProperty("high_contrast", highContrast);
             JsonArray a = new JsonArray();

@@ -129,6 +129,7 @@
   "screen.kuronami_quest_tree.settings.right": "Direita",
   "screen.kuronami_quest_tree.settings.tracker_scale": "Tamanho do rastreador",
   "screen.kuronami_quest_tree.settings.keep_rail": "Manter lista de capítulos aberta",
+  "screen.kuronami_quest_tree.settings.inventory_button": "Botão do inventário",
   "screen.kuronami_quest_tree.settings.on": "Ativado",
   "screen.kuronami_quest_tree.settings.off": "Desativado",
   "screen.kuronami_quest_tree.optional": "Opcional",
@@ -507,5 +508,6 @@
   "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
   "commands.kuronami_quest_tree.giver.list.empty": "Nenhum entregador de missões está vinculado",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Vínculo do entregador de missões removido para %s",
-  "commands.kuronami_quest_tree.giver.uuid.none": "Nenhum vínculo de entregador de missões para %s"
+  "commands.kuronami_quest_tree.giver.uuid.none": "Nenhum vínculo de entregador de missões para %s",
+  "sidebar_button.kuronami_quest_tree.quest_book": "Livro de Missões"
 }

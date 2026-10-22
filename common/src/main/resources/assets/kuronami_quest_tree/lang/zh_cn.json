@@ -129,6 +129,7 @@
   "screen.kuronami_quest_tree.settings.right": "右",
   "screen.kuronami_quest_tree.settings.tracker_scale": "追踪栏大小",
   "screen.kuronami_quest_tree.settings.keep_rail": "保持章节列表展开",
+  "screen.kuronami_quest_tree.settings.inventory_button": "物品栏按钮",
   "screen.kuronami_quest_tree.settings.on": "开",
   "screen.kuronami_quest_tree.settings.off": "关",
   "screen.kuronami_quest_tree.optional": "可选",
@@ -507,5 +508,6 @@
   "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
   "commands.kuronami_quest_tree.giver.list.empty": "没有已链接的任务给予者",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "已移除 %s 的任务给予者链接",
-  "commands.kuronami_quest_tree.giver.uuid.none": "%s 没有任务给予者链接"
+  "commands.kuronami_quest_tree.giver.uuid.none": "%s 没有任务给予者链接",
+  "sidebar_button.kuronami_quest_tree.quest_book": "任务书"
 }

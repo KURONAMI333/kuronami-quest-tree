@@ -129,6 +129,7 @@
   "screen.kuronami_quest_tree.settings.right": "Droite",
   "screen.kuronami_quest_tree.settings.tracker_scale": "Taille du suivi",
   "screen.kuronami_quest_tree.settings.keep_rail": "Garder la liste des chapitres ouverte",
+  "screen.kuronami_quest_tree.settings.inventory_button": "Bouton de l'inventaire",
   "screen.kuronami_quest_tree.settings.on": "Activé",
   "screen.kuronami_quest_tree.settings.off": "Désactivé",
   "screen.kuronami_quest_tree.optional": "Facultative",
@@ -507,5 +508,6 @@
   "commands.kuronami_quest_tree.giver.list.entry": "%s -> %s",
   "commands.kuronami_quest_tree.giver.list.empty": "Aucun donneur de quête n'est lié",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Lien du donneur de quête supprimé pour %s",
-  "commands.kuronami_quest_tree.giver.uuid.none": "Aucun lien de donneur de quête pour %s"
+  "commands.kuronami_quest_tree.giver.uuid.none": "Aucun lien de donneur de quête pour %s",
+  "sidebar_button.kuronami_quest_tree.quest_book": "Livre de quêtes"
 }
