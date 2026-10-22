@@ -1,6 +1,7 @@
 package com.kuronami.questtree.network;
 
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.progress.HintLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -40,13 +41,20 @@ public record ProgressPayload(byte[] data, List<String> events, List<String> hin
             ProgressPayload::new);
 
     public static ProgressPayload of(String json, List<String> events, List<String> hints) {
+        byte[] data = compress(json);
+        HintLimits.Result limited = HintLimits.limit(hints, data.length, HintLimits.eventBytes(events), MAX);
+        return new ProgressPayload(data, events, limited.hints());
+    }
+
+    /** Gzip of the progress JSON, the part of the packet that repeats a lot of node keys. */
+    public static byte[] compress(String json) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (GZIPOutputStream gz = new GZIPOutputStream(out)) {
             gz.write(json.getBytes(StandardCharsets.UTF_8));
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-        return new ProgressPayload(out.toByteArray(), events, hints);
+        return out.toByteArray();
     }
 
     public String json() {

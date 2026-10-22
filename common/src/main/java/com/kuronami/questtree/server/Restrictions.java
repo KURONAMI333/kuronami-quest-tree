@@ -1,6 +1,7 @@
 package com.kuronami.questtree.server;
 
 import com.kuronami.questtree.progress.EquipmentPoll;
+import com.kuronami.questtree.progress.HintLimits;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.RestrictionRules;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -89,7 +90,8 @@ public final class Restrictions {
     /**
      * The item and block ids the player's unmet restrictions cover, encoded as {@code id|reason} for the progress
      * packet. The client puts the first reason on the item's tooltip, so the requirement stays visible without text
-     * in chat or the action bar (2026-10-22).
+     * in chat or the action bar (2026-10-22). The list and each entry are capped here as well as in the packet: a
+     * pack whose tags expand to thousands of ids must not make the join packet unencodable (2026-10-23 review).
      */
     public static List<String> lockedHints(ServerPlayer player) {
         RestrictionRules rules = ProgressData.restrictions();
@@ -98,6 +100,7 @@ public final class Restrictions {
         }
         PlayerProgress progress = ProgressService.progress(player);
         Map<String, String> byId = new LinkedHashMap<>();
+        outer:
         for (RestrictionRules.Rule rule : rules.all()) {
             if (ProgressService.conditionsMet(player, progress, null, rule.json(), true)) {
                 continue;
@@ -108,11 +111,14 @@ public final class Restrictions {
                 message = message.substring(0, 256);
             }
             for (String id : hintIds.getOrDefault(rule.id(), List.of())) {
+                if (!byId.containsKey(id) && byId.size() >= HintLimits.MAX_HINTS) {
+                    break outer;
+                }
                 byId.putIfAbsent(id, message);
             }
         }
         List<String> out = new ArrayList<>(byId.size());
-        byId.forEach((id, message) -> out.add(id + "|" + message));
+        byId.forEach((id, message) -> out.add(HintLimits.truncate(id + "|" + message)));
         return List.copyOf(out);
     }
 

@@ -14,6 +14,7 @@ import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.progress.HintLimits;
 import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
@@ -90,6 +91,8 @@ public final class ProgressService {
             new com.kuronami.questtree.progress.BarrierCache<>(4, 8);
     /** Addon task types that already threw: a task is scanned every tick, so log one line per type, not per tick. */
     private static final Set<String> FAILED_ADDON_TASKS = new java.util.HashSet<>();
+    /** Players already told that their restriction hints were trimmed; one line per session, not per send. */
+    private static final Set<UUID> HINT_TRUNCATION_LOGGED = new java.util.HashSet<>();
 
     private ProgressService() {
     }
@@ -1401,8 +1404,15 @@ public final class ProgressService {
         } else if (events.size() > 64) {
             events = events.subList(events.size() - 64, events.size());
         }
-        ProgressPayload payload = ProgressPayload.of(ProgressJson.write(progress(player)).toString(), List.copyOf(events),
-                Restrictions.lockedHints(player));
+        List<String> hints = Restrictions.lockedHints(player);
+        byte[] data = ProgressPayload.compress(ProgressJson.write(progress(player)).toString());
+        HintLimits.Result limited = HintLimits.limit(hints, data.length,
+                HintLimits.eventBytes(events), ProgressPayload.MAX);
+        if ((limited.dropped() > 0 || limited.shortened() > 0) && HINT_TRUNCATION_LOGGED.add(player.getUUID())) {
+            Constants.LOG.warn("Restriction hints for {} were trimmed: {} sent, {} dropped, {} shortened",
+                    player.getGameProfile().getName(), limited.hints().size(), limited.dropped(), limited.shortened());
+        }
+        ProgressPayload payload = new ProgressPayload(data, List.copyOf(events), limited.hints());
         if (payload.data().length > ProgressPayload.MAX) {
             Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)", player.getGameProfile().getName(), payload.data().length);
             return;
@@ -1417,6 +1427,7 @@ public final class ProgressService {
         DIRTY.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
         REVISIONS.remove(player.getUUID());
+        HINT_TRUNCATION_LOGGED.remove(player.getUUID());
         BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
@@ -1430,6 +1441,7 @@ public final class ProgressService {
         DIRTY.clear();
         REVISIONS.clear();
         OBSERVED.clear();
+        HINT_TRUNCATION_LOGGED.clear();
         MIGRATED.clear();
         TeamSync.clear();
     }
