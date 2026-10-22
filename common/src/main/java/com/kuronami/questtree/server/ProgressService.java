@@ -147,6 +147,7 @@ public final class ProgressService {
                 continue;
             }
             DIRTY.put(id, true);
+            REVISIONS.merge(id, 1L, Long::sum);
             Rewards.refreshAttributes(online, progress(online));
         }
         for (UUID id : ids) {
@@ -1324,6 +1325,7 @@ public final class ProgressService {
     static void markExperienceDirty(ServerPlayer player) {
         for (ServerPlayer member : TeamResolver.onlineMembers(player.server, player.getUUID())) {
             DIRTY.putIfAbsent(member.getUUID(), false);
+            REVISIONS.merge(member.getUUID(), 1L, Long::sum);
         }
     }
 
