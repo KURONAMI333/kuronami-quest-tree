@@ -391,10 +391,21 @@ final class DevTour {
         });
         // a quest giver: link the first chapter to a villager, then right-click it and photograph the opened book
         if (quests != null) {
-            cmd(et + 166, "kill @e[type=minecraft:villager,tag=questtree_tour_giver]");
-            cmd(et + 167, "summon minecraft:villager ^ ^ ^3 {Tags:[\"questtree_tour_giver\"],NoAI:1b,Silent:1b,"
-                    + "Invulnerable:1b,PersistenceRequired:1b}");
-            cmd(et + 168, "tp @s ~ ~ ~ facing entity @e[type=minecraft:villager,tag=questtree_tour_giver,limit=1]");
+            // clear an earlier run without the "No entity was found" line, then put the villager in the direction the
+            // player faces at the same height, so it is in view whatever the camera pitch is
+            cmd(et + 166, "execute if entity @e[type=minecraft:villager,tag=questtree_tour_giver] "
+                    + "run kill @e[type=minecraft:villager,tag=questtree_tour_giver]");
+            Minecraft client = Minecraft.getInstance();
+            String at = "~ ~ ~";
+            if (client.player != null) {
+                net.minecraft.core.Direction dir = client.player.getDirection();
+                at = String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f",
+                        client.player.getX() + dir.getStepX() * 3.0, client.player.getY(),
+                        client.player.getZ() + dir.getStepZ() * 3.0);
+            }
+            cmd(et + 167, "summon minecraft:villager " + at
+                    + " {Tags:[\"questtree_tour_giver\"],NoAI:1b,Silent:1b,Invulnerable:1b,PersistenceRequired:1b}");
+            cmd(et + 168, "tp @s ~ ~ ~ facing " + at);
             cmd(et + 169, "quest_tree giver set " + quests.id);
             at(et + 172, () -> {
                 Minecraft mc = Minecraft.getInstance();

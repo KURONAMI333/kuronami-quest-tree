@@ -4,13 +4,13 @@ import com.kuronami.questtree.block.QuestTaskBlockEntity;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.giver.GiverTarget;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -52,7 +52,7 @@ final class GiverCommands {
                         src.hasPermission(com.kuronami.questtree.giver.GiverPolicy.PERMISSION),
                         src.getPlayer() != null))
                 .then(Commands.literal("set")
-                        .then(Commands.argument("target", StringArgumentType.word()).suggests(TARGETS)
+                        .then(Commands.argument("target", ResourceLocationArgument.id()).suggests(TARGETS)
                                 .executes(GiverCommands::set)))
                 .then(Commands.literal("clear").executes(GiverCommands::clear))
                 .build();
@@ -65,7 +65,7 @@ final class GiverCommands {
             src.sendFailure(playerOnly());
             return 0;
         }
-        String raw = StringArgumentType.getString(c, "target");
+        String raw = ResourceLocationArgument.getId(c, "target").toString();
         GiverTarget target = GiverTarget.resolve(raw, ProgressService.rules().model());
         if (target == null) {
             src.sendFailure(Component.translatable("commands.kuronami_quest_tree.giver.unknown", raw));
