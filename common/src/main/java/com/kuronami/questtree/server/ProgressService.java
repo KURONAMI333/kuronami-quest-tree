@@ -433,6 +433,7 @@ public final class ProgressService {
             }
             if (type(t).equals("item")) {
                 if (!kind.equals("craft") || !ProgressRules.craftedOnly(t)
+                        || com.kuronami.questtree.progress.ScreenRules.screenOnly(t)
                         || !ItemRequirement.of(t).matches(stack, player.registryAccess())) {
                     continue;
                 }
@@ -631,6 +632,7 @@ public final class ProgressService {
             case "submit" -> {
                 if (n != null && working(r, p, n) && validTask(n, a.index()) && r.taskOpen(p, n, a.index())
                         && conditionsMet(player, p, n, n.tasks.get(a.index()), true)
+                        && !com.kuronami.questtree.progress.ScreenRules.screenOnly(n.tasks.get(a.index()))
                         && ProgressRules.consumes(n, n.tasks.get(a.index()))) {
                     long before = p.task(n.key, a.index());
                     submit(player, p, n, a.index());
@@ -768,8 +770,10 @@ public final class ProgressService {
                 if (ProgressRules.consumes(n, t) || !r.taskOpen(p, n, i) || !conditionsMet(player, p, n, t, true)) {
                     continue;
                 }
-                if (type(t).equals("item") && ProgressRules.craftedOnly(t)) {
+                if (type(t).equals("item") && (ProgressRules.craftedOnly(t)
+                        || com.kuronami.questtree.progress.ScreenRules.screenOnly(t))) {
                     // only_from_crafting: a crafting result moves this, not what the bag happens to hold
+                    // task_screen_only: only a task screen moves this, never the bag
                     continue;
                 }
                 String ty = type(t);
@@ -1040,6 +1044,26 @@ public final class ProgressService {
         }
         ProgressStore.get(player.server).setDirty();
         markDirty(player);
+    }
+
+    /**
+     * A task screen changed the owner's progress (2026-10-22): write it through the owner's current team, complete any
+     * node the insertion finished, and send the change to everyone online in that team. The screen itself may be used
+     * by another member, or while the owner is offline, so the actor is the owner when present and any online member
+     * otherwise.
+     */
+    public static void screenChanged(MinecraftServer server, UUID owner) {
+        ProgressStore.get(server).setDirty();
+        PlayerProgress p = ProgressStore.get(server).view(server, owner);
+        ServerPlayer actor = server.getPlayerList().getPlayer(owner);
+        if (actor == null) {
+            actor = TeamResolver.onlineMembers(server, owner).stream().findFirst().orElse(null);
+        }
+        if (actor != null) {
+            recheck(actor, p);
+            markDirty(actor);
+            flush(actor);
+        }
     }
 
     /**

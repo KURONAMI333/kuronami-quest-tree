@@ -519,5 +519,17 @@
   "kuronami_quest_tree.viewer.state.open": "Open",
   "kuronami_quest_tree.viewer.state.locked": "Locked",
   "kuronami_quest_tree.viewer.choice": "%s (choice)",
-  "kuronami_quest_tree.viewer.random": "%s (random)"
+  "kuronami_quest_tree.viewer.random": "%s (random)",
+  "block.kuronami_quest_tree.task_screen_1": "Task Screen (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "Task Screen (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "Task Screen (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "Task Screen (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "A pack tool: shows one task and takes what it needs",
+  "item.kuronami_quest_tree.task_screen_configurator": "Task Screen Configurator",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "A pack tool: links a task to a screen",
+  "screen.kuronami_quest_tree.task_screen.pick": "Link a task",
+  "screen.kuronami_quest_tree.task_screen.none": "No task",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "Not your screen",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "This task has no screen",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "Task screens only"
 }

@@ -7,6 +7,8 @@ public final class ModBlockEntities {
 
     private static BlockEntityType<QuestTaskBlockEntity> task;
     private static BlockEntityType<QuestBarrierBlockEntity> barrier;
+    private static BlockEntityType<TaskScreenBlockEntity> taskScreen;
+    private static BlockEntityType<TaskScreenAuxBlockEntity> taskScreenAux;
 
     private ModBlockEntities() {
     }
@@ -25,5 +27,21 @@ public final class ModBlockEntities {
 
     public static void setBarrier(BlockEntityType<QuestBarrierBlockEntity> type) {
         barrier = type;
+    }
+
+    public static BlockEntityType<TaskScreenBlockEntity> taskScreen() {
+        return taskScreen;
+    }
+
+    public static void setTaskScreen(BlockEntityType<TaskScreenBlockEntity> type) {
+        taskScreen = type;
+    }
+
+    public static BlockEntityType<TaskScreenAuxBlockEntity> taskScreenAux() {
+        return taskScreenAux;
+    }
+
+    public static void setTaskScreenAux(BlockEntityType<TaskScreenAuxBlockEntity> type) {
+        taskScreenAux = type;
     }
 }

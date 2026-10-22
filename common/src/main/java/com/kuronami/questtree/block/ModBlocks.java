@@ -11,6 +11,9 @@ public final class ModBlocks {
     private static Block barrierBlock;
     private static Item taskItem;
     private static Item barrierItem;
+    private static final Block[] screens = new Block[8];
+    private static final Item[] screenItems = new Item[8];
+    private static Block screenAux;
 
     private ModBlocks() {
     }
@@ -31,6 +34,27 @@ public final class ModBlocks {
 
     public static Block barrierBlock() {
         return barrierBlock;
+    }
+
+    public static void setTaskScreen(int size, Block block, Item item) {
+        screens[size] = block;
+        screenItems[size] = item;
+    }
+
+    public static Block taskScreen(int size) {
+        return screens[size];
+    }
+
+    public static Item taskScreenItem(int size) {
+        return screenItems[size];
+    }
+
+    public static void setTaskScreenAux(Block block) {
+        screenAux = block;
+    }
+
+    public static Block taskScreenAux() {
+        return screenAux;
     }
 
     public static Item taskItem() {

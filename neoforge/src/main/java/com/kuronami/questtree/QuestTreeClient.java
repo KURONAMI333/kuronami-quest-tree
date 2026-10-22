@@ -1,6 +1,8 @@
 package com.kuronami.questtree;
 
 import com.kuronami.questtree.client.ClientProgress;
+import com.kuronami.questtree.client.ClientTaskScreens;
+import com.kuronami.questtree.client.TaskScreenRenderer;
 import com.kuronami.questtree.client.EditorSession;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -33,6 +35,17 @@ public final class QuestTreeClient {
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(p);
                 }
             };
+            ClientTaskScreens.sender = p -> {
+                var conn = net.minecraft.client.Minecraft.getInstance().getConnection();
+                if (conn != null && conn.hasChannel(p.type())) {
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(p);
+                }
+            };
+        }
+
+        @SubscribeEvent
+        public static void renderers(net.neoforged.neoforge.client.event.EntityRenderersEvent.RegisterRenderers event) {
+            event.registerBlockEntityRenderer(QuestTree.TASK_SCREEN_BE.get(), TaskScreenRenderer::new);
         }
     }
 

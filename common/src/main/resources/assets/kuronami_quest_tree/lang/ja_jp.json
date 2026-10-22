@@ -519,5 +519,17 @@
   "kuronami_quest_tree.viewer.state.open": "受付中",
   "kuronami_quest_tree.viewer.state.locked": "ロック",
   "kuronami_quest_tree.viewer.choice": "%s（選択）",
-  "kuronami_quest_tree.viewer.random": "%s（ランダム）"
+  "kuronami_quest_tree.viewer.random": "%s（ランダム）",
+  "block.kuronami_quest_tree.task_screen_1": "タスクスクリーン (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "タスクスクリーン (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "タスクスクリーン (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "タスクスクリーン (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "パック用ツール：1つのタスクを表示し、必要なものを受け取る",
+  "item.kuronami_quest_tree.task_screen_configurator": "タスクスクリーン設定ツール",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "パック用ツール：タスクをスクリーンに結び付ける",
+  "screen.kuronami_quest_tree.task_screen.pick": "タスクを結び付ける",
+  "screen.kuronami_quest_tree.task_screen.none": "タスクなし",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "あなたのスクリーンではありません",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "このタスクはスクリーンに対応していません",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "タスクスクリーンのみ"
 }

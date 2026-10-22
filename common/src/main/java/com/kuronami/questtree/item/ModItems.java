@@ -9,6 +9,7 @@ import net.minecraft.world.item.Item;
 public final class ModItems {
 
     private static Item questBook;
+    private static Item taskScreenConfigurator;
 
     private ModItems() {
     }
@@ -20,5 +21,13 @@ public final class ModItems {
     /** Called by the loader's registration; the last one wins, and there is only one. */
     public static void setQuestBook(Item item) {
         questBook = item;
+    }
+
+    public static Item taskScreenConfigurator() {
+        return taskScreenConfigurator;
+    }
+
+    public static void setTaskScreenConfigurator(Item item) {
+        taskScreenConfigurator = item;
     }
 }

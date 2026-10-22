@@ -519,5 +519,17 @@
   "kuronami_quest_tree.viewer.state.open": "Открыто",
   "kuronami_quest_tree.viewer.state.locked": "Закрыто",
   "kuronami_quest_tree.viewer.choice": "%s (выбор)",
-  "kuronami_quest_tree.viewer.random": "%s (случайно)"
+  "kuronami_quest_tree.viewer.random": "%s (случайно)",
+  "block.kuronami_quest_tree.task_screen_1": "Экран задания (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "Экран задания (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "Экран задания (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "Экран задания (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "Инструмент сборки: показывает задание и принимает нужное",
+  "item.kuronami_quest_tree.task_screen_configurator": "Настройщик экрана задания",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "Инструмент сборки: привязывает задание к экрану",
+  "screen.kuronami_quest_tree.task_screen.pick": "Привязать задание",
+  "screen.kuronami_quest_tree.task_screen.none": "Без задания",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "Это не ваш экран",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "У этого задания нет экрана",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "Только экраны заданий"
 }

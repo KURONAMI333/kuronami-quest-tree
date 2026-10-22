@@ -76,6 +76,7 @@ public final class ContentSchema {
                 out.add(FieldSpec.picker("item", P + "item", FieldSpec.Kind.ITEM));
                 out.add(FieldSpec.integer("count", P + "count"));
                 out.add(FieldSpec.bool("consume", P + "consume"));
+                out.add(FieldSpec.bool("task_screen_only", P + "task_screen_only"));
                 out.add(FieldSpec.choice("match_components", P + "match_components", "", "none", "fuzzy", "strict"));
             }
             case "kill" -> {

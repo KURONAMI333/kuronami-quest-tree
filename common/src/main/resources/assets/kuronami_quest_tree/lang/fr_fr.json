@@ -519,5 +519,17 @@
   "kuronami_quest_tree.viewer.state.open": "Ouverte",
   "kuronami_quest_tree.viewer.state.locked": "Verrouillée",
   "kuronami_quest_tree.viewer.choice": "%s (choix)",
-  "kuronami_quest_tree.viewer.random": "%s (aléatoire)"
+  "kuronami_quest_tree.viewer.random": "%s (aléatoire)",
+  "block.kuronami_quest_tree.task_screen_1": "Écran de tâche (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "Écran de tâche (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "Écran de tâche (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "Écran de tâche (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "Outil de pack : affiche une tâche et prend ce qu’il faut",
+  "item.kuronami_quest_tree.task_screen_configurator": "Configurateur d’écran de tâche",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "Outil de pack : lie une tâche à un écran",
+  "screen.kuronami_quest_tree.task_screen.pick": "Lier une tâche",
+  "screen.kuronami_quest_tree.task_screen.none": "Aucune tâche",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "Ce n’est pas votre écran",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "Cette tâche n’a pas d’écran",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "Écrans de tâche uniquement"
 }

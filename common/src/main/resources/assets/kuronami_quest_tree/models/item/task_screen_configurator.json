@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "kuronami_quest_tree:item/task_screen_configurator"
+  }
+}

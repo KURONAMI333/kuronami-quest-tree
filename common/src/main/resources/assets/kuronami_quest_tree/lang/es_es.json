@@ -519,5 +519,17 @@
   "kuronami_quest_tree.viewer.state.open": "Abierta",
   "kuronami_quest_tree.viewer.state.locked": "Bloqueada",
   "kuronami_quest_tree.viewer.choice": "%s (elección)",
-  "kuronami_quest_tree.viewer.random": "%s (aleatorio)"
+  "kuronami_quest_tree.viewer.random": "%s (aleatorio)",
+  "block.kuronami_quest_tree.task_screen_1": "Pantalla de tareas (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "Pantalla de tareas (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "Pantalla de tareas (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "Pantalla de tareas (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "Herramienta de paquete: muestra una tarea y toma lo que necesita",
+  "item.kuronami_quest_tree.task_screen_configurator": "Configurador de pantalla de tareas",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "Herramienta de paquete: vincula una tarea a una pantalla",
+  "screen.kuronami_quest_tree.task_screen.pick": "Vincular una tarea",
+  "screen.kuronami_quest_tree.task_screen.none": "Sin tarea",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "No es tu pantalla",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "Esta tarea no tiene pantalla",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "Solo pantallas de tareas"
 }

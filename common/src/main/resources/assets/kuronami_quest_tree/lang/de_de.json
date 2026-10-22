@@ -519,5 +519,17 @@
   "kuronami_quest_tree.viewer.state.open": "Offen",
   "kuronami_quest_tree.viewer.state.locked": "Gesperrt",
   "kuronami_quest_tree.viewer.choice": "%s (Auswahl)",
-  "kuronami_quest_tree.viewer.random": "%s (zufällig)"
+  "kuronami_quest_tree.viewer.random": "%s (zufällig)",
+  "block.kuronami_quest_tree.task_screen_1": "Aufgabenbildschirm (1×1)",
+  "block.kuronami_quest_tree.task_screen_3": "Aufgabenbildschirm (3×3)",
+  "block.kuronami_quest_tree.task_screen_5": "Aufgabenbildschirm (5×5)",
+  "block.kuronami_quest_tree.task_screen_7": "Aufgabenbildschirm (7×7)",
+  "block.kuronami_quest_tree.task_screen.desc": "Ein Paketwerkzeug: zeigt eine Aufgabe und nimmt, was sie braucht",
+  "item.kuronami_quest_tree.task_screen_configurator": "Aufgabenbildschirm-Konfigurator",
+  "item.kuronami_quest_tree.task_screen_configurator.desc": "Ein Paketwerkzeug: verknüpft eine Aufgabe mit einem Bildschirm",
+  "screen.kuronami_quest_tree.task_screen.pick": "Aufgabe verknüpfen",
+  "screen.kuronami_quest_tree.task_screen.none": "Keine Aufgabe",
+  "screen.kuronami_quest_tree.task_screen.no_permission": "Nicht dein Bildschirm",
+  "screen.kuronami_quest_tree.task_screen.not_supported": "Diese Aufgabe hat keinen Bildschirm",
+  "screen.kuronami_quest_tree.editor.field.task_screen_only": "Nur Aufgabenbildschirme"
 }

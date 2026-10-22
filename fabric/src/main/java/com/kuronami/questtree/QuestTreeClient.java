@@ -2,6 +2,8 @@ package com.kuronami.questtree;
 
 import com.kuronami.questtree.client.ClientCues;
 import com.kuronami.questtree.client.ClientProgress;
+import com.kuronami.questtree.client.ClientTaskScreens;
+import com.kuronami.questtree.client.TaskScreenRenderer;
 import com.kuronami.questtree.client.ClientTeam;
 import com.kuronami.questtree.client.EditorSession;
 import com.kuronami.questtree.network.CuePayload;
@@ -9,6 +11,7 @@ import com.kuronami.questtree.network.EditorReplyPayload;
 import com.kuronami.questtree.network.EditorStatePayload;
 import com.kuronami.questtree.network.OpenPayload;
 import com.kuronami.questtree.network.ProgressPayload;
+import com.kuronami.questtree.network.ScreenBindOpenPayload;
 import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.network.TeamPayload;
 import net.fabricmc.api.ClientModInitializer;
@@ -35,6 +38,8 @@ public class QuestTreeClient implements ClientModInitializer {
                 (payload, context) -> EditorSession.onReply(payload));
         ClientPlayNetworking.registerGlobalReceiver(EditorStatePayload.TYPE,
                 (payload, context) -> EditorSession.setAllowed(payload.canEdit()));
+        ClientPlayNetworking.registerGlobalReceiver(ScreenBindOpenPayload.TYPE,
+                (payload, context) -> ClientTaskScreens.onOpen(payload));
         ClientProgress.sender = a -> {
             if (ClientPlayNetworking.canSend(a.type())) {
                 ClientPlayNetworking.send(a);
@@ -45,6 +50,13 @@ public class QuestTreeClient implements ClientModInitializer {
                 ClientPlayNetworking.send(p);
             }
         };
+        ClientTaskScreens.sender = p -> {
+            if (ClientPlayNetworking.canSend(p.type())) {
+                ClientPlayNetworking.send(p);
+            }
+        };
+        net.fabricmc.fabric.api.client.rendering.v1.BlockEntityRendererRegistry.register(
+                com.kuronami.questtree.QuestTree.SCREEN_BE, TaskScreenRenderer::new);
         net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback.EVENT.register((stack, context, type, lines) -> {
             if (net.minecraft.client.Minecraft.getInstance().player != null) {
                 com.kuronami.questtree.client.ItemTooltips.append(stack, lines);
