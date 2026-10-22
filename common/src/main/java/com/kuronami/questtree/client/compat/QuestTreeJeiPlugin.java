@@ -2,15 +2,25 @@ package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.RecipeViewer;
+import com.kuronami.questtree.client.viewer.QuestViewerData;
+import com.kuronami.questtree.client.viewer.QuestViewerIndex.Hit;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.ingredients.ITypedIngredient;
+import mezz.jei.api.recipe.IFocus;
+import mezz.jei.api.recipe.advanced.IRecipeManagerPlugin;
 import mezz.jei.api.recipe.RecipeIngredientRole;
+import mezz.jei.api.recipe.RecipeType;
+import mezz.jei.api.recipe.category.IRecipeCategory;
+import mezz.jei.api.registration.IAdvancedRegistration;
+import mezz.jei.api.registration.IRecipeCatalystRegistration;
+import mezz.jei.api.registration.IRecipeCategoryRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -23,6 +33,21 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
     @Override
     public ResourceLocation getPluginUid() {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "jei");
+    }
+
+    @Override
+    public void registerCategories(IRecipeCategoryRegistration registration) {
+        registration.addRecipeCategories(new QuestViewerJeiCategory(registration.getJeiHelpers().getGuiHelper()));
+    }
+
+    @Override
+    public void registerAdvanced(IAdvancedRegistration registration) {
+        registration.addRecipeManagerPlugin(new QuestViewerRecipeManager());
+    }
+
+    @Override
+    public void registerRecipeCatalysts(IRecipeCatalystRegistration registration) {
+        registration.addRecipeCatalyst(QuestViewerRecipe.book(), QuestViewerJeiCategory.TYPE);
     }
 
     @Override
@@ -70,5 +95,65 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
 
     private static ItemStack stackOf(Optional<ITypedIngredient<?>> typed) {
         return typed.flatMap(t -> t.getIngredient(VanillaTypes.ITEM_STACK)).orElse(ItemStack.EMPTY);
+    }
+
+    /**
+     * Answers JEI's ingredient lookups from the live index, so a quest becomes visible as soon as its chapter arrives
+     * and its state text follows the player without rebuilding the display list.
+     */
+    private static final class QuestViewerRecipeManager implements IRecipeManagerPlugin {
+
+        @Override
+        public <T, V> List<T> getRecipes(IRecipeCategory<T> category, IFocus<V> focus) {
+            if (!(category instanceof QuestViewerJeiCategory)) {
+                return List.of();
+            }
+            Object ingredient = focus.getTypedValue().getIngredient();
+            if (!(ingredient instanceof ItemStack stack) || stack.isEmpty()) {
+                return List.of();
+            }
+            if (focus.getRole() == RecipeIngredientRole.CATALYST) {
+                return stack.is(QuestViewerRecipe.book().getItem()) ? all() : List.of();
+            }
+            var index = QuestViewerData.index();
+            var query = QuestViewerData.query(stack);
+            List<Hit> hits = focus.getRole() == RecipeIngredientRole.INPUT
+                    ? index.uses(query) : index.rewards(query);
+            return recipes(hits);
+        }
+
+        @Override
+        public <T> List<T> getRecipes(IRecipeCategory<T> category) {
+            return category instanceof QuestViewerJeiCategory ? all() : List.of();
+        }
+
+        @Override
+        public <V> List<RecipeType<?>> getRecipeTypes(IFocus<V> focus) {
+            Object ingredient = focus.getTypedValue().getIngredient();
+            if (!(ingredient instanceof ItemStack stack) || stack.isEmpty()) {
+                return List.of();
+            }
+            if (focus.getRole() == RecipeIngredientRole.CATALYST) {
+                return stack.is(QuestViewerRecipe.book().getItem())
+                        ? List.of(QuestViewerJeiCategory.TYPE) : List.of();
+            }
+            var index = QuestViewerData.index();
+            var query = QuestViewerData.query(stack);
+            boolean has = focus.getRole() == RecipeIngredientRole.INPUT
+                    ? !index.uses(query).isEmpty() : !index.rewards(query).isEmpty();
+            return has ? List.of(QuestViewerJeiCategory.TYPE) : List.of();
+        }
+
+        private static <T> List<T> all() {
+            return recipes(QuestViewerData.index().hits());
+        }
+
+        @SuppressWarnings("unchecked")
+        private static <T> List<T> recipes(List<Hit> hits) {
+            return (List<T>) hits.stream()
+                    .map(QuestViewerRecipe::new)
+                    .filter(recipe -> !recipe.stacks().isEmpty())
+                    .toList();
+        }
     }
 }

@@ -12,6 +12,7 @@ import com.kuronami.questtree.network.SyncPayload;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
 import com.kuronami.questtree.progress.ProgressRules;
+import com.kuronami.questtree.client.viewer.QuestViewerData;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -99,6 +100,7 @@ public final class ClientProgress {
                 EditorSession.onBundle(bundle);
                 Pins.load();
                 Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
+                QuestViewerData.rebuildAll();
                 Constants.LOG.info("Received {} progression chapters", sync.model().chapters.size());
             } catch (Exception ex) {
                 Constants.LOG.error("Could not read progression data from server", ex);
@@ -141,6 +143,7 @@ public final class ClientProgress {
             ProgressFeedback.onUpdate(old, next, p.events());
         }
         haveProgress = true;
+        QuestViewerData.refreshVisibility();
     }
 
     public static PlayerProgress progress() {
@@ -467,6 +470,7 @@ public final class ClientProgress {
         ProgressScreen.clearViews();
         ProgressHud.clear();
         Motion.clear();
+        QuestViewerData.clear();
     }
 
     /** Called every client tick by the loader module. The same key opens and closes the screen. */

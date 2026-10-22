@@ -5,8 +5,11 @@ import me.shedaniel.math.Point;
 import me.shedaniel.rei.api.client.ClientHelper;
 import me.shedaniel.rei.api.client.REIRuntime;
 import me.shedaniel.rei.api.client.plugins.REIClientPlugin;
+import me.shedaniel.rei.api.client.registry.category.CategoryRegistry;
+import me.shedaniel.rei.api.client.registry.display.DisplayRegistry;
 import me.shedaniel.rei.api.client.registry.screen.ScreenRegistry;
 import me.shedaniel.rei.api.client.view.ViewSearchBuilder;
+import me.shedaniel.rei.api.common.display.DisplaySerializerRegistry;
 import me.shedaniel.rei.api.common.entry.EntryStack;
 import me.shedaniel.rei.api.common.plugins.PluginManager;
 import me.shedaniel.rei.api.common.registry.ReloadStage;
@@ -20,6 +23,18 @@ import net.minecraft.world.item.ItemStack;
  * subclass is the one REI's annotation scanner finds. It is only loaded when REI is installed.
  */
 public class QuestTreeReiPlugin implements REIClientPlugin {
+
+    @Override
+    public void registerCategories(CategoryRegistry registry) {
+        registry.add(new QuestViewerReiCategory());
+        registry.addWorkstations(QuestViewerReiCategory.ID, EntryStacks.of(QuestViewerRecipe.book()));
+    }
+
+    @Override
+    public void registerDisplays(DisplayRegistry registry) {
+        DisplaySerializerRegistry.getInstance().registerNotSerializable(QuestViewerReiCategory.ID);
+        registry.registerGlobalDisplayGenerator(new QuestViewerReiGenerator());
+    }
 
     @Override
     public void preStage(PluginManager<REIClientPlugin> manager, ReloadStage stage) {

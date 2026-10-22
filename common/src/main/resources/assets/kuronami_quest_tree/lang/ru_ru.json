@@ -512,5 +512,11 @@
   "commands.kuronami_quest_tree.giver.list.empty": "Нет связанных выдач квестов",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "Связь выдачи квеста удалена для %s",
   "commands.kuronami_quest_tree.giver.uuid.none": "Нет связи выдачи квеста для %s",
-  "sidebar_button.kuronami_quest_tree.quest_book": "Книга заданий"
+  "sidebar_button.kuronami_quest_tree.quest_book": "Книга заданий",
+  "viewer.category.quests": "Квесты",
+  "emi.category.kuronami_quest_tree.quest": "Квесты",
+  "viewer.state.done": "Выполнено",
+  "viewer.state.open": "Открыто",
+  "viewer.state.locked": "Закрыто",
+  "viewer.choice": "%s (выбор)"
 }

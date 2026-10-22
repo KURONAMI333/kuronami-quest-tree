@@ -1,12 +1,17 @@
 package com.kuronami.questtree.client.compat;
 
+import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.RecipeViewer;
+import com.kuronami.questtree.client.viewer.QuestViewerData;
 import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.EmiPlugin;
 import dev.emi.emi.api.EmiRegistry;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.stack.EmiStackInteraction;
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.item.ItemStack;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * EMI's side of {@link RecipeViewer}. The class carries no annotation: the Fabric entrypoint names it, and the NeoForge
@@ -14,9 +19,36 @@ import net.minecraft.world.item.ItemStack;
  */
 public class QuestTreeEmiPlugin implements EmiPlugin {
 
+    private static final AtomicBoolean WARNED = new AtomicBoolean();
+
     @Override
     public void register(EmiRegistry registry) {
+        registry.addCategory(QuestViewerEmiCategory.CATEGORY);
+        registry.addWorkstation(QuestViewerEmiCategory.CATEGORY, EmiStack.of(QuestViewerRecipe.book()));
+        for (var hit : QuestViewerData.index().hits()) {
+            QuestViewerRecipe recipe = new QuestViewerRecipe(hit);
+            if (!recipe.stacks().isEmpty()) {
+                registry.addRecipe(new QuestViewerEmiRecipe(recipe));
+            }
+        }
+        QuestViewerData.setRefreshHook(QuestTreeEmiPlugin::reload);
         RecipeViewer.Holder.set("emi", new Viewer());
+    }
+
+    /** EMI builds its list once per reload; ask it to rebuild after a sync or progress change. */
+    private static void reload() {
+        if (Minecraft.getInstance().level == null) {
+            return;
+        }
+        try {
+            Class.forName("dev.emi.emi.runtime.EmiReloadManager")
+                    .getMethod("reload")
+                    .invoke(null);
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException ex) {
+            if (WARNED.compareAndSet(false, true)) {
+                Constants.LOG.warn("EMI is present but its reload entry point could not be called", ex);
+            }
+        }
     }
 
     private static final class Viewer implements RecipeViewer {

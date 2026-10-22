@@ -512,5 +512,11 @@
   "commands.kuronami_quest_tree.giver.list.empty": "没有已链接的任务给予者",
   "commands.kuronami_quest_tree.giver.uuid.cleared": "已移除 %s 的任务给予者链接",
   "commands.kuronami_quest_tree.giver.uuid.none": "%s 没有任务给予者链接",
-  "sidebar_button.kuronami_quest_tree.quest_book": "任务书"
+  "sidebar_button.kuronami_quest_tree.quest_book": "任务书",
+  "viewer.category.quests": "任务",
+  "emi.category.kuronami_quest_tree.quest": "任务",
+  "viewer.state.done": "已完成",
+  "viewer.state.open": "可进行",
+  "viewer.state.locked": "已锁定",
+  "viewer.choice": "%s（选择）"
 }
