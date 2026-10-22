@@ -1495,8 +1495,11 @@ public class ProgressScreen extends Screen {
                 }
                 int lc = lineColor(ClientProgress.state(p.key), cs);
                 // around the node under the pointer (or the selected one): what it needs in one colour, what it opens in
-                // another, everything else stepped back, so crossing and converging lines can be told apart
-                int role = focus == null ? 0 : n.key.equals(focus) ? 1 : p.key.equals(focus) ? 2 : 3;
+                // another. Everything else steps back only while the selection is in focus: a hover alone leaves the
+                // other lines exactly as they are, since dimming them made the whole screen flicker as the pointer
+                // crossed tiles (the player, 2026-10-22).
+                int role = focus == null ? 0 : n.key.equals(focus) ? 1 : p.key.equals(focus) ? 2
+                        : hoveredNode != null && selected == null ? 0 : 3;
                 // the way just opened: colour runs in from the earlier node, the arrowhead at its front (300ms)
                 float grow = Motion.progress(Motion.UNLOCKED, p.key, Motion.LINE_GROW);
                 LineDraw l = lineGeometry(p, n, lc, role, grow >= 0 ? grow : -1, v[2]);
