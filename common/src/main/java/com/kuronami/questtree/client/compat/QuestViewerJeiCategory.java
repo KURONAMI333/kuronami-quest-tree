@@ -84,12 +84,12 @@ public final class QuestViewerJeiCategory implements IRecipeCategory<QuestViewer
         graphics.renderItem(recipe.icon(), 4, 4);
         graphics.renderItemDecorations(font, recipe.icon(), 4, 4);
         graphics.drawString(font, Component.literal(trim(recipe.title(), titleWidth, font))
-                .withStyle(ChatFormatting.UNDERLINE), 26, 4, 0xFF404040, false);
-        graphics.drawString(font, trim(recipe.chapter(), titleWidth, font), 26, 15, 0xFF808080, false);
+                .withStyle(ChatFormatting.UNDERLINE), 26, 4, QuestViewerStyle.textColor(), false);
+        graphics.drawString(font, trim(recipe.chapter(), titleWidth, font), 26, 15, QuestViewerStyle.dimColor(), false);
         QuestViewerStyle.mark(graphics, state, QuestViewerRecipe.WIDTH - stateWidth + 2, 5, 7);
-        graphics.drawString(font, stateText, QuestViewerRecipe.WIDTH - stateWidth + 11, 4, 0xFF404040, false);
+        graphics.drawString(font, stateText, QuestViewerRecipe.WIDTH - stateWidth + 11, 4, QuestViewerStyle.textColor(), false);
         graphics.drawString(font, trim(recipe.needLabel(), QuestViewerRecipe.WIDTH - 30, font),
-                30, 35, 0xFF404040, false);
+                30, 35, QuestViewerStyle.textColor(), false);
     }
 
     @Override

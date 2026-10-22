@@ -31,6 +31,19 @@ public final class QuestViewerStyle {
         };
     }
 
+    /**
+     * The recipe viewers' body text, from the screen's palette so a pack restyles it too (2026-10-23, R6 L3). A viewer
+     * draws on JEI's or REI's own frame, which is why these used to be fixed greys that a dark theme could not read.
+     */
+    public static int textColor() {
+        return Ui.TEXT;
+    }
+
+    /** Supporting text (a chapter, a table id, a remainder count), one step below {@link #textColor()}. */
+    public static int dimColor() {
+        return Ui.DIM;
+    }
+
     /** A small tinted dot before the state label. */
     public static void mark(GuiGraphics graphics, ProgressRules.State state, float x, float y, float size) {
         RenderSystem.enableBlend();

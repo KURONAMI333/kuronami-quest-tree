@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.client.QuestViewerStyle;
 import com.kuronami.questtree.item.ModItems;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
@@ -78,17 +79,15 @@ public final class CrateViewerJeiCategory implements IRecipeCategory<CrateViewer
     public void draw(CrateViewerData.Recipe recipe, IRecipeSlotsView slots, GuiGraphics graphics,
                      double mouseX, double mouseY) {
         Font font = Minecraft.getInstance().font;
-        graphics.renderItem(recipe.crate(), 5, 5);
-        graphics.renderItemDecorations(font, recipe.crate(), 5, 5);
         graphics.drawString(font, recipe.crate().getHoverName().copy().withStyle(ChatFormatting.UNDERLINE),
-                30, 5, 0xFF404040, false);
-        graphics.drawString(font, trim(recipe.tableId(), 134, font), 30, 17, 0xFF808080, false);
+                30, 5, QuestViewerStyle.textColor(), false);
+        graphics.drawString(font, trim(recipe.tableId(), 134, font), 30, 17, QuestViewerStyle.dimColor(), false);
         graphics.drawString(font, Component.translatable("kuronami_quest_tree.viewer.crate.rewards",
-                        recipe.contents().size()), 30, 27, 0xFF404040, false);
+                        recipe.contents().size()), 30, 27, QuestViewerStyle.textColor(), false);
         int hidden = recipe.contents().size() - COLUMNS * ROWS;
         if (hidden > 0) {
             graphics.drawString(font, Component.translatable("kuronami_quest_tree.viewer.crate.more", hidden),
-                    8, 75, 0xFF808080, false);
+                    8, 75, QuestViewerStyle.dimColor(), false);
         }
     }
 
