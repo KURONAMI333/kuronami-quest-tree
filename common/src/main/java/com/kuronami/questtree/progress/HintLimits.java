@@ -17,6 +17,8 @@ public final class HintLimits {
     public static final int MAX_HINTS = 2048;
     /** Longest single hint, in code points. */
     public static final int MAX_HINT_CHARS = 256;
+    /** Longest single hint, in UTF-8 bytes: the payload codec allows 512 bytes and this leaves room for the id. */
+    public static final int MAX_HINT_BYTES_PER_ENTRY = 480;
     /** Most bytes all hints together may take, before the length prefixes. */
     public static final int MAX_HINT_BYTES = 64 * 1024;
     /** Space left free in the payload for the codec's own overhead. */
@@ -38,15 +40,43 @@ public final class HintLimits {
     private HintLimits() {
     }
 
-    /** Cuts one hint to the length the packet allows. */
+    /**
+     * Cuts one hint to the length the packet allows. The string codec's limit is counted in UTF-8 bytes, so a hint of
+     * 256 Japanese characters would still be 768 bytes and fail to encode; both limits are applied.
+     */
     public static String truncate(String hint) {
         if (hint == null) {
             return "";
         }
-        if (hint.codePointCount(0, hint.length()) <= MAX_HINT_CHARS) {
+        if (hint.codePointCount(0, hint.length()) <= MAX_HINT_CHARS
+                && utf8Bytes(hint) <= MAX_HINT_BYTES_PER_ENTRY) {
             return hint;
         }
-        return hint.substring(0, hint.offsetByCodePoints(0, MAX_HINT_CHARS));
+        int end = 0;
+        int bytes = 0;
+        int chars = 0;
+        while (end < hint.length() && chars < MAX_HINT_CHARS) {
+            int codePoint = hint.codePointAt(end);
+            int size = utf8Size(codePoint);
+            if (bytes + size > MAX_HINT_BYTES_PER_ENTRY) {
+                break;
+            }
+            bytes += size;
+            end += Character.charCount(codePoint);
+            chars++;
+        }
+        return hint.substring(0, end);
+    }
+
+    /** The UTF-8 size of one code point. */
+    private static int utf8Size(int codePoint) {
+        if (codePoint < 0x80) {
+            return 1;
+        }
+        if (codePoint < 0x800) {
+            return 2;
+        }
+        return codePoint < 0x10000 ? 3 : 4;
     }
 
     /** The UTF-8 size the string codec writes, or 0 for null. */

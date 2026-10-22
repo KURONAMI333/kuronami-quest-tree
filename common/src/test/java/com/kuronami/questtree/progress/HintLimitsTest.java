@@ -36,8 +36,11 @@ class HintLimitsTest {
         HintLimits.Result result = HintLimits.limit(List.of(longHint), 1024, 0, PAYLOAD_MAX);
         assertEquals(1, result.hints().size());
         assertEquals(1, result.shortened());
-        assertTrue(result.hints().get(0).codePointCount(0, result.hints().get(0).length())
-                <= HintLimits.MAX_HINT_CHARS);
+        String kept = result.hints().get(0);
+        assertTrue(kept.codePointCount(0, kept.length()) <= HintLimits.MAX_HINT_CHARS);
+        assertTrue(kept.getBytes(StandardCharsets.UTF_8).length <= HintLimits.MAX_HINT_BYTES_PER_ENTRY);
+        // the payload codec's own limit is 512 bytes
+        assertTrue(kept.getBytes(StandardCharsets.UTF_8).length <= 512);
     }
 
     @Test
