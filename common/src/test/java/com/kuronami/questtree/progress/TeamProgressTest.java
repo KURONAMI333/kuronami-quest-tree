@@ -151,6 +151,18 @@ class TeamProgressTest {
     }
 
     @Test
+    void bookLockIsSharedAndSurvivesReloadAndSync() {
+        TeamProgress team = new TeamProgress(TEAM);
+        assertFalse(team.view(A).bookLocked());
+        team.view(B).setBookLocked(true);
+
+        assertTrue(team.view(A).bookLocked());
+        assertTrue(TeamProgress.parse(team.toJson().toString()).view(A).bookLocked());
+        JsonObject synced = ProgressJson.write(team.view(A));
+        assertTrue(ProgressJson.read(synced).bookLocked());
+    }
+
+    @Test
     void teamStagesAreSharedAndSurviveJoinLeaveAndReload() {
         TeamProgress team = new TeamProgress(TEAM);
         team.view(A).teamStages.add("chapter/two");

@@ -198,8 +198,33 @@ public class ProgressScreen extends Screen {
         }
     }
 
+    /**
+     * Opens the book where the player left it. The team's lock (FTB Quests' {@code locked}) refuses only opening: a
+     * book already on screen keeps working, as progress keeps counting on the server.
+     */
+    public static void open() {
+        if (refuseLocked()) {
+            return;
+        }
+        query = "";
+        net.minecraft.client.Minecraft.getInstance().setScreen(new ProgressScreen());
+    }
+
+    /** Tells the player the book is closed, with the same toast and sound everywhere it is refused. */
+    private static boolean refuseLocked() {
+        if (!ClientProgress.bookLocked()) {
+            return false;
+        }
+        NoticeToast.show("lock", net.minecraft.network.chat.Component.translatable("screen.kuronami_quest_tree.book_locked"));
+        ProgressFeedback.locked();
+        return true;
+    }
+
     /** Opens the screen on one quest (the open key over an item that a quest wants). */
     public static void openAt(String key) {
+        if (refuseLocked()) {
+            return;
+        }
         ProgressScreen screen = new ProgressScreen();
         screen.pendingGoTo = key;
         query = "";
@@ -212,6 +237,9 @@ public class ProgressScreen extends Screen {
      * its hint instead of its map.
      */
     public static void openTarget(String encoded) {
+        if (refuseLocked()) {
+            return;
+        }
         GiverTarget target = GiverTarget.decode(encoded);
         ClientModel m = ClientProgress.model();
         if (target == null || m == null) {
@@ -240,6 +268,9 @@ public class ProgressScreen extends Screen {
 
     /** Opens the book at the chapter list only, for a giver whose chapter is not open yet. */
     public static void openRail() {
+        if (refuseLocked()) {
+            return;
+        }
         ProgressScreen screen = new ProgressScreen();
         screen.pendingRail = true;
         query = "";

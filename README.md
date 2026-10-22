@@ -21,6 +21,9 @@ Most commands need permission level 2. `migrate` needs level 4 (or the server co
 | `/quest_tree validate` | Errors, warnings and content this pack cannot complete, grouped by chapter |
 | `/quest_tree reset <players> [chapter or node]` | Forget progress (everything, one chapter, or one node) |
 | `/quest_tree complete <players> <node>` | Finish a quest's tasks; rewards stay claimable |
+| `/quest_tree complete_all <players>` | Finish every quest; skill chapters are left alone |
+| `/quest_tree progress <players> <node> <task> <value>` | Set one task's counter (the task counts from 1) |
+| `/quest_tree book_lock <players> <on\|off>` | Close or reopen the book for a whole team |
 | `/quest_tree respec <players> <chapter>` | Give back every point spent in a skill chapter |
 | `/quest_tree lock <players> <chapter>` | Hide one chapter from those players |
 | `/quest_tree unlock <players> <chapter>` | Show it again |
@@ -39,6 +42,13 @@ Most commands need permission level 2. `migrate` needs level 4 (or the server co
 | `/quest_tree rewards status <players>` | Report whether rewards are blocked |
 | `/quest_tree team_stage add <players> <stage>` | Add a stage to the players' team progress |
 | `/quest_tree team_stage remove <players> <stage>` | Remove a stage from the team progress |
+| `/quest_tree open_book [<chapter or node>]` | Open the book for yourself, optionally at one target |
+| `/quest_tree chapter generate creative\|inventory\|container <pos>` | Make a chapter with one quest per item in that source |
+| `/quest_tree table export <table> [pos]` | Put a table's item rewards into a container (the one you look at by default) |
+| `/quest_tree table import <name> [pos]` | Make a table from a container's stacks (item id and count only) |
+| `/quest_tree table delete_empty` | Delete every reward table with no entries |
+| `/quest_tree clear_display_cache` | Answer the FTB Quests command; this mod keeps no display cache |
+| `/quest_tree cleanup_translations show\|execute` | List, or delete, language keys the book no longer reads |
 
 Chapter ids are `<namespace>:<chapter>`, node ids `<namespace>:<chapter>/<node>`.
 

@@ -74,6 +74,13 @@ public final class PlayerProgress {
     private boolean emergencyWaitNotice;
     /** The quest book was handed out on first join (server config, 2026-10-20). */
     private boolean bookGiven;
+    /**
+     * The team's quest book is closed for everyone (FTB Quests' {@code locked}, 2026-10-22). A team value: every
+     * member's view reads the same flag, and an admin command changes it once per team.
+     */
+    private boolean bookLocked;
+    /** Set only on a view: the shared record the lock lives in, so a write reaches the team. */
+    private PlayerProgress sharedRecord;
     /** Set only on a view: writes of the book flag and reward flag go to this player's part. */
     private PlayerPart part;
     /** Set only when this is a shared record: an admin blocked every member's rewards. */
@@ -148,6 +155,8 @@ public final class PlayerProgress {
         p.recent = part.recent;
         p.bookGiven = part.bookGiven;
         p.rewardsBlocked = part.rewardsBlocked;
+        p.bookLocked = shared.bookLocked;
+        p.sharedRecord = shared;
         p.emergencyReadyAt = part.emergencyReadyAt;
         p.emergencyWaitNotice = part.emergencyWaitNotice;
         p.part = part;
@@ -191,6 +200,19 @@ public final class PlayerProgress {
 
     public boolean rewardsBlocked() {
         return rewardsBlocked;
+    }
+
+    /** Whether the team's book is closed. Shared, so a view reads the team record's flag. */
+    public boolean bookLocked() {
+        return sharedRecord != null ? sharedRecord.bookLocked : bookLocked;
+    }
+
+    public void setBookLocked(boolean locked) {
+        if (sharedRecord != null) {
+            sharedRecord.bookLocked = locked;
+        } else {
+            bookLocked = locked;
+        }
     }
 
     public void setRewardsBlocked(boolean blocked) {
@@ -318,6 +340,7 @@ public final class PlayerProgress {
         teamStages.addAll(other.teamStages);
         paidSkillRewards.clear();
         paidSkillRewards.addAll(other.paidSkillRewards);
+        bookLocked = other.bookLocked;
     }
 
     public void event(String kind, String node, long time) {

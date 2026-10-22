@@ -38,7 +38,7 @@ public final class InventoryQuestButton extends ImageButton {
 
     private InventoryQuestButton(AbstractContainerScreen<?> screen) {
         super(0, 0, InventoryButtonLayout.WIDTH, InventoryButtonLayout.HEIGHT, SPRITES,
-                button -> Minecraft.getInstance().setScreen(new ProgressScreen()),
+                button -> ProgressScreen.open(),
                 Component.translatable("item.kuronami_quest_tree.quest_book"));
         this.screen = screen;
         setTooltip(Tooltip.create(Component.translatable("item.kuronami_quest_tree.quest_book")));

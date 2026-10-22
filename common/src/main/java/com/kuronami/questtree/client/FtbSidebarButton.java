@@ -14,6 +14,6 @@ public final class FtbSidebarButton {
     }
 
     public static void openQuestBook() {
-        Minecraft.getInstance().setScreen(new ProgressScreen());
+        ProgressScreen.open();
     }
 }

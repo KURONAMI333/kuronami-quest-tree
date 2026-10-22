@@ -52,6 +52,7 @@ public final class ProgressJson {
         o.addProperty("emergency_wait_notice", p.emergencyWaitNotice());
         o.addProperty("book_given", p.bookGiven());
         o.addProperty("rewards_blocked", p.rewardsBlocked());
+        o.addProperty("book_locked", p.bookLocked());
         return o;
     }
 
@@ -108,6 +109,7 @@ public final class ProgressJson {
         p.setEmergencyWaitNotice(PackNumbers.booleanOr(o.get("emergency_wait_notice"), false));
         p.setRewardsBlocked(PackNumbers.booleanOr(o.get("rewards_blocked"), false));
         p.setBookGiven(PackNumbers.booleanOr(o.get("book_given"), false));
+        p.setBookLocked(PackNumbers.booleanOr(o.get("book_locked"), false));
         return p;
     }
 

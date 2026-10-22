@@ -191,12 +191,14 @@ public final class EditorService {
     public static void onServerTick(MinecraftServer server) {
         // /reload can move a reward index outside an editor publish: apply what moved before anything is sent.
         applyRewardRemap(ProgressStore.get(server), ProgressData.takeRewardRemap());
-        if (!dirty) {
+        if (!dirty || server.getTickCount() < publishAt) {
             return;
         }
-        if (server.getTickCount() < publishAt) {
-            return;
-        }
+        publish(server);
+    }
+
+    /** Rebuilds and resends the book after one or more accepted writes. */
+    private static void publish(MinecraftServer server) {
         dirty = false;
         publishAt = -1;
         try {
@@ -216,6 +218,37 @@ public final class EditorService {
                 ProgressService.flush(player);
             }
         }
+    }
+
+    /**
+     * An operator command's write, through the same op engine and publish path as the editor (2026-10-22). Commands
+     * do not need editing mode: their literal already carries permission level 2, and {@code writerPermissionLevel}
+     * keeps the same rule about writing command rewards. The change is published at once, so a command that reports
+     * "created X" is followed by a book that contains X.
+     */
+    public static ProgressionEditor.Outcome applyCommand(MinecraftServer server, int writerPermissionLevel,
+                                                         String chapterId, long revision, String op, JsonObject args) {
+        if (editor == null || worldRoot == null) {
+            return new ProgressionEditor.Outcome(false, false, false, "", revision,
+                    List.of("the server has no world loaded"));
+        }
+        ProgressionEditor.Outcome outcome = editor.apply(ProgressData.packChapters(), ProgressData.packTables(),
+                ProgressData.packSources(), chapterId, revision, op, args, ProgressData.packUnreadable(),
+                writerPermissionLevel);
+        if (outcome.changed()) {
+            dirty = true;
+            publishAt = server.getTickCount();
+            publish(server);
+        }
+        return outcome;
+    }
+
+    /** The revision a table's next write must name, or 0 when it was never edited. */
+    public static long tableRevision(String id) {
+        if (editor == null) {
+            return 0;
+        }
+        return ProgressionOverlay.read(editor.overlayRoot()).tableRevision(id);
     }
 
     /**

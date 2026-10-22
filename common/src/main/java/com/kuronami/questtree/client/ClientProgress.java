@@ -122,10 +122,15 @@ public final class ClientProgress {
     public static void onOpen(OpenPayload p) {
         String target = p.target() == null ? "" : p.target();
         if (target.isEmpty()) {
-            Minecraft.getInstance().setScreen(new ProgressScreen());
+            ProgressScreen.open();
         } else {
             ProgressScreen.openTarget(target);
         }
+    }
+
+    /** Whether the team's book is closed (FTB Quests' {@code locked}). */
+    public static boolean bookLocked() {
+        return progress.bookLocked();
     }
 
     /** The player's own progress, replaced whole on every update. */
@@ -491,7 +496,7 @@ public final class ClientProgress {
         }
         while (OPEN_KEY.consumeClick()) {
             if (mc.screen == null && mc.player != null) {
-                mc.setScreen(new ProgressScreen());
+                ProgressScreen.open();
             }
         }
         while (TRACK_KEY.consumeClick()) {
