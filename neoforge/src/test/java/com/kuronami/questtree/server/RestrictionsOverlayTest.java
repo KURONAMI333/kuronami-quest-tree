@@ -44,7 +44,8 @@ class RestrictionsOverlayTest {
         JsonObject file = new JsonObject();
         file.addProperty("revision", 4);
         JsonArray rules = new JsonArray();
-        rules.add(JsonParser.parseString("{\"id\":\"edited\",\"items\":[\"minecraft:iron_sword\"]}"));
+        rules.add(JsonParser.parseString("{\"id\":\"edited\",\"items\":[\"minecraft:iron_sword\"],"
+                + "\"conditions\":[{\"type\":\"stage\",\"stage\":\"edited\"}]}"));
         file.add("rules", rules);
         write(file);
 
@@ -67,7 +68,8 @@ class RestrictionsOverlayTest {
     @Test
     void aWrittenFileReadsBackWithTheNextRevision() throws Exception {
         JsonArray rules = new JsonArray();
-        rules.add(JsonParser.parseString("{\"id\":\"rule\"}"));
+        rules.add(JsonParser.parseString("{\"id\":\"rule\",\"items\":[\"minecraft:stone\"],"
+                + "\"conditions\":[{\"type\":\"stage\",\"stage\":\"x\"}]}"));
 
         ProgressionOverlay.writeRestrictions(root, 7, rules);
 

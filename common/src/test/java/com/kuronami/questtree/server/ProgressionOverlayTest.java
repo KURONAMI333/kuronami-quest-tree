@@ -150,4 +150,27 @@ class ProgressionOverlayTest {
         assertEquals(9, overlay.revisionsJson().get("t:basics").getAsLong());
     }
 
+    /** A bad rule saved by the restrictions editor reaches /quest_tree validate, not just the runtime parse. */
+    @Test
+    void overlayRestrictionProblemsAreReportedAsWarnings() throws Exception {
+        Path root = temp.resolve(ProgressionOverlay.DIR);
+        Files.createDirectories(root);
+        Files.writeString(root.resolve("restrictions.json"), """
+                {"revision": 1, "rules": [
+                  {"id": "bad_action", "items": ["minecraft:stone"], "actions": ["wield"],
+                   "conditions": [{"type": "stage", "stage": "x"}]},
+                  {"id": "no_target"}
+                ]}
+                """, StandardCharsets.UTF_8);
+
+        ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(root);
+
+        assertEquals(2, overlay.restrictions.rules.size());
+        assertTrue(overlay.problems.stream().anyMatch(p -> p.severity() == ProgressValidator.Severity.WARNING
+                && p.path().startsWith("rules[0].actions") && p.message().contains("unknown action")),
+                overlay.problems.toString());
+        assertTrue(overlay.problems.stream().anyMatch(p -> p.path().equals("rules[1]")
+                && p.message().contains("no items or blocks")), overlay.problems.toString());
+    }
+
 }

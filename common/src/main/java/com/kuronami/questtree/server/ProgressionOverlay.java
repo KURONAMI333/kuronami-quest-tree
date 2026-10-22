@@ -369,6 +369,13 @@ public final class ProgressionOverlay {
         JsonElement rules = o.get("rules");
         if (rules != null && rules.isJsonArray()) {
             overlay.rules = rules.getAsJsonArray().deepCopy();
+            // The editor writes the whole array, so its parse problems must reach /quest_tree validate like the pack's
+            // own file does. Without this line a saved bad rule was read at runtime but never listed (2026-10-22).
+            for (com.kuronami.questtree.progress.RestrictionRules.Problem problem
+                    : com.kuronami.questtree.progress.RestrictionRules.parse(overlay.rules).problems()) {
+                out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.WARNING, shown,
+                        problem.path(), problem.message(), 0));
+            }
         } else {
             out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "rules",
                     "\"rules\" is not an array, so the file is ignored and the pack's rules apply", 0));
