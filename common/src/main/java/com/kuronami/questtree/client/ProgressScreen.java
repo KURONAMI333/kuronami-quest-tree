@@ -2924,6 +2924,8 @@ public class ProgressScreen extends Screen {
                 () -> openChapterEditor(ch)));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.chapter.new"), true,
                 () -> openNewChapter(ch)));
+        entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.restrictions.title"),
+                true, this::openRestrictions));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.deleted.title"), true,
                 this::openDeleted));
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.export"), true,
@@ -2931,6 +2933,15 @@ public class ProgressScreen extends Screen {
         entries.add(new EditorMenuEntry(Component.translatable("screen.kuronami_quest_tree.editor.test"), true,
                 () -> confirmTest(ch)));
         openEditorMenu(mx, my, entries);
+    }
+
+    private void openRestrictions() {
+        EditorSession.whenIdle(() -> {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.screen == this) {
+                mc.setScreen(new RestrictionsEditScreen(this));
+            }
+        });
     }
 
     private void openNodeEditor(ClientModel.Chapter ch, ClientModel.Node n) {
@@ -3582,6 +3593,13 @@ public class ProgressScreen extends Screen {
         var tables = ClientProgress.rawTables();
         String id = tables.isEmpty() ? "devtour:empty_table" : tables.keySet().iterator().next();
         minecraft.setScreen(new TableEditScreen(this, id, tables.isEmpty()));
+    }
+
+    /** Dev tour only: open the item and block restrictions. */
+    void tourOpenRestrictions() {
+        if (minecraft != null) {
+            minecraft.setScreen(new RestrictionsEditScreen(this));
+        }
     }
 
     /** Dev tour only: open the list of deleted chapters and nodes. */

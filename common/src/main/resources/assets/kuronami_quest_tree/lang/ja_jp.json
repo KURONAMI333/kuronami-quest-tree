@@ -487,5 +487,16 @@
   "message.kuronami_quest_tree.emergency_none": "このパックには緊急アイテムがありません。",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "エディタがサーバーの応答を反映できませんでした: %s",
   "screen.kuronami_quest_tree.editor.notice.send_failed": "編集を送信できませんでした",
-  "message.kuronami_quest_tree.restricted": "条件を満たすまで使えない"
+  "message.kuronami_quest_tree.restricted": "条件を満たすまで使えない",
+  "screen.kuronami_quest_tree.editor.restrictions.title": "使用制限",
+  "screen.kuronami_quest_tree.editor.restrictions.add": "ルールを追加",
+  "screen.kuronami_quest_tree.editor.restrictions.rules": "ルール",
+  "screen.kuronami_quest_tree.editor.field.rule_id": "ID",
+  "screen.kuronami_quest_tree.editor.field.items": "アイテム",
+  "screen.kuronami_quest_tree.editor.field.item_tags": "アイテムタグ",
+  "screen.kuronami_quest_tree.editor.field.blocks": "ブロック",
+  "screen.kuronami_quest_tree.editor.field.block_tags": "ブロックタグ",
+  "screen.kuronami_quest_tree.editor.field.actions": "操作",
+  "screen.kuronami_quest_tree.editor.field.conditions": "条件",
+  "screen.kuronami_quest_tree.editor.field.rule_message": "メッセージ"
 }

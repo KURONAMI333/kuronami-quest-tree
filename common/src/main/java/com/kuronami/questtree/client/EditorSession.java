@@ -108,11 +108,18 @@ public final class EditorSession {
     }
 
     /** A new bundle arrived: take its authoritative revisions. */
+    /** The target id the restrictions file uses; it has one revision for the whole file. */
+    public static final String RESTRICTIONS = "restrictions";
+
     public static void onBundle(JsonObject bundle) {
         revisions.clear();
         tableRevisions.clear();
         readRevisions(bundle, "revisions", revisions);
         readRevisions(bundle, "table_revisions", tableRevisions);
+        JsonElement revision = bundle.get("restrictions_revision");
+        if (revision != null && revision.isJsonPrimitive() && revision.getAsJsonPrimitive().isNumber()) {
+            tableRevisions.put(RESTRICTIONS, revision.getAsLong());
+        }
     }
 
     private static void readRevisions(JsonObject bundle, String key, Map<String, Long> into) {

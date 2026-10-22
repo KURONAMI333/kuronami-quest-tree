@@ -154,6 +154,25 @@ public final class ProgressionOverlay {
         }
     }
 
+    /**
+     * The whole restrictions file (2026-10-22, G6): one array of rules, written whole. A rule is an entry in an array,
+     * so a partial patch would only decide which index a condition belongs to; the revision is one number for the file.
+     * {@code null} rules mean the pack's own {@code restrictions.json} is used unchanged.
+     */
+    public static final class RestrictionOverlay {
+        public long revision;
+        public JsonArray rules = new JsonArray();
+        public String file = "";
+        public String raw = "";
+
+        public JsonObject toJson() {
+            JsonObject out = new JsonObject();
+            out.addProperty("revision", revision);
+            out.add("rules", rules.deepCopy());
+            return out;
+        }
+    }
+
     /** Everything the overlay directory held, plus what could not be read. */
     public static final class Overlay {
         public final Map<String, ChapterOverlay> chapters = new LinkedHashMap<>();
@@ -162,6 +181,8 @@ public final class ProgressionOverlay {
         public final Map<String, TableOverlay> tables = new LinkedHashMap<>();
         /** Per-table revisions (see {@code table_revisions.json}); kept apart from chapter revisions. */
         public final Map<String, Long> tableRevisions = new LinkedHashMap<>();
+        /** The whole restrictions file, or null when it does not exist and the pack's rules apply. */
+        public RestrictionOverlay restrictions;
         public final List<ProgressValidator.Problem> problems = new ArrayList<>();
 
         public ChapterOverlay chapter(String id) {
@@ -296,14 +317,86 @@ public final class ProgressionOverlay {
                 }
             }
         }
+
+    /**
+     * Puts the overlay's restrictions into {@code bundle} when the file exists: it replaces the pack's rule array
+     * whole, so an editor can delete a pack rule. Without the file the pack's array and revision 0 stay as they are.
+     */
+    public void applyRestrictionsTo(JsonObject bundle) {
+        if (restrictions == null) {
+            return;
+        }
+        bundle.add("restrictions", restrictions.rules.deepCopy());
+        bundle.addProperty("restrictions_revision", restrictions.revision);
+    }
+
     }
 
     private ProgressionOverlay() {
     }
 
+    private static void readRestrictions(Path progressionRoot, Overlay out) {
+        Path file = progressionRoot.resolve("restrictions.json");
+        if (!Files.isRegularFile(file)) {
+            return;
+        }
+        String shown = display(progressionRoot, file);
+        String text;
+        try {
+            text = Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                    "could not be read: " + ex.getMessage(), 0));
+            return;
+        }
+        JsonElement parsed;
+        try {
+            parsed = JsonParser.parseString(text);
+        } catch (Exception ex) {
+            out.problems.add(ProgressValidator.parseError(shown, text, ex));
+            return;
+        }
+        if (!parsed.isJsonObject()) {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "",
+                    "the restrictions file is not a JSON object", 0));
+            return;
+        }
+        JsonObject o = parsed.getAsJsonObject();
+        RestrictionOverlay overlay = new RestrictionOverlay();
+        overlay.file = shown;
+        overlay.raw = text;
+        overlay.revision = number(o, "revision");
+        JsonElement rules = o.get("rules");
+        if (rules != null && rules.isJsonArray()) {
+            overlay.rules = rules.getAsJsonArray().deepCopy();
+        } else {
+            out.problems.add(new ProgressValidator.Problem(ProgressValidator.Severity.ERROR, shown, "rules",
+                    "\"rules\" is not an array, so the file is ignored and the pack's rules apply", 0));
+            return;
+        }
+        out.restrictions = overlay;
+    }
+
+    /** Writes {@code restrictions.json} atomically; the caller passes the new revision and the complete rule array. */
+    public static void writeRestrictions(Path progressionRoot, long revision, JsonArray rules) throws IOException {
+        RestrictionOverlay overlay = new RestrictionOverlay();
+        overlay.revision = revision;
+        overlay.rules = rules.deepCopy();
+        Path file = progressionRoot.resolve("restrictions.json");
+        Files.createDirectories(progressionRoot);
+        Path temp = Files.createTempFile(progressionRoot, "restrictions", ".tmp");
+        try {
+            Files.writeString(temp, GSON.toJson(overlay.toJson()), StandardCharsets.UTF_8);
+            moveAtomically(temp, file);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
     /** Reads the overlay under {@code progressionRoot} (the {@code progression} folder, not the world root). */
     public static Overlay read(Path progressionRoot) {
         Overlay out = new Overlay();
+        readRestrictions(progressionRoot, out);
         Path chaptersDir = progressionRoot.resolve("chapters");
         if (!Files.isDirectory(chaptersDir)) {
             readTables(progressionRoot, out);

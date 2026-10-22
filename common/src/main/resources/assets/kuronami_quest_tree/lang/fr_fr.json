@@ -487,5 +487,16 @@
   "message.kuronami_quest_tree.emergency_none": "Ce pack ne contient pas d'objets d'urgence.",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "L’éditeur n’a pas pu appliquer la réponse du serveur : %s",
   "screen.kuronami_quest_tree.editor.notice.send_failed": "La modification n’a pas pu être envoyée",
-  "message.kuronami_quest_tree.restricted": "Verrouillé jusqu'à ce que la condition soit remplie"
+  "message.kuronami_quest_tree.restricted": "Verrouillé jusqu'à ce que la condition soit remplie",
+  "screen.kuronami_quest_tree.editor.restrictions.title": "Restrictions",
+  "screen.kuronami_quest_tree.editor.restrictions.add": "Ajouter une règle",
+  "screen.kuronami_quest_tree.editor.restrictions.rules": "Règles",
+  "screen.kuronami_quest_tree.editor.field.rule_id": "Id",
+  "screen.kuronami_quest_tree.editor.field.items": "Objets",
+  "screen.kuronami_quest_tree.editor.field.item_tags": "Tags d'objets",
+  "screen.kuronami_quest_tree.editor.field.blocks": "Blocs",
+  "screen.kuronami_quest_tree.editor.field.block_tags": "Tags de blocs",
+  "screen.kuronami_quest_tree.editor.field.actions": "Actions",
+  "screen.kuronami_quest_tree.editor.field.conditions": "Conditions",
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Message"
 }

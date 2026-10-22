@@ -487,5 +487,16 @@
   "message.kuronami_quest_tree.emergency_none": "此整合包没有应急物品。",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "编辑器无法应用服务器的响应：%s",
   "screen.kuronami_quest_tree.editor.notice.send_failed": "无法发送这次编辑",
-  "message.kuronami_quest_tree.restricted": "满足条件前无法使用"
+  "message.kuronami_quest_tree.restricted": "满足条件前无法使用",
+  "screen.kuronami_quest_tree.editor.restrictions.title": "限制",
+  "screen.kuronami_quest_tree.editor.restrictions.add": "添加规则",
+  "screen.kuronami_quest_tree.editor.restrictions.rules": "规则",
+  "screen.kuronami_quest_tree.editor.field.rule_id": "ID",
+  "screen.kuronami_quest_tree.editor.field.items": "物品",
+  "screen.kuronami_quest_tree.editor.field.item_tags": "物品标签",
+  "screen.kuronami_quest_tree.editor.field.blocks": "方块",
+  "screen.kuronami_quest_tree.editor.field.block_tags": "方块标签",
+  "screen.kuronami_quest_tree.editor.field.actions": "操作",
+  "screen.kuronami_quest_tree.editor.field.conditions": "条件",
+  "screen.kuronami_quest_tree.editor.field.rule_message": "消息"
 }

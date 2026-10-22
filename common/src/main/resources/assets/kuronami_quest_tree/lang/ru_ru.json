@@ -487,5 +487,16 @@
   "message.kuronami_quest_tree.emergency_none": "В этом наборе нет аварийных предметов.",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "Редактор не смог применить ответ сервера: %s",
   "screen.kuronami_quest_tree.editor.notice.send_failed": "Не удалось отправить изменение",
-  "message.kuronami_quest_tree.restricted": "Заблокировано до выполнения условия"
+  "message.kuronami_quest_tree.restricted": "Заблокировано до выполнения условия",
+  "screen.kuronami_quest_tree.editor.restrictions.title": "Ограничения",
+  "screen.kuronami_quest_tree.editor.restrictions.add": "Добавить правило",
+  "screen.kuronami_quest_tree.editor.restrictions.rules": "Правила",
+  "screen.kuronami_quest_tree.editor.field.rule_id": "Id",
+  "screen.kuronami_quest_tree.editor.field.items": "Предметы",
+  "screen.kuronami_quest_tree.editor.field.item_tags": "Теги предметов",
+  "screen.kuronami_quest_tree.editor.field.blocks": "Блоки",
+  "screen.kuronami_quest_tree.editor.field.block_tags": "Теги блоков",
+  "screen.kuronami_quest_tree.editor.field.actions": "Действия",
+  "screen.kuronami_quest_tree.editor.field.conditions": "Условия",
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Сообщение"
 }

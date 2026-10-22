@@ -487,5 +487,16 @@
   "message.kuronami_quest_tree.emergency_none": "Este pacote não tem itens de emergência.",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "O editor não conseguiu aplicar a resposta do servidor: %s",
   "screen.kuronami_quest_tree.editor.notice.send_failed": "Não foi possível enviar a edição",
-  "message.kuronami_quest_tree.restricted": "Bloqueado até o requisito ser cumprido"
+  "message.kuronami_quest_tree.restricted": "Bloqueado até o requisito ser cumprido",
+  "screen.kuronami_quest_tree.editor.restrictions.title": "Restrições",
+  "screen.kuronami_quest_tree.editor.restrictions.add": "Adicionar regra",
+  "screen.kuronami_quest_tree.editor.restrictions.rules": "Regras",
+  "screen.kuronami_quest_tree.editor.field.rule_id": "Id",
+  "screen.kuronami_quest_tree.editor.field.items": "Itens",
+  "screen.kuronami_quest_tree.editor.field.item_tags": "Tags de itens",
+  "screen.kuronami_quest_tree.editor.field.blocks": "Blocos",
+  "screen.kuronami_quest_tree.editor.field.block_tags": "Tags de blocos",
+  "screen.kuronami_quest_tree.editor.field.actions": "Ações",
+  "screen.kuronami_quest_tree.editor.field.conditions": "Condições",
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Mensagem"
 }

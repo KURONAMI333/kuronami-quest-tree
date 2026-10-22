@@ -205,6 +205,61 @@ public final class EditorDoc {
     // ------------------------------------------------------------------ rows
 
     /** What a row's box shows for the current JSON. */
+    /** A {@link FieldSpec.Kind#IDS} member as one line; non-string entries are skipped, not guessed. */
+    public static String showIds(JsonObject root, String path) {
+        JsonElement e = get(root, path);
+        if (e == null || !e.isJsonArray()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        for (JsonElement item : e.getAsJsonArray()) {
+            if (item.isJsonPrimitive() && item.getAsJsonPrimitive().isString()) {
+                parts.add(item.getAsString());
+            }
+        }
+        return String.join(", ", parts);
+    }
+
+    /** Writes a comma-separated line as an array of trimmed, non-empty ids; a blank line removes the member. */
+    public static void writeIds(JsonObject root, String path, String value) {
+        if (value == null || value.isBlank()) {
+            remove(root, path);
+            return;
+        }
+        JsonArray array = new JsonArray();
+        for (String part : value.split(",")) {
+            String id = part.trim();
+            if (!id.isEmpty()) {
+                array.add(id);
+            }
+        }
+        if (array.isEmpty()) {
+            remove(root, path);
+        } else {
+            set(root, path, array);
+        }
+    }
+
+    /** A {@link FieldSpec.Kind#JSON} member as compact text, so the whole value fits one row. */
+    public static String showJson(JsonObject root, String path) {
+        JsonElement e = get(root, path);
+        return e == null || e.isJsonNull() ? "" : e.toString();
+    }
+
+    /** Parses the row's text into the member; false when it is not JSON, which leaves the last readable value in place. */
+    public static boolean writeJson(JsonObject root, String path, String value) {
+        if (value == null || value.isBlank()) {
+            remove(root, path);
+            return true;
+        }
+        try {
+            set(root, path, com.google.gson.JsonParser.parseString(value.trim()));
+            return true;
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
     public static String show(JsonObject root, FieldSpec field) {
         return switch (field.kind()) {
             case BOOL -> String.valueOf(bool(root, field.path(), field.defaultOn()));

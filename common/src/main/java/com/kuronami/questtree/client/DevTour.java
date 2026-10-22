@@ -380,7 +380,11 @@ final class DevTour {
             Ui.loadPalette(Minecraft.getInstance().getResourceManager());
         });
         shot(et + 155, "42_high_contrast");
-        at(et + 157, () -> {
+        // the item and block restrictions, as the editor's own screen
+        at(et + 157, () -> onScreen("43_restrictions", ProgressScreen::tourOpenRestrictions));
+        shot(et + 163, "43_restrictions");
+        at(et + 165, () -> {
+            Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
             ClientConfig.textScale = textScaleBefore;
             ClientConfig.highContrast = contrastBefore;

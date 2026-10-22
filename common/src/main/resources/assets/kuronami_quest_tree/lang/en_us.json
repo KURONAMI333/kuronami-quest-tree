@@ -487,5 +487,16 @@
   "message.kuronami_quest_tree.emergency_none": "This pack has no emergency items.",
   "screen.kuronami_quest_tree.editor.notice.reply_failed": "The editor could not apply the server's answer: %s",
   "screen.kuronami_quest_tree.editor.notice.send_failed": "The edit could not be sent",
-  "message.kuronami_quest_tree.restricted": "Locked until its requirement is met"
+  "message.kuronami_quest_tree.restricted": "Locked until its requirement is met",
+  "screen.kuronami_quest_tree.editor.restrictions.title": "Restrictions",
+  "screen.kuronami_quest_tree.editor.restrictions.add": "Add rule",
+  "screen.kuronami_quest_tree.editor.restrictions.rules": "Rules",
+  "screen.kuronami_quest_tree.editor.field.rule_id": "Id",
+  "screen.kuronami_quest_tree.editor.field.items": "Items",
+  "screen.kuronami_quest_tree.editor.field.item_tags": "Item tags",
+  "screen.kuronami_quest_tree.editor.field.blocks": "Blocks",
+  "screen.kuronami_quest_tree.editor.field.block_tags": "Block tags",
+  "screen.kuronami_quest_tree.editor.field.actions": "Actions",
+  "screen.kuronami_quest_tree.editor.field.conditions": "Conditions",
+  "screen.kuronami_quest_tree.editor.field.rule_message": "Message"
 }
