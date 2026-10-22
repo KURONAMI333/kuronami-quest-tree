@@ -41,6 +41,11 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
         registration.addRecipeCategories(new QuestViewerJeiCategory(registration.getJeiHelpers().getGuiHelper()));
     }
 
+    /**
+     * Known JEI limitation, accepted: JEI computes the unfocused category list once and caches it
+     * ({@code recipeCategoriesVisibleCache}). If the player opens that list before the bundle has synced, this
+     * category stays out of it until JEI reloads. The focused lookups below are live, so nothing else is stale.
+     */
     @Override
     public void registerAdvanced(IAdvancedRegistration registration) {
         registration.addRecipeManagerPlugin(new QuestViewerRecipeManager());
