@@ -98,14 +98,21 @@ final class Ui {
      * 1px border that runs from #383838 at the top to #242424 at the bottom. The tones are ours, the structure is
      * Jade's (see {@link #frame}). Read from {@code gui/palette.json}, so a pack can restyle it.
      */
-    static int HUD_TRACKER = 0xB3111214;
-    static int HUD_TRACKER_EDGE = 0xB3383838;
-    static int HUD_TRACKER_EDGE_BOTTOM = 0xB3242424;
+    /**
+     * The tracker card's Jade-matching frame (2026-10-22, the player: still too dark). Jade's dark theme is #131313
+     * with the tooltip alpha of 0.7, and Jade applies it as 0.7 * 255 / 256, so the drawn alpha is 0.697 = 0xB1:
+     * #B1131313 inside, #B1383838 at the top and sides, #B1242424 at the bottom.
+     */
+    static int HUD_TRACKER = 0xB1131313;
+    static int HUD_TRACKER_EDGE = 0xB1383838;
+    static int HUD_TRACKER_EDGE_BOTTOM = 0xB1242424;
     /** A toast's level line (yellow), and its title (white). */
     static int TOAST_LEVEL = 0xFFFFFF55;
     static int TOAST_TITLE = 0xFFFFFFFF;
-    /** The empty part of the experience toast bar. */
+    /** The empty part of the experience toast bar, and the toast's own frame (vanilla's #212121 on #555555). */
     static int TOAST_TRACK = 0xFF2A2A2A;
+    static int TOAST_FILL = 0xFF212121;
+    static int TOAST_EDGE = 0xFF555555;
 
     /** Screen text scale, separate from Minecraft's GUI scale (2026-10-22). */
     static float textScale = 1f;
@@ -116,11 +123,17 @@ final class Ui {
     static final int S3 = 12;
     static final int S4 = 16;
 
-    /** Radii: marks and chips, controls and rows, cards and fields, panels. */
-    static final int R1 = 4;
-    static final int R2 = 8;
-    static final int R3 = 8;
-    static final int R4 = 12;
+    /**
+     * The corner radius of every piece of chrome, in GUI pixels, from {@code corner_radius} in the palette
+     * (2026-10-22, the player: the screen was too round to read as Minecraft; 0 is square). The four names keep the
+     * old call sites readable, but all of them are the one value now: chips, rows, cards, fields and panels share it.
+     * Quest tile shapes and the belt's chevrons are content, not chrome, and do not use it.
+     */
+    static int CORNER = 2;
+    static int R1 = CORNER;
+    static int R2 = CORNER;
+    static int R3 = CORNER;
+    static int R4 = CORNER;
 
     private static final ResourceLocation FILL = texture("shape/rsquare");
     private static final ResourceLocation EDGE = texture("shape/rsquare_edge");
@@ -213,6 +226,9 @@ final class Ui {
         HUD_TRACKER_EDGE = color(o, "hud_tracker_edge", HUD_TRACKER_EDGE);
         HUD_TRACKER_EDGE_BOTTOM = color(o, "hud_tracker_edge_bottom", HUD_TRACKER_EDGE_BOTTOM);
         TOAST_TRACK = color(o, "toast_track", TOAST_TRACK);
+        TOAST_FILL = color(o, "toast_fill", TOAST_FILL);
+        TOAST_EDGE = color(o, "toast_edge", TOAST_EDGE);
+        applyCornerRadius(integer(o, "corner_radius", CORNER));
         if (ClientConfig.highContrast()) {
             // readability over the pack's palette: white text on a near-black ground, and a warmer selection
             TEXT = 0xFFFFFFFF;
@@ -241,10 +257,11 @@ final class Ui {
     private static int[] defaults;
 
     private static int[] current() {
-        return new int[]{TEXT, MUTED, DIM, BRIGHT, GROUND, PANEL, PANEL_TRANSLUCENT, RAIL_CLOSED, FLOATING, ACCENT, BADGE, BADGE_TEXT, OVERLAY_1, OVERLAY_2, OVERLAY_3, HAIRLINE, DIVIDER, FOCUS, DISABLED, Tiles.GREEN, Tiles.GREEN_DARK, Tiles.GREEN_TEXT, Tiles.TILE_LOCKED, Tiles.INK, Tiles.WHITE, Tiles.GREEN_BRIGHT, Tiles.GREEN_SETTLED, Tiles.GREY, Tiles.BLUE, Tiles.BLUE_DARK, Tiles.GOLD, Tiles.RED, ProgressScreen.LINE_OPEN, ProgressScreen.LINE_CLOSED, ProgressScreen.LINE_CLOSED_ON, TEXT_ERROR, SCROLLBAR, SCROLLBAR_HOVER, MARK, SELECTION, OPTIONAL_OUTLINE, FLASH, MINIMAP_VIEW, MINIMAP_OPEN, LINE_OPEN_HOVER, HUD_BACK, HUD_TEXT, HUD_MUTED, HUD_TRACKER, HUD_TRACKER_EDGE, HUD_TRACKER_EDGE_BOTTOM, TOAST_TRACK, GLASS_TINT, GLASS_CLEAR, GLASS_REGULAR, ProgressScreen.LINE_REQUIRES, ProgressScreen.LINE_UNLOCKS};
+        return new int[]{TEXT, MUTED, DIM, BRIGHT, GROUND, PANEL, PANEL_TRANSLUCENT, RAIL_CLOSED, FLOATING, ACCENT, BADGE, BADGE_TEXT, OVERLAY_1, OVERLAY_2, OVERLAY_3, HAIRLINE, DIVIDER, FOCUS, DISABLED, Tiles.GREEN, Tiles.GREEN_DARK, Tiles.GREEN_TEXT, Tiles.TILE_LOCKED, Tiles.INK, Tiles.WHITE, Tiles.GREEN_BRIGHT, Tiles.GREEN_SETTLED, Tiles.GREY, Tiles.BLUE, Tiles.BLUE_DARK, Tiles.GOLD, Tiles.RED, ProgressScreen.LINE_OPEN, ProgressScreen.LINE_CLOSED, ProgressScreen.LINE_CLOSED_ON, TEXT_ERROR, SCROLLBAR, SCROLLBAR_HOVER, MARK, SELECTION, OPTIONAL_OUTLINE, FLASH, MINIMAP_VIEW, MINIMAP_OPEN, LINE_OPEN_HOVER, HUD_BACK, HUD_TEXT, HUD_MUTED, HUD_TRACKER, HUD_TRACKER_EDGE, HUD_TRACKER_EDGE_BOTTOM, TOAST_TRACK, TOAST_FILL, TOAST_EDGE, GLASS_TINT, GLASS_CLEAR, GLASS_REGULAR, ProgressScreen.LINE_REQUIRES, ProgressScreen.LINE_UNLOCKS};
     }
 
     private static void restoreDefaults() {
+        applyCornerRadius(2);
         if (defaults == null) {
             defaults = current();
             return;
@@ -302,6 +319,8 @@ final class Ui {
         HUD_TRACKER_EDGE = defaults[i++];
         HUD_TRACKER_EDGE_BOTTOM = defaults[i++];
         TOAST_TRACK = defaults[i++];
+        TOAST_FILL = defaults[i++];
+        TOAST_EDGE = defaults[i++];
         GLASS_TINT = defaults[i++];
         GLASS_CLEAR = defaults[i++];
         GLASS_REGULAR = defaults[i++];
@@ -322,6 +341,30 @@ final class Ui {
             Constants.LOG.warn("Bad colour for {} in {}: {}", key, PALETTE, o.get(key));
             return fallback;
         }
+    }
+
+    /** A whole number of GUI pixels; a missing or bad value keeps the fallback. */
+    private static int integer(com.google.gson.JsonObject o, String key, int fallback) {
+        if (!o.has(key)) {
+            return fallback;
+        }
+        try {
+            return o.get(key).getAsInt();
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("Bad number for {} in {}: {}", key, PALETTE, o.get(key));
+            return fallback;
+        }
+    }
+
+    /** The one corner radius every chrome surface uses; 0 is square, and the mask is nine-sliced for anything between. */
+    static void applyCornerRadius(int guiPixels) {
+        CORNER = Math.max(0, Math.min(64, guiPixels));
+        R1 = R2 = R3 = R4 = CORNER;
+    }
+
+    /** Dev tour and tests: set the radius for this session; the next palette load takes the file's value again. */
+    static void setCornerRadius(int guiPixels) {
+        applyCornerRadius(guiPixels);
     }
 
     private static ResourceLocation texture(String path) {
@@ -381,23 +424,48 @@ final class Ui {
     }
 
     /**
-     * A thin border around a fill, both rounded on the same mask (2026-10-22, the in-game tracker after Jade's
-     * tooltip): the fill is inset by the 1px line. Jade's border is a vertical gradient, #383838 at the top to
-     * #242424 at the bottom; the bottom edge carries the darker tone and the sides keep the lighter one, which reads
-     * the same without a scissor (a scissor would use screen coordinates and break under the HUD's own pose).
+     * A thin border around a fill (2026-10-22, the in-game tracker after Jade's tooltip). Jade's border is a vertical
+     * gradient, #383838 at the top to #242424 at the bottom; the bottom row carries the darker tone and the sides keep
+     * the lighter one. Every pixel is painted exactly once: the border and the fill never overlap, so a translucent
+     * fill shows the world through it at its own alpha. (Until 2026-10-22 the fill sat on top of a full-size border
+     * surface, which doubled the alpha inside the card to about 0.9 and read darker than Jade's 0.7.)
+     * Corners are cut row by row from the radius, so 0 is square and 1-2 is the slight rounding the screens use.
      */
     static void frame(GuiGraphics g, int x, int y, int w, int h, int radius, int edge, int edgeBottom, int fill) {
         if (w <= 2 || h <= 2) {
             return;
         }
-        int r = Math.min(Math.min(radius, Math.min(w, h) / 2), EDGE_CORNER);
-        surface(g, x, y, w, h, radius, edge);
-        if (r > 0) {
-            g.fill(x + r, y + h - 1, x + w - r, y + h, edgeBottom);
-        } else {
-            g.fill(x, y + h - 1, x + w, y + h, edgeBottom);
+        int r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+        for (int i = 0; i < h; i++) {
+            int in = cornerInset(r, i, h);
+            int x0 = x + in;
+            int x1 = x + w - in;
+            if (i == 0 || i == h - 1) {
+                g.fill(x0, y + i, x1, y + i + 1, i == h - 1 ? edgeBottom : edge);
+                continue;
+            }
+            // the side border is wider where the row above or below is cut further in, so the outline stays closed
+            int side = Math.max(1, Math.max(cornerInset(r, i - 1, h), cornerInset(r, i + 1, h)) - in);
+            side = Math.min(side, (x1 - x0) / 2);
+            g.fill(x0, y + i, x0 + side, y + i + 1, edge);
+            g.fill(x1 - side, y + i, x1, y + i + 1, edge);
+            if (x1 - side > x0 + side) {
+                g.fill(x0 + side, y + i, x1 - side, y + i + 1, fill);
+            }
         }
-        surface(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, radius - 1), fill);
+    }
+
+    /** How far row {@code i} of an {@code h}-tall shape with corner radius {@code r} starts in from its sides. */
+    static int cornerInset(int r, int i, int h) {
+        if (r <= 0 || i < 0 || i >= h) {
+            return 0;
+        }
+        int d = Math.min(i, h - 1 - i);
+        if (d >= r) {
+            return 0;
+        }
+        double dy = r - d - 0.5;
+        return r - (int) Math.round(Math.sqrt(Math.max(0.0, (double) r * r - dy * dy)));
     }
 
     /** A panel: a rounded fill with a hairline, the treatment every container in the screen shares. */
@@ -416,9 +484,31 @@ final class Ui {
         int textW = textWidth(font, count);
         int w = Math.max(BADGE_H, textW + 4);
         int x = right - w;
-        surface(g, x, y, w, BADGE_H, BADGE_H / 2 + 1, BADGE);
+        surface(g, x, y, w, BADGE_H, CORNER, BADGE);
         text(g, font, count, x + (w - textW + 1) / 2, y + 2, BADGE_TEXT);
         return w;
+    }
+
+    static final int CORNER_BADGE_H = 9;
+
+    /**
+     * A small count badge at an icon's top-right corner that stays outside the icon: its left edge starts at
+     * {@code iconRight}. Footer icons use it so the number never sits on top of the mark it belongs to (2026-10-22).
+     */
+    static void cornerBadge(GuiGraphics g, Font font, String count, int iconRight, int iconTop) {
+        int textW = textWidth(font, count);
+        int w = Math.max(CORNER_BADGE_H, textW + 3);
+        int h = CORNER_BADGE_H;
+        int x = iconRight + 1;
+        int y = iconTop - 2;
+        surface(g, x, y, w, h, CORNER, BADGE);
+        text(g, font, count, x + (w - textW + 1) / 2, y + 1, BADGE_TEXT);
+    }
+
+    /** The advancement toast's frame, drawn here so its corner follows {@link #CORNER} (vanilla's sprite is fixed at 2). */
+    static void toastFrame(GuiGraphics g, int w, int h) {
+        surface(g, 0, 0, w, h, CORNER, TOAST_FILL);
+        outline(g, 0, 0, w, h, CORNER, TOAST_EDGE);
     }
 
     /**

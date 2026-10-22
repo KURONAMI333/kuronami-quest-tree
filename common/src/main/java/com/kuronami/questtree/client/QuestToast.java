@@ -6,7 +6,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +13,6 @@ import java.util.List;
 /** "Quest complete" in the vanilla advancement toast frame, with the quest's state tile and the mod's own toast sounds. */
 final class QuestToast implements Toast, OwnSoundToast {
 
-    private static final ResourceLocation BACKGROUND = ResourceLocation.withDefaultNamespace("toast/advancement");
     private static final long SHOW = 3000;
 
     private final ClientModel.Node node;
@@ -55,7 +53,7 @@ final class QuestToast implements Toast, OwnSoundToast {
 
     @Override
     public Visibility render(GuiGraphics g, ToastComponent toasts, long time) {
-        g.blitSprite(BACKGROUND, 0, 0, width(), height());
+        Ui.toastFrame(g, width(), height());
         Tiles.tile(g, node.shape, 6, 6, 20, state, 1, ClientProgress.iconFor(node), false);
         var font = toasts.getMinecraft().font;
         g.drawString(font, top, 32, 7, Ui.TOAST_LEVEL, false);

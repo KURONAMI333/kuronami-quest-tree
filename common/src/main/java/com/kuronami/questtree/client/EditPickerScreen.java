@@ -127,7 +127,7 @@ final class EditPickerScreen extends Screen {
         if (max > 0) {
             int thumb = Math.max(12, (int) (h * (h / (double) (shown.size() * ROW_H))));
             int ty = top + (int) ((h - thumb) * (scroll / max));
-            Ui.surface(g, px + pw - 8, ty, 3, thumb, 2, Ui.SCROLLBAR);
+            Ui.surface(g, px + pw - 8, ty, 3, thumb, Ui.CORNER, Ui.SCROLLBAR);
         }
         if (shown.isEmpty()) {
             Ui.text(g, font, "-", px + 12, top + 4, Ui.DIM);
