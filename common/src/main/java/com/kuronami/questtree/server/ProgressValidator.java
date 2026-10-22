@@ -219,6 +219,9 @@ public final class ProgressValidator {
         }
         // pack-wide settings: the emergency button's items are handed out as written, so a bad id is a lost use
         checkSettings(out, bundle, registry);
+        // restrictions are not nodes: a bad target or condition makes a rule that never matches, which is reported
+        // but never drops anything (2026-10-22 review, M1)
+        checkRestrictions(out, bundle, registry);
 
         // pass 1: the node itself (shape, types, required fields, ids, numbers)
         for (Map.Entry<String, JsonObject> e : nodes.entrySet()) {
@@ -492,6 +495,68 @@ public final class ProgressValidator {
             }
             default -> problem(out, Severity.WARNING, ref, curvePath + ".type",
                     "unknown curve type " + quote(type) + ", so the fixed cost is used");
+        }
+    }
+
+    /**
+     * The rules of {@code progression/restrictions.json}: a rule names items, blocks and the tags that hold them, and
+     * asks for conditions. The readers skip a target that cannot be read, so a bad one is a WARNING here; unlike a
+     * task's conditions, they can never drop a node because a rule is not one.
+     */
+    private static void checkRestrictions(Result out, JsonObject bundle, Registry registry) {
+        JsonElement rulesElement = bundle.get("restrictions");
+        if (rulesElement == null) {
+            return;
+        }
+        ChapterRef ref = new ChapterRef("", null, "restrictions.");
+        if (!rulesElement.isJsonArray()) {
+            problem(out, Severity.WARNING, ref, "restrictions",
+                    "\"restrictions\" is not an array, so no restriction is read");
+            return;
+        }
+        for (int i = 0; i < rulesElement.getAsJsonArray().size(); i++) {
+            JsonElement entry = rulesElement.getAsJsonArray().get(i);
+            String at = "restrictions[" + i + "]";
+            if (!entry.isJsonObject()) {
+                problem(out, Severity.WARNING, ref, at, "a restriction rule must be an object, so it is not read");
+                continue;
+            }
+            JsonObject rule = entry.getAsJsonObject();
+            warningConditions(out, ref, at, rule, registry);
+            for (int j = 0; j < arr(rule, "items").size(); j++) {
+                JsonElement v = arr(rule, "items").get(j);
+                id(out, ref, at + ".items[" + j + "]", "item", isText(v) ? v.getAsString() : "", registry);
+            }
+            for (int j = 0; j < arr(rule, "blocks").size(); j++) {
+                JsonElement v = arr(rule, "blocks").get(j);
+                id(out, ref, at + ".blocks[" + j + "]", "block", isText(v) ? v.getAsString() : "", registry);
+            }
+            for (int j = 0; j < arr(rule, "item_tags").size(); j++) {
+                JsonElement v = arr(rule, "item_tags").get(j);
+                String tag = isText(v) ? v.getAsString() : "";
+                if (!tag.isEmpty()) {
+                    id(out, ref, at + ".item_tags[" + j + "]", "item", "#" + tag, registry);
+                }
+            }
+            for (int j = 0; j < arr(rule, "block_tags").size(); j++) {
+                JsonElement v = arr(rule, "block_tags").get(j);
+                String tag = isText(v) ? v.getAsString() : "";
+                if (!tag.isEmpty()) {
+                    id(out, ref, at + ".block_tags[" + j + "]", "block", "#" + tag, registry);
+                }
+            }
+        }
+    }
+
+    /** The quest conditions check, with every ERROR turned into a WARNING: a broken restriction never drops a node. */
+    private static void warningConditions(Result out, ChapterRef ref, String path, JsonObject holder, Registry registry) {
+        int before = out.problems.size();
+        conditionList(out, ref, path, holder, registry);
+        for (int i = before; i < out.problems.size(); i++) {
+            Problem p = out.problems.get(i);
+            if (p.severity() == Severity.ERROR) {
+                out.problems.set(i, new Problem(Severity.WARNING, p.file(), p.path(), p.message(), p.line()));
+            }
         }
     }
 
