@@ -96,6 +96,12 @@ public final class ProgressService {
     private static final Set<UUID> HINT_TRUNCATION_LOGGED = new java.util.HashSet<>();
     /** Players already told that their book was too large to send; cleared once a send succeeds. */
     private static final Set<UUID> TOO_LARGE_LOGGED = new java.util.HashSet<>();
+    /**
+     * Tick of the last oversize send. A book that only grows can never fit, so retrying every 10 ticks would
+     * recompress the whole thing forever; the next attempt waits {@link #TOO_LARGE_RETRY_TICKS}.
+     */
+    private static final Map<UUID, Integer> TOO_LARGE_AT = new HashMap<>();
+    private static final int TOO_LARGE_RETRY_TICKS = 200;
     /** Addon condition types that already threw: conditions are judged on every flush, so one line per type. */
     private static final Set<String> FAILED_ADDON_CONDITIONS = new java.util.HashSet<>();
     /**
@@ -1421,11 +1427,32 @@ public final class ProgressService {
 
     /** Sends the player's progress if anything changed since the last send. */
     public static void flush(ServerPlayer player) {
+        int tick = player.server.getTickCount();
         Boolean urgent = DIRTY.get(player.getUUID());
-        if (urgent == null || (!urgent && player.server.getTickCount() % 10 != 0)) {
+        if (urgent == null || (!urgent && tick % 10 != 0)) {
+            return;
+        }
+        Integer tooLargeAt = TOO_LARGE_AT.get(player.getUUID());
+        if (tooLargeAt != null && tick - tooLargeAt < TOO_LARGE_RETRY_TICKS) {
+            return;
+        }
+        // measure before taking anything off the queues: an oversize payload must not swallow the queued events,
+        // which include the completion toast and its sound and cannot be rebuilt later (2026-10-23 review)
+        byte[] data = ProgressPayload.compress(ProgressJson.write(progress(player)).toString());
+        if (data.length > ProgressPayload.MAX) {
+            // stay dirty so a later send tries again: a silent stop would leave the client's book stale until the
+            // next change, which the player reads as "clicking does nothing"
+            DIRTY.put(player.getUUID(), false);
+            TOO_LARGE_AT.put(player.getUUID(), tick);
+            if (TOO_LARGE_LOGGED.add(player.getUUID())) {
+                Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)",
+                        player.getGameProfile().getName(), data.length);
+            }
             return;
         }
         DIRTY.remove(player.getUUID());
+        TOO_LARGE_AT.remove(player.getUUID());
+        TOO_LARGE_LOGGED.remove(player.getUUID());
         List<String> events = PENDING.remove(player.getUUID());
         if (events == null) {
             events = List.of();
@@ -1433,7 +1460,6 @@ public final class ProgressService {
             events = events.subList(events.size() - 64, events.size());
         }
         List<String> hints = Restrictions.lockedHints(player);
-        byte[] data = ProgressPayload.compress(ProgressJson.write(progress(player)).toString());
         HintLimits.Result limited = HintLimits.limit(hints, data.length,
                 HintLimits.eventBytes(events), ProgressPayload.MAX);
         if ((limited.dropped() > 0 || limited.shortened() > 0) && HINT_TRUNCATION_LOGGED.add(player.getUUID())) {
@@ -1441,16 +1467,6 @@ public final class ProgressService {
                     player.getGameProfile().getName(), limited.hints().size(), limited.dropped(), limited.shortened());
         }
         ProgressPayload payload = new ProgressPayload(data, List.copyOf(events), limited.hints());
-        if (payload.data().length > ProgressPayload.MAX) {
-            // stay dirty so the next send tries again: a silent stop would leave the client's book stale until the
-            // next change, which the player reads as "clicking does nothing" (2026-10-23 review)
-            DIRTY.put(player.getUUID(), false);
-            if (TOO_LARGE_LOGGED.add(player.getUUID())) {
-                Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)",
-                        player.getGameProfile().getName(), payload.data().length);
-            }
-            return;
-        }
         Services.PLATFORM.sendToPlayer(player, payload);
         // the party row and the shared-quest labels come from the same update as the progress they describe
         TeamSync.send(player);
@@ -1464,6 +1480,7 @@ public final class ProgressService {
         REVISIONS.remove(player.getUUID());
         HINT_TRUNCATION_LOGGED.remove(player.getUUID());
         TOO_LARGE_LOGGED.remove(player.getUUID());
+        TOO_LARGE_AT.remove(player.getUUID());
         BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly

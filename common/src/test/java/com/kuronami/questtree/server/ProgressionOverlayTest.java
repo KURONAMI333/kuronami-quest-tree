@@ -112,6 +112,20 @@ class ProgressionOverlayTest {
     }
 
     @Test
+    void aChapterIdLongerThanTheEditorMintsIsStillReadable() throws Exception {
+        // packs may already ship a long id; rejecting it on read would turn the whole layer into errors, which
+        // blocks every editor write in the world (2026-10-23 review)
+        writeOverlay("t:" + "a".repeat(60), """
+                {"revision": 1, "chapter": {"title": "Long"}}
+                """);
+
+        ProgressionOverlay.Overlay overlay = ProgressionOverlay.read(temp.resolve(ProgressionOverlay.DIR));
+
+        assertTrue(overlay.problems.stream().noneMatch(p -> p.severity() == ProgressValidator.Severity.ERROR),
+                overlay.problems.toString());
+    }
+
+    @Test
     void aPathThatCannotBeAChapterIdIsReported() throws Exception {
         writeOverlay("single", "{}");
 

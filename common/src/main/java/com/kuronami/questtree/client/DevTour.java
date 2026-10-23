@@ -792,7 +792,9 @@ final class DevTour {
             }
             // a later step may already have moved the camera while this one waited; the shot is of the row
             worldReturn();
-            at(tick + 2, () -> {
+            // a few ticks, not two: the glyph atlas is rebaked while the row comes into view, and a grab in the
+            // middle of that upload writes another texture's pixels into the photo (seen 2026-10-23)
+            at(tick + 8, () -> {
                 shot(name);
                 screensShot = true;
             });

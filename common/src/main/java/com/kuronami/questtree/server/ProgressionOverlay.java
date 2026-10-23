@@ -990,9 +990,13 @@ public final class ProgressionOverlay {
         return namespace + ":" + chapter;
     }
 
-    /** One path segment of a chapter id; the cap keeps an editor-made id inside the reply packet's 64 chars. */
+    /**
+     * One path segment of a chapter id. Reading keeps no length cap: a pack may already ship a long id, and
+     * rejecting it here would turn the whole layer into read errors, which blocks every editor write in the world.
+     * Editor-made ids are capped where they are minted ({@link ProgressionEditor#safeSegment}).
+     */
     private static boolean safeSegment(String s) {
-        return !s.isEmpty() && s.length() <= 48 && !s.equals(".") && !s.equals("..")
+        return !s.isEmpty() && !s.equals(".") && !s.equals("..")
                 && s.chars().allMatch(c -> c == '_' || c == '-' || c == '.' || Character.isLetterOrDigit(c));
     }
 

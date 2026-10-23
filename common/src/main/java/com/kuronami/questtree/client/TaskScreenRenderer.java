@@ -69,7 +69,7 @@ public class TaskScreenRenderer implements BlockEntityRenderer<TaskScreenBlockEn
 
         pose.pushPose();
         pose.translate(0.5, 0.5, 0.5);
-        pose.mulPose(Axis.YP.rotationDegrees(facing.toYRot() + 180));
+        pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot()));
         pose.translate(-0.5, -0.5, -0.5);
         // the aux blocks run from -half to half + 1 around the core (TaskScreenBlock.screenPositions), so the face
         // starts at the first aux column and grows upward from the core's bottom
@@ -122,7 +122,7 @@ public class TaskScreenRenderer implements BlockEntityRenderer<TaskScreenBlockEn
         }
         pose.pushPose();
         pose.translate(0.5, 0.0, 0.5);
-        pose.mulPose(Axis.YP.rotationDegrees(facing.toYRot() + 180));
+        pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot()));
         pose.translate(0.0, y * size, -0.53F);
         pose.scale(-scale, -scale, -scale);
         font.drawInBatch(text, -width / 2.0F, 0.0F, color, false, pose.last().pose(), TEXT,
