@@ -160,6 +160,9 @@ final class Ui {
      */
     static void loadPalette(net.minecraft.server.packs.resources.ResourceManager rm) {
         restoreDefaults();
+        // the optional ground and tile-face pictures follow the palette, but only a changed pack list needs the
+        // masks read again (a screen open or a resize must not re-read every shape)
+        Tiles.reloadIfPacksChanged();
         theme = ThemeOverrides.EMPTY;
         try {
             var res = rm.getResource(THEME);

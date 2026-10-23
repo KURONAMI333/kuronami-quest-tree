@@ -823,7 +823,8 @@ public class ProgressScreen extends Screen {
             mouseY = (int) Math.floor(tourPointerY);
         }
         super.render(g, mouseX, mouseY, partialTick);
-        g.fill(0, 0, width, height, SCRIM);
+        // the palette's ground, or a pack's ground.png tinted by it and tiled; no picture is the flat fill it always was
+        Tiles.ground(g, width, height, SCRIM);
         buttons.clear();
         pendingTip = null;
         railTip = null;

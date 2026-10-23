@@ -66,6 +66,24 @@ count badges, scrollbars, the HUD tracker and the toasts. The white masks keep t
 (edge) corners and are nine-sliced to the requested radius, so any value from 0 up works. Quest tile shapes and the
 belt's chevrons are content, not chrome, and keep the shape drawn in their own pictures.
 
+## Ground and tile face: `assets/kuronami_quest_tree/textures/gui/`
+
+Two optional pictures carry the two largest flat surfaces, and both are tinted like everything else. A pack without
+them keeps the screen exactly as it is: the palette's `ground` fill and each tile's flat state colour.
+
+- `ground.png`: the map background, drawn in place of the flat `ground` colour. One picture pixel is one GUI pixel; the
+  picture is repeated from the top-left corner across the whole screen, and tinted by `ground`, so draw it white or grey
+  and let the palette (or high contrast) choose the hue. The picture has to meet itself at its edges, because it tiles.
+- `patch/tile.png`: the face of a quest or skill tile, inside the shape's rim. It is scaled once to fit each tile and
+  tinted by that tile's state colour — the palette's `tile_locked`, `tile_open`, `done_settled`, `done_bright` or
+  `tile_white`, including any `gui/theme.json` override — so draw it white or grey and let the state choose the hue.
+  Its transparency lets the rim show through. It is clipped to the shape's own face, so every shape works, and the
+  progress water stays flat: only the face above it takes the picture.
+
+Both are read when the book arrives and every time the screen opens, like the palette, so after `F3 + T` reopen the
+screen. Like the shapes, they are pictures, not colours: high contrast still ignores the palette and theme overrides,
+not these files.
+
 ## Shapes and icons: `assets/kuronami_quest_tree/textures/gui/`
 
 - `shape/<name>.png` and `shape/<name>_ring.png`: white masks for tiles (`square`, `rsquare`, `circle`, `diamond`,

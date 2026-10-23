@@ -98,6 +98,69 @@ final class Tiles {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/" + path + ".png");
     }
 
+    /** Optional screen ground picture; a pack without it keeps the flat palette ground. */
+    private static final ResourceLocation GROUND = texture("ground");
+    /** Optional picture on a tile's face; a pack without it keeps the flat state colour. */
+    private static final ResourceLocation TILE_PATCH = texture("patch/tile");
+
+    /** Sizes of optional pictures, read without the missing-texture warning {@link #textureSize} logs. */
+    private static final Map<ResourceLocation, int[]> OPTIONAL_SIZES = new HashMap<>();
+
+    /** A picture's pixel size, or {0, 0} when the pack does not ship it. */
+    private static int[] optionalSize(ResourceLocation id) {
+        return OPTIONAL_SIZES.computeIfAbsent(id, k -> {
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(k);
+            if (res.isEmpty()) {
+                return new int[]{0, 0};
+            }
+            try (var in = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(in)) {
+                return new int[]{img.getWidth(), img.getHeight()};
+            } catch (java.io.IOException ex) {
+                Constants.LOG.warn("Could not read texture {}: {}", k, ex.toString());
+                return new int[]{0, 0};
+            }
+        });
+    }
+
+    /**
+     * The screen's map background: the palette's {@code ground} colour, or {@code textures/gui/ground.png} tinted by
+     * it and repeated across the screen at one picture pixel per GUI pixel. A pack without the picture gets exactly
+     * the flat fill the screen has always drawn.
+     */
+    static void ground(GuiGraphics g, int w, int h, int argb) {
+        int[] size = optionalSize(GROUND);
+        if (size[0] <= 0 || size[1] <= 0) {
+            g.fill(0, 0, w, h, argb);
+            return;
+        }
+        // the colour goes down first so a pack's transparent pixels show the ground colour, not whatever was
+        // drawn before this screen (2026-10-24)
+        g.fill(0, 0, w, h, argb);
+        prepareTiled(GROUND);
+        RenderSystem.enableBlend();
+        g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
+        g.blit(GROUND, 0, 0, w, h, 0, 0, w, h, size[0], size[1]);
+        g.setColor(1, 1, 1, 1);
+        RenderSystem.disableBlend();
+    }
+
+    private static final Set<ResourceLocation> PREPARED_TILED = new java.util.HashSet<>();
+
+    /** Smooth, repeating in both directions: the ground is one picture tiled over the whole screen. */
+    private static void prepareTiled(ResourceLocation tex) {
+        if (!PREPARED_TILED.add(tex)
+                || net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(tex).isEmpty()) {
+            return;
+        }
+        var t = net.minecraft.client.Minecraft.getInstance().getTextureManager().getTexture(tex);
+        t.setFilter(false, false);
+        t.bind();
+        com.mojang.blaze3d.platform.GlStateManager._texParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_S,
+                org.lwjgl.opengl.GL11.GL_REPEAT);
+        com.mojang.blaze3d.platform.GlStateManager._texParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T,
+                org.lwjgl.opengl.GL11.GL_REPEAT);
+    }
+
     /**
      * Shapes and marks are smooth white masks (128px shapes, 64px marks, filtered when scaled), tinted when drawn. Until
      * 2026-10-16 they were laid out pixel by pixel; the player compared them with FTB Quests' smooth shapes and asked to
@@ -232,6 +295,8 @@ final class Tiles {
     static void reload() {
         PREPARED.clear();
         PREPARED_REPEAT.clear();
+        PREPARED_TILED.clear();
+        OPTIONAL_SIZES.clear();
         Metrics.ALL.values().forEach(Metrics::release);
         Metrics.ALL.clear();
         TEXTURE_SIZES.clear();
@@ -284,7 +349,7 @@ final class Tiles {
     private static void rim(GuiGraphics g, String shape, int x, int y, int s, int face) {
         Metrics m = Metrics.of(shape);
         shape(g, shape, x, y, s, s, shade(face, 0.62f, 1f));
-        tinted(g, m.face, x, y, s, s, 0, 1, face);
+        tinted(g, m.pattern, x, y, s, s, 0, 1, face);
         tinted(g, m.light, x, y, s, s, 0, 1, withAlpha(shade(face, 1.22f, 0.9f), 0.85f));
         tinted(g, m.shade, x, y, s, s, 0, 1, withAlpha(shade(face, 0.8f, 1f), 0.85f));
     }
@@ -515,6 +580,8 @@ final class Tiles {
         private static final float BEVEL = 7f;
 
         ResourceLocation face;
+        /** The face as drawn: {@link #face}, or the pack's {@code patch/tile.png} carried in its alpha. */
+        ResourceLocation pattern;
         ResourceLocation light;
         ResourceLocation shade;
         /** Side of the largest square inside the face, and the height of its centre, as shares of the tile. */
@@ -534,6 +601,7 @@ final class Tiles {
             java.util.Arrays.fill(edge, 0.5f);
             ResourceLocation src = texture("shape/" + shape);
             face = src;
+            pattern = src;
             light = src;
             shade = src;
             float[] a = read(src);
@@ -581,6 +649,7 @@ final class Tiles {
                 }
             }
             face = register(shape + "_face", fa, n);
+            pattern = patchFace(shape + "_pattern", fa, n, face);
             light = register(shape + "_light", la, n);
             shade = register(shape + "_shade", sa, n);
             if (bottom >= top) {
@@ -631,12 +700,56 @@ final class Tiles {
             }
         }
 
+        /**
+         * The face with the pack's optional {@code patch/tile.png} carried inside the shape's own alpha: the picture is
+         * scaled once over the tile, its colours are multiplied by the state colour at draw time, and its transparency
+         * lets the rim through. No picture returns {@code flat}, so the face is exactly what it was before.
+         */
+        private ResourceLocation patchFace(String name, float[] fa, int n, ResourceLocation flat) {
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(TILE_PATCH);
+            if (res.isEmpty()) {
+                return flat;
+            }
+            try (var is = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(is)) {
+                int pw = img.getWidth();
+                int ph = img.getHeight();
+                if (pw <= 0 || ph <= 0) {
+                    return flat;
+                }
+                float[] alpha = fa.clone();
+                int[] rgb = new int[n * n];
+                for (int y = 0; y < n; y++) {
+                    int py = Math.min(ph - 1, y * ph / n);
+                    for (int x = 0; x < n; x++) {
+                        int px = Math.min(pw - 1, x * pw / n);
+                        int p = img.getPixelRGBA(px, py);
+                        rgb[y * n + x] = ((p & 255) << 16) | (((p >> 8) & 255) << 8) | ((p >> 16) & 255);
+                        alpha[y * n + x] *= ((p >>> 24) & 255) / 255f;
+                    }
+                }
+                return register(name, alpha, n, rgb);
+            } catch (java.io.IOException ex) {
+                Constants.LOG.warn("Could not read tile face {}: {}", TILE_PATCH, ex.toString());
+                return flat;
+            }
+        }
+
         private ResourceLocation register(String name, float[] alpha, int n) {
+            return register(name, alpha, n, null);
+        }
+
+        private ResourceLocation register(String name, float[] alpha, int n, int[] rgb) {
             com.mojang.blaze3d.platform.NativeImage img = new com.mojang.blaze3d.platform.NativeImage(n, n, true);
             for (int y = 0; y < n; y++) {
                 for (int x = 0; x < n; x++) {
                     int al = Math.round(clamp01(alpha[y * n + x]) * 255);
-                    img.setPixelRGBA(x, y, (al << 24) | 0xFFFFFF);
+                    int color = 0xFFFFFF;
+                    if (rgb != null) {
+                        int c = rgb[y * n + x];
+                        // NativeImage pixels are ABGR, the palette's are RGB
+                        color = ((c & 255) << 16) | (((c >> 8) & 255) << 8) | ((c >> 16) & 255);
+                    }
+                    img.setPixelRGBA(x, y, (al << 24) | color);
                 }
             }
             ResourceLocation id = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "derived/" + name);
