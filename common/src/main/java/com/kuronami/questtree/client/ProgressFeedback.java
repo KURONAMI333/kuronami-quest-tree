@@ -44,7 +44,7 @@ final class ProgressFeedback {
                 ClientModel.Task t = n.tasks.get(i);
                 // item tasks count what is held right now; say so, or a count that follows the inventory reads as a tally
                 boolean held = t.type.equals("item") && !t.consume;
-                ProgressHud.notice(t.icon().isEmpty() ? n.icon : t.icon(), taskName(t), e.getValue(), t.count, n.title, held);
+                ProgressHud.notice(n, t, e.getValue(), held);
             }
         }
         // experience in skill chapters: one toast per chapter that updates while experience keeps coming

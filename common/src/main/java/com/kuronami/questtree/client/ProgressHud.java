@@ -25,6 +25,7 @@ public final class ProgressHud {
     private static final long HOLD = 2200;
     private static final long FADE_OUT = 300;
 
+    private static ClientModel.Node noticeNode;
     private static ItemStack noticeIcon = ItemStack.EMPTY;
     private static Component noticeTask;
     private static Component noticeQuest;
@@ -44,7 +45,7 @@ public final class ProgressHud {
     private ProgressHud() {
     }
 
-    static void notice(ItemStack icon, Component task, long have, long need, Component quest, boolean held) {
+    static void notice(ClientModel.Node node, ClientModel.Task task, long have, boolean held) {
         long now = Util.getMillis();
         // a new notice while one is showing replaces it without fading in again
         if (noticeTask == null || now - noticeAt > FADE_IN + HOLD) {
@@ -52,12 +53,32 @@ public final class ProgressHud {
         } else {
             noticeAt = now - FADE_IN;
         }
-        noticeIcon = icon;
-        noticeTask = task;
-        noticeQuest = quest;
-        noticeHave = Math.min(have, need);
-        noticeNeed = need;
+        noticeNode = node;
+        noticeIcon = task.icon().isEmpty() ? node.icon : task.icon();
+        noticeTask = task.name();
+        noticeQuest = node.title;
+        noticeHave = Math.min(have, task.count);
+        noticeNeed = task.count;
         noticeHeld = held;
+    }
+
+    /** Dev tour only: one notice for a known quest, so the photo does not wait for a task to move. */
+    static void tourNotice(String key) {
+        ClientModel m = ClientProgress.model();
+        ClientModel.Node n = m == null || key == null ? null : m.nodesByKey.get(key);
+        if (n == null) {
+            Constants.LOG.warn("Dev tour: no quest {} for the notice photo", key);
+            return;
+        }
+        for (ClientModel.Task t : n.tasks) {
+            if (t.count > 0) {
+                notice(n, t, Math.max(1, t.count / 2), t.type.equals("item") && !t.consume);
+                Constants.LOG.info("Dev tour: notice {} / {} {}/{}", n.key, t.name().getString(),
+                        Math.max(1, t.count / 2), t.count);
+                return;
+            }
+        }
+        Constants.LOG.warn("Dev tour: quest {} has no counted task for the notice photo", key);
     }
 
     /** J cycles all / pinned only / hidden, as FTB Quests' tracker key does (2026-10-22). */
@@ -162,27 +183,34 @@ public final class ProgressHud {
         if (noticeHeld) {
             count = Component.translatable("hud.kuronami_quest_tree.held", count).getString();
         }
-        String task = font.plainSubstrByWidth(noticeTask.getString(), 120);
-        String quest = font.plainSubstrByWidth(noticeQuest.getString(), 120);
-        int w = 20 + font.width(task) + 6 + font.width(count) + 10 + font.width(quest) + 6;
+        String task = font.plainSubstrByWidth(noticeTask.getString(), Ui.textRoom(120));
+        String quest = font.plainSubstrByWidth(noticeQuest.getString(), Ui.textRoom(120));
+        int tw = Ui.textWidth(font, task) + 6 + Ui.textWidth(font, count) + 6 + Ui.textWidth(font, quest);
+        int w = TrackerRules.PAD + TrackerRules.ICON + TrackerRules.GAP + tw + TrackerRules.PAD;
+        int h = TrackerRules.PAD * 2 + TrackerRules.ICON;
         int x = (g.guiWidth() - w) / 2;
-        // above the hotbar, hearts and the vanilla action bar: -82 ran into the action bar text at -72 (review 2026-10-16)
+        // above the hotbar, hearts and the vanilla action bar: -96 ran into the action bar text at -72 (review 2026-10-16)
         int y = g.guiHeight() - 96 + (int) ((1 - Math.min(1, t / (float) FADE_IN)) * 3);
         g.pose().pushPose();
         g.pose().translate(0, 0, -50);
-        g.fill(x, y, x + w, y + 20, Tiles.withAlpha(Ui.HUD_BACK, alpha));
+        // the tracker card's frame, so a task moving and the J screen read as one surface (2026-10-23)
+        Ui.frame(g, x, y, w, h, Ui.R2,
+                Tiles.withAlpha(Ui.HUD_TRACKER_EDGE, alpha), Tiles.withAlpha(Ui.HUD_TRACKER_EDGE_BOTTOM, alpha),
+                Tiles.withAlpha(Ui.HUD_TRACKER, alpha));
         if (alpha > 0.5f) {
-            g.renderItem(noticeIcon, x + 2, y + 2);
+            Tiles.tile(g, noticeNode.shape, x + TrackerRules.PAD, y + TrackerRules.PAD, TrackerRules.ICON,
+                    ClientProgress.look(noticeNode.key), ClientProgress.fraction(noticeNode.key), noticeIcon, false, noticeNode.key);
         }
-        int a = (int) (alpha * 255) << 24;
-        int tx = x + 20;
-        g.drawString(font, task, tx, y + 6, Ui.HUD_TASK, true);
-        tx += font.width(task) + 6;
-        g.drawString(font, count, tx, y + 6, (noticeHave >= noticeNeed ? Tiles.GREEN_TEXT & 0xFFFFFF : Ui.HUD_TEXT) | a, true);
-        tx += font.width(count) + 4;
-        g.fill(tx + 1, y + 9, tx + 3, y + 11, Ui.HUD_COUNT_DOT | a);
+        int tx = x + TrackerRules.PAD + TrackerRules.ICON + TrackerRules.GAP;
+        int ty = y + TrackerRules.PAD + 4;
+        Ui.text(g, font, task, tx, ty, Tiles.withAlpha(Ui.MARK, alpha));
+        tx += Ui.textWidth(font, task) + 6;
+        Ui.text(g, font, count, tx, ty,
+                Tiles.withAlpha(noticeHave >= noticeNeed ? Tiles.GREEN_TEXT : Ui.HUD_TEXT, alpha));
+        tx += Ui.textWidth(font, count) + 4;
+        g.fill(tx + 1, ty + 3, tx + 3, ty + 5, Tiles.withAlpha(Ui.HUD_COUNT_DOT, alpha));
         tx += 6;
-        g.drawString(font, quest, tx, y + 6, Ui.HUD_QUEST | a, true);
+        Ui.text(g, font, quest, tx, ty, Tiles.withAlpha(Ui.HUD_QUEST, alpha));
         g.pose().popPose();
     }
 

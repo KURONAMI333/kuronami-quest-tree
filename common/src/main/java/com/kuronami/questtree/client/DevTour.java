@@ -602,7 +602,16 @@ final class DevTour {
         // a locale's translation screen: every key the pack's English file has, unset in this one
         at(qt + 166, () -> Minecraft.getInstance().setScreen(new TranslationEditScreen(null, "ja_jp")));
         shot(qt + 170, "62_translation");
-        at(qt + 172, () -> Minecraft.getInstance().setScreen(null));
+        // the one-line notice above the hotbar, in the tracker card's frame (2026-10-23)
+        at(qt + 174, () -> {
+            Minecraft.getInstance().setScreen(null);
+            ClientModel.Node n = trackerPin();
+            Constants.LOG.info("Dev tour: notice screen={} key={}", Minecraft.getInstance().screen,
+                    n == null ? null : n.key);
+            ProgressHud.tourNotice(n == null ? null : n.key);
+        });
+        shot(qt + 177, "63_hud_notice");
+        at(qt + 182, () -> Minecraft.getInstance().setScreen(null));
         at(qt + 200, () -> {
             worldCleanup();
             Ui.clearCornerRadius();
