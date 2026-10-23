@@ -71,8 +71,9 @@ public class TaskScreenRenderer implements BlockEntityRenderer<TaskScreenBlockEn
         pose.translate(0.5, 0.5, 0.5);
         pose.mulPose(Axis.YP.rotationDegrees(facing.toYRot() + 180));
         pose.translate(-0.5, -0.5, -0.5);
-        // the core is the bottom-centre of the face (TaskScreenBlock.screenPositions), so the face grows upward
-        pose.translate(-size / 2.0F, 0.0F, -0.02F);
+        // the aux blocks run from -half to half + 1 around the core (TaskScreenBlock.screenPositions), so the face
+        // starts at the first aux column and grows upward from the core's bottom
+        pose.translate(-half, 0.0F, -0.02F);
         pose.scale(half * 2.0F + 1.0F, half * 2.0F + 1.0F, 1.0F);
 
         Matrix4f matrix = pose.last().pose();

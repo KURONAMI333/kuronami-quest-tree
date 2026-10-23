@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client;
 
 import com.kuronami.questtree.Constants;
+import com.kuronami.questtree.block.TaskScreenBlockEntity;
 import com.kuronami.questtree.progress.ProgressRules.State;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -46,6 +47,10 @@ final class DevTour {
     private static String lastScreen = "";
     /** The quest this tour pinned for the tracker photo, so the pin can be put back at the end. */
     private static String tourPin;
+    /** The cores this run placed; the world photos wait until their block entities have arrived. */
+    private static final List<BlockPos> PLACED_CORES = new ArrayList<>();
+    /** Set once the task screen photo has been taken, so the next step can move the camera. */
+    private static boolean screensShot;
 
     static void tick() {
         Minecraft mc = Minecraft.getInstance();
@@ -85,6 +90,8 @@ final class DevTour {
 
     private static void build() {
         ticks = 0;
+        PLACED_CORES.clear();
+        screensShot = false;
         ClientModel m = ClientProgress.model();
         ClientModel.Chapter quests = first(m, false);
         ClientModel.Chapter skills = first(m, true);
@@ -527,7 +534,9 @@ final class DevTour {
         at(qt + 20, () -> Minecraft.getInstance().setScreen(null));
         at(qt + 24, DevTour::worldBuild);
         at(qt + 34, DevTour::worldReturn);
-        shot(qt + 44, "51_task_screens");
+        // the blocks are placed by commands and the faces are drawn from the block entities, so the photo waits for
+        // the client to have them: on a slower run the first tick after the teleport still shows an empty world
+        shotWhenReady(qt + 44, qt + 90, "51_task_screens");
         at(qt + 46, DevTour::worldApproachConfigurator);
         at(qt + 50, DevTour::worldUseConfigurator);
         shot(qt + 58, "52_screen_picker");
@@ -714,6 +723,7 @@ final class DevTour {
     private static void placeScreen(int size, int coreX, int coreY, int coreZ, int taskIndex, String owner) {
         int half = size / 2;
         long coreLong = BlockPos.asLong(coreX, coreY, coreZ);
+        PLACED_CORES.add(new BlockPos(coreX, coreY, coreZ));
         for (int dx = -half; dx <= half; dx++) {
             for (int dy = 0; dy < size; dy++) {
                 boolean isCore = dx == 0 && dy == 0;
@@ -773,6 +783,35 @@ final class DevTour {
         cmdNow("tp @s " + (cx + 3000) + ".5 " + (y + 1) + " " + (cz + 3000) + ".5");
     }
 
+    /** Takes the photo once every placed core has its binding, or at the deadline whatever the state. */
+    private static void shotWhenReady(int tick, int deadline, String name) {
+        at(tick, () -> {
+            if (!screensReady() && tick < deadline) {
+                shotWhenReady(tick + 1, deadline, name);
+                return;
+            }
+            // a later step may already have moved the camera while this one waited; the shot is of the row
+            worldReturn();
+            at(tick + 2, () -> {
+                shot(name);
+                screensShot = true;
+            });
+        });
+    }
+
+    private static boolean screensReady() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || PLACED_CORES.isEmpty()) {
+            return false;
+        }
+        for (BlockPos pos : PLACED_CORES) {
+            if (!(mc.level.getBlockEntity(pos) instanceof TaskScreenBlockEntity core) || core.node().isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static void worldReturn() {
         if (!tourHomeSet) {
             return;
@@ -783,6 +822,12 @@ final class DevTour {
     private static void worldApproachConfigurator() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || !tourHomeSet) {
+            return;
+        }
+        if (!screensShot) {
+            // the screen photo is still waiting for the block entities; walking away now would photograph the row
+            // from the wrong place, so look again in a tick
+            at(ticks + 2, DevTour::worldApproachConfigurator);
             return;
         }
         cmdNow("item replace entity @s weapon.mainhand with kuronami_quest_tree:task_screen_configurator");
