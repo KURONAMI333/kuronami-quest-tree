@@ -1,5 +1,6 @@
 package com.kuronami.questtree.client;
 
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -23,6 +24,12 @@ import org.joml.Matrix4f;
  * plane, so the same renderer works for all four sizes.
  */
 public class TaskScreenRenderer implements BlockEntityRenderer<TaskScreenBlockEntity> {
+    /**
+     * Glyph quads written into the level's shared source are flushed before the block entity pass is over, so the
+     * letters are written into a source of their own and flushed at the end of the screen.
+     */
+    private static final MultiBufferSource.BufferSource TEXT =
+            MultiBufferSource.immediate(new ByteBufferBuilder(4096));
 
     public TaskScreenRenderer(BlockEntityRendererProvider.Context context) {
     }
@@ -55,67 +62,70 @@ public class TaskScreenRenderer implements BlockEntityRenderer<TaskScreenBlockEn
             return;
         }
         Direction facing = screen.getBlockState().getValue(TaskScreenBlock.FACING);
-        int half = block.getSize() / 2;
+        int size = block.getSize();
+        int half = size / 2;
+        long target = Math.max(1, task.count);
+        long progress = Math.min(screen.progress(), target);
 
         pose.pushPose();
         pose.translate(0.5, 0.5, 0.5);
-        pose.mulPose(Axis.YP.rotationDegrees(180));
         pose.mulPose(Axis.YP.rotationDegrees(facing.toYRot() + 180));
         pose.translate(-0.5, -0.5, -0.5);
-        pose.translate(-half, -half * 2.0F, -0.02F);
+        // the core is the bottom-centre of the face (TaskScreenBlock.screenPositions), so the face grows upward
+        pose.translate(-size / 2.0F, 0.0F, -0.02F);
         pose.scale(half * 2.0F + 1.0F, half * 2.0F + 1.0F, 1.0F);
 
         Matrix4f matrix = pose.last().pose();
+        // Every quad is written before the text and the icon: a shared buffer type (debugQuads) is closed as soon as
+        // another type asks the same source for a buffer, so a reference held across those calls can no longer be used.
         VertexConsumer quads = buffers.getBuffer(RenderType.debugQuads());
         face(quads, matrix, 0.02F, 0.02F, 0.98F, 0.98F, Ui.PANEL_TRANSLUCENT);
         frame(quads, matrix, Ui.HAIRLINE);
+        face(quads, matrix, 0.08F, 0.08F, 0.92F, 0.115F, Ui.DIVIDER);
+        if (progress > 0) {
+            face(quads, matrix, 0.08F, 0.08F, 0.08F + 0.84F * (progress / (float) target), 0.115F, Ui.ACCENT);
+        }
+        if (buffers instanceof MultiBufferSource.BufferSource source) {
+            source.endBatch(RenderType.debugQuads());
+        }
 
-        Font font = Minecraft.getInstance().font;
-        text(font, buffers, pose, node.title, 0.15F, 0.15F, Ui.BRIGHT);
-        text(font, buffers, pose, task.name(), 0.17F, 0.07F, Ui.TEXT);
-
-        long target = Math.max(1, task.count);
-        long progress = Math.min(screen.progress(), target);
-        text(font, buffers, pose, Component.literal(progress + " / " + target), 0.83F, 0.15F,
-                progress >= target ? Ui.ACCENT : Ui.TEXT);
-
-        pose.pushPose();
-        pose.translate(0.5, 0.54, -0.01);
-        pose.scale(0.45F, 0.45F, 0.2F * half);
+        pose.translate(0.5, 0.45, 0.0F);
+        pose.scale(0.35F, 0.35F, 0.2F * half);
         pose.mulPose(Axis.XP.rotationDegrees(180));
         Minecraft.getInstance().getItemRenderer().renderStatic(task.icon(), ItemDisplayContext.GUI, light,
                 OverlayTexture.NO_OVERLAY, pose, buffers, Minecraft.getInstance().level, 0);
         pose.popPose();
 
-        float bar = 0.9F;
-        face(quads, matrix, 0.08F, bar, 0.92F, bar + 0.035F, Ui.DIVIDER);
-        if (progress > 0) {
-            face(quads, matrix, 0.08F, bar, 0.08F + 0.84F * (progress / (float) target), bar + 0.035F, Ui.ACCENT);
-        }
-
-        pose.popPose();
+        Font font = Minecraft.getInstance().font;
+        text(font, pose, facing, node.title, 0.88F, 0.09F, size, Ui.DIM);
+        text(font, pose, facing, task.name(), 0.74F, 0.16F, size, Ui.BRIGHT);
+        text(font, pose, facing, Component.literal(progress + " / " + target), 0.26F, 0.13F, size,
+                progress >= target ? Ui.ACCENT : Ui.TEXT);
+        TEXT.endBatch();
     }
 
-    private static void text(Font font, MultiBufferSource buffers, PoseStack pose, Component text, double y, float size,
-                             int color) {
+    /**
+     * One line lying on the face: {@code y} runs 0..1 from the bottom of the face and the line is centred. It is
+     * placed in the screen's own frame rather than the face's, so the glyphs keep their aspect whatever the size and
+     * whichever way the screen faces.
+     */
+    private static void text(Font font, PoseStack pose, Direction facing, Component text, float y, float textSize,
+                             int size, int color) {
         if (text == null || text.getString().isEmpty()) {
             return;
         }
-        pose.pushPose();
-        pose.translate(0.5, y, 0.0);
         int width = font.width(text);
-        float scale = size / 9.0F;
-        float drawn = width * scale;
-        if (drawn > 1.0F) {
-            scale /= drawn;
-            drawn = 1.0F;
+        float scale = textSize * size / 9.0F;
+        if (width * scale > size * 0.9F) {
+            scale = size * 0.9F / width;
         }
-        if (drawn > 0.9F) {
-            scale *= 0.9F;
-        }
-        pose.scale(scale, scale, 1.0F);
-        font.drawInBatch(text, -width / 2.0F, 0.0F, color, false, pose.last().pose(), buffers,
-                Font.DisplayMode.NORMAL, 0, 15728880);
+        pose.pushPose();
+        pose.translate(0.5, 0.0, 0.5);
+        pose.mulPose(Axis.YP.rotationDegrees(facing.toYRot() + 180));
+        pose.translate(0.0, y * size, -0.53F);
+        pose.scale(-scale, -scale, -scale);
+        font.drawInBatch(text, -width / 2.0F, 0.0F, color, false, pose.last().pose(), TEXT,
+                Font.DisplayMode.NORMAL, 0xF000F0, OverlayTexture.NO_OVERLAY);
         pose.popPose();
     }
 

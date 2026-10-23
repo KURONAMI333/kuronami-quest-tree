@@ -526,6 +526,7 @@ final class DevTour {
         shot(qt + 18, "50_viewer_crates");
         at(qt + 20, () -> Minecraft.getInstance().setScreen(null));
         at(qt + 24, DevTour::worldBuild);
+        at(qt + 34, DevTour::worldReturn);
         shot(qt + 44, "51_task_screens");
         at(qt + 46, DevTour::worldApproachConfigurator);
         at(qt + 50, DevTour::worldUseConfigurator);
@@ -709,6 +710,26 @@ final class DevTour {
         cmdNow("tp @s " + fmt(px) + " " + (TOUR_FLOOR_Y + 1) + " " + fmt(pz) + " " + fmt(yaw) + " 0.0");
     }
 
+    /** Places one screen the way the block item does: the core plus every aux block of the face. */
+    private static void placeScreen(int size, int coreX, int coreY, int coreZ, int taskIndex, String owner) {
+        int half = size / 2;
+        long coreLong = BlockPos.asLong(coreX, coreY, coreZ);
+        for (int dx = -half; dx <= half; dx++) {
+            for (int dy = 0; dy < size; dy++) {
+                boolean isCore = dx == 0 && dy == 0;
+                int x = coreX + dx;
+                int y = coreY + dy;
+                // setblock with the NBT in one go: data merge afterwards would change only the server's block entity
+                // and the client would keep an empty one, so the face would not draw
+                String nbt = isCore
+                        ? "{node:\"aa_devtour:parity/screens\",task:" + taskIndex + ",owner:" + owner + "}"
+                        : "{core:" + coreLong + "L}";
+                cmdNow("setblock " + x + " " + y + " " + coreZ + " kuronami_quest_tree:"
+                        + (isCore ? "task_screen_" + size : "task_screen_aux") + "[facing=north]" + nbt);
+            }
+        }
+    }
+
     private static void worldBuild() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) {
@@ -729,24 +750,34 @@ final class DevTour {
         int cz = tourCz;
         int y = TOUR_FLOOR_Y;
         String owner = ownerTag(mc.player.getUUID());
+        cmdNow("weather clear");
         cmdNow("time set day");
         cmdNow("fill " + (cx - 14) + " " + y + " " + (cz - 16) + " " + (cx + 13) + " " + y + " " + (cz + 2)
                 + " minecraft:polished_deepslate");
         // one core per size, all with the bottom of the drawn face on the floor, so the sizes line up
         int[][] screens = {
                 {cx - 11, y + 1, 1, 0, 3},
-                {cx - 7, y + 3, 3, 1, 8},
-                {cx - 1, y + 5, 5, 2, 20},
-                {cx + 7, y + 7, 7, 3, 61},
+                {cx - 7, y + 1, 3, 1, 8},
+                {cx - 1, y + 1, 5, 2, 20},
+                {cx + 7, y + 1, 7, 3, 61},
         };
         for (int[] s : screens) {
-            cmdNow("setblock " + s[0] + " " + s[1] + " " + cz
-                    + " kuronami_quest_tree:task_screen_" + s[2] + "[facing=south]");
-            cmdNow("data merge block " + s[0] + " " + s[1] + " " + cz
-                    + " {node:\"aa_devtour:parity/screens\",task:" + s[3] + ",owner:" + owner + "}");
+            // setblock only places the core; the aux blocks are what a player's placement fills in, and the core is
+            // the bottom-centre of the face (TaskScreenBlock.screenPositions), so they all stand on the floor
+            placeScreen(s[2], s[0], s[1], cz, s[3], owner);
             cmdNow("quest_tree progress @s aa_devtour:parity/screens " + (s[3] + 1) + " " + s[4]);
         }
-        standAt(0, -13, cx, cz);
+        // setblock sends the block change before it loads the block entity's NBT, so the client would keep an empty
+        // core and draw no face. Going far enough for the chunk to unload and coming back makes the client read the
+        // chunk with the NBT in it; worldReturn stands in front of the row a few ticks later.
+        cmdNow("tp @s " + (cx + 3000) + ".5 " + (y + 1) + " " + (cz + 3000) + ".5");
+    }
+
+    private static void worldReturn() {
+        if (!tourHomeSet) {
+            return;
+        }
+        standAt(0, -13, tourCx, tourCz);
     }
 
     private static void worldApproachConfigurator() {
@@ -777,9 +808,8 @@ final class DevTour {
         int y = TOUR_FLOOR_Y;
         // back to the start of the first task, so the detector's pulse is what completes it
         cmdNow("quest_tree progress @s aa_devtour:parity/screens 1 0");
-        cmdNow("setblock " + (cx - 9) + " " + (y + 1) + " " + cz + " kuronami_quest_tree:quest_detector");
-        cmdNow("data merge block " + (cx - 9) + " " + (y + 1) + " " + cz
-                + " {target:\"aa_devtour:parity/screens#0\",radius:" + TOUR_DETECTOR_RADIUS + "}");
+        cmdNow("setblock " + (cx - 9) + " " + (y + 1) + " " + cz + " kuronami_quest_tree:quest_detector"
+                + "{target:\"aa_devtour:parity/screens#0\",radius:" + TOUR_DETECTOR_RADIUS + "}");
         standAt(-5, -6, cx - 9, cz);
     }
 
