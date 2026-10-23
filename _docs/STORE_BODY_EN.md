@@ -43,4 +43,4 @@ All Rights Reserved. Free to put in any modpack, on any platform, monetised or n
 
 Bugs and questions: comment on the CurseForge page, or DM [@kuronami333 on X](https://x.com/kuronami333).
 
-Source: https://github.com/KURONAMI333/quest-tree
+Source: https://github.com/KURONAMI333/kuronami-quest-tree
