@@ -36,7 +36,9 @@ final class FabricTaskScreenStorages {
                     return 0;
                 }
                 stack.setCount((int) amount);
-                transaction.addCloseCallback((tx, result) -> {
+                // the outermost transaction decides: a nested insert that commits inside an outer abort would
+                // otherwise still pay the screen and let the caller keep its items (2026-10-23 review)
+                transaction.getOpenTransaction(0).addCloseCallback((tx, result) -> {
                     if (result.wasCommitted()) {
                         screen.insertScreenItem(stack);
                     }
@@ -95,7 +97,7 @@ final class FabricTaskScreenStorages {
                 if (amount <= 0) {
                     return 0;
                 }
-                transaction.addCloseCallback((tx, result) -> {
+                transaction.getOpenTransaction(0).addCloseCallback((tx, result) -> {
                     if (result.wasCommitted()) {
                         screen.insertScreenFluid(fluid, amount);
                     }
