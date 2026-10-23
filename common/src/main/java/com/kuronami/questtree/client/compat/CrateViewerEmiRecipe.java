@@ -1,5 +1,6 @@
 package com.kuronami.questtree.client.compat;
 
+import com.kuronami.questtree.client.QuestViewerStyle;
 import dev.emi.emi.api.recipe.BasicEmiRecipe;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.widget.TextWidget;
@@ -32,12 +33,13 @@ public final class CrateViewerEmiRecipe extends BasicEmiRecipe {
     public void addWidgets(WidgetHolder widgets) {
         Font font = Minecraft.getInstance().font;
         widgets.addSlot(EmiStack.of(recipe.crate()), 8, 8);
-        widgets.add(new TextWidget(recipe.crate().getHoverName().copy().withStyle(ChatFormatting.UNDERLINE)
-                .getVisualOrderText(), 30, 5, 0xFFFFFFFF, false));
-        widgets.add(new TextWidget(Component.literal(trim(recipe.tableId(), 132, font)).getVisualOrderText(),
-                30, 17, 0xFF9E9E9E, false));
-        widgets.add(new TextWidget(Component.translatable("kuronami_quest_tree.viewer.crate.rewards",
-                recipe.contents().size()).getVisualOrderText(), 30, 27, 0xFFFFFFFF, false));
+        widgets.add(new TextWidget(Component.literal(trim(recipe.crate().getHoverName().getString(), 136, font))
+                .withStyle(ChatFormatting.UNDERLINE).getVisualOrderText(), 30, 5, QuestViewerStyle.textColor(), false));
+        widgets.add(new TextWidget(Component.literal(trim(recipe.tableId(), 136, font)).getVisualOrderText(),
+                30, 17, QuestViewerStyle.dimColor(), false));
+        widgets.add(new TextWidget(Component.literal(trim(Component.translatable(
+                "kuronami_quest_tree.viewer.crate.rewards", recipe.contents().size()).getString(), 136, font))
+                .getVisualOrderText(), 30, 27, QuestViewerStyle.textColor(), false));
 
         for (int i = 0; i < Math.min(recipe.contents().size(), COLUMNS * ROWS); i++) {
             int x = 8 + (i % COLUMNS) * 18;

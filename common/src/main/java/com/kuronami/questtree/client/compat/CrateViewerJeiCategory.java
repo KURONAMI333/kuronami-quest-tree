@@ -50,6 +50,12 @@ public final class CrateViewerJeiCategory implements IRecipeCategory<CrateViewer
         return Component.translatable("kuronami_quest_tree.viewer.category.crates");
     }
 
+    /** Our own card replaces JEI's frame, so its light border would only ring the dark panel. */
+    @Override
+    public boolean needsRecipeBorder() {
+        return false;
+    }
+
     @Override
     public IDrawable getIcon() {
         return icon;
@@ -78,12 +84,20 @@ public final class CrateViewerJeiCategory implements IRecipeCategory<CrateViewer
     @Override
     public void draw(CrateViewerData.Recipe recipe, IRecipeSlotsView slots, GuiGraphics graphics,
                      double mouseX, double mouseY) {
+        // the card goes down here: JEI calls draw() before it draws the slots (2026-10-23)
+        QuestViewerStyle.card(graphics, 0, 0, getWidth(), getHeight());
         Font font = Minecraft.getInstance().font;
-        graphics.drawString(font, recipe.crate().getHoverName().copy().withStyle(ChatFormatting.UNDERLINE),
-                30, 5, QuestViewerStyle.textColor(), false);
-        graphics.drawString(font, trim(recipe.tableId(), 134, font), 30, 17, QuestViewerStyle.dimColor(), false);
-        graphics.drawString(font, Component.translatable("kuronami_quest_tree.viewer.crate.rewards",
-                        recipe.contents().size()), 30, 27, QuestViewerStyle.textColor(), false);
+        // JEI leaves the input slot empty on screen for this category (2026-10-23), so the crate is drawn here;
+        // the slot still exists so clicking and searching by the crate item keep working.  The item was invisible
+        // here because its tint carried an alpha of 0, not because of JEI (2026-10-24, ClientLootCrates).
+        graphics.renderItem(recipe.crate(), 8, 8);
+        graphics.renderItemDecorations(font, recipe.crate(), 8, 8);
+        int right = getWidth() - 4;
+        graphics.drawString(font, Component.literal(trim(recipe.crate().getHoverName().getString(), right - 30, font))
+                .withStyle(ChatFormatting.UNDERLINE), 30, 5, QuestViewerStyle.textColor(), false);
+        graphics.drawString(font, trim(recipe.tableId(), right - 30, font), 30, 17, QuestViewerStyle.dimColor(), false);
+        graphics.drawString(font, trim(Component.translatable("kuronami_quest_tree.viewer.crate.rewards",
+                recipe.contents().size()).getString(), right - 30, font), 30, 27, QuestViewerStyle.textColor(), false);
         int hidden = recipe.contents().size() - COLUMNS * ROWS;
         if (hidden > 0) {
             graphics.drawString(font, Component.translatable("kuronami_quest_tree.viewer.crate.more", hidden),

@@ -52,20 +52,25 @@ public final class CrateViewerReiCategory implements DisplayCategory<CrateViewer
     @Override
     public List<Widget> setupDisplay(CrateViewerReiDisplay display, Rectangle bounds) {
         List<Widget> widgets = new ArrayList<>();
-        widgets.add(Widgets.createRecipeBase(bounds));
+        // REI's own base is light; the labels below use the mod's palette, so the card is drawn here instead
+        // (2026-10-24: light text on REI's light base was unreadable)
+        widgets.add(Widgets.createDrawableWidget((graphics, mouseX, mouseY, delta) ->
+                QuestViewerStyle.card(graphics, bounds.x, bounds.y, bounds.width, bounds.height)));
         CrateViewerData.Recipe recipe = display.recipe();
         Font font = Minecraft.getInstance().font;
 
         widgets.add(Widgets.createSlot(new Point(bounds.x + 10, bounds.y + 8))
                 .entry(EntryStacks.of(recipe.crate())).markInput());
         widgets.add(Widgets.createLabel(new Point(bounds.x + 30, bounds.y + 4),
-                recipe.crate().getHoverName().copy().withStyle(ChatFormatting.UNDERLINE)
+                Component.literal(trim(recipe.crate().getHoverName().getString(), bounds.width - 34, font))
+                        .withStyle(ChatFormatting.UNDERLINE)
                         .withStyle(style -> style.withColor(QuestViewerStyle.textColor()))));
         widgets.add(Widgets.createLabel(new Point(bounds.x + 30, bounds.y + 16),
-                Component.literal(trim(recipe.tableId(), bounds.width - 40, font))
+                Component.literal(trim(recipe.tableId(), bounds.width - 34, font))
                         .withStyle(style -> style.withColor(QuestViewerStyle.dimColor()))));
         widgets.add(Widgets.createLabel(new Point(bounds.x + 30, bounds.y + 26),
-                Component.translatable("kuronami_quest_tree.viewer.crate.rewards", recipe.contents().size())
+                Component.literal(trim(Component.translatable("kuronami_quest_tree.viewer.crate.rewards",
+                        recipe.contents().size()).getString(), bounds.width - 34, font))
                         .withStyle(style -> style.withColor(QuestViewerStyle.textColor()))));
 
         for (int i = 0; i < Math.min(recipe.contents().size(), COLUMNS * ROWS); i++) {

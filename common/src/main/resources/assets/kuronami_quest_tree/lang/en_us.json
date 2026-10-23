@@ -160,6 +160,7 @@
   "screen.kuronami_quest_tree.can_repeat_count": "Repeatable ×%s",
   "screen.kuronami_quest_tree.exclusive": "Exclusive",
   "screen.kuronami_quest_tree.needs_list": "Needs: %s",
+  "screen.kuronami_quest_tree.rewards_list": "Rewards: %s",
   "screen.kuronami_quest_tree.locked": "Locked",
   "screen.kuronami_quest_tree.excluded": "Excluded",
   "screen.kuronami_quest_tree.unknown": "???",

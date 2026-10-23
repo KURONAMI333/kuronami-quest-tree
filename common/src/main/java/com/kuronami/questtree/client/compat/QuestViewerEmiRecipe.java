@@ -58,22 +58,29 @@ public final class QuestViewerEmiRecipe extends BasicEmiRecipe {
                 graphics.renderItem(recipe.icon(), 0, 0)));
         widgets.add(new DrawableWidget(26, 4, titleWidth, 10, (graphics, mouseX, mouseY, delta) ->
                 graphics.drawString(font, Component.literal(trim(recipe.title(), titleWidth, font))
-                        .withStyle(ChatFormatting.UNDERLINE), 0, 0, 0xFFFFFFFF, false)));
+                        .withStyle(ChatFormatting.UNDERLINE), 0, 0, QuestViewerStyle.textColor(), false)));
         widgets.add(new ClickArea(26, 2, titleWidth, 11, recipe::open));
 
         widgets.add(new TextWidget(Component.literal(trim(recipe.chapter(), titleWidth, font)).getVisualOrderText(),
-                26, 14, 0xFF9E9E9E, false));
-        widgets.add(new TextWidget(Component.literal(trim(recipe.needLabel(), 136, font)).getVisualOrderText(),
-                30, 35, 0xFFFFFFFF, false));
+                26, 14, QuestViewerStyle.dimColor(), false));
+        widgets.add(new TextWidget(Component.literal(trim(needLabel(), 136, font)).getVisualOrderText(),
+                30, 35, QuestViewerStyle.textColor(), false));
 
         widgets.add(new DrawableWidget(104, 3, 62, 11, (graphics, mouseX, mouseY, delta) -> {
             var state = recipe.state();
             String text = QuestViewerStyle.stateLabel(state).getString();
             QuestViewerStyle.mark(graphics, state, 2, 2, 7);
-            graphics.drawString(font, text, 62 - font.width(text), 1, 0xFFFFFFFF, false);
+            graphics.drawString(font, text, 62 - font.width(text), 1, QuestViewerStyle.textColor(), false);
         }));
 
         widgets.addSlot(ingredient(recipe), 8, 30);
+    }
+
+    /** Which way the item goes: the same slot is an input for a task and an output for a reward. */
+    private String needLabel() {
+        return Component.translatable(recipe.needsItem()
+                ? "screen.kuronami_quest_tree.needs_list"
+                : "screen.kuronami_quest_tree.rewards_list", recipe.needLabelComponent()).getString();
     }
 
     /** A tag becomes one tag ingredient so EMI knows every member, however long the tag is. */

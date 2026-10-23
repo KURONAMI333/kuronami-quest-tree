@@ -160,6 +160,7 @@
   "screen.kuronami_quest_tree.can_repeat_count": "繰り返し可能 ×%s",
   "screen.kuronami_quest_tree.exclusive": "排他",
   "screen.kuronami_quest_tree.needs_list": "必要: %s",
+  "screen.kuronami_quest_tree.rewards_list": "報酬: %s",
   "screen.kuronami_quest_tree.locked": "ロック中",
   "screen.kuronami_quest_tree.excluded": "対象外",
   "screen.kuronami_quest_tree.unknown": "???",

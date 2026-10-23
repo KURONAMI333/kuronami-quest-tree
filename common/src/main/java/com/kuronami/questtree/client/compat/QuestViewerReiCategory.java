@@ -49,7 +49,10 @@ public final class QuestViewerReiCategory implements DisplayCategory<QuestViewer
     @Override
     public List<Widget> setupDisplay(QuestViewerReiDisplay display, Rectangle bounds) {
         List<Widget> widgets = new ArrayList<>();
-        widgets.add(Widgets.createRecipeBase(bounds));
+        // REI's own base is light; the labels below use the mod's palette, so the card is drawn here instead
+        // (2026-10-24: light text on REI's light base was unreadable)
+        widgets.add(Widgets.createDrawableWidget((graphics, mouseX, mouseY, delta) ->
+                QuestViewerStyle.card(graphics, bounds.x, bounds.y, bounds.width, bounds.height)));
 
         QuestViewerRecipe recipe = display.recipe();
         Font font = Minecraft.getInstance().font;
@@ -65,17 +68,21 @@ public final class QuestViewerReiCategory implements DisplayCategory<QuestViewer
         if (!recipe.stacks().isEmpty()) {
             widgets.add(Widgets.createClickableLabel(new Point(bounds.x + 28, bounds.y + 3),
                     Component.literal(trim(recipe.title(), titleWidth, font)).withStyle(ChatFormatting.UNDERLINE)
-                            .withStyle(style -> style.withColor(0xFF404040)),
+                            .withStyle(style -> style.withColor(QuestViewerStyle.textColor())),
                     label -> recipe.open()));
         }
         widgets.add(Widgets.createLabel(new Point(bounds.x + 28, bounds.y + 14),
                 Component.literal(trim(recipe.chapter(), titleWidth, font))
-                        .withStyle(style -> style.withColor(0xFF808080))));
+                        .withStyle(style -> style.withColor(QuestViewerStyle.dimColor()))));
         widgets.add(Widgets.createLabel(new Point(stateX, bounds.y + 3),
-                Component.literal(stateText).withStyle(style -> style.withColor(0xFF404040))));
+                Component.literal(stateText).withStyle(style -> style.withColor(QuestViewerStyle.textColor()))));
+        Component need = Component.translatable(recipe.needsItem()
+                        ? "screen.kuronami_quest_tree.needs_list"
+                        : "screen.kuronami_quest_tree.rewards_list",
+                recipe.needLabelComponent());
         widgets.add(Widgets.createLabel(new Point(bounds.x + 30, bounds.y + 36),
-                Component.literal(trim(recipe.needLabel(), bounds.width - 40, font))
-                        .withStyle(style -> style.withColor(0xFF404040))));
+                Component.literal(trim(need.getString(), bounds.width - 40, font))
+                        .withStyle(style -> style.withColor(QuestViewerStyle.textColor()))));
         return widgets;
     }
 

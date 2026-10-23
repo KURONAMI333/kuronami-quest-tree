@@ -160,6 +160,7 @@
   "screen.kuronami_quest_tree.can_repeat_count": "Повторяемое ×%s",
   "screen.kuronami_quest_tree.exclusive": "Взаимоисключающее",
   "screen.kuronami_quest_tree.needs_list": "Требуется: %s",
+  "screen.kuronami_quest_tree.rewards_list": "Награды: %s",
   "screen.kuronami_quest_tree.locked": "Заблокировано",
   "screen.kuronami_quest_tree.excluded": "Исключено",
   "screen.kuronami_quest_tree.unknown": "???",

@@ -160,6 +160,7 @@
   "screen.kuronami_quest_tree.can_repeat_count": "반복 가능 ×%s",
   "screen.kuronami_quest_tree.exclusive": "택일",
   "screen.kuronami_quest_tree.needs_list": "필요: %s",
+  "screen.kuronami_quest_tree.rewards_list": "보상: %s",
   "screen.kuronami_quest_tree.locked": "잠김",
   "screen.kuronami_quest_tree.excluded": "제외됨",
   "screen.kuronami_quest_tree.unknown": "???",

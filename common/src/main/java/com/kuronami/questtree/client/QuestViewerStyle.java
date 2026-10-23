@@ -49,4 +49,12 @@ public final class QuestViewerStyle {
         RenderSystem.enableBlend();
         Tiles.icon(graphics, "dot", x, y, size, stateColor(state));
     }
+
+    /**
+     * The card a viewer entry is drawn on: the screen's panel fill and hairline, so the palette's text colours read
+     * on it. JEI and REI otherwise draw their own light frame, which the mod's light text vanishes on (2026-10-23).
+     */
+    public static void card(GuiGraphics graphics, int x, int y, int w, int h) {
+        Ui.frame(graphics, x, y, w, h, Ui.R2, Ui.HAIRLINE, Ui.HAIRLINE, Ui.PANEL);
+    }
 }

@@ -25,8 +25,8 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * A quest as a recipe: the quest book at the top, its icon and title, and the item the task needs or the reward gives.
- * Clicking the title opens the quest. No background is supplied, so JEI draws its normal recipe frame that resource
- * packs can restyle.
+ * Clicking the title opens the quest. The card is drawn here, in the same style as the quest screen, and
+ * {@code needsRecipeBorder()} is false so JEI does not draw its own frame under it.
  */
 public final class QuestViewerJeiCategory implements IRecipeCategory<QuestViewerRecipe> {
 
@@ -37,6 +37,12 @@ public final class QuestViewerJeiCategory implements IRecipeCategory<QuestViewer
 
     public QuestViewerJeiCategory(IGuiHelper helper) {
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, QuestViewerRecipe.book());
+    }
+
+    /** Our own card replaces JEI's frame, so its light border would only ring the dark panel. */
+    @Override
+    public boolean needsRecipeBorder() {
+        return false;
     }
 
     @Override
@@ -75,20 +81,29 @@ public final class QuestViewerJeiCategory implements IRecipeCategory<QuestViewer
     @Override
     public void draw(QuestViewerRecipe recipe, IRecipeSlotsView slots, GuiGraphics graphics,
                      double mouseX, double mouseY) {
+        // the card goes down here: JEI calls draw() before it draws the slots (2026-10-23)
+        QuestViewerStyle.card(graphics, 0, 0, QuestViewerRecipe.WIDTH, QuestViewerRecipe.HEIGHT);
         Font font = net.minecraft.client.Minecraft.getInstance().font;
         ProgressRules.State state = recipe.state();
         String stateText = recipe.stateLabel().getString();
-        int stateWidth = font.width(stateText) + 11;
-        int titleWidth = Math.max(20, QuestViewerRecipe.WIDTH - 26 - stateWidth);
+        int right = QuestViewerRecipe.WIDTH - 4;
+        int stateX = right - font.width(stateText);
+        int markX = stateX - 9;
+        int titleWidth = Math.max(20, markX - 4 - 26);
 
         graphics.renderItem(recipe.icon(), 4, 4);
         graphics.renderItemDecorations(font, recipe.icon(), 4, 4);
         graphics.drawString(font, Component.literal(trim(recipe.title(), titleWidth, font))
                 .withStyle(ChatFormatting.UNDERLINE), 26, 4, QuestViewerStyle.textColor(), false);
         graphics.drawString(font, trim(recipe.chapter(), titleWidth, font), 26, 15, QuestViewerStyle.dimColor(), false);
-        QuestViewerStyle.mark(graphics, state, QuestViewerRecipe.WIDTH - stateWidth + 2, 5, 7);
-        graphics.drawString(font, stateText, QuestViewerRecipe.WIDTH - stateWidth + 11, 4, QuestViewerStyle.textColor(), false);
-        graphics.drawString(font, trim(recipe.needLabel(), QuestViewerRecipe.WIDTH - 30, font),
+        QuestViewerStyle.mark(graphics, state, markX, 5, 7);
+        graphics.drawString(font, stateText, stateX, 4, QuestViewerStyle.textColor(), false);
+        // say which way the item goes: the same slot is an input for a task and an output for a reward
+        Component need = Component.translatable(recipe.needsItem()
+                        ? "screen.kuronami_quest_tree.needs_list"
+                        : "screen.kuronami_quest_tree.rewards_list",
+                recipe.needLabelComponent());
+        graphics.drawString(font, trim(need.getString(), right - 30, font),
                 30, 35, QuestViewerStyle.textColor(), false);
     }
 
