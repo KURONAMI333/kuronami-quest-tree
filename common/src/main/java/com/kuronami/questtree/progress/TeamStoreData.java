@@ -3,6 +3,7 @@ package com.kuronami.questtree.progress;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.kuronami.questtree.Constants;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -145,8 +146,10 @@ public final class TeamStoreData {
             try {
                 TeamProgress t = TeamProgress.fromJson(e.getValue().getAsJsonObject());
                 data.teams.put(t.id, t);
-            } catch (RuntimeException ignored) {
-                // one unreadable team is dropped; the rest of the world still loads
+            } catch (RuntimeException ex) {
+                // one unreadable team is dropped and the rest of the world still loads, but the next save will not
+                // write it again, so say which one went (2026-10-23 review)
+                Constants.LOG.error("Could not read team {}: {}", e.getKey(), ex.toString());
             }
         }
         JsonObject owners = root.has("owners") && root.get("owners").isJsonObject()

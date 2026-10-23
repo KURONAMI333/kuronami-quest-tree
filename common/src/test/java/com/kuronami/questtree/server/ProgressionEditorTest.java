@@ -29,6 +29,15 @@ class ProgressionEditorTest {
     @TempDir
     Path temp;
 
+    @Test
+    void chapterIdsStayInsideTheReplyPacket() {
+        String longName = "n".repeat(49);
+        assertFalse(ProgressionEditor.safeSegment(longName));
+        assertTrue(ProgressionEditor.safeSegment("n".repeat(48)));
+        assertFalse(ProgressionEditor.validChapterId("t:" + "n".repeat(120)));
+        assertTrue(ProgressionEditor.validChapterId("t:basics"));
+    }
+
     private static JsonObject node(String tasks) {
         JsonObject n = new JsonObject();
         n.addProperty("x", 0);

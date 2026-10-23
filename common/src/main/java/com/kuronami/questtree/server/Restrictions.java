@@ -51,11 +51,16 @@ public final class Restrictions {
     private static Map<String, TagKey<Block>> blockTags = Map.of();
     /** Every item and block id each rule covers, tags expanded once per load, for the tooltip hints. */
     private static Map<String, List<String>> hintIds = Map.of();
+    /**
+     * Set by {@link #reload}: the reload listeners run before the game rebinds the item and block tags, so the hints
+     * are expanded on the next tick instead of reading the tags one reload too early (2026-10-23 review).
+     */
+    private static boolean hintsStale;
 
     private Restrictions() {
     }
 
-    /** The rules were (re)loaded: turn every tag they name into a key once. */
+    /** The rules were (re)loaded: turn every tag they name into a key once, and mark the hints for the next tick. */
     public static void reload(RestrictionRules rules) {
         Map<String, TagKey<Item>> items = new LinkedHashMap<>();
         Map<String, TagKey<Block>> blocks = new LinkedHashMap<>();
@@ -67,8 +72,21 @@ public final class Restrictions {
                 blocks.computeIfAbsent(tag, t -> TagKey.create(Registries.BLOCK, ResourceLocation.parse(t)));
             }
         }
+        itemTags = Map.copyOf(items);
+        blockTags = Map.copyOf(blocks);
+        hintIds = Map.of();
+        hintsStale = true;
+        SEEN.clear();
+    }
+
+    /** Expands the tag ids the hints need, once. Called on the server tick and before the hints are read. */
+    public static void tickHints() {
+        if (!hintsStale) {
+            return;
+        }
+        hintsStale = false;
         Map<String, List<String>> hints = new LinkedHashMap<>();
-        for (RestrictionRules.Rule rule : rules.all()) {
+        for (RestrictionRules.Rule rule : ProgressData.restrictions().all()) {
             LinkedHashSet<String> ids = new LinkedHashSet<>(rule.items());
             ids.addAll(rule.blocks());
             for (String tag : rule.itemTags()) {
@@ -81,10 +99,7 @@ public final class Restrictions {
             }
             hints.put(rule.id(), List.copyOf(ids));
         }
-        itemTags = Map.copyOf(items);
-        blockTags = Map.copyOf(blocks);
         hintIds = Map.copyOf(hints);
-        SEEN.clear();
     }
 
     /**
@@ -98,6 +113,7 @@ public final class Restrictions {
         if (rules.isEmpty()) {
             return List.of();
         }
+        tickHints();
         PlayerProgress progress = ProgressService.progress(player);
         Map<String, String> byId = new LinkedHashMap<>();
         outer:

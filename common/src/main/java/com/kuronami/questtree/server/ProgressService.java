@@ -94,6 +94,16 @@ public final class ProgressService {
     private static final Set<String> FAILED_ADDON_TASKS = new java.util.HashSet<>();
     /** Players already told that their restriction hints were trimmed; one line per session, not per send. */
     private static final Set<UUID> HINT_TRUNCATION_LOGGED = new java.util.HashSet<>();
+    /** Players already told that their book was too large to send; cleared once a send succeeds. */
+    private static final Set<UUID> TOO_LARGE_LOGGED = new java.util.HashSet<>();
+    /** Addon condition types that already threw: conditions are judged on every flush, so one line per type. */
+    private static final Set<String> FAILED_ADDON_CONDITIONS = new java.util.HashSet<>();
+    /**
+     * Screen owners whose insertion has not been rechecked yet. Hoppers can insert every tick, and one recheck of the
+     * whole book plus one send to the team per inserted item is what the 2026-10-23 review flagged, so the work is
+     * done once per tick in {@link #tickScreens}.
+     */
+    private static final Set<UUID> SCREEN_PENDING = new java.util.HashSet<>();
 
     private ProgressService() {
     }
@@ -505,7 +515,11 @@ public final class ProgressService {
         try {
             return handler.test(new QuestConditionType.ConditionContext(player, n, condition, task));
         } catch (RuntimeException ex) {
-            Constants.LOG.error("Condition '{}' of {} failed: {}", type, n == null ? "?" : n.key, ex.toString());
+            // a restriction is judged with no node (n == null), and judging happens every flush: log once per type
+            if (FAILED_ADDON_CONDITIONS.add(type)) {
+                Constants.LOG.error("Condition '{}' of {} failed (further failures of this type are silent): {}",
+                        type, n == null ? "?" : n.key, ex.toString());
+            }
             return false;
         }
     }
@@ -1097,14 +1111,29 @@ public final class ProgressService {
      */
     public static void screenChanged(MinecraftServer server, UUID owner) {
         ProgressStore.get(server).setDirty();
-        ServerPlayer actor = server.getPlayerList().getPlayer(owner);
-        if (!ScreenCompletion.shouldCompleteNow(actor != null)) {
+        SCREEN_PENDING.add(owner);
+    }
+
+    /**
+     * Ends the tick for the screens that took items in it: one recheck and one send per owner, however many items
+     * went in. A screen that finished nothing is still sent, because the numbers on the face come from the progress.
+     */
+    public static void tickScreens(MinecraftServer server) {
+        if (SCREEN_PENDING.isEmpty()) {
             return;
         }
-        PlayerProgress p = ProgressStore.get(server).view(server, owner);
-        recheck(actor, p);
-        markDirty(actor);
-        flush(actor);
+        List<UUID> owners = List.copyOf(SCREEN_PENDING);
+        SCREEN_PENDING.clear();
+        for (UUID owner : owners) {
+            ServerPlayer actor = server.getPlayerList().getPlayer(owner);
+            if (!ScreenCompletion.shouldCompleteNow(actor != null)) {
+                continue;
+            }
+            PlayerProgress p = ProgressStore.get(server).view(server, owner);
+            recheck(actor, p);
+            markDirty(actor);
+            flush(actor);
+        }
     }
 
     /**
@@ -1413,7 +1442,13 @@ public final class ProgressService {
         }
         ProgressPayload payload = new ProgressPayload(data, List.copyOf(events), limited.hints());
         if (payload.data().length > ProgressPayload.MAX) {
-            Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)", player.getGameProfile().getName(), payload.data().length);
+            // stay dirty so the next send tries again: a silent stop would leave the client's book stale until the
+            // next change, which the player reads as "clicking does nothing" (2026-10-23 review)
+            DIRTY.put(player.getUUID(), false);
+            if (TOO_LARGE_LOGGED.add(player.getUUID())) {
+                Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)",
+                        player.getGameProfile().getName(), payload.data().length);
+            }
             return;
         }
         Services.PLATFORM.sendToPlayer(player, payload);
@@ -1424,9 +1459,11 @@ public final class ProgressService {
     public static void onLogout(ServerPlayer player) {
         PENDING.remove(player.getUUID());
         DIRTY.remove(player.getUUID());
+        SCREEN_PENDING.remove(player.getUUID());
         OBSERVED.remove(player.getUUID());
         REVISIONS.remove(player.getUUID());
         HINT_TRUNCATION_LOGGED.remove(player.getUUID());
+        TOO_LARGE_LOGGED.remove(player.getUUID());
         BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
         // logout fires before the server removes the player, so they must be excluded from "online" explicitly
@@ -1441,6 +1478,9 @@ public final class ProgressService {
         REVISIONS.clear();
         OBSERVED.clear();
         HINT_TRUNCATION_LOGGED.clear();
+        TOO_LARGE_LOGGED.clear();
+        FAILED_ADDON_CONDITIONS.clear();
+        SCREEN_PENDING.clear();
         MIGRATED.clear();
         TeamSync.clear();
     }

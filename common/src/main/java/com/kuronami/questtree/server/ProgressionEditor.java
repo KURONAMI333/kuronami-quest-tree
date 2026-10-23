@@ -1705,7 +1705,7 @@ public final class ProgressionEditor {
     }
 
     static boolean validChapterId(String id) {
-        if (id == null) {
+        if (id == null || id.length() > 128) {
             return false;
         }
         int colon = id.indexOf(':');
@@ -1723,8 +1723,9 @@ public final class ProgressionEditor {
         return true;
     }
 
+    /** One path segment of a chapter id; the cap keeps an editor-made id inside the reply packet's 64 chars. */
     static boolean safeSegment(String s) {
-        return s != null && !s.isEmpty() && !s.equals(".") && !s.equals("..")
+        return s != null && !s.isEmpty() && s.length() <= 48 && !s.equals(".") && !s.equals("..")
                 && s.chars().allMatch(c -> c == '_' || c == '-' || c == '.' || Character.isLetterOrDigit(c));
     }
 

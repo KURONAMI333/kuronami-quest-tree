@@ -71,6 +71,16 @@ public final class LootCrates {
         return true;
     }
 
+    /** Whether the table exists and carries crate settings, so a crate put in would roll instead of vanishing. */
+    public static boolean canRoll(String tableId) {
+        if (tableId == null || tableId.isEmpty()) {
+            return false;
+        }
+        ProgressModel model = ProgressService.rules().model();
+        return model != null
+                && LootCrateRules.crate(tableId, model.rewardTables.get(tableId)).isPresent();
+    }
+
     /**
      * The reward entries {@code count} crates roll, or null when the table has no crate settings. Paying them out is
      * the caller's job, so an opener block can route items into its output instead of the owner's inventory.

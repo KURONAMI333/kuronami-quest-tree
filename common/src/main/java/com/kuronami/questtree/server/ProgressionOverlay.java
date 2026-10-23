@@ -990,8 +990,9 @@ public final class ProgressionOverlay {
         return namespace + ":" + chapter;
     }
 
+    /** One path segment of a chapter id; the cap keeps an editor-made id inside the reply packet's 64 chars. */
     private static boolean safeSegment(String s) {
-        return !s.isEmpty() && !s.equals(".") && !s.equals("..")
+        return !s.isEmpty() && s.length() <= 48 && !s.equals(".") && !s.equals("..")
                 && s.chars().allMatch(c -> c == '_' || c == '-' || c == '.' || Character.isLetterOrDigit(c));
     }
 

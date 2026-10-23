@@ -74,7 +74,7 @@ QuestTree.registerCondition('example:level_30', context => context.player().expe
 QuestTree.open(player, 'example:basics/start')
 ```
 
-A type registered with `QuestTree.registerCondition` is written in the same `conditions` array as the five built-in types (`stage`, `score`, `item`, `advancement`, `party_size`), using its namespaced id. Built-in types work without any script registration.
+A type registered with `QuestTree.registerCondition` is written in the same `conditions` array as the five built-in types (`stage`, `score`, `item`, `advancement`, `party_size`), using its namespaced id. Built-in types work without any script registration. The context's node is null when the condition is used by a restriction rather than by a task or a reward, so an implementation must not rely on it.
 
 A reload removes only the ids registered by that script kind (startup / server / client). Registering an id that already exists from a script is refused and returns false. Register at the top level of the script.
 

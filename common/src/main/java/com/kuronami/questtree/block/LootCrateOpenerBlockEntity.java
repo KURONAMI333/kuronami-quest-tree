@@ -63,8 +63,13 @@ public class LootCrateOpenerBlockEntity extends BlockEntity implements WorldlyCo
     }
 
     private boolean accepts(ItemStack stack) {
-        return !stack.isEmpty() && stack.getItem() == com.kuronami.questtree.item.ModItems.lootCrate()
-                && stack.has(ModDataComponents.lootCrate()) && ownerPlayer() != null;
+        if (stack.isEmpty() || stack.getItem() != com.kuronami.questtree.item.ModItems.lootCrate()
+                || !stack.has(ModDataComponents.lootCrate()) || ownerPlayer() == null) {
+            return false;
+        }
+        String tableId = stack.get(ModDataComponents.lootCrate());
+        // a hopper must not hand the crate over while the table cannot be read: setItem would drop it without a roll
+        return level == null || level.isClientSide || LootCrates.canRoll(tableId);
     }
 
     /** Rolls the crate into the output. The input is consumed only when the table is readable. */

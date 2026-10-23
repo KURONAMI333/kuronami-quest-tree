@@ -13,8 +13,10 @@ import java.util.List;
 
 /**
  * Fabric's transfer API view of a task screen's items and fluids (2026-10-22). Insertion is permanent (the item or
- * fluid becomes task progress), so there is nothing to extract. Energy is not part of this API; see
- * {@link FabricEnergyStorages}, which registers Team Reborn Energy when that optional mod is loaded.
+ * fluid becomes task progress), so there is nothing to extract. Because it cannot be undone, it is written when the
+ * transaction commits: a transaction that is aborted after inserting would otherwise leave the item gone and the
+ * progress banked (2026-10-23 review). Energy is not part of this API; see {@link FabricEnergyStorages}, which
+ * registers Team Reborn Energy when that optional mod is loaded.
  */
 final class FabricTaskScreenStorages {
 
@@ -29,7 +31,17 @@ final class FabricTaskScreenStorages {
                     return 0;
                 }
                 ItemStack stack = resource.toStack((int) Math.min(maxAmount, Integer.MAX_VALUE));
-                return screen.insertScreenItem(stack);
+                long amount = Math.min(maxAmount, screen.itemCapacity(stack));
+                if (amount <= 0) {
+                    return 0;
+                }
+                stack.setCount((int) amount);
+                transaction.addCloseCallback((tx, result) -> {
+                    if (result.wasCommitted()) {
+                        screen.insertScreenItem(stack);
+                    }
+                });
+                return amount;
             }
 
             @Override
@@ -78,7 +90,17 @@ final class FabricTaskScreenStorages {
                 if (resource.isBlank() || maxAmount <= 0) {
                     return 0;
                 }
-                return screen.insertScreenFluid(resource.getFluid(), maxAmount);
+                net.minecraft.world.level.material.Fluid fluid = resource.getFluid();
+                long amount = Math.min(maxAmount, screen.fluidCapacity(fluid));
+                if (amount <= 0) {
+                    return 0;
+                }
+                transaction.addCloseCallback((tx, result) -> {
+                    if (result.wasCommitted()) {
+                        screen.insertScreenFluid(fluid, amount);
+                    }
+                });
+                return amount;
             }
 
             @Override
