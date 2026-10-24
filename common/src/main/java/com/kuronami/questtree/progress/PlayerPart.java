@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -93,18 +94,10 @@ public final class PlayerPart {
 
     public static PlayerPart fromJson(JsonObject o) {
         PlayerPart part = new PlayerPart();
-        for (JsonElement e : arr(o, "claimed")) {
-            part.claimed.add(e.getAsString());
-        }
-        for (JsonElement e : arr(o, "claimed_rewards")) {
-            part.claimedRewards.add(e.getAsString());
-        }
-        for (JsonElement e : arr(o, "recent")) {
-            part.recent.addLast(e.getAsString());
-        }
-        for (JsonElement e : arr(o, "completed")) {
-            part.completed.add(e.getAsString());
-        }
+        readStrings(arr(o, "claimed"), part.claimed);
+        readStrings(arr(o, "claimed_rewards"), part.claimedRewards);
+        readRecent(arr(o, "recent"), part.recent);
+        readStrings(arr(o, "completed"), part.completed);
         for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
             long at = PackNumbers.savedLong(e.getValue(), Long.MIN_VALUE);
             if (at >= 0) {
@@ -120,12 +113,8 @@ public final class PlayerPart {
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             part.cooldown.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
-        for (JsonElement e : arr(o, "stages")) {
-            part.stages.add(e.getAsString());
-        }
-        for (JsonElement e : arr(o, "team_stages_applied")) {
-            part.teamStagesApplied.add(e.getAsString());
-        }
+        readStrings(arr(o, "stages"), part.stages);
+        readStrings(arr(o, "team_stages_applied"), part.teamStagesApplied);
         if (o.has("pending_rewards") && o.get("pending_rewards").isJsonObject()) {
             for (Map.Entry<String, JsonElement> e : obj(o, "pending_rewards").entrySet()) {
                 part.pendingRewards.put(e.getKey(), PackNumbers.savedInt(e.getValue(), 0));
@@ -133,7 +122,9 @@ public final class PlayerPart {
         } else {
             // saves before 2026-10-21 stored each pending reward once
             for (JsonElement e : arr(o, "pending_rewards")) {
-                part.pendingRewards.merge(e.getAsString(), 1, Integer::sum);
+                if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                    part.pendingRewards.merge(e.getAsString(), 1, Integer::sum);
+                }
             }
         }
         // skill rewards are never blocked any more; keys an older save kept are dropped instead of paid at login
@@ -145,13 +136,32 @@ public final class PlayerPart {
             }
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
-            part.rewardRolls.put(e.getKey(), e.getValue().getAsString());
+            JsonElement value = e.getValue();
+            if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+                part.rewardRolls.put(e.getKey(), value.getAsString());
+            }
         }
         part.emergencyReadyAt = PackNumbers.savedLong(o.get("emergency_ready_at"), 0L);
         part.emergencyWaitNotice = PackNumbers.booleanOr(o.get("emergency_wait_notice"), false);
         part.rewardsBlocked = PackNumbers.booleanOr(o.get("rewards_blocked"), false);
         part.bookGiven = PackNumbers.booleanOr(o.get("book_given"), false);
         return part;
+    }
+
+    private static void readStrings(JsonArray a, Collection<String> into) {
+        for (JsonElement e : a) {
+            if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                into.add(e.getAsString());
+            }
+        }
+    }
+
+    private static void readRecent(JsonArray a, Deque<String> into) {
+        for (JsonElement e : a) {
+            if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                into.addLast(e.getAsString());
+            }
+        }
     }
 
     private static JsonArray strings(Iterable<String> it) {

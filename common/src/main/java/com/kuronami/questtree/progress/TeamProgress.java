@@ -294,7 +294,23 @@ public final class TeamProgress {
     }
 
     public static TeamProgress fromJson(JsonObject o) {
-        UUID id = UUID.fromString(o.get("id").getAsString());
+        return fromJson(o, null);
+    }
+
+    /** As above; {@code fallbackId} is the saved map key, used when the record itself has no readable id. */
+    public static TeamProgress fromJson(JsonObject o, UUID fallbackId) {
+        UUID id = fallbackId;
+        JsonElement savedId = o.get("id");
+        if (savedId != null && savedId.isJsonPrimitive() && savedId.getAsJsonPrimitive().isString()) {
+            try {
+                id = UUID.fromString(savedId.getAsString());
+            } catch (IllegalArgumentException ignored) {
+                // a broken id is replaced by the map key when the caller has one
+            }
+        }
+        if (id == null) {
+            throw new IllegalArgumentException("Team record has no readable id");
+        }
         TeamProgress team = new TeamProgress(id);
         if (o.has("shared") && o.get("shared").isJsonObject()) {
             team.shared.copySharedFrom(ProgressJson.read(o.getAsJsonObject("shared")));
@@ -322,14 +338,18 @@ public final class TeamProgress {
         }
         if (o.has("team_claimed_rewards") && o.get("team_claimed_rewards").isJsonArray()) {
             for (JsonElement e : o.getAsJsonArray("team_claimed_rewards")) {
-                team.teamClaimedRewards.add(e.getAsString());
+                if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                    team.teamClaimedRewards.add(e.getAsString());
+                }
             }
         }
         // the key is written on every save (even empty): a save without it predates the record and is migrated once
         team.needsPaidMigration = !o.has("paid_skill_rewards");
         if (o.has("paid_skill_rewards") && o.get("paid_skill_rewards").isJsonArray()) {
             for (JsonElement e : o.getAsJsonArray("paid_skill_rewards")) {
-                team.paidSkillRewards.add(e.getAsString());
+                if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                    team.paidSkillRewards.add(e.getAsString());
+                }
             }
         }
         team.absorbLegacyEmergencyCooldown();

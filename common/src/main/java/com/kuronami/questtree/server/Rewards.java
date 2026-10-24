@@ -336,7 +336,8 @@ public final class Rewards {
     /** Number of entries of the table a table reward points at (0 when missing). */
     static int tableSize(JsonObject rw) {
         JsonObject table = ProgressService.rules().model().rewardTables.get(ProgressService.str(rw, "table"));
-        return table == null || !table.has("entries") ? 0 : table.getAsJsonArray("entries").size();
+        return table == null || !table.has("entries") || !table.get("entries").isJsonArray()
+                ? 0 : table.getAsJsonArray("entries").size();
     }
 
     /**
@@ -702,12 +703,23 @@ public final class Rewards {
             Constants.LOG.warn("Reward table '{}' of {} does not exist", ProgressService.str(rw, "table"), n.key);
             return true;
         }
-        List<JsonObject> entries = new ArrayList<>();
-        List<Double> weights = new ArrayList<>();
-        for (JsonElement e : table.getAsJsonArray("entries")) {
-            JsonObject o = e.getAsJsonObject();
-            entries.add(o.getAsJsonObject("reward"));
-            weights.add(o.has("weight") ? o.get("weight").getAsDouble() : 1.0);
+        if (!table.get("entries").isJsonArray()) {
+            Constants.LOG.warn("Reward table '{}' of {} has no usable entries; nothing is paid",
+                    ProgressService.str(rw, "table"), n.key);
+            return false;
+        }
+        List<RewardTableEdit.Entry> entries = RewardTableEdit.entries(table);
+        boolean payable = false;
+        for (RewardTableEdit.Entry entry : entries) {
+            if (entry.reward() != null) {
+                payable = true;
+                break;
+            }
+        }
+        if (!payable) {
+            Constants.LOG.warn("Reward table '{}' of {} has no usable entries; nothing is paid",
+                    ProgressService.str(rw, "table"), n.key);
+            return false;
         }
         String key = rollKey == null || rollKey.isEmpty() ? n.key : rollKey;
         String mode = rw.has("mode") ? rw.get("mode").getAsString() : "random";
@@ -719,20 +731,27 @@ public final class Rewards {
                     all.add(i);
                 }
                 return com.kuronami.questtree.progress.RewardPayout.pay(p, key + ">all", all,
-                        (index, position) -> give(player, p, n, entries.get(index), -1,
-                                key + ">all>" + position, ignoreBlock));
+                        (index, position) -> {
+                            JsonObject reward = entries.get(index).reward();
+                            return reward == null || give(player, p, n, reward, -1,
+                                    key + ">all>" + position, ignoreBlock);
+                        });
             }
             case "choice" -> {
-                if (choice < 0 || choice >= entries.size()) {
+                if (choice < 0 || choice >= entries.size() || entries.get(choice).reward() == null) {
                     return false;
                 }
-                return give(player, p, n, entries.get(choice), -1, key + ">choice", ignoreBlock);
+                return give(player, p, n, entries.get(choice).reward(), -1, key + ">choice", ignoreBlock);
             }
             default -> {
                 // FTB Quests: a random reward never rolls "empty" (only a loot crate's table uses empty_weight), and
                 // entries with weight 0 are always granted outside the rolls (2026-10-20 review)
                 boolean loot = mode.equals("loot");
                 double empty = loot && table.has("empty_weight") ? table.get("empty_weight").getAsDouble() : 0;
+                List<Double> weights = new ArrayList<>();
+                for (RewardTableEdit.Entry entry : entries) {
+                    weights.add(entry.reward() == null ? 0 : entry.weight());
+                }
                 String picksKey = key + ">rolls";
                 List<Integer> picks = com.kuronami.questtree.progress.RewardRoll.decode(p.rewardRolls.get(picksKey));
                 if (picks == null) {
@@ -742,8 +761,13 @@ public final class Rewards {
                     p.rewardRolls.put(picksKey, com.kuronami.questtree.progress.RewardRoll.encode(picks));
                 }
                 boolean paid = com.kuronami.questtree.progress.RewardPayout.pay(p, key, picks,
-                        (index, position) -> index < 0 || index >= entries.size()
-                                || give(player, p, n, entries.get(index), -1, key + ">" + position, ignoreBlock));
+                        (index, position) -> {
+                            if (index < 0 || index >= entries.size()) {
+                                return true;
+                            }
+                            JsonObject reward = entries.get(index).reward();
+                            return reward == null || give(player, p, n, reward, -1, key + ">" + position, ignoreBlock);
+                        });
                 if (paid) {
                     p.rewardRolls.remove(picksKey);
                 }
@@ -785,7 +809,15 @@ public final class Rewards {
             return;
         }
         ResourceLocation id = modifierId(nodeKey, slot);
-        double value = rw.has("value") ? rw.get("value").getAsDouble() : 0;
+        double value = 0;
+        JsonElement savedValue = rw.get("value");
+        if (savedValue != null) {
+            if (savedValue.isJsonPrimitive() && savedValue.getAsJsonPrimitive().isNumber()) {
+                value = savedValue.getAsDouble();
+            } else {
+                Constants.LOG.warn("Attribute reward of {} has a value that is not a number; using 0", nodeKey);
+            }
+        }
         inst.removeModifier(id);
         inst.addPermanentModifier(new AttributeModifier(id, value, operation(ProgressService.str(rw, "operation"))));
     }

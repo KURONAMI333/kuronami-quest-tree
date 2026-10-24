@@ -18,7 +18,44 @@ public final class RewardTableEdit {
     public record Item(String id, int count) {
     }
 
+    /**
+     * One parsed table entry, kept at its original position so a choice keeps the index the client showed.
+     * {@code reward} is null when the entry cannot be paid (not an object, no object reward, or a non-number weight).
+     */
+    public record Entry(JsonObject reward, double weight) {
+    }
+
     private RewardTableEdit() {
+    }
+
+    /** The entries of a table in order; broken entries stay in place with a null reward. */
+    public static List<Entry> entries(JsonObject table) {
+        List<Entry> entries = new ArrayList<>();
+        JsonElement all = table == null ? null : table.get("entries");
+        if (all == null || !all.isJsonArray()) {
+            return entries;
+        }
+        for (JsonElement e : all.getAsJsonArray()) {
+            if (e == null || !e.isJsonObject()) {
+                entries.add(new Entry(null, 0));
+                continue;
+            }
+            JsonObject o = e.getAsJsonObject();
+            JsonElement reward = o.get("reward");
+            if (reward == null || !reward.isJsonObject()) {
+                entries.add(new Entry(null, 0));
+                continue;
+            }
+            JsonElement weight = o.get("weight");
+            if (weight == null) {
+                entries.add(new Entry(reward.getAsJsonObject(), 1.0));
+            } else if (weight.isJsonPrimitive() && weight.getAsJsonPrimitive().isNumber()) {
+                entries.add(new Entry(reward.getAsJsonObject(), weight.getAsDouble()));
+            } else {
+                entries.add(new Entry(null, 0));
+            }
+        }
+        return entries;
     }
 
     /** A table is empty when it has no entries at all; an entry with weight 0 still counts, as in FTB Quests. */

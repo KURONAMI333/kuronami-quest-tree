@@ -69,6 +69,25 @@ public final class QuestTreeClient {
         public static void renderers(net.neoforged.neoforge.client.event.EntityRenderersEvent.RegisterRenderers event) {
             event.registerBlockEntityRenderer(QuestTree.TASK_SCREEN_BE.get(), TaskScreenRenderer::new);
         }
+
+        /** F3+T keeps the pack ids unchanged; the listener catches the reload itself and re-measures shapes and pictures. */
+        @SubscribeEvent
+        public static void reloadListeners(net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent event) {
+            event.registerReloadListener(new net.minecraft.server.packs.resources.SimplePreparableReloadListener<Void>() {
+                @Override
+                protected Void prepare(net.minecraft.server.packs.resources.ResourceManager rm,
+                                       net.minecraft.util.profiling.ProfilerFiller profiler) {
+                    return null;
+                }
+
+                @Override
+                protected void apply(Void nothing, net.minecraft.server.packs.resources.ResourceManager rm,
+                                     net.minecraft.util.profiling.ProfilerFiller profiler) {
+                    // releasing textures belongs on the client thread, so the caches are dropped there
+                    net.minecraft.client.Minecraft.getInstance().execute(ClientProgress::onResourceReload);
+                }
+            });
+        }
     }
 
     @EventBusSubscriber(modid = Constants.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)

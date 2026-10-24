@@ -4130,7 +4130,7 @@ public class ProgressScreen extends Screen {
                     iw = Math.max(1, Math.min(iw, w));
                     ih = Math.max(1, Math.min(ih, 256));
                     ResourceLocation tex = ResourceLocation.tryParse(token.target());
-                    if (tex != null) {
+                    if (tex != null && imageOnClient(tex)) {
                         g.blit(tex, x + (w - iw) / 2, y, iw, ih, 0, 0, iw, ih, iw, ih);
                     }
                     // the image's own (+4) margin is the gap under it: adding the line's 12 would leave a blank line
@@ -4268,6 +4268,9 @@ public class ProgressScreen extends Screen {
     /** Opens a node's chapter and selects it, centring the map on it. */
     private void goTo(String key) {
         ClientModel m = model();
+        if (m == null) {
+            return;
+        }
         ClientModel.Chapter c = m.chapterOf.get(key);
         if (c != null && ClientProgress.chapterHidden(c.id)) {
             // a chapter hidden as a whole is not opened through links, images or requirement rows either

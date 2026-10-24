@@ -288,6 +288,7 @@
   "screen.kuronami_quest_tree.editor.field.suppress_autoclaim": "Stop auto-claiming",
   "screen.kuronami_quest_tree.editor.field.milestone": "Веха",
   "screen.kuronami_quest_tree.editor.field.optional": "Необязательное",
+  "screen.kuronami_quest_tree.editor.field.invalid": "Неверно",
   "screen.kuronami_quest_tree.editor.field.root": "Начальный узел",
   "screen.kuronami_quest_tree.editor.field.cost": "Стоимость",
   "screen.kuronami_quest_tree.editor.field.hidden_until": "Скрыто до",

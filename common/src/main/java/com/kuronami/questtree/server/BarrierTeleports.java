@@ -26,11 +26,21 @@ public final class BarrierTeleports {
     }
 
     private static final Map<UUID, Pending> PENDING = new HashMap<>();
+    /**
+     * The barrier a player is still standing in after its teleport ran. A gate whose destination is inside itself
+     * calls {@code entityInside} every tick; without this it would teleport and play the sound every tick. The entry is
+     * dropped once the player is no longer in that block, so walking back in works again.
+     */
+    private static final Map<UUID, BlockPos> HANDLED = new HashMap<>();
 
     private BarrierTeleports() {
     }
 
     public static void queue(ServerPlayer player, BarrierTeleport teleport, BlockPos barrier) {
+        if (barrier.equals(HANDLED.get(player.getUUID()))) {
+            return;
+        }
+        HANDLED.put(player.getUUID(), barrier);
         ResourceLocation id = teleport.dimension().isEmpty() ? null : ResourceLocation.tryParse(teleport.dimension());
         ResourceKey<Level> dimension = id == null ? null : ResourceKey.create(Registries.DIMENSION, id);
         PENDING.put(player.getUUID(), new Pending(dimension,
@@ -40,6 +50,16 @@ public final class BarrierTeleports {
 
     /** Runs at the end of every server tick. */
     public static void tick(MinecraftServer server) {
+        HANDLED.entrySet().removeIf(e -> {
+            ServerPlayer player = server.getPlayerList().getPlayer(e.getKey());
+            if (player == null) {
+                return true;
+            }
+            BlockPos barrier = e.getValue();
+            return !player.getBoundingBox().inflate(1.0E-3).intersects(
+                    barrier.getX(), barrier.getY(), barrier.getZ(),
+                    barrier.getX() + 1.0D, barrier.getY() + 1.0D, barrier.getZ() + 1.0D);
+        });
         if (PENDING.isEmpty()) {
             return;
         }
@@ -68,5 +88,6 @@ public final class BarrierTeleports {
 
     public static void clear() {
         PENDING.clear();
+        HANDLED.clear();
     }
 }

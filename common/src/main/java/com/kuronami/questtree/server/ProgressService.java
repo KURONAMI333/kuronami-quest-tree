@@ -110,6 +110,9 @@ public final class ProgressService {
      * done once per tick in {@link #tickScreens}.
      */
     private static final Set<UUID> SCREEN_PENDING = new java.util.HashSet<>();
+    /** Pack Stages names that its {@code has} command can carry as one argument; anything else is not looked up. */
+    private static final java.util.regex.Pattern SAFE_STAGE =
+            java.util.regex.Pattern.compile("[A-Za-z0-9_./:+-]+");
 
     private ProgressService() {
     }
@@ -1753,10 +1756,13 @@ public final class ProgressService {
             }
             if (n.tasks.isEmpty() && !n.chapter.isSkills() && !p.completed.contains(n.key)) {
                 // task-less quests complete on their own, like the complete command
+                long doneAt = System.currentTimeMillis();
                 p.completed.add(n.key);
-                p.completedAt.put(n.key, System.currentTimeMillis());
+                p.completedAt.put(n.key, doneAt);
                 event(player, p, "complete", n.key);
                 autoRewards(player, p, n);
+                // a repeatable quest with nothing to claim starts its next round at completion (as in recheck)
+                rules().repeatAfterCompletion(p, n, doneAt);
             }
         }
         recheck(player, p);
@@ -1791,6 +1797,10 @@ public final class ProgressService {
 
     static boolean hasStage(ServerPlayer player, String stage) {
         if (stage.isEmpty() || !Services.PLATFORM.isModLoaded("pack_stages")) {
+            return false;
+        }
+        // the name is one command argument: a space or quote would add or split arguments instead of naming a stage
+        if (!SAFE_STAGE.matcher(stage).matches()) {
             return false;
         }
         return ServerCommands.run(player, "pack_stages has " + player.getGameProfile().getName() + " " + stage, 2, true) > 0;

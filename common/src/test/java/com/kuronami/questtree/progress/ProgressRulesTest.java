@@ -89,6 +89,37 @@ class ProgressRulesTest {
     }
 
     @Test
+    void brokenPointFieldsAreIgnoredInsteadOfThrowing() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": 100, "start": null, "spent_limit": "abc"},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel m = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = m.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        assertEquals(0, rules.availablePoints(p, a), "a start that is not a number counts as 0");
+        assertEquals(1, rules.addExperience(p, a, 100));
+        assertEquals(1, rules.availablePoints(p, a), "a spent_limit that is not a number is not applied");
+    }
+
+    @Test
+    void nonNumericExperienceValuesUseTheLastGoodOne() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:a": {"points": {"per_level": {"data": {"values": [100, null, "abc", 200, {}]}}},
+                                      "nodes": {"n": {"cost": 1}}}}}
+                """).getAsJsonObject();
+        ProgressModel m = ProgressModel.of(bundle);
+        ProgressModel.Chapter a = m.chapters.get("t:a");
+        ProgressRules rules = new ProgressRules(m);
+        assertEquals(100.0, rules.experienceForLevel(a, 0), 1e-9);
+        assertEquals(100.0, rules.experienceForLevel(a, 1), 1e-9, "null falls back to the previous value");
+        assertEquals(100.0, rules.experienceForLevel(a, 2), 1e-9, "a non-number string falls back too");
+        assertEquals(200.0, rules.experienceForLevel(a, 3), 1e-9);
+        assertEquals(200.0, rules.experienceForLevel(a, 4), 1e-9, "an object falls back to the previous value");
+    }
+
+    @Test
     void chapterLockHidesAndHoldsItsNodes() {
         JsonObject bundle = JsonParser.parseString("""
                 {"chapters": {"t:a": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": false},

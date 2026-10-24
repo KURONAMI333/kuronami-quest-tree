@@ -144,7 +144,13 @@ public final class TeamStoreData {
                 ? root.getAsJsonObject("teams") : new JsonObject();
         for (Map.Entry<String, JsonElement> e : teams.entrySet()) {
             try {
-                TeamProgress t = TeamProgress.fromJson(e.getValue().getAsJsonObject());
+                UUID key = null;
+                try {
+                    key = UUID.fromString(e.getKey());
+                } catch (IllegalArgumentException ignored) {
+                    // the record's own id still decides when the map key is not a UUID
+                }
+                TeamProgress t = TeamProgress.fromJson(e.getValue().getAsJsonObject(), key);
                 data.teams.put(t.id, t);
             } catch (RuntimeException ex) {
                 // one unreadable team is dropped and the rest of the world still loads, but the next save will not
@@ -163,12 +169,17 @@ public final class TeamStoreData {
         }
         if (root.has("migrations") && root.get("migrations").isJsonObject()) {
             for (Map.Entry<String, JsonElement> e : root.getAsJsonObject("migrations").entrySet()) {
-                data.migrations.put(e.getKey(), e.getValue().getAsString());
+                JsonElement value = e.getValue();
+                if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+                    data.migrations.put(e.getKey(), value.getAsString());
+                }
             }
         }
         if (root.has("personal_nodes") && root.get("personal_nodes").isJsonArray()) {
             for (JsonElement e : root.getAsJsonArray("personal_nodes")) {
-                data.personalNodes.add(e.getAsString());
+                if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                    data.personalNodes.add(e.getAsString());
+                }
             }
         }
         return data;

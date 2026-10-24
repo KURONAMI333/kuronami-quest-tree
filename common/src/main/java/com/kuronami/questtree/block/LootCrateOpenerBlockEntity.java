@@ -54,6 +54,17 @@ public class LootCrateOpenerBlockEntity extends BlockEntity implements WorldlyCo
         return n;
     }
 
+    /** The accumulated output, handed to the block's drops when it is broken. */
+    public List<ItemStack> takeOutputs() {
+        if (outputs.isEmpty()) {
+            return List.of();
+        }
+        List<ItemStack> out = new ArrayList<>(outputs);
+        outputs.clear();
+        setChanged();
+        return out;
+    }
+
     @Nullable
     private ServerPlayer ownerPlayer() {
         if (owner == null || level == null || level.getServer() == null) {

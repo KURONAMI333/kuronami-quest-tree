@@ -88,6 +88,20 @@ public class QuestTreeClient implements ClientModInitializer {
                 com.kuronami.questtree.client.ItemTooltips.append(stack, lines);
             }
         });
+        // F3+T keeps the pack ids unchanged; the listener catches the reload itself and re-measures shapes and pictures
+        net.fabricmc.fabric.api.resource.ResourceManagerHelper.get(net.minecraft.server.packs.PackType.CLIENT_RESOURCES)
+                .registerReloadListener(new net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener() {
+                    @Override
+                    public net.minecraft.resources.ResourceLocation getFabricId() {
+                        return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "client_resources");
+                    }
+
+                    @Override
+                    public void onResourceManagerReload(net.minecraft.server.packs.resources.ResourceManager rm) {
+                        // releasing textures belongs on the client thread, so the caches are dropped there
+                        net.minecraft.client.Minecraft.getInstance().execute(ClientProgress::onResourceReload);
+                    }
+                });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientProgress.onLogout());
         // the quest book beside the inventory (2026-10-20)
         net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register((client, screen, w, h) ->

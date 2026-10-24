@@ -288,6 +288,7 @@
   "screen.kuronami_quest_tree.editor.field.suppress_autoclaim": "Stop auto-claiming",
   "screen.kuronami_quest_tree.editor.field.milestone": "節目",
   "screen.kuronami_quest_tree.editor.field.optional": "任意",
+  "screen.kuronami_quest_tree.editor.field.invalid": "不正な値",
   "screen.kuronami_quest_tree.editor.field.root": "開始ノード",
   "screen.kuronami_quest_tree.editor.field.cost": "費用",
   "screen.kuronami_quest_tree.editor.field.hidden_until": "表示の条件",

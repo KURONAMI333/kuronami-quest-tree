@@ -71,6 +71,17 @@ class QuestTreeApiTest {
     }
 
     @Test
+    void lookupsUseTheSameDefaultNamespaceAsRegistration() {
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath("minecraft", "questtree_probe");
+        QuestTaskType handler = context -> 1;
+        QuestTreeApi.registerTaskType(id, handler);
+        assertTrue(QuestTreeApi.taskTypeRegistered("questtree_probe"));
+        assertSame(handler, QuestTreeApi.taskType("questtree_probe"));
+        assertSame(handler, QuestTreeApi.taskType(id.toString()), "the full id still finds it");
+        assertFalse(QuestTreeApi.taskTypeRegistered(null));
+    }
+
+    @Test
     void anAbsentAddonIsReportedButDoesNotDropTheNode() {
         ProgressValidator.Result result = validate("questtree_test:missing_task", "questtree_test:missing");
         assertEquals(1, result.errors(), "an unknown task type is an error, as before");

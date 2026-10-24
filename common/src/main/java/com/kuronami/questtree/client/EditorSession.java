@@ -78,11 +78,36 @@ public final class EditorSession {
         allowed = on;
         if (!on) {
             active = false;
-            queue.clear();
+            failPending();
             idleTasks.clear();
             optimistic.clear();
             settledAt.clear();
             EditorChangelog.clear();
+        }
+    }
+
+    /**
+     * Answers every op still queued or in flight as failed and drops it. Editing closing or the server going away means
+     * no reply is coming, so a screen waiting on one must be told: otherwise its {@code sending} flag stays set forever.
+     */
+    private static void failPending() {
+        Pending inFlight = current;
+        current = null;
+        List<Pending> dropped = new ArrayList<>(queue);
+        queue.clear();
+        if (inFlight != null) {
+            dropped.add(0, inFlight);
+        }
+        for (Pending pending : dropped) {
+            if (pending.then() == null) {
+                continue;
+            }
+            try {
+                pending.then().accept(new EditorReplyPayload(pending.requestId(), pending.chapterId(), false,
+                        "", "", revisionOf(pending)));
+            } catch (RuntimeException ex) {
+                Constants.LOG.error("An editor reply handler failed", ex);
+            }
         }
     }
 
@@ -408,11 +433,10 @@ public final class EditorSession {
 
     /** Leaving a server: no revision, clipboard or notice from it may reach the next one. */
     public static void onLogout() {
-        queue.clear();
-        idleTasks.clear();
-        current = null;
         allowed = false;
         active = false;
+        failPending();
+        idleTasks.clear();
         revisions.clear();
         tableRevisions.clear();
         optimistic.clear();

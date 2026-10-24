@@ -288,6 +288,7 @@
   "screen.kuronami_quest_tree.editor.field.suppress_autoclaim": "Stop auto-claiming",
   "screen.kuronami_quest_tree.editor.field.milestone": "Milestone",
   "screen.kuronami_quest_tree.editor.field.optional": "Optional",
+  "screen.kuronami_quest_tree.editor.field.invalid": "Invalid",
   "screen.kuronami_quest_tree.editor.field.root": "Start node",
   "screen.kuronami_quest_tree.editor.field.cost": "Cost",
   "screen.kuronami_quest_tree.editor.field.hidden_until": "Hidden until",

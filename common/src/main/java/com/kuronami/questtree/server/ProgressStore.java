@@ -305,15 +305,11 @@ public final class ProgressStore extends SavedData {
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("version", TeamStoreData.VERSION);
         CompoundTag teams = new CompoundTag();
-        data.teams.forEach((id, team) -> {
-            try {
+        data.teams.forEach((id, team) ->
                 // One compound per team, not one writeUTF string: a big book overflows the 65,535-byte string and the
-                // whole save failed, taking every team's progress with it (2026-10-22 release review).
-                teams.put(id.toString(), com.kuronami.questtree.progress.JsonTags.toTag(team.toJson()));
-            } catch (RuntimeException ex) {
-                Constants.LOG.error("Could not write progress of team {}: {}", id, ex.toString());
-            }
-        });
+                // whole save failed, taking every team's progress with it (2026-10-22 release review). A team that
+                // cannot be written fails the whole save now, so the previous file stays instead of losing it.
+                teams.put(id.toString(), com.kuronami.questtree.progress.JsonTags.toTag(team.toJson())));
         tag.put("teams", teams);
         CompoundTag owners = new CompoundTag();
         data.owners.forEach((player, team) -> owners.putString(player.toString(), team.toString()));

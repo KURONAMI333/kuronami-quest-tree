@@ -236,6 +236,65 @@ class TeamProgressTest {
         assertFalse(store.team(A).view(A).rewardClaimed("t:q/a#1"));
     }
 
+    @Test
+    void brokenArrayElementsAreDroppedAndTheRestOfThePlayerRecordStays() {
+        JsonObject saved = JsonParser.parseString("""
+                {"completed": ["t:q/a", {"bad": true}, 5, "t:q/b"],
+                 "claimed": [null, "t:q/a"],
+                 "claimed_rewards": [["nested"], "t:q/a#0"],
+                 "team_claimed_rewards": [{"bad": 1}, "t:q/b#0"],
+                 "stages": [true, "t:s"],
+                 "recent": ["claim|t:q/a|1", [], "claim|t:q/b|2"]}
+                """).getAsJsonObject();
+
+        PlayerProgress read = ProgressJson.read(saved);
+
+        assertEquals(Set.of("t:q/a", "t:q/b"), read.completed);
+        assertEquals(Set.of("t:q/a"), read.claimed);
+        assertEquals(Set.of("t:q/a#0"), read.claimedRewards);
+        assertEquals(Set.of("t:q/b#0"), read.teamClaimedRewards);
+        assertEquals(Set.of("t:s"), read.stages);
+        assertEquals(2, read.recent.size());
+    }
+
+    @Test
+    void brokenTeamElementsDoNotDropTheWholeTeam() {
+        JsonObject root = JsonParser.parseString("""
+                {"version": 2,
+                 "teams": {"00000000-0000-0000-0000-0000000000ff": {
+                   "shared": {"completed": ["t:q/a", {"bad": true}, 5]},
+                   "team_claimed_rewards": ["t:q/a#0", {"bad": 1}],
+                   "paid_skill_rewards": ["t:q/s#0", 7]}},
+                 "migrations": {"ok": "hash@1", "bad": {"nested": true}},
+                 "personal_nodes": ["t:q/n", {"bad": 1}, 3]}
+                """).getAsJsonObject();
+
+        TeamStoreData data = TeamStoreData.fromJson(root);
+
+        TeamProgress team = data.teams.get(TEAM);
+        assertNotNull(team, "a broken element must not take the whole team down");
+        assertEquals(Set.of("t:q/a"), team.shared.completed);
+        assertEquals(Set.of("t:q/a#0"), team.teamClaimedRewards);
+        assertEquals(Set.of("t:q/s#0"), team.paidSkillRewards);
+        assertEquals("hash@1", data.migrations.get("ok"));
+        assertEquals(1, data.migrations.size());
+        assertEquals(Set.of("t:q/n"), data.personalNodes);
+    }
+
+    @Test
+    void aTeamWithoutAnIdUsesTheSavedMapKey() {
+        JsonObject root = JsonParser.parseString("""
+                {"version": 2,
+                 "teams": {"00000000-0000-0000-0000-0000000000ff": {
+                   "shared": {"completed": ["t:q/a"]}}}}
+                """).getAsJsonObject();
+
+        TeamStoreData data = TeamStoreData.fromJson(root);
+
+        assertNotNull(data.teams.get(TEAM), "the map key is the team id when the record has none");
+        assertEquals(Set.of("t:q/a"), data.teams.get(TEAM).shared.completed);
+    }
+
     private static ProgressModel.Chapter lockableChapter() {
         JsonObject bundle = JsonParser.parseString("""
                 {"chapters": {"t:s": {"points": {"per_level": 1, "start": 1, "unlocked_by_default": true},

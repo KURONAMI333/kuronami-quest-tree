@@ -288,6 +288,7 @@
   "screen.kuronami_quest_tree.editor.field.suppress_autoclaim": "Stop auto-claiming",
   "screen.kuronami_quest_tree.editor.field.milestone": "이정표",
   "screen.kuronami_quest_tree.editor.field.optional": "선택",
+  "screen.kuronami_quest_tree.editor.field.invalid": "잘못된 값",
   "screen.kuronami_quest_tree.editor.field.root": "시작 노드",
   "screen.kuronami_quest_tree.editor.field.cost": "비용",
   "screen.kuronami_quest_tree.editor.field.hidden_until": "표시 조건",

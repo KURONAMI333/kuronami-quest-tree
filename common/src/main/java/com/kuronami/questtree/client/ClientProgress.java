@@ -543,6 +543,11 @@ public final class ClientProgress {
         QuestViewerData.clear();
     }
 
+    /** A client resource reload finished: masks and pictures are measured again from the new pack contents. */
+    public static void onResourceReload() {
+        Tiles.reload();
+    }
+
     /** Called every client tick by the loader module. The same key opens and closes the screen. */
     public static void onClientTick() {
         QuestViewerData.onClientTick();

@@ -155,29 +155,35 @@ public final class QuestTreeApi {
     }
 
     public static boolean taskTypeRegistered(String id) {
-        return TASKS.containsKey(id);
+        String key = key(id);
+        return key != null && TASKS.containsKey(key);
     }
 
     public static boolean rewardTypeRegistered(String id) {
-        return REWARDS.containsKey(id);
+        String key = key(id);
+        return key != null && REWARDS.containsKey(key);
     }
 
     public static boolean conditionTypeRegistered(String id) {
-        return CONDITIONS.containsKey(id);
+        String key = key(id);
+        return key != null && CONDITIONS.containsKey(key);
     }
 
     /** The registered task type, or null for a built-in type or one whose addon is absent. */
     public static QuestTaskType taskType(String id) {
-        return TASKS.get(id);
+        String key = key(id);
+        return key == null ? null : TASKS.get(key);
     }
 
     public static QuestRewardType rewardType(String id) {
-        return REWARDS.get(id);
+        String key = key(id);
+        return key == null ? null : REWARDS.get(key);
     }
 
     /** The registered condition type, or null for a built-in kind or one whose addon is absent. */
     public static QuestConditionType conditionType(String id) {
-        return CONDITIONS.get(id);
+        String key = key(id);
+        return key == null ? null : CONDITIONS.get(key);
     }
 
     /**
@@ -219,9 +225,46 @@ public final class QuestTreeApi {
         return id == null ? "" : id.toString();
     }
 
-    /** The registry key for a script's id, or null when it is not a resource location. */
+    /**
+     * The registry key for a script's id, or null when it is not a resource location. Mirrors
+     * {@link ResourceLocation#tryParse(String)} so the common tests stay free of game classes.
+     */
     private static String key(String id) {
-        ResourceLocation parsed = id == null ? null : ResourceLocation.tryParse(id);
-        return parsed == null ? null : key(parsed);
+        if (id == null) {
+            return null;
+        }
+        int colon = id.indexOf(':');
+        if (colon >= 0) {
+            String path = id.substring(colon + 1);
+            if (!validPath(path)) {
+                return null;
+            }
+            if (colon == 0) {
+                return "minecraft:" + path;
+            }
+            String namespace = id.substring(0, colon);
+            return validNamespace(namespace) ? namespace + ":" + path : null;
+        }
+        return validPath(id) ? "minecraft:" + id : null;
+    }
+
+    private static boolean validNamespace(String namespace) {
+        for (int i = 0; i < namespace.length(); i++) {
+            char c = namespace.charAt(i);
+            if (c != '_' && c != '-' && c != '.' && (c < 'a' || c > 'z') && (c < '0' || c > '9')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean validPath(String path) {
+        for (int i = 0; i < path.length(); i++) {
+            char c = path.charAt(i);
+            if (c != '_' && c != '-' && c != '/' && c != '.' && (c < 'a' || c > 'z') && (c < '0' || c > '9')) {
+                return false;
+            }
+        }
+        return true;
     }
 }

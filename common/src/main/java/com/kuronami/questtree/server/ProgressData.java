@@ -605,7 +605,13 @@ public final class ProgressData {
                 continue;
             }
             JsonObject patch = p.getValue().getAsJsonObject();
-            String target = patch.has("target") ? patch.get("target").getAsString() : null;
+            JsonElement targetElement = patch.get("target");
+            if (targetElement != null
+                    && !(targetElement.isJsonPrimitive() && targetElement.getAsJsonPrimitive().isString())) {
+                Constants.LOG.warn("Progression patch {} has a target that is not a string", p.getKey());
+                continue;
+            }
+            String target = targetElement == null ? null : targetElement.getAsString();
             JsonElement base = target == null ? null : chapters.get(target);
             if (base == null || !base.isJsonObject()) {
                 Constants.LOG.warn("Progression patch {} targets missing chapter {}", p.getKey(), target);

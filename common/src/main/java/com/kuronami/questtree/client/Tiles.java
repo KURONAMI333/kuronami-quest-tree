@@ -76,11 +76,17 @@ final class Tiles {
                 : ResourceLocation.fromNamespaceAndPath(parsed.getNamespace(), "textures/" + parsed.getPath() + ".png");
     }
 
-    /** Draws a whole texture into a square, however many pixels the file has (chapter icons are not always 16x16). */
+    /**
+     * Draws a whole texture into a square, however many pixels the file has (chapter icons are not always 16x16). A
+     * missing or unreadable picture draws nothing: the missing texture's magenta says nothing about a chapter's icon.
+     */
     static void textureIcon(GuiGraphics g, ResourceLocation id, float x, float y, float size) {
         int[] dims = textureSize(id);
-        int w = dims[0] > 0 ? dims[0] : 16;
-        int h = dims[1] > 0 ? dims[1] : 16;
+        if (dims[0] <= 0 || dims[1] <= 0) {
+            return;
+        }
+        int w = dims[0];
+        int h = dims[1];
         g.pose().pushPose();
         g.pose().translate(x, y, 0);
         g.pose().scale(size / 16f, size / 16f, 1);
@@ -283,12 +289,17 @@ final class Tiles {
 
     /** {@link #reload()} when the list of resource packs differs from the one the shapes were measured with. */
     static void reloadIfPacksChanged() {
-        String now = net.minecraft.client.Minecraft.getInstance().getResourceManager().listPacks()
-                .map(net.minecraft.server.packs.PackResources::packId).collect(java.util.stream.Collectors.joining(","));
+        String now = packIds();
         if (!now.equals(packs)) {
             packs = now;
             reload();
         }
+    }
+
+    /** The enabled packs' ids, in load order; the same list across F3+T, which is why a reload hook also calls {@link #reload()}. */
+    private static String packIds() {
+        return net.minecraft.client.Minecraft.getInstance().getResourceManager().listPacks()
+                .map(net.minecraft.server.packs.PackResources::packId).collect(java.util.stream.Collectors.joining(","));
     }
 
     /** Forgets everything worked out from the masks, so the next draw reads a resource pack's shapes again. */

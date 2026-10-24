@@ -12,8 +12,12 @@ import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * Opens loot crates for the player who placed it. Items come out of the front; the owner must be online, so a machine
@@ -49,6 +53,15 @@ public class LootCrateOpenerBlock extends BaseEntityBlock {
         if (placer instanceof Player player && level.getBlockEntity(pos) instanceof LootCrateOpenerBlockEntity opener) {
             opener.setOwner(player.getUUID());
         }
+    }
+
+    @Override
+    protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+        List<ItemStack> drops = super.getDrops(state, params);
+        if (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) instanceof LootCrateOpenerBlockEntity opener) {
+            drops.addAll(opener.takeOutputs());
+        }
+        return drops;
     }
 
     @Override

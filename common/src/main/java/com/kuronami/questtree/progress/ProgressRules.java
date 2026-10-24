@@ -933,13 +933,11 @@ public final class ProgressRules {
     /** Points that can be spent now in a skill chapter. */
     public int availablePoints(PlayerProgress p, ProgressModel.Chapter c) {
         JsonObject pts = c.points == null ? new JsonObject() : c.points;
-        int start = pts.has("start") ? pts.get("start").getAsInt() : 0;
+        int start = intOf(pts, "start", 0);
         String key = key(c);
         int earned = p.level.getOrDefault(key, 0);
         int total = start + earned + p.bonus.getOrDefault(key, 0);
-        if (pts.has("spent_limit") && pts.get("spent_limit").isJsonPrimitive()) {
-            total = Math.min(total, pts.get("spent_limit").getAsInt());
-        }
+        total = Math.min(total, intOf(pts, "spent_limit", Integer.MAX_VALUE));
         return Math.max(0, total - p.spent.getOrDefault(key, 0));
     }
 
@@ -964,7 +962,14 @@ public final class ProgressRules {
                 if (values.isEmpty()) {
                     return 100;
                 }
-                return Math.max(1, values.get(Math.max(0, Math.min(level, values.size() - 1))).getAsLong());
+                long need = 100;
+                for (int i = 0; i <= Math.max(0, Math.min(level, values.size() - 1)); i++) {
+                    JsonElement v = values.get(i);
+                    if (v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber()) {
+                        need = v.getAsLong();
+                    }
+                }
+                return Math.max(1, need);
             }
         }
         String expr = per.isJsonPrimitive() ? per.getAsString()

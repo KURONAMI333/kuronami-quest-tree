@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.util.Collection;
+import java.util.Deque;
 import java.util.Map;
 
 /** PlayerProgress to and from JSON (used for saving inside NBT and for syncing to the client). */
@@ -58,26 +60,18 @@ public final class ProgressJson {
 
     public static PlayerProgress read(JsonObject o) {
         PlayerProgress p = new PlayerProgress();
-        for (JsonElement e : arr(o, "completed")) {
-            p.completed.add(e.getAsString());
-        }
+        readStrings(arr(o, "completed"), p.completed);
         for (Map.Entry<String, JsonElement> e : obj(o, "completed_at").entrySet()) {
             long at = PackNumbers.savedLong(e.getValue(), Long.MIN_VALUE);
             if (at >= 0) {
                 p.completedAt.put(e.getKey(), at);
             }
         }
-        for (JsonElement e : arr(o, "claimed")) {
-            p.claimed.add(e.getAsString());
-        }
+        readStrings(arr(o, "claimed"), p.claimed);
         // own_claimed_rewards is the current shape; claimed_rewards is the merged list older saves and clients have
         String ownKey = o.has("own_claimed_rewards") ? "own_claimed_rewards" : "claimed_rewards";
-        for (JsonElement e : arr(o, ownKey)) {
-            p.claimedRewards.add(e.getAsString());
-        }
-        for (JsonElement e : arr(o, "team_claimed_rewards")) {
-            p.teamClaimedRewards.add(e.getAsString());
-        }
+        readStrings(arr(o, ownKey), p.claimedRewards);
+        readStrings(arr(o, "team_claimed_rewards"), p.teamClaimedRewards);
         for (Map.Entry<String, JsonElement> e : obj(o, "tasks").entrySet()) {
             p.tasks.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
@@ -92,19 +86,13 @@ public final class ProgressJson {
         for (Map.Entry<String, JsonElement> e : obj(o, "chapter_open").entrySet()) {
             p.chapterOpen.put(e.getKey(), PackNumbers.booleanOr(e.getValue(), false));
         }
-        for (JsonElement e : arr(o, "team_stages")) {
-            p.teamStages.add(e.getAsString());
-        }
-        for (JsonElement e : arr(o, "stages")) {
-            p.stages.add(e.getAsString());
-        }
+        readStrings(arr(o, "team_stages"), p.teamStages);
+        readStrings(arr(o, "stages"), p.stages);
         readInts(obj(o, "repeats"), p.repeats);
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             p.cooldown.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
-        for (JsonElement e : arr(o, "recent")) {
-            p.recent.addLast(e.getAsString());
-        }
+        readRecent(arr(o, "recent"), p.recent);
         p.setEmergencyReadyAt(PackNumbers.savedLong(o.get("emergency_ready_at"), 0L));
         p.setEmergencyWaitNotice(PackNumbers.booleanOr(o.get("emergency_wait_notice"), false));
         p.setRewardsBlocked(PackNumbers.booleanOr(o.get("rewards_blocked"), false));
@@ -117,6 +105,22 @@ public final class ProgressJson {
         JsonArray a = new JsonArray();
         it.forEach(a::add);
         return a;
+    }
+
+    private static void readStrings(JsonArray a, Collection<String> into) {
+        for (JsonElement e : a) {
+            if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                into.add(e.getAsString());
+            }
+        }
+    }
+
+    private static void readRecent(JsonArray a, Deque<String> into) {
+        for (JsonElement e : a) {
+            if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                into.addLast(e.getAsString());
+            }
+        }
     }
 
     private static JsonObject ints(Map<String, Integer> m) {

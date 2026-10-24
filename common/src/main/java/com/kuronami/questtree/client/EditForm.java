@@ -274,6 +274,8 @@ final class EditForm {
         private final Runnable extra;
         private final java.util.function.Function<String, Component> optionName;
         private String error;
+        /** The box holds text the numeric field cannot write: say so instead of leaving the JSON silently behind. */
+        private boolean invalidNumber;
         private boolean boxed;
 
         FieldLine(Font font, FieldSpec spec, JsonObject root, Component label, Runnable changed, Runnable pick,
@@ -307,6 +309,8 @@ final class EditForm {
                     } else {
                         EditorDoc.write(root, spec, v);
                     }
+                    invalidNumber = (spec.kind() == FieldSpec.Kind.INT || spec.kind() == FieldSpec.Kind.DOUBLE)
+                            && !v.isBlank() && !numberParses(v.trim(), spec.kind() == FieldSpec.Kind.INT);
                     edited.accept(spec.path());
                 });
                 boxed = true;
@@ -344,9 +348,32 @@ final class EditForm {
             }
         }
 
+        /** The validator's sentence for this row, or the one word for text the numeric field cannot write. */
+        private String message() {
+            if (error != null) {
+                return error;
+            }
+            return invalidNumber
+                    ? Component.translatable("screen.kuronami_quest_tree.editor.field.invalid").getString() : null;
+        }
+
+        /** The number the box holds is written only when it parses, the same way {@link EditorDoc#setNumber} reads it. */
+        private static boolean numberParses(String value, boolean integer) {
+            try {
+                if (integer) {
+                    Long.parseLong(value);
+                } else if (!Double.isFinite(Double.parseDouble(value))) {
+                    return false;
+                }
+                return true;
+            } catch (NumberFormatException ex) {
+                return false;
+            }
+        }
+
         @Override
         public int height() {
-            return ROW + (error != null ? 11 : 0);
+            return ROW + (message() != null ? 11 : 0);
         }
 
         private int labelW() {
@@ -356,8 +383,9 @@ final class EditForm {
         @Override
         public void render(GuiGraphics g, Font font, int x, int y, int w, int mouseX, int mouseY) {
             place(x, y, w);
+            String message = message();
             Ui.text(g, font, font.plainSubstrByWidth(label.getString(), Ui.textRoom(labelW() - 4)), x + 4, y + (ROW - 8) / 2,
-                    error != null ? Ui.TEXT_ERROR : Ui.MUTED);
+                    message != null ? Ui.TEXT_ERROR : Ui.MUTED);
             int cx = x + labelW();
             int cw = w - labelW() - 4;
             switch (spec.kind()) {
@@ -365,8 +393,8 @@ final class EditForm {
                 case ENUM -> renderChoice(g, font, cx, y, cw, mouseX, mouseY);
                 default -> renderBox(g, font, cx, y, cw, mouseX, mouseY);
             }
-            if (error != null) {
-                Ui.text(g, font, font.plainSubstrByWidth(error, Ui.textRoom(w - 8)), x + 4, y + ROW, Ui.TEXT_ERROR);
+            if (message != null) {
+                Ui.text(g, font, font.plainSubstrByWidth(message, Ui.textRoom(w - 8)), x + 4, y + ROW, Ui.TEXT_ERROR);
             }
         }
 
