@@ -14,8 +14,8 @@ import java.util.Set;
 
 /**
  * Conditions-gated restrictions on items and blocks (DATA_MODEL.md "制限"): until the rule's {@code conditions} hold,
- * the named items and blocks cannot be equipped, used, attacked with, placed or broken, and the reason is shown
- * briefly. The rules come from {@code data/<ns>/progression/restrictions.json}, merged across namespaces; the shape
+ * the named items and blocks cannot be equipped, used, attacked with, placed, broken or crafted, and the reason is
+ * shown briefly. The rules come from {@code data/<ns>/progression/restrictions.json}, merged across namespaces; the shape
  * and the matching live here so a test needs no game.
  * <p>
  * Matching is by id and by tag. The caller supplies the ids and a {@link TagMatcher} (the game side asks the item or
@@ -28,8 +28,9 @@ public final class RestrictionRules {
     public static final String ATTACK = "attack";
     public static final String PLACE = "place";
     public static final String BREAK = "break";
-    /** The five actions a rule may name; an omitted list means all of them. */
-    public static final List<String> ACTIONS = List.of(EQUIP, USE, ATTACK, PLACE, BREAK);
+    public static final String CRAFT = "craft";
+    /** The six actions a rule may name; an omitted list means all of them. */
+    public static final List<String> ACTIONS = List.of(EQUIP, USE, ATTACK, PLACE, BREAK, CRAFT);
 
     /** Whether the item or block state the caller holds is in a tag. */
     public interface TagMatcher {
@@ -44,7 +45,7 @@ public final class RestrictionRules {
         private final List<String> itemTags;
         private final List<String> blocks;
         private final List<String> blockTags;
-        /** Null when the rule names no actions: it then applies to all five. */
+        /** Null when the rule names no actions: it then applies to all six. */
         private final Set<String> actions;
         private final String message;
 

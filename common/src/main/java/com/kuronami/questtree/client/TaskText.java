@@ -74,6 +74,11 @@ final class TaskText {
                 return new Shown(new ItemStack(Items.COMPASS), Component.translatable("task." + p + ".structure_named", pretty(str(o, "structure"))));
             case "location":
                 return new Shown(new ItemStack(Items.COMPASS), Component.translatable("task." + p + ".location"));
+            case "reach_day": {
+                String day = str(o, "day");
+                return new Shown(new ItemStack(Items.CLOCK),
+                        Component.translatable("task." + p + ".reach_day_named", day.isEmpty() ? "0" : day));
+            }
             case "stat": {
                 String id = str(o, "stat");
                 return new Shown(new ItemStack(Items.WRITABLE_BOOK), registryName("stat", id));

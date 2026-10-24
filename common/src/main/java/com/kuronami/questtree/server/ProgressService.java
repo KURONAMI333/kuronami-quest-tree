@@ -20,6 +20,7 @@ import com.kuronami.questtree.progress.HintLimits;
 import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressJson;
+import com.kuronami.questtree.progress.PackNumbers;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.ProgressRules.State;
 import com.kuronami.questtree.progress.ScreenCompletion;
@@ -1056,6 +1057,8 @@ public final class ProgressService {
                     case "stat" -> stat(player, str(t, "stat"));
                     case "stage" -> (ProgressModel.boolOf(t, "team") && p.teamStages.contains(str(t, "stage"))
                             || hasStage(player, str(t, "stage"))) ? 1 : 0;
+                    case "reach_day" -> ProgressRules.dayReached(level.getDayTime(),
+                            PackNumbers.savedLong(t.get("day"), 0)) ? 1 : 0;
                     default -> {
                         QuestTaskType addon = QuestTreeApi.taskType(type(t));
                         if (addon == null) {

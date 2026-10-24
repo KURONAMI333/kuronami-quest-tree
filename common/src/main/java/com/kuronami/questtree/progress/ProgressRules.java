@@ -428,6 +428,16 @@ public final class ProgressRules {
         return 1;
     }
 
+    /** The world's day counter: {@code ServerLevel#getDayTime() / 24000}. */
+    public static long worldDay(long dayTime) {
+        return dayTime / 24000L;
+    }
+
+    /** Whether {@code reach_day} has its day; day 0 is the first day, so it is reached at once. */
+    public static boolean dayReached(long dayTime, long day) {
+        return worldDay(dayTime) >= day;
+    }
+
     // ------------------------------------------------------------------ skill points
 
     /**

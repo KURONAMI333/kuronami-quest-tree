@@ -52,6 +52,25 @@ class RestrictionRulesTest {
     }
 
     @Test
+    void craftIsItsOwnAction() {
+        RestrictionRules r = rules("""
+                {"restrictions": [{"id": "no_craft", "items": ["minecraft:iron_sword"],
+                                   "actions": ["craft"],
+                                   "conditions": [{"type": "stage", "stage": "one"}]}]}""");
+        assertEquals(1, r.forItem(RestrictionRules.CRAFT, IRON_SWORD, tags(Set.of())).size());
+        assertTrue(r.forItem(RestrictionRules.USE, IRON_SWORD, tags(Set.of())).isEmpty());
+    }
+
+    @Test
+    void theCraftActionMatchesItemTags() {
+        RestrictionRules r = rules("""
+                {"restrictions": [{"id": "by_tag", "item_tags": ["minecraft:swords"], "actions": ["craft"],
+                                   "conditions": [{"type": "stage", "stage": "one"}]}]}""");
+        assertEquals("by_tag", r.forItem(RestrictionRules.CRAFT, DIAMOND, tags(Set.of(SWORDS))).get(0).id());
+        assertTrue(r.forItem(RestrictionRules.CRAFT, DIAMOND, tags(Set.of())).isEmpty());
+    }
+
+    @Test
     void itemAndBlockTagsMatchThroughTheCaller() {
         RestrictionRules r = rules("""
                 {"restrictions": [

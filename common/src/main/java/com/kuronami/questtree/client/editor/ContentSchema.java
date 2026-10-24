@@ -2,6 +2,7 @@ package com.kuronami.questtree.client.editor;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.progress.RestrictionRules;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +19,7 @@ public final class ContentSchema {
 
     public static final List<String> TASK_TYPES = List.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
-            "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "stage", "custom");
+            "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "stage", "custom", "reach_day");
 
     /** {@code choice} is a {@code table} in mode {@code choice}; it is listed apart because the form treats it so. */
     public static final List<String> REWARD_TYPES = List.of(
@@ -27,6 +28,9 @@ public final class ContentSchema {
 
     public static final List<String> SHAPES = List.of("", "square", "rsquare", "circle", "diamond", "hexagon",
             "octagon", "pentagon", "gear", "heart", "none");
+
+    /** The actions a restriction rule may name, in the order the editor offers them. */
+    public static final List<String> RESTRICTION_ACTIONS = RestrictionRules.ACTIONS;
 
     private ContentSchema() {
     }
@@ -135,6 +139,7 @@ public final class ContentSchema {
                 out.add(FieldSpec.integer("count", P + "count"));
             }
             case "stage" -> out.add(FieldSpec.text("stage", P + "stage"));
+            case "reach_day" -> out.add(FieldSpec.integer("day", P + "day"));
             case "custom" -> {
                 out.add(FieldSpec.bool("enable_button", P + "enable_button"));
                 out.add(FieldSpec.integer("amount", P + "amount"));

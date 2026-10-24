@@ -162,6 +162,11 @@ public final class Restrictions {
         return refuse(player, hits);
     }
 
+    /** Whether taking this crafting result is refused for the player. */
+    public static boolean blockedCraft(ServerPlayer player, ItemStack result) {
+        return blockedItem(player, result, RestrictionRules.CRAFT);
+    }
+
     /**
      * Whether placing this stack is refused: either the item itself is restricted for {@code place}, or the block it
      * would become is. The block state is the default one, because tags belong to the block, not to its facing.

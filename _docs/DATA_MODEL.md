@@ -155,7 +155,7 @@ Pack text is stored in the data pack's own language files, separate from the mod
 
 `tasks[].type` can be:
 
-`item` (`count`, `consume`, `match_components`, `only_from_crafting`), `checkmark`, `kill`, `advancement`, `structure`, `biome`, `dimension`, `location`, `observation`, `stat`, `xp`, `fluid`, `energy`, `break`, `place_block`, `stage`, `custom`, `craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`, `interaction`.
+`item` (`count`, `consume`, `match_components`, `only_from_crafting`), `checkmark`, `kill`, `advancement`, `structure`, `biome`, `dimension`, `location`, `observation`, `stat`, `xp`, `fluid`, `energy`, `break`, `place_block`, `stage`, `custom`, `craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`, `interaction`, `reach_day`.
 
 Every task also accepts `optional`, `icon`, `title` and `conditions`.
 
@@ -167,7 +167,7 @@ Action tasks replace FTB Quests' Task Screen by counting the player's own action
 
 An `energy` task can be filled at a task screen (place one and bind it to the task), or completed by carrying the fullest single stack when a pack checks the inventory instead. A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
 
-`observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`. `place_block` takes the same `block` and `count` and counts blocks placed by the player, capped at `count`.
+`observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`. `place_block` takes the same `block` and `count` and counts blocks placed by the player, capped at `count`. `reach_day` takes `day` (0 or more, default 0) and counts the world's day counter (`getDayTime / 24000`), so `/time set` can move it.
 
 ### Requirements and the item counter
 
@@ -270,11 +270,12 @@ Conditions are evaluated once, when the reward is granted. Revocation (respec, r
 
 - `id` is required and global across namespaces. A second namespace writing the same id is ignored with a `WARNING`; the first one wins.
 - At least one of `items`, `item_tags`, `blocks`, `block_tags` is required. Tags are written as ordinary tag ids (`minecraft:swords`, no leading `#`).
-- `actions` is any of `equip`, `use`, `attack`, `place`, `break`. Omitted or null means all five; an empty list or an unknown name is reported (`WARNING`) and applies to nothing.
+- `actions` is any of `equip`, `use`, `attack`, `place`, `break`, `craft`. Omitted or null means all six; an empty list or an unknown name is reported (`WARNING`) and applies to nothing.
 - `conditions` uses the same five built-in kinds and registered kinds as tasks and rewards. A rule with no conditions is reported (`WARNING`): it would keep its items shut forever.
 - `message` is the reason shown in the action bar; it is shown as written (not translated). Without it the mod shows its own line. A refusal is shown at most once a second per player.
 - `equip` covers the armour slots and the offhand. It is checked every five ticks, and the players' checks are spread by UUID; an unchanged set of worn item ids with the same rules and progress revision is skipped. A restricted item is put back into the inventory (or dropped when full) within that window. The main hand is not checked, because moving an item into it happens constantly.
 - `use` covers using the item in the air, on a block, or on an entity; it also covers using a restricted block (a chest, a door, and so on).
+- `craft` is checked when a crafting grid's result is taken, by a click or a shift-click; the result stays in the slot and the ingredients are untouched. Furnace, smoker, blast furnace and brewing results are not covered.
 - `place` is checked in `BlockItem#place`: it matches the item being placed and the block it would become. A placement that does not go through `BlockItem` is not covered. There is no creative-mode or permission-level exemption; a restricted item is refused for every player. `break` matches the block and the item held to break it. A refused action never drops anything or counts toward a task.
 - Restrictions are enforced on the server only. The client mod does not need to know them; the synced bundle carries the rules for the editor.
 - A fake player (one with no connection, or a mod's own `ServerPlayer` subclass, such as Create's deployer) is not restricted and gets no progress record.

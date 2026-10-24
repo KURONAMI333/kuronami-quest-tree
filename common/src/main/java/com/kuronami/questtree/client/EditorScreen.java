@@ -201,8 +201,9 @@ abstract class EditorScreen extends Screen {
                 continue;
             }
             boolean table = isTableField(spec);
+            boolean choices = spec.kind() == FieldSpec.Kind.IDS && !spec.options().isEmpty();
             lines.add(new EditForm.FieldLine(font, spec, root, label, () -> onEdited(spec.path()),
-                    spec.picker() || table ? () -> openPicker(spec, root) : null,
+                    spec.picker() || table || choices ? () -> openPicker(spec, root) : null,
                     null, null, EditorScreen::optionName, path -> onEdited(path)));
         }
         return lines;
@@ -224,6 +225,10 @@ abstract class EditorScreen extends Screen {
     }
 
     protected final void openPicker(FieldSpec spec, JsonObject root) {
+        if (spec.kind() == FieldSpec.Kind.IDS) {
+            openChoicePicker(spec, root);
+            return;
+        }
         List<EditPickers.Option> options = isTableField(spec) ? tableOptions() : EditPickers.options(spec.kind());
         if (minecraft != null) {
             minecraft.setScreen(new EditPickerScreen(this, Component.translatable(spec.label()), options, true, id -> {
@@ -232,6 +237,31 @@ abstract class EditorScreen extends Screen {
                 onEdited(spec.path());
             }));
         }
+    }
+
+    /** An IDS row with schema options: pick one and it is appended, so a rule can name several actions. */
+    private void openChoicePicker(FieldSpec spec, JsonObject root) {
+        if (minecraft == null) {
+            return;
+        }
+        List<EditPickers.Option> options = new ArrayList<>();
+        for (String id : spec.options()) {
+            options.add(new EditPickers.Option(id, optionName(id), ItemStack.EMPTY));
+        }
+        minecraft.setScreen(new EditPickerScreen(this, Component.translatable(spec.label()), options, true, id -> {
+            List<String> now = new ArrayList<>();
+            for (String part : EditorDoc.showIds(root, spec.path()).split(",")) {
+                if (!part.isBlank()) {
+                    now.add(part.trim());
+                }
+            }
+            if (!now.contains(id)) {
+                now.add(id);
+            }
+            EditorDoc.writeIds(root, spec.path(), String.join(", ", now));
+            form.refresh();
+            onEdited(spec.path());
+        }));
     }
 
     private static List<EditPickers.Option> tableOptions() {

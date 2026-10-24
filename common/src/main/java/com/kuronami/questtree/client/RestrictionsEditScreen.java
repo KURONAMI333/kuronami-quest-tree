@@ -3,6 +3,7 @@ package com.kuronami.questtree.client;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.client.editor.ContentSchema;
 import com.kuronami.questtree.client.editor.EditorDoc;
 import com.kuronami.questtree.client.editor.FieldSpec;
 import net.minecraft.client.gui.screens.Screen;
@@ -38,7 +39,8 @@ final class RestrictionsEditScreen extends EditorScreen {
                 new FieldSpec("item_tags", FieldSpec.Kind.IDS, PREFIX + "field.item_tags", List.of(), false),
                 new FieldSpec("blocks", FieldSpec.Kind.IDS, PREFIX + "field.blocks", List.of(), false),
                 new FieldSpec("block_tags", FieldSpec.Kind.IDS, PREFIX + "field.block_tags", List.of(), false),
-                new FieldSpec("actions", FieldSpec.Kind.IDS, PREFIX + "field.actions", List.of(), false),
+                new FieldSpec("actions", FieldSpec.Kind.IDS, PREFIX + "field.actions",
+                        ContentSchema.RESTRICTION_ACTIONS, false),
                 new FieldSpec("conditions", FieldSpec.Kind.JSON, PREFIX + "field.conditions", List.of(), false),
                 FieldSpec.text("message", PREFIX + "field.rule_message"));
     }

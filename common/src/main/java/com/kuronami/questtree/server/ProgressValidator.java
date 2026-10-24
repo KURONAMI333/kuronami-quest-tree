@@ -134,7 +134,7 @@ public final class ProgressValidator {
     private static final Set<String> TASK_TYPES = Set.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
             "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "stage", "custom", "interaction",
-            "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
+            "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup", "reach_day");
     private static final Set<String> TASK_UNIMPLEMENTED = Set.of();
     private static final Set<String> INTERACTION_KINDS = Set.of(
             "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
@@ -1015,6 +1015,16 @@ public final class ProgressValidator {
                 } else {
                     // an empty spec matches any block (ProgressService.blockMatches), so it is only worth saying so
                     id(out, ref, path + ".block", "block", s.text(), registry);
+                }
+            }
+            case "reach_day" -> {
+                JsonElement e = t.get("day");
+                if (e != null && (!integral(e) || fractional(e))) {
+                    problem(out, Severity.ERROR, ref, path + ".day",
+                            "\"day\" is not a whole number, so the task never counts");
+                } else if (e != null && e.getAsLong() < 0) {
+                    problem(out, Severity.ERROR, ref, path + ".day",
+                            "\"day\" is " + e.getAsLong() + ", so the task never counts");
                 }
             }
             case "energy" -> {
@@ -2244,6 +2254,12 @@ public final class ProgressValidator {
         } catch (NumberFormatException ex) {
             return false;
         }
+    }
+
+    /** A JSON number with a fractional part, which {@code getAsLong} truncates instead of rejecting. */
+    private static boolean fractional(JsonElement e) {
+        return e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
+                && e.getAsDouble() != Math.rint(e.getAsDouble());
     }
 
     /**

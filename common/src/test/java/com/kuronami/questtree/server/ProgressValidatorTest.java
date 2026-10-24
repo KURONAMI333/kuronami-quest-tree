@@ -303,6 +303,23 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aReachDayTaskNeedsANonNegativeWholeDay() {
+        ProgressValidator.Result ok = validate(chapter("{\"type\": \"reach_day\", \"day\": 30}", ""));
+        assertEquals(List.of(), ok.problems);
+
+        ProgressValidator.Result omitted = validate(chapter("{\"type\": \"reach_day\"}", ""));
+        assertEquals(List.of(), omitted.problems);
+
+        ProgressValidator.Result fraction = validate(chapter("{\"type\": \"reach_day\", \"day\": 1.5}", ""));
+        assertEquals(1, errors(fraction));
+        assertTrue(says(fraction, "not a whole number"));
+
+        ProgressValidator.Result negative = validate(chapter("{\"type\": \"reach_day\", \"day\": -1}", ""));
+        assertEquals(1, errors(negative));
+        assertTrue(says(negative, "never counts"));
+    }
+
+    @Test
     void contentTheLoadedWorldDoesNotHaveIsAWarningAndTheNodeStays() {
         ProgressValidator.Registry registry = (kind, id) -> !id.endsWith("notreal");
         ProgressValidator.Result r = validate(chapter("""
@@ -988,6 +1005,16 @@ class ProgressValidatorTest {
         assertTrue(says(r, "tag \"#missing_tag\" does not exist in this pack"));
         assertTrue(says(r, "tag \"#missing_block_tag\" does not exist in this pack"), r.problems.toString());
         assertTrue(says(r, "stage condition has no stage"));
+    }
+
+    @Test
+    void aCraftRestrictionActionIsAccepted() {
+        ProgressValidator.Result r = validate("""
+                {"chapters": {}, "restrictions": [
+                  {"id": "r", "items": ["minecraft:stone"], "actions": ["use", "craft"],
+                   "conditions": [{"type": "stage", "stage": "chapter_one"}]}]}
+                """);
+        assertEquals(List.of(), r.problems);
     }
 
     @Test
