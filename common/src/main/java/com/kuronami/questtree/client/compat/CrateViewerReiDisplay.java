@@ -15,7 +15,8 @@ public final class CrateViewerReiDisplay extends BasicDisplay {
 
     public CrateViewerReiDisplay(CrateViewerData.Recipe recipe) {
         super(List.of(EntryIngredient.of(EntryStacks.of(recipe.crate()))),
-                List.of(EntryIngredient.of(recipe.contents().stream().map(EntryStacks::of).toList())),
+                List.of(EntryIngredient.of(recipe.contents().stream()
+                        .map(content -> EntryStacks.of(content.stack())).toList())),
                 Optional.of(recipe.id()));
         this.recipe = recipe;
     }

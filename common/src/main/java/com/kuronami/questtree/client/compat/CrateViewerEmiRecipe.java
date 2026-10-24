@@ -1,6 +1,7 @@
 package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.client.QuestViewerStyle;
+import com.kuronami.questtree.progress.CrateOdds;
 import dev.emi.emi.api.recipe.BasicEmiRecipe;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.widget.TextWidget;
@@ -26,7 +27,7 @@ public final class CrateViewerEmiRecipe extends BasicEmiRecipe {
                 recipe.id().getNamespace(), "/" + recipe.id().getPath()), 170, 84);
         this.recipe = recipe;
         this.inputs = List.of(EmiStack.of(recipe.crate()));
-        this.outputs = recipe.contents().stream().map(EmiStack::of).toList();
+        this.outputs = recipe.contents().stream().map(content -> EmiStack.of(content.stack())).toList();
     }
 
     @Override
@@ -44,7 +45,8 @@ public final class CrateViewerEmiRecipe extends BasicEmiRecipe {
         for (int i = 0; i < Math.min(recipe.contents().size(), COLUMNS * ROWS); i++) {
             int x = 8 + (i % COLUMNS) * 18;
             int y = 40 + (i / COLUMNS) * 18;
-            widgets.addSlot(EmiStack.of(recipe.contents().get(i)), x, y).recipeContext(this);
+            widgets.addSlot(EmiStack.of(recipe.contents().get(i).stack()), x, y).recipeContext(this)
+                    .appendTooltip(Component.literal(CrateOdds.percent(recipe.chance(i))));
         }
     }
 

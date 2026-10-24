@@ -1,9 +1,13 @@
 package com.kuronami.questtree.client;
 
+import com.kuronami.questtree.client.compat.CrateViewerData;
+import com.kuronami.questtree.progress.CrateOdds;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,17 +21,17 @@ public final class CrateLootScreen extends Screen {
     private static final int CELL = 22;
     private static final int PAD = 12;
 
-    private record Entry(ItemStack stack, int count) {
+    private record Entry(ItemStack stack, int count, double chance) {
     }
 
     private final List<Entry> entries;
 
-    public CrateLootScreen(List<ItemStack> items) {
+    public CrateLootScreen(List<ItemStack> items, String tableId) {
         super(Component.translatable("screen.kuronami_quest_tree.crate_loot"));
-        this.entries = group(items);
+        this.entries = group(items, tableId);
     }
 
-    private static List<Entry> group(List<ItemStack> items) {
+    private static List<Entry> group(List<ItemStack> items, String tableId) {
         List<ItemStack> stacks = new ArrayList<>();
         List<Integer> counts = new ArrayList<>();
         for (ItemStack stack : items) {
@@ -50,7 +54,8 @@ public final class CrateLootScreen extends Screen {
         }
         List<Entry> out = new ArrayList<>();
         for (int i = 0; i < stacks.size(); i++) {
-            out.add(new Entry(stacks.get(i), counts.get(i)));
+            ItemStack stack = stacks.get(i);
+            out.add(new Entry(stack, counts.get(i), CrateViewerData.chanceOf(tableId, stack)));
         }
         return out;
     }
@@ -78,7 +83,7 @@ public final class CrateLootScreen extends Screen {
         Ui.surface(g, left, top, w, h, Ui.R4, Ui.PANEL_TRANSLUCENT);
         Ui.outline(g, left, top, w, h, Ui.R4, Ui.HAIRLINE);
         Ui.textCenter(g, font, title, width / 2, top + 8, Ui.TEXT);
-        ItemStack hovered = ItemStack.EMPTY;
+        Entry hovered = null;
         for (int i = 0; i < entries.size(); i++) {
             int col = i % columns();
             int row = i / columns();
@@ -88,11 +93,18 @@ public final class CrateLootScreen extends Screen {
             g.renderItem(entry.stack(), x, y);
             g.renderItemDecorations(font, entry.stack(), x, y, entry.count() > 1 ? "×" + entry.count() : "");
             if (mouseX >= x && mouseX < x + 16 && mouseY >= y && mouseY < y + 16) {
-                hovered = entry.stack();
+                hovered = entry;
             }
         }
-        if (!hovered.isEmpty()) {
-            g.renderTooltip(font, hovered, mouseX, mouseY);
+        if (hovered != null) {
+            if (Double.isFinite(hovered.chance())) {
+                List<Component> lines = new ArrayList<>(hovered.stack().getTooltipLines(Item.TooltipContext.EMPTY,
+                        minecraft == null ? null : minecraft.player, TooltipFlag.Default.NORMAL));
+                lines.add(Component.literal(CrateOdds.percent(hovered.chance())));
+                g.renderComponentTooltip(font, lines, mouseX, mouseY);
+            } else {
+                g.renderTooltip(font, hovered.stack(), mouseX, mouseY);
+            }
         }
     }
 

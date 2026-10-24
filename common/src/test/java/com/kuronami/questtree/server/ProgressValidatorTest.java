@@ -290,6 +290,19 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aPlaceBlockTaskIsCheckedLikeBreak() {
+        ProgressValidator.Registry registry = (kind, id) -> true;
+        ProgressValidator.Result ok = validate(chapter(
+                "{\"type\": \"place_block\", \"count\": 10, \"block\": \"#minecraft:stone_bricks\"}", ""), registry);
+        assertEquals(List.of(), ok.problems);
+
+        ProgressValidator.Result bad = validate(chapter(
+                "{\"type\": \"place_block\", \"count\": 1, \"block\": \"#\"}", ""), registry);
+        assertEquals(1, errors(bad));
+        assertTrue(says(bad, "the block tag \"#\" is empty"));
+    }
+
+    @Test
     void contentTheLoadedWorldDoesNotHaveIsAWarningAndTheNodeStays() {
         ProgressValidator.Registry registry = (kind, id) -> !id.endsWith("notreal");
         ProgressValidator.Result r = validate(chapter("""

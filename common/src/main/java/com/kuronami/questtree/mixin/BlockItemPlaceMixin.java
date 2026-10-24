@@ -1,5 +1,6 @@
 package com.kuronami.questtree.mixin;
 
+import com.kuronami.questtree.server.ProgressService;
 import com.kuronami.questtree.server.Restrictions;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -22,6 +23,15 @@ public abstract class BlockItemPlaceMixin {
         if (context.getPlayer() instanceof ServerPlayer sp
                 && Restrictions.blockedPlacement(sp, context.getItemInHand())) {
             cir.setReturnValue(InteractionResult.FAIL);
+        }
+    }
+
+    @Inject(method = "place", at = @At("RETURN"))
+    private void questTree$afterPlace(BlockPlaceContext context, CallbackInfoReturnable<InteractionResult> cir) {
+        // only the player's own successful BlockItem placement counts; dispensers and pistons never come through here
+        if (context.getPlayer() instanceof ServerPlayer sp && !sp.isSpectator()
+                && cir.getReturnValue().consumesAction()) {
+            ProgressService.onBlockPlace(sp, context.getLevel().getBlockState(context.getClickedPos()));
         }
     }
 }

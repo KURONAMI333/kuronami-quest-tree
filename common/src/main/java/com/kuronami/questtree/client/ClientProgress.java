@@ -132,7 +132,7 @@ public final class ClientProgress {
 
     /** A crate was opened: show its loot in the same kind of screen FTB Quests uses. */
     public static void onCrateLoot(com.kuronami.questtree.network.CrateLootPayload p) {
-        Minecraft.getInstance().setScreen(new CrateLootScreen(p.items()));
+        Minecraft.getInstance().setScreen(new CrateLootScreen(p.items(), p.tableId()));
     }
 
     /** A quest giver, a quest block or an addon asked the server to open the book on one target. */

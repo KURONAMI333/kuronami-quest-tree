@@ -3,6 +3,7 @@ package com.kuronami.questtree.client.compat;
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.QuestViewerStyle;
 import com.kuronami.questtree.item.ModItems;
+import com.kuronami.questtree.progress.CrateOdds;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
@@ -77,7 +78,10 @@ public final class CrateViewerJeiCategory implements IRecipeCategory<CrateViewer
         for (int i = 0; i < Math.min(recipe.contents().size(), COLUMNS * ROWS); i++) {
             int x = 8 + (i % COLUMNS) * SLOT;
             int y = 40 + (i / COLUMNS) * SLOT;
-            builder.addOutputSlot(x, y).addItemStack(recipe.contents().get(i));
+            double chance = recipe.chance(i);
+            builder.addOutputSlot(x, y).addItemStack(recipe.contents().get(i).stack())
+                    .addRichTooltipCallback((slot, tooltip) ->
+                            tooltip.add(Component.literal(CrateOdds.percent(chance))));
         }
     }
 

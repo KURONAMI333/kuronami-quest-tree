@@ -155,7 +155,7 @@ Pack text is stored in the data pack's own language files, separate from the mod
 
 `tasks[].type` can be:
 
-`item` (`count`, `consume`, `match_components`, `only_from_crafting`), `checkmark`, `kill`, `advancement`, `structure`, `biome`, `dimension`, `location`, `observation`, `stat`, `xp`, `fluid`, `energy`, `break`, `stage`, `custom`, `craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`, `interaction`.
+`item` (`count`, `consume`, `match_components`, `only_from_crafting`), `checkmark`, `kill`, `advancement`, `structure`, `biome`, `dimension`, `location`, `observation`, `stat`, `xp`, `fluid`, `energy`, `break`, `place_block`, `stage`, `custom`, `craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`, `interaction`.
 
 Every task also accepts `optional`, `icon`, `title` and `conditions`.
 
@@ -167,7 +167,7 @@ Action tasks replace FTB Quests' Task Screen by counting the player's own action
 
 An `energy` task can be filled at a task screen (place one and bind it to the task), or completed by carrying the fullest single stack when a pack checks the inventory instead. A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
 
-`observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`.
+`observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`. `place_block` takes the same `block` and `count` and counts blocks placed by the player, capped at `count`.
 
 ### Requirements and the item counter
 

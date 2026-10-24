@@ -133,7 +133,7 @@ public final class ProgressValidator {
     // WARNING instead of an ERROR, so adding a field to the documented format never breaks a pack that uses it.
     private static final Set<String> TASK_TYPES = Set.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
-            "observation", "stat", "xp", "fluid", "energy", "break", "stage", "custom", "interaction",
+            "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "stage", "custom", "interaction",
             "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
     private static final Set<String> TASK_UNIMPLEMENTED = Set.of();
     private static final Set<String> INTERACTION_KINDS = Set.of(
@@ -996,6 +996,17 @@ public final class ProgressValidator {
                 }
             }
             case "break" -> {
+                Spec s = specText(t.get("block"));
+                if (s.unreadable()) {
+                    specProblem(out, ref, path + ".block", "block");
+                } else if (s.text().equals("#")) {
+                    problem(out, Severity.ERROR, ref, path + ".block", "the block tag \"#\" is empty, so it never matches");
+                } else {
+                    // an empty spec matches any block (ProgressService.blockMatches), so it is only worth saying so
+                    id(out, ref, path + ".block", "block", s.text(), registry);
+                }
+            }
+            case "place_block" -> {
                 Spec s = specText(t.get("block"));
                 if (s.unreadable()) {
                     specProblem(out, ref, path + ".block", "block");

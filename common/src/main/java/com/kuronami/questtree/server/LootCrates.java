@@ -65,7 +65,7 @@ public final class LootCrates {
             }
         }
         if (!shown.isEmpty()) {
-            Services.PLATFORM.sendToPlayer(player, new CrateLootPayload(shown));
+            Services.PLATFORM.sendToPlayer(player, new CrateLootPayload(shown, tableId));
         }
         ProgressStore.get(player.server).setDirty();
         return true;

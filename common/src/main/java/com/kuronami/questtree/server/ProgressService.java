@@ -14,6 +14,7 @@ import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.platform.Services;
+import com.kuronami.questtree.progress.BlockTaskRules;
 import com.kuronami.questtree.progress.HintLimits;
 import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PlayerProgress;
@@ -364,7 +365,45 @@ public final class ProgressService {
             long target = ProgressRules.target(n.tasks.get(i));
             long had = p.task(n.key, i);
             if (had < target) {
-                bump(player, p, n, i, Math.min(had + 1, target));
+                bump(player, p, n, i, BlockTaskRules.next(had, target));
+            }
+        }
+        if (!hits.isEmpty()) {
+            recheck(player, p);
+        }
+    }
+
+    /** A player placed a block. Counts "place_block" tasks, capped at the target. */
+    public static void onBlockPlace(ServerPlayer player, BlockState state) {
+        if (ServerPlayers.isFake(player)) {
+            return;
+        }
+        PlayerProgress p = progress(player);
+        if (p.bookLocked()) {
+            return;
+        }
+        ProgressRules r = rules();
+        List<TaskRef> refs = tasksOfType(r, "place_block");
+        if (refs.isEmpty()) {
+            return;
+        }
+        List<TaskRef> hits = new ArrayList<>();
+        for (TaskRef ref : refs) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
+            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
+                    && blockMatches(blockSpec(t), state)) {
+                hits.add(ref);
+            }
+        }
+        for (TaskRef ref : hits) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            long target = ProgressRules.target(n.tasks.get(i));
+            long had = p.task(n.key, i);
+            if (had < target) {
+                bump(player, p, n, i, BlockTaskRules.next(had, target));
             }
         }
         if (!hits.isEmpty()) {
@@ -1596,15 +1635,11 @@ public final class ProgressService {
         return max;
     }
 
-    /** A "break" task's block matcher; an empty spec matches any block. */
+    /** A "break" or "place_block" task's block matcher; an empty spec matches any block. */
     static boolean blockMatches(String spec, BlockState state) {
-        if (spec.isEmpty()) {
-            return true;
-        }
-        if (spec.startsWith("#")) {
-            return blockTagMatches(spec, state.getBlock());
-        }
-        return BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString().equals(spec);
+        Block block = state.getBlock();
+        return BlockTaskRules.matches(spec, BuiltInRegistries.BLOCK.getKey(block).toString(),
+                tag -> blockTagMatches("#" + tag, block));
     }
 
     /** An "observation" task's block matcher, where {@code kind} picks id, tag or exact block state. */

@@ -77,7 +77,7 @@ public final class CrateViewerReiCategory implements DisplayCategory<CrateViewer
             int x = bounds.x + 10 + (i % COLUMNS) * 18;
             int y = bounds.y + 40 + (i / COLUMNS) * 18;
             widgets.add(Widgets.createSlot(new Point(x, y))
-                    .entry(EntryStacks.of(recipe.contents().get(i))).markOutput());
+                    .entry(EntryStacks.of(recipe.contents().get(i).stack())).markOutput());
         }
         return widgets;
     }
