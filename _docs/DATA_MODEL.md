@@ -122,7 +122,7 @@ Pack text is stored in the data pack's own language files, separate from the mod
   "tasks_required": null,
   "ranks": null,
   "toggleable": false,
-  "repeat": {"cooldown": 0, "max": null},
+  "repeat": {"cooldown": 0, "max": null, "reset": null},
   "sequential_tasks": false,
   "visibility": {"hidden_until": "deps_visible", "requires": null, "hide_details_until_startable": false, "hide_text_until_complete": false, "invisible_until_tasks": null, "hide_lock_icon": false},
   "hide_from_recipe_viewer": null,
@@ -145,7 +145,7 @@ Pack text is stored in the data pack's own language files, separate from the mod
 - `mode` is `all`, `any`, `all_started` or `any_started`.
 - `exclusive` allows at most `max` completed nodes from the same `group`.
 - `tasks_required` asks how many tasks are enough to open the node. `null` means all of them.
-- A node with `repeat` starts over after each claim. `cooldown` is the wait in seconds before it can be repeated, and `max` is the total number of times it may be completed (omitted means unlimited). A repeatable quest whose action cannot be repeated (kill, checkmark, delivery) does not repeat without a `cooldown`. Item tasks in a repeatable quest are delivered rather than merely held. Once a repeatable quest has been completed at least once, requirements and exclusivity treat it as completed.
+- A node with `repeat` starts over after each claim. `cooldown` is the wait in seconds before it can be repeated, and `max` is the total number of times it may be completed (omitted means unlimited). A repeatable quest whose action cannot be repeated (kill, checkmark, delivery) does not repeat without a `cooldown`. `reset` (`"daily"` or `"weekly"`) replaces the cooldown: the next round opens on the next day, or on the next 7-day boundary (`(day / 7 + 1) * 7`), and `max` still caps the total number of completions. A cooldown written beside `reset` is ignored. Item tasks in a repeatable quest are delivered rather than merely held. Once a repeatable quest has been completed at least once, requirements and exclusivity treat it as completed.
 - `ranks` takes the same node in stages: `[{"cost": 1, "rewards": [...]}, ...]`.
 - `visibility.requires` is a separate "becomes visible when" condition; it is not the same as the opening requirement `requires`.
 - A chapter can also have `requires` (for example a Pack Stages stage). Players who do not meet it do not see the chapter at all.
@@ -528,7 +528,7 @@ If validation itself throws, that one failure is recorded as `ERROR` and loading
 - `optional` and `consume` are read as booleans during the tick; an object, array or null throws (`ERROR`), while a number or word is read as false (`WARNING`).
 - `rolls`, `weight`, `empty_weight`, `min`, `max`, `cost`, `tasks_required`, an attribute's `value` and xp's `amount` either fall back to a default or are caught by the reward giver: `WARNING`.
 - Zero or less: `count` and `amount` are `WARNING` (the target is raised to 1). `weight` of 0 or less is `WARNING` (that entry can never be chosen). An empty `break.block` means "any block", so it is not warned about.
-- `repeat`: a repeat checks `done + 1 >= max`, so a `max` of 1 or less never repeats (`WARNING`). `cooldown` is read as a number when a claim is confirmed, so a non-integer is `ERROR`; 0 or less is read as "no cooldown" (`WARNING`). A non-numeric `max` is read as unlimited (`WARNING`).
+- `repeat`: a repeat checks `done + 1 >= max`, so a `max` of 1 or less never repeats (`WARNING`). `cooldown` is read as a number when a claim is confirmed, so a non-integer is `ERROR`; 0 or less is read as "no cooldown" (`WARNING`). A non-numeric `max` is read as unlimited (`WARNING`). `reset` must be `"daily"` or `"weekly"`; any other value is ignored (`WARNING`), and a `cooldown` written beside it is ignored (`WARNING`).
 - Reward tables: when an `entries` element is not an object, or `weight` cannot be read, the table fails while being assembled and pays nothing (the `WARNING` text says so).
 - Shape: a chapter must be an object and its `nodes` an object (otherwise `ERROR`; the reader turns it into an empty object, so the chapter becomes empty). Each `nodes` value must be an object (otherwise `ERROR`; the reader skips it). `tasks` must be an array; `rewards`, `ranks` and a reward table's `entries` must be arrays. `requires` must be an object; `repeat` must be a boolean or object. `requires.nodes` and `exclusive_with` must be arrays whose elements can be read as names (numbers and booleans are converted to strings and resolve as names; objects, arrays and null throw, so `ERROR`). `root`, `optional` and `hidden` must be booleans; `mode` and `group` must be strings; `shape` and `milestone` must be strings. A reward table's `mode` is also read as a string, so it must be a string (otherwise that reward is skipped, `WARNING`). Values that fall back to a default are `WARNING`; values that throw are `ERROR`.
 - Duplicate keys in one object are `WARNING`: The JSON reader silently keeps the last one, so the check looks at the text.

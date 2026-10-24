@@ -51,6 +51,8 @@ public final class PlayerProgress {
     /** Repeatable quests: how often each was claimed, and until when (epoch millis) it rests before it opens again. */
     public Map<String, Integer> repeats = new HashMap<>();
     public Map<String, Long> cooldown = new HashMap<>();
+    /** Repeatable quests with a daily/weekly reset: the world day their next round may start. */
+    public Map<String, Long> resetAt = new HashMap<>();
     /**
      * Chapters whose open/locked state a command changed. The state belongs to the whole team: every member's view
      * reads the same map. No entry means the chapter's {@code points.unlocked_by_default}; storing only the override
@@ -142,6 +144,7 @@ public final class PlayerProgress {
         p.exchange = shared.exchange;
         p.repeats = personalNodes.isEmpty() ? shared.repeats : new RoutedMap<>(shared.repeats, part.repeats);
         p.cooldown = personalNodes.isEmpty() ? shared.cooldown : new RoutedMap<>(shared.cooldown, part.cooldown);
+        p.resetAt = personalNodes.isEmpty() ? shared.resetAt : new RoutedMap<>(shared.resetAt, part.resetAt);
         p.chapterOpen = shared.chapterOpen;
         p.teamStages = shared.teamStages;
         p.stages = part.stages;
@@ -255,6 +258,7 @@ public final class PlayerProgress {
             part.tasks.clear();
             part.repeats.clear();
             part.cooldown.clear();
+            part.resetAt.clear();
         }
     }
 
@@ -269,6 +273,7 @@ public final class PlayerProgress {
         part.tasks.keySet().removeIf(k -> k.startsWith(id + "/") || k.startsWith(id + "#"));
         part.repeats.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
         part.cooldown.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
+        part.resetAt.keySet().removeIf(k -> k.equals(id) || k.startsWith(prefix));
     }
 
     /**
@@ -334,6 +339,8 @@ public final class PlayerProgress {
         repeats.putAll(other.repeats);
         cooldown.clear();
         cooldown.putAll(other.cooldown);
+        resetAt.clear();
+        resetAt.putAll(other.resetAt);
         chapterOpen.clear();
         chapterOpen.putAll(other.chapterOpen);
         teamStages.clear();

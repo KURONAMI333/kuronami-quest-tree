@@ -50,6 +50,9 @@ public final class ProgressJson {
         JsonObject cd = new JsonObject();
         p.cooldown.forEach(cd::addProperty);
         o.add("cooldown", cd);
+        JsonObject resetAt = new JsonObject();
+        p.resetAt.forEach(resetAt::addProperty);
+        o.add("reset_at", resetAt);
         o.addProperty("emergency_ready_at", p.emergencyReadyAt());
         o.addProperty("emergency_wait_notice", p.emergencyWaitNotice());
         o.addProperty("book_given", p.bookGiven());
@@ -91,6 +94,9 @@ public final class ProgressJson {
         readInts(obj(o, "repeats"), p.repeats);
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             p.cooldown.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "reset_at").entrySet()) {
+            p.resetAt.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
         readRecent(arr(o, "recent"), p.recent);
         p.setEmergencyReadyAt(PackNumbers.savedLong(o.get("emergency_ready_at"), 0L));

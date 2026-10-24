@@ -102,10 +102,12 @@ public final class TeamProgress {
         moveMapToParts(shared.tasks, p -> p.tasks, toPersonal);
         moveIntMapToParts(shared.repeats, p -> p.repeats, toPersonal);
         moveMapToParts(shared.cooldown, p -> p.cooldown, toPersonal);
+        moveMapToParts(shared.resetAt, p -> p.resetAt, toPersonal);
         moveMapToShared(p -> p.completedAt, shared.completedAt, toShared);
         moveMapToShared(p -> p.tasks, shared.tasks, toShared);
         moveIntMapToShared(p -> p.repeats, shared.repeats, toShared);
         moveMapToShared(p -> p.cooldown, shared.cooldown, toShared);
+        moveMapToShared(p -> p.resetAt, shared.resetAt, toShared);
         views.clear();
     }
 
@@ -255,6 +257,7 @@ public final class TeamProgress {
         other.exchange.forEach((k, v) -> shared.exchange.merge(k, v, Math::max));
         other.repeats.forEach((k, v) -> shared.repeats.merge(k, v, Math::max));
         other.cooldown.forEach((k, v) -> shared.cooldown.merge(k, v, Math::max));
+        other.resetAt.forEach((k, v) -> shared.resetAt.merge(k, v, Math::max));
         // a chapter has one open/locked state for the whole team; when the two sides differ, closed wins so a join
         // cannot reopen a chapter someone had locked
         other.chapterOpen.forEach((chapter, open) ->

@@ -1038,6 +1038,9 @@ public final class ProgressService {
         }
         ProgressRules r = rules();
         ServerLevel level = player.serverLevel();
+        if (r.sweepResets(p, r.model(), ProgressRules.worldDay(level.getDayTime()))) {
+            ProgressStore.get(player.server).setDirty();
+        }
         BlockPos pos = player.blockPosition();
         for (ProgressModel.Node n : r.model().nodes.values()) {
             if (!working(r, p, n)) {
@@ -1215,7 +1218,7 @@ public final class ProgressService {
                     event(player, p, "complete", n.key);
                     autoRewards(player, p, n);
                     // nothing to claim means no claim click: the completion itself starts the quest over
-                    r.repeatAfterCompletion(p, n, doneAt);
+                    r.repeatAfterCompletion(p, n, doneAt, ProgressRules.worldDay(player.serverLevel().getDayTime()));
                     changed = true;
                 }
             }
@@ -1365,7 +1368,8 @@ public final class ProgressService {
         }
         p.claimed.add(n.key);
         event(player, p, "claim", n.key);
-        rules().repeatAfterClaim(p, n, System.currentTimeMillis());
+        rules().repeatAfterClaim(p, n, System.currentTimeMillis(),
+                ProgressRules.worldDay(player.serverLevel().getDayTime()));
         ProgressStore.get(player.server).setDirty();
     }
 
@@ -1813,7 +1817,7 @@ public final class ProgressService {
                 event(player, p, "complete", n.key);
                 autoRewards(player, p, n);
                 // a repeatable quest with nothing to claim starts its next round at completion (as in recheck)
-                rules().repeatAfterCompletion(p, n, doneAt);
+                rules().repeatAfterCompletion(p, n, doneAt, ProgressRules.worldDay(player.serverLevel().getDayTime()));
             }
         }
         recheck(player, p);

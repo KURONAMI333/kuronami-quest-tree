@@ -27,6 +27,7 @@ public final class PlayerPart {
     public final Map<String, Long> tasks = new HashMap<>();
     public final Map<String, Integer> repeats = new HashMap<>();
     public final Map<String, Long> cooldown = new HashMap<>();
+    public final Map<String, Long> resetAt = new HashMap<>();
     /** Stages this player holds, including Pack Stages granted outside the quest tree. */
     public final Set<String> stages = new HashSet<>();
     /** Team stages already mirrored into this player's Pack Stages. */
@@ -61,6 +62,7 @@ public final class PlayerPart {
         tasks.putAll(other.tasks);
         repeats.putAll(other.repeats);
         cooldown.putAll(other.cooldown);
+        resetAt.putAll(other.resetAt);
         stages.addAll(other.stages);
         teamStagesApplied.addAll(other.teamStagesApplied);
         other.pendingRewards.forEach((k, v) -> pendingRewards.merge(k, v, Integer::sum));
@@ -81,6 +83,7 @@ public final class PlayerPart {
         o.add("tasks", longs(tasks));
         o.add("repeats", ints(repeats));
         o.add("cooldown", longs(cooldown));
+        o.add("reset_at", longs(resetAt));
         o.add("stages", strings(stages));
         o.add("team_stages_applied", strings(teamStagesApplied));
         o.add("pending_rewards", ints(pendingRewards));
@@ -112,6 +115,9 @@ public final class PlayerPart {
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "cooldown").entrySet()) {
             part.cooldown.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "reset_at").entrySet()) {
+            part.resetAt.put(e.getKey(), PackNumbers.savedLong(e.getValue(), 0L));
         }
         readStrings(arr(o, "stages"), part.stages);
         readStrings(arr(o, "team_stages_applied"), part.teamStagesApplied);

@@ -586,6 +586,7 @@ final class PlayerCommands {
         pr.clearNode(n.key);
         pr.repeats.remove(n.key);
         pr.cooldown.remove(n.key);
+        pr.resetAt.remove(n.key);
     }
 
     private static void complete(ServerPlayer p, PlayerProgress pr, String id) {

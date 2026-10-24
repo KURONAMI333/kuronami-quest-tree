@@ -1057,20 +1057,33 @@ public final class ProgressRules {
     /**
      * After a claim: whether the quest starts over ({@code "repeat": {"cooldown": seconds, "max": n}}). Quests without
      * tasks only repeat with a cooldown, or they would complete again in the same tick forever.
+     * <p>
+     * A {@code reset} of "daily" or "weekly" replaces the cooldown: the round is not cleared now, only the day it may
+     * be cleared on is recorded ({@link #sweepResets} does it when that day comes). {@code day} is the world day
+     * ({@link #worldDay}).
      */
-    public boolean repeatAfterClaim(PlayerProgress p, ProgressModel.Node n, long now) {
+    public boolean repeatAfterClaim(PlayerProgress p, ProgressModel.Node n, long now, long day) {
         if (!repeatable(n)) {
             return false;
         }
         JsonElement rep = n.json.get("repeat");
         JsonObject r = rep.isJsonObject() ? rep.getAsJsonObject() : new JsonObject();
-        long cooldown = r.has("cooldown") ? r.get("cooldown").getAsLong() : 0;
-        int max = r.has("max") && r.get("max").isJsonPrimitive() ? r.get("max").getAsInt() : Integer.MAX_VALUE;
+        int max = repeatMax(n.json);
         int done = p.repeats.getOrDefault(n.key, 0);
         // max = how many times the quest can be done in total
+        if (done + 1 >= max) {
+            return false;
+        }
+        String reset = reset(n.json);
+        if (!reset.isEmpty()) {
+            // cooldown is not read at all here: the next round waits for the reset boundary instead
+            p.resetAt.put(n.key, resetBoundary(day, reset));
+            return false;
+        }
+        long cooldown = r.has("cooldown") ? r.get("cooldown").getAsLong() : 0;
         // without a required task that must be done again (an action, not a state), only a cooldown keeps it from
         // completing again at once: quests with no required tasks, or with only "being somewhere / having something" tasks
-        if (done + 1 >= max || (cooldown <= 0 && !hasRepeatableWork(n))) {
+        if (cooldown <= 0 && !hasRepeatableWork(n)) {
             return false;
         }
         p.repeats.put(n.key, done + 1);
@@ -1085,11 +1098,78 @@ public final class ProgressRules {
      * A repeatable quest with no rewards has no claim click that would start it over, so its completion does
      * (2026-10-20). Quests with rewards keep the old order: the claim after the last reward resets them.
      */
-    public boolean repeatAfterCompletion(PlayerProgress p, ProgressModel.Node n, long now) {
+    public boolean repeatAfterCompletion(PlayerProgress p, ProgressModel.Node n, long now, long day) {
         if (!n.rewards.isEmpty()) {
             return false;
         }
-        return repeatAfterClaim(p, n, now);
+        return repeatAfterClaim(p, n, now, day);
+    }
+
+    /**
+     * The repeat reset written on a node: "daily", "weekly", or "" when it is absent or unreadable. Only a repeat
+     * object has one; {@code "repeat": true} never resets on a schedule.
+     */
+    public static String reset(JsonObject node) {
+        JsonElement rep = node.get("repeat");
+        if (rep == null || !rep.isJsonObject()) {
+            return "";
+        }
+        JsonElement reset = rep.getAsJsonObject().get("reset");
+        if (reset == null || !reset.isJsonPrimitive() || !reset.getAsJsonPrimitive().isString()) {
+            return "";
+        }
+        String value = reset.getAsString();
+        return value.equals("daily") || value.equals("weekly") ? value : "";
+    }
+
+    /** The first day a reset round may start again: the next day for daily, the next 7-day boundary for weekly. */
+    public static long resetBoundary(long day, String reset) {
+        return "weekly".equals(reset) ? (day / 7 + 1) * 7 : day + 1;
+    }
+
+    /**
+     * Clears every round whose reset boundary has come, called from the 20-tick scan. A round is cleared only while
+     * {@code repeats + 1 < max}, so the total number of completions still ends at {@code max}. Entries for nodes that
+     * are no longer in the model are dropped. Returns whether anything changed.
+     */
+    public boolean sweepResets(PlayerProgress p, ProgressModel model, long day) {
+        boolean changed = false;
+        var it = p.resetAt.entrySet().iterator();
+        while (it.hasNext()) {
+            var e = it.next();
+            ProgressModel.Node n = model.nodes.get(e.getKey());
+            if (n == null) {
+                it.remove();
+                changed = true;
+                continue;
+            }
+            if (day < e.getValue()) {
+                continue;
+            }
+            it.remove();
+            changed = true;
+            // a pack that dropped the repeat (or the reset) keeps the completed round: only a node that still asks
+            // for a scheduled round is cleared, or the entry alone would make it repeatable again
+            if (!repeatable(n) || reset(n.json).isEmpty()) {
+                continue;
+            }
+            int done = p.repeats.getOrDefault(n.key, 0);
+            int max = repeatMax(n.json);
+            if (done + 1 < max) {
+                p.repeats.put(n.key, done + 1);
+                p.clearRound(n.key);
+            }
+        }
+        return changed;
+    }
+
+    /** A repeat's total number of completions; unlimited when it is absent or unreadable. */
+    public static int repeatMax(JsonObject node) {
+        JsonElement rep = node.get("repeat");
+        if (rep == null || !rep.isJsonObject()) {
+            return Integer.MAX_VALUE;
+        }
+        return PackNumbers.savedInt(rep.getAsJsonObject().get("max"), Integer.MAX_VALUE);
     }
 
     /**

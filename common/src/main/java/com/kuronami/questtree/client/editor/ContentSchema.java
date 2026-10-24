@@ -64,6 +64,7 @@ public final class ContentSchema {
                 FieldSpec.flag("repeat", P + "repeatable"),
                 FieldSpec.integer("repeat.cooldown", P + "cooldown"),
                 FieldSpec.integer("repeat.max", P + "repeat_max"),
+                FieldSpec.choice("repeat.reset", P + "reset", "", "daily", "weekly"),
                 FieldSpec.bool("sequential_tasks", P + "sequential_tasks"),
                 FieldSpec.integer("tasks_required", P + "tasks_required"),
                 FieldSpec.choice("requires.mode", P + "requires_mode", "", "all", "any", "all_started",

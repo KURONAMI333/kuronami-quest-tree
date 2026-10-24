@@ -849,7 +849,8 @@ public final class ProgressValidator {
      * <p>
      * "max" is how many times the node can be done in total, so it has to be at least 2 for the first repeat to happen
      * ({@code done + 1 >= max} refuses it otherwise); "cooldown" is seconds, and 0 or less only matters for a node with
-     * no task to do again, which this check does not look into.
+     * no task to do again, which this check does not look into. "reset" is "daily" or "weekly"; any other value is
+     * ignored, and a cooldown beside it is not read at all.
      */
     private static void repeat(Result out, ChapterRef ref, String path, JsonObject node) {
         JsonElement e = node.get("repeat");
@@ -874,6 +875,18 @@ public final class ProgressValidator {
             } else if (cooldown.getAsLong() <= 0) {
                 problem(out, Severity.WARNING, ref, path + ".repeat.cooldown",
                         "\"cooldown\" is " + cooldown.getAsLong() + ", which is read as no cooldown");
+            }
+        }
+        JsonElement reset = r.get("reset");
+        if (reset != null) {
+            String value = reset.isJsonPrimitive() && reset.getAsJsonPrimitive().isString() ? reset.getAsString() : "";
+            if (!value.equals("daily") && !value.equals("weekly")) {
+                problem(out, Severity.WARNING, ref, path + ".repeat.reset",
+                        "\"reset\" is not \"daily\" or \"weekly\", so the node ignores it");
+            }
+            if (cooldown != null) {
+                problem(out, Severity.WARNING, ref, path + ".repeat.cooldown",
+                        "\"cooldown\" is ignored because \"reset\" is set");
             }
         }
         JsonElement max = r.get("max");

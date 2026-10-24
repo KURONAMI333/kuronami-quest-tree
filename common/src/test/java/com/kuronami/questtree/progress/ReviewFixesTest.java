@@ -110,7 +110,7 @@ class ReviewFixesTest {
                 {"chapters": {"t:q": {"nodes": {"n": {"repeat": {"cooldown": 60}}}}}}
                 """).getAsJsonObject());
         ProgressModel.Node n = model.chapters.get("t:q").nodes.get("n");
-        assertTrue(new ProgressRules(model).repeatAfterClaim(p, n, 1_000L));
+        assertTrue(new ProgressRules(model).repeatAfterClaim(p, n, 1_000L, 0L));
         assertEquals(2, p.pendingRewards.get("t:q/n#-1#0"),
                 "the next round must not forget the two pay-outs the last one owes");
     }
