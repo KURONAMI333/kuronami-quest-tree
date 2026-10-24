@@ -41,6 +41,17 @@ The target cannot contain spaces; the display text can.
 - A second word is the stack size (`4` or `x4`); it is shown as `x4` beside the icon and is only a label.
 - The icon is 10px and wraps with the line; a line holding only an item is not a paragraph break.
 
+## Inline entities
+
+`{entity:<id>}` draws the entity's spawn egg in the sentence, and hovering it shows that egg's vanilla tooltip (the mob's name). An entity without a spawn egg (the ender dragon, a mod's boss) uses a spawner instead. Clicking does nothing, because an entity has no recipe page.
+
+```json
+"description": "Clear the camp of {entity:minecraft:zombie} and {entity:minecraft:skeleton}."
+```
+
+- The id may leave out `minecraft:`; an id this pack does not have is shown as written, so a typo stays visible.
+- The icon is the same 10px as an inline item, so a sentence may mix both.
+
 ## Images
 
 ```json

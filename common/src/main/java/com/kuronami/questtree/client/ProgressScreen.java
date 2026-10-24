@@ -4139,8 +4139,9 @@ public class ProgressScreen extends Screen {
                     lastImage = true;
                     continue;
                 }
-                if (token.kind() == FtbText.Token.Kind.ITEM) {
-                    ItemStack stack = itemStack(token.target());
+                if (token.kind() == FtbText.Token.Kind.ITEM || token.kind() == FtbText.Token.Kind.ENTITY) {
+                    boolean entity = token.kind() == FtbText.Token.Kind.ENTITY;
+                    ItemStack stack = entity ? entityIcon(token.target()) : itemStack(token.target());
                     if (!stack.isEmpty()) {
                         int countW = token.count() > 1 ? 2 + Ui.textWidth(font, "x" + token.count()) : 0;
                         int total = ITEM_ICON + countW;
@@ -4165,15 +4166,18 @@ public class ProgressScreen extends Screen {
                             if (lastMouseX >= cx && lastMouseX < right && lastMouseY >= top && lastMouseY < top + ITEM_ICON) {
                                 hoverStack = stack;
                             }
-                            buttons.add(new Button(cx, top, Math.max(ITEM_ICON, right - cx), ITEM_ICON, () -> showRecipes(stack)));
+                            // an entity has no recipe page: its icon is a spawn egg, so only an item opens the viewer
+                            if (!entity) {
+                                buttons.add(new Button(cx, top, Math.max(ITEM_ICON, right - cx), ITEM_ICON, () -> showRecipes(stack)));
+                            }
                         }
                         cx += total;
                         lastImage = false;
                         continue;
                     }
-                    // an item this pack does not have: the id as written, so a typo stays visible in the sentence
+                    // an item or entity this pack does not have: the id as written, so a typo stays visible in the sentence
                 }
-                boolean itemText = token.kind() == FtbText.Token.Kind.ITEM;
+                boolean itemText = token.kind() == FtbText.Token.Kind.ITEM || token.kind() == FtbText.Token.Kind.ENTITY;
                 boolean link = token.kind() != FtbText.Token.Kind.TEXT && !itemText;
                 String text = itemText ? token.target() : token.text();
                 int color = link ? Ui.ACCENT : Ui.TEXT;
@@ -4224,6 +4228,24 @@ public class ProgressScreen extends Screen {
         }
         return net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(rl)
                 .map(ItemStack::new).orElse(ItemStack.EMPTY);
+    }
+
+    /**
+     * The icon an inline entity wears: its spawn egg, so the row keeps the vanilla item tooltip and the pack can
+     * retexture it. An entity without an egg (the ender dragon, a mod's boss) falls back to a spawner, so the id is
+     * still drawn as something the reader can hover.
+     */
+    private ItemStack entityIcon(String id) {
+        ResourceLocation rl = ResourceLocation.tryParse(id);
+        if (rl == null) {
+            return ItemStack.EMPTY;
+        }
+        net.minecraft.world.entity.EntityType<?> type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+        if (type == null) {
+            return ItemStack.EMPTY;
+        }
+        net.minecraft.world.item.SpawnEggItem egg = net.minecraft.world.item.SpawnEggItem.byId(type);
+        return new ItemStack(egg != null ? egg : net.minecraft.world.item.Items.SPAWNER);
     }
 
     private void showRecipes(ItemStack stack) {

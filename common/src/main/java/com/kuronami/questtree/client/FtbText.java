@@ -33,7 +33,7 @@ final class FtbText {
      */
     record Token(Kind kind, String text, String target, int width, int height, int count) {
         enum Kind {
-            TEXT, IMAGE, OPEN_URL, QUEST, RECIPE, ITEM
+            TEXT, IMAGE, OPEN_URL, QUEST, RECIPE, ITEM, ENTITY
         }
 
         static Token text(String text) {
@@ -51,13 +51,18 @@ final class FtbText {
         static Token item(String target, int count) {
             return new Token(Kind.ITEM, "", target, 0, 0, count);
         }
+
+        static Token entity(String target) {
+            return new Token(Kind.ENTITY, "", target, 0, 0, 1);
+        }
     }
 
     /** One source line. A blank line is a paragraph break, not an empty drawing line. */
     record Line(List<Token> tokens) {
         boolean blank() {
             for (Token t : tokens) {
-                if (t.kind() == Token.Kind.IMAGE || t.kind() == Token.Kind.ITEM || !t.text().isBlank()) {
+                if (t.kind() == Token.Kind.IMAGE || t.kind() == Token.Kind.ITEM
+                        || t.kind() == Token.Kind.ENTITY || !t.text().isBlank()) {
                     return false;
                 }
             }
@@ -399,6 +404,14 @@ final class FtbText {
                 }
             }
             return Token.item(parts[0], count);
+        }
+        if (body.startsWith("entity:")) {
+            String[] parts = body.substring("entity:".length()).strip().split("\\s+");
+            if (parts.length == 0 || !ITEM_TARGET.matcher(parts[0]).matches()) {
+                // an id the game could never parse would draw nothing; keep the braces as prose instead
+                return null;
+            }
+            return Token.entity(parts[0]);
         }
         if (body.startsWith("open_url:")) {
             return link(Token.Kind.OPEN_URL, "open_url:", body.substring("open_url:".length()));

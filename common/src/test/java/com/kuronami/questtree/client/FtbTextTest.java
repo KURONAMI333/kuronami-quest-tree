@@ -75,6 +75,22 @@ class FtbTextTest {
     }
 
     @Test
+    void anEntityTokenCarriesItsId() {
+        List<FtbText.Token> t = tokens("clear {entity:minecraft:zombie} and {entity:skeleton}");
+        assertEquals(FtbText.Token.Kind.ENTITY, t.get(1).kind());
+        assertEquals("minecraft:zombie", t.get(1).target());
+        assertEquals("skeleton", t.get(3).target());
+    }
+
+    @Test
+    void anEntityIdThatCouldNotParseStaysProse() {
+        for (String bad : List.of("{entity:https://example.com/x}", "{entity:Zombie}", "{entity:}", "{entity:minecraft:}")) {
+            assertTrue(tokens("x " + bad + " y").stream().noneMatch(t -> t.kind() == FtbText.Token.Kind.ENTITY),
+                    "not an entity: " + bad);
+        }
+    }
+
+    @Test
     void anItemIdThatCouldNotParseStaysProse() {
         for (String bad : List.of("{item:https://example.com/x}", "{item:Test:Diamond}", "{item:}", "{item:minecraft:}")) {
             assertTrue(tokens("x " + bad + " y").stream().noneMatch(t -> t.kind() == FtbText.Token.Kind.ITEM),
