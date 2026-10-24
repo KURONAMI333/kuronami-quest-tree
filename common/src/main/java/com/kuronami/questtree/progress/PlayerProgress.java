@@ -69,6 +69,8 @@ public final class PlayerProgress {
     public Map<String, Integer> pendingRewards = new HashMap<>();
     /** Rolls already made for a reward table, kept until its pay-out succeeds (2026-10-21 review). */
     public Map<String, String> rewardRolls = new HashMap<>();
+    /** Loot crate rolls since each table last took its ceiling entry: table id → count. Per player, never the team's. */
+    public Map<String, Integer> pity = new HashMap<>();
     /** Latest events for the "Recent" list, newest first: {@code kind|node key|epoch millis}. */
     public Deque<String> recent = new ArrayDeque<>();
     /** Emergency items: when this player may use them again, and whether the wait message was already shown. */
@@ -151,6 +153,7 @@ public final class PlayerProgress {
         p.teamStagesApplied = part.teamStagesApplied;
         p.pendingRewards = part.pendingRewards;
         p.rewardRolls = part.rewardRolls;
+        p.pity = part.pity;
         p.claimed = part.claimed;
         p.claimedRewards = part.claimedRewards;
         p.teamClaimedRewards = teamClaimedRewards;

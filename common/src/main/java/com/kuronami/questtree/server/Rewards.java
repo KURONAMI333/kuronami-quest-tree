@@ -755,8 +755,24 @@ public final class Rewards {
                 String picksKey = key + ">rolls";
                 List<Integer> picks = com.kuronami.questtree.progress.RewardRoll.decode(p.rewardRolls.get(picksKey));
                 if (picks == null) {
-                    picks = com.kuronami.questtree.progress.RewardRoll.roll(weights, empty, loot,
-                            intOf(table, "rolls", 1), () -> player.getRandom().nextDouble());
+                    com.kuronami.questtree.progress.PityRules.Settings pity = loot
+                            ? com.kuronami.questtree.progress.PityRules.settings(table, weights) : null;
+                    if (pity == null) {
+                        picks = com.kuronami.questtree.progress.RewardRoll.roll(weights, empty, loot,
+                                intOf(table, "rolls", 1), () -> player.getRandom().nextDouble());
+                    } else {
+                        String tableId = ProgressService.str(rw, "table");
+                        com.kuronami.questtree.progress.PityRules.Result result =
+                                com.kuronami.questtree.progress.PityRules.roll(weights, empty, true,
+                                        intOf(table, "rolls", 1), p.pity.getOrDefault(tableId, 0), pity,
+                                        () -> player.getRandom().nextDouble());
+                        picks = result.picks();
+                        if (result.misses() <= 0) {
+                            p.pity.remove(tableId);
+                        } else {
+                            p.pity.put(tableId, result.misses());
+                        }
+                    }
                     // decide and record before paying, so a failed entry does not make the next attempt roll again
                     p.rewardRolls.put(picksKey, com.kuronami.questtree.progress.RewardRoll.encode(picks));
                 }

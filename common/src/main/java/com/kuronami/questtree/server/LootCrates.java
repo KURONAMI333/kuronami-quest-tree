@@ -7,6 +7,7 @@ import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.network.CrateLootPayload;
 import com.kuronami.questtree.platform.Services;
 import com.kuronami.questtree.progress.LootCrateRules;
+import com.kuronami.questtree.progress.PityRules;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.RewardRoll;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -92,20 +93,17 @@ public final class LootCrates {
         if (table == null || crate == null || count <= 0) {
             return null;
         }
+        // one slot per entry as the table writes it, so "pity": {"entry": 2} means the same entry everywhere;
+        // an entry that cannot be paid stays in place with weight 0, which the roll never takes
         List<JsonObject> entries = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
         for (JsonElement e : entries(table)) {
-            if (!e.isJsonObject()) {
-                continue;
-            }
-            JsonObject entry = e.getAsJsonObject();
-            if (!entry.has("reward") || !entry.get("reward").isJsonObject()) {
-                continue;
-            }
-            entries.add(entry.getAsJsonObject("reward"));
-            weights.add(entry.has("weight") && entry.get("weight").isJsonPrimitive()
+            JsonObject entry = e.isJsonObject() ? e.getAsJsonObject() : null;
+            boolean payable = entry != null && entry.has("reward") && entry.get("reward").isJsonObject();
+            entries.add(payable ? entry.getAsJsonObject("reward") : null);
+            weights.add(payable && entry.has("weight") && entry.get("weight").isJsonPrimitive()
                     && entry.get("weight").getAsJsonPrimitive().isNumber()
-                    ? entry.get("weight").getAsDouble() : 1.0);
+                    ? entry.get("weight").getAsDouble() : payable ? 1.0 : 0.0);
         }
         int rolls = Math.max(0, modelInt(table, "rolls", 1));
         long attempts = (long) rolls * count;
@@ -115,11 +113,26 @@ public final class LootCrates {
         double empty = table.has("empty_weight") && table.get("empty_weight").isJsonPrimitive()
                 && table.get("empty_weight").getAsJsonPrimitive().isNumber()
                 ? table.get("empty_weight").getAsDouble() : 0;
-        List<Integer> picks = RewardRoll.roll(weights, empty, true, (int) attempts,
-                () -> player.getRandom().nextDouble());
+        PityRules.Settings pity = PityRules.settings(table, weights);
+        List<Integer> picks;
+        if (pity == null) {
+            picks = RewardRoll.roll(weights, empty, true, (int) attempts,
+                    () -> player.getRandom().nextDouble());
+        } else {
+            PlayerProgress progress = ProgressService.progress(player);
+            PityRules.Result result = PityRules.roll(weights, empty, true, (int) attempts,
+                    progress.pity.getOrDefault(tableId, 0), pity, () -> player.getRandom().nextDouble());
+            picks = result.picks();
+            if (result.misses() <= 0) {
+                progress.pity.remove(tableId);
+            } else {
+                progress.pity.put(tableId, result.misses());
+            }
+            ProgressStore.get(player.server).setDirty();
+        }
         List<JsonObject> out = new ArrayList<>();
         for (int pick : picks) {
-            if (pick >= 0 && pick < entries.size()) {
+            if (pick >= 0 && pick < entries.size() && entries.get(pick) != null) {
                 out.add(entries.get(pick));
             }
         }

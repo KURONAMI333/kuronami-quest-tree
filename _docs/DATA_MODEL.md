@@ -244,6 +244,21 @@ The chapter's open or locked state belongs to the team. A lock or unlock changes
 
 A table pays its entries in order. An entry that was paid is marked in the player's saved table progress, so a retry after a later entry failed hands out only the entries still missing. When the whole table is through, the marks and the recorded roll are removed together. A `choice` table pays one entry and has nothing to mark.
 
+### Loot crate ceilings
+
+A loot crate table can promise an entry after a run of misses:
+
+```json
+{"rolls": 1, "empty_weight": 5, "pity": {"after": 20, "entry": 2},
+ "entries": [{"weight": 10, "reward": {"type": "item", "item": {"id": "minecraft:iron_ingot", "count": 4}}},
+             {"weight": 4, "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}},
+             {"weight": 1, "reward": {"type": "item", "item": {"id": "minecraft:netherite_ingot"}}}]}
+```
+
+After `after` rolls that did not take `entry`, the next roll takes it without rolling, and the count starts over. Any roll that takes it starts the count over as well. An empty result (`empty_weight`) counts as a miss. `entry` is the position in `entries`; when it is left out, the entry with the smallest weight above 0 is the one (the first one on a tie). An entry with weight 0 is granted outside the rolls, so it cannot be the ceiling's entry.
+
+The count belongs to one player and one table, saved with that player's progress. A table without `pity` rolls as before. The chances a recipe viewer shows stay the single-roll chances: the ceiling is not folded into them. A shape the roll cannot use (`after` below 1, `entry` out of range, or an `entry` with weight 0) gives no ceiling, and the table keeps rolling.
+
 ## Conditions
 
 Tasks and rewards accept `"conditions": [...]`. A task is counted, and a reward is paid, only when every condition is met. A reward whose conditions are unmet is skipped: it does not hold the node open as unclaimed. The node finishes and can repeat.
@@ -543,6 +558,7 @@ If validation itself throws, that one failure is recorded as `ERROR` and loading
 - Number types. `count`, `amount`, `ticks`, `item.count`, and a `location`'s `position` / `size` are read as integers during the server tick. `count` and `ticks` are read through a type guard and an unreadable shape is skipped, so they are `WARNING` (and fall back to 1). The others (`amount`, `item.count`) and readable but non-integer values (`"many"`, `1.5`) have no guard, so they are `ERROR`. The JSON reader accepts a numeric string such as `"16"`, so that is not an `ERROR`.
 - `optional` and `consume` are read as booleans during the tick; an object, array or null throws (`ERROR`), while a number or word is read as false (`WARNING`).
 - `rolls`, `weight`, `empty_weight`, `min`, `max`, `cost`, `tasks_required`, an attribute's `value` and xp's `amount` either fall back to a default or are caught by the reward giver: `WARNING`.
+- `pity`: `after` must be a number of 1 or more, `entry` a position inside `entries`, and that entry's weight above 0. Anything else gives no ceiling (`WARNING`); the table still rolls.
 - Zero or less: `count` and `amount` are `WARNING` (the target is raised to 1). `weight` of 0 or less is `WARNING` (that entry can never be chosen). An empty `break.block` means "any block", so it is not warned about.
 - `repeat`: a repeat checks `done + 1 >= max`, so a `max` of 1 or less never repeats (`WARNING`). `cooldown` is read as a number when a claim is confirmed, so a non-integer is `ERROR`; 0 or less is read as "no cooldown" (`WARNING`). A non-numeric `max` is read as unlimited (`WARNING`). `reset` must be `"daily"` or `"weekly"`; any other value is ignored (`WARNING`), and a `cooldown` written beside it is ignored (`WARNING`).
 - Reward tables: when an `entries` element is not an object, or `weight` cannot be read, the table fails while being assembled and pays nothing (the `WARNING` text says so).

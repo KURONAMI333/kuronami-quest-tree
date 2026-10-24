@@ -577,6 +577,34 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aLootCrateCeilingIsCheckedAndAUsableOneIsSilent() {
+        String ok = """
+                {"chapters": {},
+                 "reward_tables": {"t:gems": {"rolls": 1, "pity": {"after": 20, "entry": 1}, "entries": [
+                    {"weight": 4, "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}},
+                    {"weight": 1, "reward": {"type": "item", "item": {"id": "minecraft:netherite_ingot"}}}]}}}""";
+        assertEquals(List.of(), validate(ok).problems);
+
+        assertTrue(says(validate(tableWithPity("{\"after\": 0}")), "so there is no ceiling"));
+        assertTrue(says(validate(tableWithPity("{\"after\": 3, \"entry\": 5}")), "but the table has"));
+        assertTrue(says(validate(tableWithPity("{\"after\": 3, \"entry\": 0}")),
+                "no entry can be the ceiling's entry"));
+        assertTrue(says(validate(tableWithPity("{\"after\": \"3\"}")), "is missing or not a number"));
+        assertTrue(says(validate(tableWithPity("5")), "is not an object"));
+        assertEquals(0, errors(validate(tableWithPity("{\"after\": 0}"))));
+    }
+
+    /** A two-entry crate table whose first entry is always granted, so an entry of 0 cannot be the ceiling. */
+    private static String tableWithPity(String pity) {
+        return """
+                {"chapters": {},
+                 "reward_tables": {"t:gems": {"rolls": 1, "pity": %s, "entries": [
+                    {"weight": 0, "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}},
+                    {"weight": 1, "reward": {"type": "item", "item": {"id": "minecraft:netherite_ingot"}}}]}}}"""
+                .formatted(pity);
+    }
+
+    @Test
     void aSyntaxErrorIsReportedWithItsLine() {
         String bad = "{\n  \"chapters\": {\n    \"a\": ,\n  }\n}";
         ProgressValidator.Problem p;

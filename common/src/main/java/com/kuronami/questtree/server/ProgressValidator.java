@@ -1514,7 +1514,65 @@ public final class ProgressValidator {
         }
         whole(out, ref, path, table, "rolls");
         numberShape(out, ref, path, table, "empty_weight");
+        checkPity(out, ref, path, table);
         checkLootCrate(out, ref, path + ".loot_crate", table);
+    }
+
+    /**
+     * {@code "pity": {"after": 20, "entry": 2}} — a loot crate's ceiling. A shape the roll cannot use gives no
+     * ceiling (the table still rolls as before), so each of these is a WARNING rather than a broken table.
+     */
+    private static void checkPity(Result out, ChapterRef ref, String path, JsonObject table) {
+        JsonElement e = table.get("pity");
+        if (e == null) {
+            return;
+        }
+        String p = path + ".pity";
+        if (!e.isJsonObject()) {
+            problem(out, Severity.WARNING, ref, p, "\"pity\" is not an object, so there is no ceiling");
+            return;
+        }
+        JsonObject pity = e.getAsJsonObject();
+        JsonElement after = pity.get("after");
+        if (after == null || !number(after)) {
+            problem(out, Severity.WARNING, ref, p + ".after", "\"after\" is missing or not a number, so there is no ceiling");
+            return;
+        }
+        if ((int) after.getAsDouble() < 1) {
+            problem(out, Severity.WARNING, ref, p + ".after",
+                    "\"after\" is " + trim(after.getAsDouble()) + ", so there is no ceiling");
+            return;
+        }
+        JsonElement entry = pity.get("entry");
+        if (entry != null && !number(entry)) {
+            problem(out, Severity.WARNING, ref, p + ".entry", "\"entry\" is not a number, so there is no ceiling");
+            return;
+        }
+        List<Double> weights = new ArrayList<>();
+        JsonArray all = table.getAsJsonArray("entries");
+        for (int i = 0; i < all.size(); i++) {
+            JsonElement item = all.get(i);
+            boolean payable = item.isJsonObject() && item.getAsJsonObject().has("reward")
+                    && item.getAsJsonObject().get("reward").isJsonObject();
+            if (!payable) {
+                weights.add(0.0);
+                continue;
+            }
+            JsonElement weight = item.getAsJsonObject().get("weight");
+            weights.add(weight != null && number(weight) ? weight.getAsDouble() : 1.0);
+        }
+        int size = weights.size();
+        int pick = entry == null ? -1 : (int) entry.getAsDouble();
+        if (entry != null && (pick < 0 || pick >= size)) {
+            problem(out, Severity.WARNING, ref, p + ".entry",
+                    "\"entry\" is " + pick + " but the table has " + size
+                            + " entries, so there is no ceiling");
+            return;
+        }
+        if (com.kuronami.questtree.progress.PityRules.settings(table, weights) == null) {
+            problem(out, Severity.WARNING, ref, p,
+                    "no entry can be the ceiling's entry (its weight is 0), so there is no ceiling");
+        }
     }
 
     /** A weight the table does not choose with: Rewards.table reads it with getAsDouble, and 0 means "never". */
@@ -1823,6 +1881,11 @@ public final class ProgressValidator {
                 problem(out, Severity.WARNING, ref, path + "." + field + "[" + i + "]", "is not a " + what + " string, so it is skipped");
             }
         }
+    }
+
+    /** A JSON number only: the roll reads these with {@code getAsInt}, so a string would not be used. */
+    private static boolean number(JsonElement e) {
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber();
     }
 
     private static void whole(Result out, ChapterRef ref, String path, JsonObject o, String field) {

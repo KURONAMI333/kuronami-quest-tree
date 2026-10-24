@@ -36,6 +36,8 @@ public final class PlayerPart {
     public final Map<String, Integer> pendingRewards = new HashMap<>();
     /** Rolls already made for a reward table, so a failed pay-out does not roll again: reward key → picked indexes. */
     public final Map<String, String> rewardRolls = new HashMap<>();
+    /** Loot crate rolls since each table last took its ceiling entry: table id → count. */
+    public final Map<String, Integer> pity = new HashMap<>();
     /** Emergency items: when this player may use them again, and whether the wait message was already shown. */
     public long emergencyReadyAt;
     public boolean emergencyWaitNotice;
@@ -67,6 +69,7 @@ public final class PlayerPart {
         teamStagesApplied.addAll(other.teamStagesApplied);
         other.pendingRewards.forEach((k, v) -> pendingRewards.merge(k, v, Integer::sum));
         rewardRolls.putAll(other.rewardRolls);
+        pity.putAll(other.pity);
         emergencyReadyAt = Math.max(emergencyReadyAt, other.emergencyReadyAt);
         emergencyWaitNotice |= other.emergencyWaitNotice;
         bookGiven |= other.bookGiven;
@@ -88,6 +91,7 @@ public final class PlayerPart {
         o.add("team_stages_applied", strings(teamStagesApplied));
         o.add("pending_rewards", ints(pendingRewards));
         o.add("reward_rolls", textMap(rewardRolls));
+        o.add("pity", ints(pity));
         o.addProperty("emergency_ready_at", emergencyReadyAt);
         o.addProperty("emergency_wait_notice", emergencyWaitNotice);
         o.addProperty("book_given", bookGiven);
@@ -140,6 +144,9 @@ public final class PlayerPart {
                 pendingKeys.remove();
                 part.droppedSkillPending++;
             }
+        }
+        for (Map.Entry<String, JsonElement> e : obj(o, "pity").entrySet()) {
+            part.pity.put(e.getKey(), PackNumbers.savedInt(e.getValue(), 0));
         }
         for (Map.Entry<String, JsonElement> e : obj(o, "reward_rolls").entrySet()) {
             JsonElement value = e.getValue();
