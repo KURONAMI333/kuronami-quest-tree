@@ -51,8 +51,9 @@ public final class FtbqTeamData {
         JsonObject counts = obj(o, "completion_count");
         for (Map.Entry<String, JsonElement> e : counts.entrySet()) {
             OptionalLong id = FtbqIds.parse(e.getKey());
-            if (id.isPresent() && e.getValue().isJsonPrimitive()) {
-                d.completionCount.put(id.getAsLong(), e.getValue().getAsInt());
+            OptionalLong value = number(e.getValue());
+            if (id.isPresent() && value.isPresent()) {
+                d.completionCount.put(id.getAsLong(), (int) value.getAsLong());
             } else {
                 d.badKeys.add("completion_count." + e.getKey());
             }
@@ -78,11 +79,24 @@ public final class FtbqTeamData {
     private static void longs(JsonObject o, String field, Map<Long, Long> into, FtbqTeamData d) {
         for (Map.Entry<String, JsonElement> e : obj(o, field).entrySet()) {
             OptionalLong id = FtbqIds.parse(e.getKey());
-            if (id.isPresent() && e.getValue().isJsonPrimitive()) {
-                into.put(id.getAsLong(), e.getValue().getAsLong());
+            OptionalLong value = number(e.getValue());
+            if (id.isPresent() && value.isPresent()) {
+                into.put(id.getAsLong(), value.getAsLong());
             } else {
                 d.badKeys.add(field + "." + e.getKey());
             }
+        }
+    }
+
+    /** A primitive number as a long; empty for a missing, non-primitive or non-numeric value (2026-10-24). */
+    private static OptionalLong number(JsonElement e) {
+        if (e == null || !e.isJsonPrimitive()) {
+            return OptionalLong.empty();
+        }
+        try {
+            return OptionalLong.of(e.getAsLong());
+        } catch (RuntimeException ex) {
+            return OptionalLong.empty();
         }
     }
 

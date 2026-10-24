@@ -218,6 +218,27 @@ class ImporterTest {
         assertEquals("any", ch.getAsJsonObject("nodes").getAsJsonObject("s0").getAsJsonObject("requires").get("mode").getAsString());
     }
 
+    /** One category whose shape is wrong is noted, and the other categories still convert (2026-10-24 review). */
+    @Test
+    void aBrokenPuffishCategoryIsNotedAndTheRestStillConvert() throws Exception {
+        Map<String, JsonElement> files = new LinkedHashMap<>();
+        try (Stream<Path> s = Files.list(fixture("puffish/mining"))) {
+            for (Path f : s.toList()) {
+                files.put(f.getFileName().toString(), JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)));
+            }
+        }
+        Map<String, Map<String, JsonElement>> categories = new LinkedHashMap<>();
+        categories.put("ftb/mining", files);
+        categories.put("broken/mining", Map.of("skills.json", JsonParser.parseString("{\"s0\": 1}")));
+        ImportOutput out = new ImportOutput("test");
+
+        PuffishImporter.convertAll(categories, out);
+
+        assertTrue(out.chapters.containsKey("skill_ftb_mining"));
+        assertTrue(out.notes.keySet().stream().anyMatch(n -> n.startsWith("category skipped (broken/mining)")),
+                out.notes.toString());
+    }
+
     /** An optional reward type that is not installed becomes Pufferfish's dummy; a required one stays reported. */
     @Test
     void puffishOptionalUnknownRewardBecomesDummy() throws Exception {

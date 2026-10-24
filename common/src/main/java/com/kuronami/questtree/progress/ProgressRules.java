@@ -36,6 +36,13 @@ public final class ProgressRules {
 
     public ProgressRules(ProgressModel model) {
         this.model = model;
+    }
+
+    /**
+     * Rebuilds the personal-node set from a model that is being applied (2026-10-24 review). This is a write to static
+     * state, so a migration's dry run builds its own rules without touching the set the server already uses.
+     */
+    public static void applyPersonalNodes(ProgressModel model) {
         java.util.Set<String> personal = new java.util.HashSet<>();
         for (ProgressModel.Node n : model.nodes.values()) {
             if (!n.shared) {

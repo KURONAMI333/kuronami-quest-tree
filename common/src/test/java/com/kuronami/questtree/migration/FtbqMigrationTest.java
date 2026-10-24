@@ -117,6 +117,46 @@ class FtbqMigrationTest {
     }
 
     @Test
+    void aBrokenChapterFileIsReportedAndTheRestStillLoads(@TempDir Path tmp) throws Exception {
+        Path chapters = Files.createDirectories(tmp.resolve("chapters"));
+        Files.writeString(chapters.resolve("main.snbt"), BOOK, StandardCharsets.UTF_8);
+        Files.writeString(chapters.resolve("broken.snbt"), "{ id: 'x' quests: [ {", StandardCharsets.UTF_8);
+        MigrationReport r = new MigrationReport();
+
+        FtbqBook book = FtbqBook.read(tmp, r);
+
+        assertEquals(3, book.questCount());
+        assertEquals(List.of("unreadable_file broken.snbt"), r.unresolvedList());
+    }
+
+    @Test
+    void nonNumericTeamValuesAreSkippedByKeyAndTheFileStillParses() {
+        FtbqTeamData t = team("""
+                {
+                  uuid: "0000000000000000000000000000000a"
+                  completion_count: {
+                    "0000000000000001": "not a number"
+                    "0000000000000011": true
+                    "0000000000001234": 2
+                  }
+                  repeatable: {
+                    "0000000000000001": { nested: 1 }
+                    "0000000000000002": "nope"
+                    "0000000000000003": 5000L
+                  }
+                }
+                """);
+
+        assertEquals(2, t.completionCount.get(0x1234L));
+        assertFalse(t.completionCount.containsKey(1L));
+        assertEquals(5000L, t.repeatable.get(3L));
+        assertTrue(t.badKeys.contains("completion_count.0000000000000001"));
+        assertTrue(t.badKeys.contains("completion_count.0000000000000011"));
+        assertTrue(t.badKeys.contains("repeatable.0000000000000001"));
+        assertTrue(t.badKeys.contains("repeatable.0000000000000002"));
+    }
+
+    @Test
     void importKeysAreWhatTheMigrationUses() {
         assertNotNull(model.nodes.get(Q1));
         assertNotNull(model.nodes.get(Q2));

@@ -81,12 +81,16 @@ public final class FtbTeamsMembers {
             try (Stream<Path> list = Files.list(dir)) {
                 for (Path f : list.filter(p -> p.toString().endsWith(".snbt")).sorted().toList()) {
                     try {
+                        if (Files.size(f) > MigrationLimits.MAX_TEXT_FILE_BYTES) {
+                            unreadable[0]++;
+                            continue;
+                        }
                         JsonObject o = Snbt.parse(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
                         if (!o.has("type")) {
                             o.addProperty("type", type);
                         }
                         out.add(o);
-                    } catch (RuntimeException ex) {
+                    } catch (IOException | RuntimeException ex) {
                         unreadable[0]++;
                     }
                 }

@@ -258,7 +258,7 @@ public final class ProgressCommands {
             return 0;
         }
         ImportOutput out = new ImportOutput(namespace);
-        cats.forEach((k, files) -> PuffishImporter.convert(k, files, out));
+        PuffishImporter.convertAll(cats, out);
         return finish(c, out);
     }
 

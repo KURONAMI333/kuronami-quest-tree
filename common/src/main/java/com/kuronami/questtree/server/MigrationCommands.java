@@ -9,6 +9,7 @@ import com.kuronami.questtree.migration.FtbqBook;
 import com.kuronami.questtree.migration.FtbqMigration;
 import com.kuronami.questtree.migration.FtbqTeamData;
 import com.kuronami.questtree.migration.MigrationHash;
+import com.kuronami.questtree.migration.MigrationLimits;
 import com.kuronami.questtree.migration.MigrationReport;
 import com.kuronami.questtree.migration.NbtJson;
 import com.kuronami.questtree.migration.PuffishMigration;
@@ -114,7 +115,7 @@ final class MigrationCommands {
         }
         MigrationReport report = new MigrationReport();
         try {
-            FtbqBook book = FtbqBook.read(questsDir);
+            FtbqBook book = FtbqBook.read(questsDir, report);
             List<FtbqTeamData> teams = new ArrayList<>();
             try (Stream<Path> list = Files.list(progressDir)) {
                 for (Path f : list.filter(p -> p.getFileName().toString().contains("-")
@@ -176,7 +177,7 @@ final class MigrationCommands {
         }
         MigrationReport report = new MigrationReport();
         try {
-            CompoundTag root = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+            CompoundTag root = NbtIo.readCompressed(file, NbtAccounter.create(MigrationLimits.MAX_NBT_BYTES));
             JsonObject players = NbtJson.of(root.getCompound("data").getCompound("players"));
             Map<UUID, JsonObject> byPlayer = new LinkedHashMap<>();
             players.entrySet().forEach(e -> {

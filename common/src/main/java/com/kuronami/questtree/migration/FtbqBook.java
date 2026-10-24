@@ -54,12 +54,26 @@ public final class FtbqBook {
 
     /** Reads {@code chapters/*.snbt} below an FTB Quests quest folder. */
     public static FtbqBook read(Path questsDir) throws IOException {
+        return read(questsDir, new MigrationReport());
+    }
+
+    /** As above, recording a file that is too large or will not parse and carrying on with the rest (2026-10-24). */
+    public static FtbqBook read(Path questsDir, MigrationReport report) throws IOException {
         Map<String, JsonObject> files = new java.util.TreeMap<>();
         try (Stream<Path> list = Files.list(questsDir.resolve("chapters"))) {
             for (Path f : list.filter(p -> p.toString().endsWith(".snbt")).sorted().toList()) {
                 String name = f.getFileName().toString();
-                files.put(name.substring(0, name.lastIndexOf('.')),
-                        Snbt.parse(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject());
+                try {
+                    if (Files.size(f) > MigrationLimits.MAX_TEXT_FILE_BYTES) {
+                        report.unresolved("unreadable_file", name);
+                        continue;
+                    }
+                    files.put(name.substring(0, name.lastIndexOf('.')),
+                            Snbt.parse(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject());
+                } catch (IOException | RuntimeException ex) {
+                    // one broken chapter file must not stop the whole migration
+                    report.unresolved("unreadable_file", name);
+                }
             }
         }
         return of(files);
@@ -72,7 +86,8 @@ public final class FtbqBook {
         book.chapters.add(1L);
         for (Map.Entry<String, JsonObject> file : chapterFiles.entrySet()) {
             JsonObject ch = file.getValue();
-            String chapter = FtbQuestsImporter.slug(ch.has("filename") ? ch.get("filename").getAsString() : file.getKey());
+            String chapter = FtbQuestsImporter.slug(ch.has("filename") && ch.get("filename").isJsonPrimitive()
+                    ? ch.get("filename").getAsString() : file.getKey());
             FtbqIds.parse(ch.get("id")).ifPresent(book.chapters::add);
             for (JsonElement qe : FtbQuestsImporter.arr(ch, "quests")) {
                 if (qe.isJsonObject() && qe.getAsJsonObject().has("id")) {

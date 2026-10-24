@@ -50,10 +50,6 @@ public final class BarrierCache<V> {
         values.remove(player);
     }
 
-    public void clearAll() {
-        values.clear();
-    }
-
     private static String key(String mode, String key) {
         return mode + '\0' + key;
     }

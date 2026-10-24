@@ -328,6 +328,7 @@ public final class ProgressData {
         base = bundle;
         COMPRESSED.clear();
         model = built;
+        com.kuronami.questtree.progress.ProgressRules.applyPersonalNodes(built);
         restrictions = RestrictionRules.of(bundle);
         Restrictions.reload(restrictions);
         generation++;

@@ -99,6 +99,17 @@ class PuffishMigrationTest {
     }
 
     @Test
+    void aDryRunDoesNotTouchTheServerPersonalNodeSet() throws Exception {
+        PlayerProgress.setPersonalNodes(java.util.Set.of("t:kept/node"));
+
+        run(model(false), new TeamStoreData(), players(null, """
+                {"categories": {"ftb:mining": {"unlocked_skills": ["s0"]}}}
+                """), p -> p);
+
+        assertEquals(java.util.Set.of("t:kept/node"), PlayerProgress.personalNodesSnapshot());
+    }
+
+    @Test
     void legacyNumberPointsAndConfigCategoriesWork() throws Exception {
         TeamStoreData store = new TeamStoreData();
         // an old file writes points as one number; a category from the config folder has no namespace in the data

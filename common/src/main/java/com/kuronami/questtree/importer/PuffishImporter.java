@@ -209,6 +209,18 @@ public final class PuffishImporter {
         }
     }
 
+    /** Converts every category, noting one that throws and carrying on with the rest (2026-10-24). */
+    public static void convertAll(Map<String, Map<String, JsonElement>> categories, ImportOutput out) {
+        categories.forEach((category, files) -> {
+            try {
+                convert(category, files, out);
+            } catch (RuntimeException ex) {
+                // one broken category must not stop the rest of the pack from coming over
+                out.note("category skipped (" + category + "): " + ex.getMessage());
+            }
+        });
+    }
+
     private static void connect(JsonObject cons, String kind, JsonObject nodes, ImportOutput out) {
         if (!cons.has(kind) || !cons.get(kind).isJsonObject()) {
             return;

@@ -9,6 +9,8 @@ import com.kuronami.questtree.platform.Services;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Server settings ({@code config/kuronami_quest_tree-server.json}), read once and rewritten nowhere (2026-10-20).
@@ -66,24 +68,16 @@ public final class ServerConfig {
         boolean drop = false;
         boolean report = true;
         int rewardPermission = com.kuronami.questtree.progress.RewardPermission.DEFAULT;
+        List<String> reset = new ArrayList<>();
         try {
             if (Files.isRegularFile(file)) {
                 JsonObject o = GSON.fromJson(Files.readString(file), JsonObject.class);
                 if (o != null) {
-                    if (o.has("give_book_on_first_join")) {
-                        give = o.get("give_book_on_first_join").getAsBoolean();
-                    }
-                    if (o.has("drop_book_on_death")) {
-                        drop = o.get("drop_book_on_death").getAsBoolean();
-                    }
-                    if (o.has("reward_command_permission_level")) {
-                        rewardPermission = com.kuronami.questtree.progress.RewardPermission.cap(
-                                o.get("reward_command_permission_level").getAsInt(),
-                                com.kuronami.questtree.progress.RewardPermission.MAX);
-                    }
-                    if (o.has("validation_report")) {
-                        report = o.get("validation_report").getAsBoolean();
-                    }
+                    Values values = valuesOf(o, reset);
+                    give = values.giveBook();
+                    drop = values.dropBook();
+                    rewardPermission = values.rewardPermission();
+                    report = values.validationReport();
                 }
             } else {
                 // write the defaults so every option is discoverable
@@ -98,10 +92,57 @@ public final class ServerConfig {
         } catch (IOException | RuntimeException e) {
             Constants.LOG.warn("Could not read {}; using the defaults", file, e);
         }
+        if (!reset.isEmpty()) {
+            // one line for the whole file: which keys fell back, not one warning per key
+            Constants.LOG.warn("Ignored {} unreadable key(s) in {}; using the default for: {}",
+                    reset.size(), file, String.join(", ", reset));
+        }
         giveBook = give;
         dropBook = drop;
         rewardCommandPermission = rewardPermission;
         validationReport = report;
+    }
+
+    /** The settings in one parsed file; a broken value leaves its key at the default and is named in {@code reset}. */
+    static Values valuesOf(JsonObject o, List<String> reset) {
+        boolean give = true;
+        boolean drop = false;
+        boolean report = true;
+        int permission = com.kuronami.questtree.progress.RewardPermission.DEFAULT;
+        if (o.has("give_book_on_first_join")) {
+            try {
+                give = o.get("give_book_on_first_join").getAsBoolean();
+            } catch (RuntimeException e) {
+                reset.add("give_book_on_first_join");
+            }
+        }
+        if (o.has("drop_book_on_death")) {
+            try {
+                drop = o.get("drop_book_on_death").getAsBoolean();
+            } catch (RuntimeException e) {
+                reset.add("drop_book_on_death");
+            }
+        }
+        if (o.has("reward_command_permission_level")) {
+            try {
+                permission = com.kuronami.questtree.progress.RewardPermission.cap(
+                        o.get("reward_command_permission_level").getAsInt(),
+                        com.kuronami.questtree.progress.RewardPermission.MAX);
+            } catch (RuntimeException e) {
+                reset.add("reward_command_permission_level");
+            }
+        }
+        if (o.has("validation_report")) {
+            try {
+                report = o.get("validation_report").getAsBoolean();
+            } catch (RuntimeException e) {
+                reset.add("validation_report");
+            }
+        }
+        return new Values(give, drop, permission, report);
+    }
+
+    record Values(boolean giveBook, boolean dropBook, int rewardPermission, boolean validationReport) {
     }
 
     /** Data packs or a new world are not a reason to re-read; only the next game start is. */

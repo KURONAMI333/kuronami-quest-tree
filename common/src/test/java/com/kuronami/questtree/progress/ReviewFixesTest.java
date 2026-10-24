@@ -272,12 +272,12 @@ class ReviewFixesTest {
     }
 
     @Test
-    void stalePersonalNodeSetIsRebuiltBeforeTheFirstView() {
+    void stalePersonalNodeSetIsRebuiltByTheServerModelApply() {
         PlayerProgress.setPersonalNodes(Set.of());
         ProgressModel model = ProgressModel.of(JsonParser.parseString("""
                 {"chapters": {"t:q": {"nodes": {"p": {"shared": false}}}}}
                 """).getAsJsonObject());
-        new ProgressRules(model);
+        ProgressRules.applyPersonalNodes(model);
         TeamProgress team = new TeamProgress(TEAM);
         team.view(A).completed.add("t:q/p");
         assertTrue(team.part(A).completed.contains("t:q/p"));
