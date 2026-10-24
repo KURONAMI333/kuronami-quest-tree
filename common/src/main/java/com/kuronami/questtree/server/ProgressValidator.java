@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.points.Expression;
+import com.kuronami.questtree.progress.BuildTaskRules;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -133,8 +134,9 @@ public final class ProgressValidator {
     // WARNING instead of an ERROR, so adding a field to the documented format never breaks a pack that uses it.
     private static final Set<String> TASK_TYPES = Set.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
-            "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "stage", "custom", "interaction",
-            "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup", "reach_day");
+            "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "build", "stage", "custom",
+            "interaction", "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride",
+            "pickup", "reach_day");
     private static final Set<String> TASK_UNIMPLEMENTED = Set.of();
     private static final Set<String> INTERACTION_KINDS = Set.of(
             "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
@@ -1030,6 +1032,7 @@ public final class ProgressValidator {
                     id(out, ref, path + ".block", "block", s.text(), registry);
                 }
             }
+            case "build" -> build(out, ref, path, t, registry);
             case "reach_day" -> {
                 JsonElement e = t.get("day");
                 if (e != null && (!integral(e) || fractional(e))) {
@@ -1119,6 +1122,91 @@ public final class ProgressValidator {
         if (!mode.equals("none") && !hasComponents) {
             problem(out, Severity.WARNING, ref, path + ".match_components",
                     "match_components is " + mode + " but the item has no components, so only its id is checked");
+        }
+    }
+
+    /**
+     * A "build" task's layout. {@code blocks} is required and must be a non-empty array of {@code {"pos": [x, y, z],
+     * "block": "id" | "#tag"}} entries, at most 256 of them, with every offset within 32 blocks of the anchor. The
+     * rule treats a broken entry as "never complete", so every shape problem is a WARNING: the pack still loads and
+     * the task is simply not reachable.
+     */
+    private static void build(Result out, ChapterRef ref, String path, JsonObject t, Registry registry) {
+        JsonElement blocksElement = t.get("blocks");
+        if (blocksElement == null || !blocksElement.isJsonArray()) {
+            problem(out, Severity.WARNING, ref, path + ".blocks",
+                    "\"blocks\" is not an array, so the task never completes");
+        } else {
+            JsonArray blocks = blocksElement.getAsJsonArray();
+            if (blocks.isEmpty()) {
+                problem(out, Severity.WARNING, ref, path + ".blocks",
+                        "\"blocks\" is empty, so the task never completes");
+            }
+            if (blocks.size() > BuildTaskRules.MAX_BLOCKS) {
+                problem(out, Severity.WARNING, ref, path + ".blocks",
+                        "\"blocks\" has " + blocks.size() + " entries, past the limit of "
+                                + BuildTaskRules.MAX_BLOCKS + ", so the task may never complete");
+            }
+            for (int i = 0; i < blocks.size(); i++) {
+                JsonElement element = blocks.get(i);
+                String entryPath = path + ".blocks[" + i + "]";
+                if (!element.isJsonObject()) {
+                    problem(out, Severity.WARNING, ref, entryPath,
+                            "block entry is not an object, so the task never completes");
+                    continue;
+                }
+                JsonObject entry = element.getAsJsonObject();
+                JsonElement pos = entry.get("pos");
+                boolean readable = pos != null && pos.isJsonArray() && pos.getAsJsonArray().size() == 3;
+                if (!readable) {
+                    problem(out, Severity.WARNING, ref, entryPath + ".pos",
+                            "\"pos\" is not three whole numbers, so the task never completes");
+                } else {
+                    for (int axis = 0; axis < 3; axis++) {
+                        Integer offset = buildOffset(pos.getAsJsonArray().get(axis));
+                        if (offset == null) {
+                            problem(out, Severity.WARNING, ref, entryPath + ".pos",
+                                    "\"pos\" is not three whole numbers, so the task never completes");
+                            break;
+                        }
+                        if (Math.abs(offset) > BuildTaskRules.MAX_OFFSET) {
+                            problem(out, Severity.WARNING, ref, entryPath + ".pos",
+                                    "offset " + offset + " is further than " + BuildTaskRules.MAX_OFFSET
+                                            + " blocks from the anchor, so the task may never complete");
+                        }
+                    }
+                }
+                JsonElement block = entry.get("block");
+                if (!isText(block) || block.getAsString().isEmpty()) {
+                    problem(out, Severity.WARNING, ref, entryPath + ".block",
+                            "\"block\" is not a block id or #tag, so the task never completes");
+                } else if (!block.getAsString().startsWith("#")) {
+                    // the same id check as break / place_block; a #tag is checked by the tag reader instead
+                    id(out, ref, entryPath + ".block", "block", block.getAsString(), registry);
+                }
+            }
+        }
+        JsonElement anchor = t.get("anchor");
+        if (anchor != null) {
+            if (!isText(anchor)) {
+                problem(out, Severity.WARNING, ref, path + ".anchor",
+                        "\"anchor\" is not a block id or #tag, so the task never triggers");
+            } else if (!anchor.getAsString().startsWith("#")) {
+                id(out, ref, path + ".anchor", "block", anchor.getAsString(), registry);
+            }
+        }
+    }
+
+    /** One offset of a build layout: a whole number that fits an int, or null. */
+    private static Integer buildOffset(JsonElement element) {
+        if (!integral(element) || fractional(element)) {
+            return null;
+        }
+        try {
+            long value = element.getAsLong();
+            return value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE ? (int) value : null;
+        } catch (RuntimeException ex) {
+            return null;
         }
     }
 

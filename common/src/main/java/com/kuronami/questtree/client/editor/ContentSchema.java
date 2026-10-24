@@ -19,7 +19,8 @@ public final class ContentSchema {
 
     public static final List<String> TASK_TYPES = List.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
-            "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "stage", "custom", "reach_day");
+            "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "build", "stage", "custom",
+            "reach_day");
 
     /** {@code choice} is a {@code table} in mode {@code choice}; it is listed apart because the form treats it so. */
     public static final List<String> REWARD_TYPES = List.of(
@@ -138,6 +139,10 @@ public final class ContentSchema {
             case "place_block" -> {
                 out.add(FieldSpec.text("block", P + "block"));
                 out.add(FieldSpec.integer("count", P + "count"));
+            }
+            case "build" -> {
+                out.add(FieldSpec.json("blocks", P + "blocks"));
+                out.add(FieldSpec.text("anchor", P + "anchor"));
             }
             case "stage" -> out.add(FieldSpec.text("stage", P + "stage"));
             case "reach_day" -> out.add(FieldSpec.integer("day", P + "day"));

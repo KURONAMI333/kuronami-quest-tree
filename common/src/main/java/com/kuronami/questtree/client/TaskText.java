@@ -91,6 +91,8 @@ final class TaskText {
             case "place_block":
                 return new Shown(new ItemStack(Items.GRASS_BLOCK),
                         Component.translatable("task." + p + ".place_block_named", targetName(spec(o, "block"), "block")));
+            case "build":
+                return new Shown(new ItemStack(Items.BRICKS), Component.translatable("task." + p + ".build"));
             case "fluid":
                 return new Shown(new ItemStack(Items.WATER_BUCKET),
                         Component.translatable("task." + p + ".fluid_named", targetName(spec(o, "fluid"), "block", "fluid")));

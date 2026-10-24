@@ -303,6 +303,60 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aBuildTaskNeedsAReadableLayout() {
+        ProgressValidator.Result ok = validate(chapter("""
+                {"type": "build", "anchor": "minecraft:gold_block", "blocks": [
+                  {"pos": [0, 0, 0], "block": "minecraft:gold_block"},
+                  {"pos": [1, 0, 0], "block": "#minecraft:stone_bricks"}]}
+                """, ""));
+        assertEquals(List.of(), ok.problems);
+
+        ProgressValidator.Result missing = validate(chapter("{\"type\": \"build\"}", ""));
+        assertEquals(0, errors(missing));
+        assertTrue(says(missing, "is not an array"));
+
+        ProgressValidator.Result empty = validate(chapter("{\"type\": \"build\", \"blocks\": []}", ""));
+        assertEquals(0, errors(empty));
+        assertTrue(says(empty, "is empty"));
+
+        ProgressValidator.Result broken = validate(chapter("""
+                {"type": "build", "blocks": [{"pos": ["a", 0, 0], "block": ""}, 7]}
+                """, ""));
+        assertEquals(0, errors(broken));
+        assertTrue(says(broken, "not three whole numbers"));
+        assertTrue(says(broken, "not a block id or #tag"));
+        assertTrue(says(broken, "block entry is not an object"));
+
+        // a block id with no namespace: the same id check as break / place_block
+        ProgressValidator.Registry registry = (kind, id) -> true;
+        ProgressValidator.Result noNamespace = validate(chapter("""
+                {"type": "build", "blocks": [{"pos": [0, 0, 0], "block": "gold_block"}]}
+                """, ""), registry);
+        assertTrue(says(noNamespace, "has no namespace, so it never matches"));
+
+        // offsets past 32, and more than 256 entries
+        StringBuilder blocks = new StringBuilder();
+        for (int i = 0; i < 257; i++) {
+            if (i > 0) {
+                blocks.append(',');
+            }
+            blocks.append("{\"pos\": [").append(i == 0 ? 33 : 0)
+                    .append(",0,0], \"block\": \"minecraft:gold_block\"}");
+        }
+        ProgressValidator.Result limits = validate(chapter(
+                "{\"type\": \"build\", \"blocks\": [" + blocks + "]}", ""));
+        assertEquals(0, errors(limits));
+        assertTrue(says(limits, "further than 32 blocks"));
+        assertTrue(says(limits, "past the limit of 256"));
+
+        ProgressValidator.Result shapes = validate(chapter("""
+                {"type": "build", "anchor": 5, "blocks": [{"pos": [0, 0, 0], "block": "minecraft:gold_block"}]}
+                """, ""));
+        assertEquals(0, errors(shapes));
+        assertTrue(says(shapes, "anchor"));
+    }
+
+    @Test
     void aReachDayTaskNeedsANonNegativeWholeDay() {
         ProgressValidator.Result ok = validate(chapter("{\"type\": \"reach_day\", \"day\": 30}", ""));
         assertEquals(List.of(), ok.problems);

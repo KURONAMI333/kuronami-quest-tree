@@ -155,7 +155,7 @@ Pack text is stored in the data pack's own language files, separate from the mod
 
 `tasks[].type` can be:
 
-`item` (`count`, `consume`, `match_components`, `only_from_crafting`), `checkmark`, `kill`, `advancement`, `structure`, `biome`, `dimension`, `location`, `observation`, `stat`, `xp`, `fluid`, `energy`, `break`, `place_block`, `stage`, `custom`, `craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`, `interaction`, `reach_day`.
+`item` (`count`, `consume`, `match_components`, `only_from_crafting`), `checkmark`, `kill`, `advancement`, `structure`, `biome`, `dimension`, `location`, `observation`, `stat`, `xp`, `fluid`, `energy`, `break`, `place_block`, `build`, `stage`, `custom`, `craft`, `use_item`, `right_click_block`, `interact_entity`, `tame`, `breed`, `ride`, `pickup`, `interaction`, `reach_day`.
 
 Every task also accepts `optional`, `icon`, `title` and `conditions`.
 
@@ -168,6 +168,22 @@ Action tasks replace FTB Quests' Task Screen by counting the player's own action
 An `energy` task can be filled at a task screen (place one and bind it to the task), or completed by carrying the fullest single stack when a pack checks the inventory instead. A quest asking for millions of FE is satisfied by carrying a battery that can store that much.
 
 `observation` takes `observe_type` (`block`, `block_tag`, `block_state`, `entity_type`, `entity_type_tag`), `target` and `ticks` (default 0, immediate). It counts consecutive ticks with the crosshair on the target and resets to 0 when the crosshair moves away. `break` takes `block` (id or `#tag`; empty means any block) and `count` (default 1) and counts blocks broken in both survival and creative, capped at `count`. `place_block` takes the same `block` and `count` and counts blocks placed by the player, capped at `count`. `reach_day` takes `day` (0 or more, default 0) and counts the world's day counter (`getDayTime / 24000`), so `/time set` can move it.
+
+### Build tasks
+
+A `build` task is a multi-block layout checked when the player places a block. It does not use an NBT template; the layout is written as offsets from the placed block:
+
+```json
+{"type": "build", "anchor": "minecraft:gold_block",
+ "blocks": [{"pos": [0, 0, 0], "block": "minecraft:gold_block"},
+            {"pos": [1, 0, 0], "block": "#minecraft:stone_bricks"},
+            {"pos": [0, 1, 0], "block": "minecraft:torch"}]}
+```
+
+- `blocks` is required: 1 to 256 entries, each with `pos` (three whole offsets from the anchor, each within 32 blocks) and `block` (a block id or `#tag`).
+- `anchor` is optional. When written, the check runs only for a placement of that block (id or `#tag`); when omitted, any placement runs it. The anchor is the placed block's own position, so the layout is written relative to it.
+- The task completes when every written block matches. Block state properties (facing, shape and so on) are ignored; only the block kind counts. Extra blocks around the layout do not matter.
+- The check runs on the server at the placement itself, never as an every-tick scan. It only looks when a player places a block, so a layout finished by anything else (a piston, a dispenser, a world edit) does not complete the task.
 
 ### Requirements and the item counter
 

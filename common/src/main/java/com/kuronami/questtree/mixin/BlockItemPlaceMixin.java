@@ -31,7 +31,8 @@ public abstract class BlockItemPlaceMixin {
         // only the player's own successful BlockItem placement counts; dispensers and pistons never come through here
         if (context.getPlayer() instanceof ServerPlayer sp && !sp.isSpectator()
                 && cir.getReturnValue().consumesAction()) {
-            ProgressService.onBlockPlace(sp, context.getLevel().getBlockState(context.getClickedPos()));
+            ProgressService.onBlockPlace(sp, context.getLevel().getBlockState(context.getClickedPos()),
+                    context.getClickedPos());
         }
     }
 }

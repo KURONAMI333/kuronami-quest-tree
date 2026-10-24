@@ -16,6 +16,7 @@ import com.kuronami.questtree.network.ProgressPayload;
 import com.kuronami.questtree.network.ProgressPayloadFit;
 import com.kuronami.questtree.platform.Services;
 import com.kuronami.questtree.progress.BlockTaskRules;
+import com.kuronami.questtree.progress.BuildTaskRules;
 import com.kuronami.questtree.progress.HintLimits;
 import com.kuronami.questtree.progress.ItemRequirement;
 import com.kuronami.questtree.progress.PlayerProgress;
@@ -377,8 +378,11 @@ public final class ProgressService {
         }
     }
 
-    /** A player placed a block. Counts "place_block" tasks, capped at the target. */
-    public static void onBlockPlace(ServerPlayer player, BlockState state) {
+    /**
+     * A player placed a block. Counts "place_block" tasks, capped at the target, and completes "build" tasks whose
+     * layout now stands around the placed block. Only the placement itself is checked, never a tick scan.
+     */
+    public static void onBlockPlace(ServerPlayer player, BlockState state, BlockPos pos) {
         if (ServerPlayers.isFake(player)) {
             return;
         }
@@ -387,12 +391,13 @@ public final class ProgressService {
             return;
         }
         ProgressRules r = rules();
-        List<TaskRef> refs = tasksOfType(r, "place_block");
-        if (refs.isEmpty()) {
+        List<TaskRef> placeRefs = tasksOfType(r, "place_block");
+        List<TaskRef> buildRefs = tasksOfType(r, "build");
+        if (placeRefs.isEmpty() && buildRefs.isEmpty()) {
             return;
         }
         List<TaskRef> hits = new ArrayList<>();
-        for (TaskRef ref : refs) {
+        for (TaskRef ref : placeRefs) {
             ProgressModel.Node n = ref.node();
             int i = ref.index();
             JsonObject t = n.tasks.get(i);
@@ -410,9 +415,46 @@ public final class ProgressService {
                 bump(player, p, n, i, BlockTaskRules.next(had, target));
             }
         }
-        if (!hits.isEmpty()) {
+        List<TaskRef> built = new ArrayList<>();
+        for (TaskRef ref : buildRefs) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            JsonObject t = n.tasks.get(i);
+            if (working(r, p, n) && r.taskOpen(p, n, i) && conditionsMet(player, p, n, t, true)
+                    && BuildTaskRules.matchesAnchor(t, idOf(state.getBlock()),
+                    tag -> blockTagMatches("#" + tag, state.getBlock()))
+                    && BuildTaskRules.matches(t, blockAt(player, pos))) {
+                built.add(ref);
+            }
+        }
+        for (TaskRef ref : built) {
+            ProgressModel.Node n = ref.node();
+            int i = ref.index();
+            bump(player, p, n, i, 1);
+        }
+        if (!hits.isEmpty() || !built.isEmpty()) {
             recheck(player, p);
         }
+    }
+
+    /** The blocks around a placed block, for a "build" task's offsets. */
+    private static BuildTaskRules.BlockAt blockAt(ServerPlayer player, BlockPos origin) {
+        ServerLevel level = player.serverLevel();
+        return new BuildTaskRules.BlockAt() {
+            @Override
+            public String id(int dx, int dy, int dz) {
+                return idOf(level.getBlockState(origin.offset(dx, dy, dz)).getBlock());
+            }
+
+            @Override
+            public boolean tag(int dx, int dy, int dz, String tag) {
+                return blockTagMatches("#" + tag, level.getBlockState(origin.offset(dx, dy, dz)).getBlock());
+            }
+        };
+    }
+
+    private static String idOf(Block block) {
+        return BuiltInRegistries.BLOCK.getKey(block).toString();
     }
 
     // ------------------------------------------------------------------ interaction tasks (2026-10-21)
