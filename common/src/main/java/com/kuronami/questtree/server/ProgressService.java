@@ -13,6 +13,7 @@ import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.network.ActionPayload;
 import com.kuronami.questtree.network.ProgressPayload;
+import com.kuronami.questtree.network.ProgressPayloadFit;
 import com.kuronami.questtree.platform.Services;
 import com.kuronami.questtree.progress.BlockTaskRules;
 import com.kuronami.questtree.progress.HintLimits;
@@ -97,6 +98,8 @@ public final class ProgressService {
     private static final Set<UUID> HINT_TRUNCATION_LOGGED = new java.util.HashSet<>();
     /** Players already told that their book was too large to send; cleared once a send succeeds. */
     private static final Set<UUID> TOO_LARGE_LOGGED = new java.util.HashSet<>();
+    /** Players already told that their recent list was trimmed to fit the packet; one line per session. */
+    private static final Set<UUID> RECENT_TRIM_LOGGED = new java.util.HashSet<>();
     /**
      * Tick of the last oversize send. A book that only grows can never fit, so retrying every 10 ticks would
      * recompress the whole thing forever; the next attempt waits {@link #TOO_LARGE_RETRY_TICKS}.
@@ -1480,7 +1483,15 @@ public final class ProgressService {
         }
         // measure before taking anything off the queues: an oversize payload must not swallow the queued events,
         // which include the completion toast and its sound and cannot be rebuilt later (2026-10-23 review)
-        byte[] data = ProgressPayload.compress(ProgressJson.write(progress(player)).toString());
+        ProgressPayloadFit.Result fit = ProgressPayloadFit.fit(
+                ProgressJson.write(progress(player)), ProgressPayload.MAX);
+        byte[] data = fit.data();
+        if (fit.droppedRecent() > 0 && !fit.tooLarge(ProgressPayload.MAX)
+                && RECENT_TRIM_LOGGED.add(player.getUUID())) {
+            // the recent list is display-only, so it is cut before the progress itself would ever be
+            Constants.LOG.warn("Recent list for {} was trimmed: {} oldest entries left out to fit the progress packet",
+                    player.getGameProfile().getName(), fit.droppedRecent());
+        }
         if (data.length > ProgressPayload.MAX) {
             // stay dirty so a later send tries again: a silent stop would leave the client's book stale until the
             // next change, which the player reads as "clicking does nothing"
@@ -1522,6 +1533,7 @@ public final class ProgressService {
         REVISIONS.remove(player.getUUID());
         HINT_TRUNCATION_LOGGED.remove(player.getUUID());
         TOO_LARGE_LOGGED.remove(player.getUUID());
+        RECENT_TRIM_LOGGED.remove(player.getUUID());
         TOO_LARGE_AT.remove(player.getUUID());
         BARRIERS.clear(player.getUUID());
         TeamSync.forget(player.getUUID());
@@ -1538,6 +1550,7 @@ public final class ProgressService {
         OBSERVED.clear();
         HINT_TRUNCATION_LOGGED.clear();
         TOO_LARGE_LOGGED.clear();
+        RECENT_TRIM_LOGGED.clear();
         FAILED_ADDON_CONDITIONS.clear();
         SCREEN_PENDING.clear();
         MIGRATED.clear();

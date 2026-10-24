@@ -9,13 +9,11 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * Server to client: the player's own progress (ProgressJson, gzip-compressed: node keys repeat a lot, so a player who
@@ -48,13 +46,7 @@ public record ProgressPayload(byte[] data, List<String> events, List<String> hin
 
     /** Gzip of the progress JSON, the part of the packet that repeats a lot of node keys. */
     public static byte[] compress(String json) {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (GZIPOutputStream gz = new GZIPOutputStream(out)) {
-            gz.write(json.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
-        return out.toByteArray();
+        return ProgressPayloadFit.compress(json);
     }
 
     public String json() {
