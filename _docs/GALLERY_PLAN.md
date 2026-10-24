@@ -73,3 +73,20 @@ English UI text and must not show `aa_devtour` ids, debug labels or the dev worl
 Alternates if a slot is dropped: `questtree_34_party.png` (team/party screen) for team progress, or
 `questtree_51_task_screens.png` (quest and barrier blocks in the world). Do not use `questtree_47_inventory_button.png`
 alone as a gallery image; the item is already described in the body.
+
+## Status 2026-10-24 17:13 (NeoForge dev tour re-run at HEAD `9d9a7b2` + `14f17cb`)
+
+All 63 shots were retaken. What the re-run showed, against this plan's own rules:
+
+- The map shots (`01`, `05`, `22`, `23`) are taken at a zoom where node titles are not drawn: the featured image shows
+  icons and connectors only, and the hovered node's title appears in a tooltip. A featured image needs a closer zoom on
+  a chapter whose nodes have titles (the dev fixture chapter, 11 nodes, or a purpose-built showcase chapter).
+- The ATM chapters (`23`, `24`, `05`) draw missing-item icons (red slash) because the dev client has none of that
+  pack's mods. They cannot be used in the gallery.
+- `48_viewer_uses` shows the chapter line as the pack's raw Japanese title ("はじめの一歩") while the quest titles are
+  English, and the dev chat lines ("Summoned new Villager", "Teleported Dev to ...") are visible. Both break the
+  English-only / no-debug rule. `50_viewer_crates` and `63_hud_notice` also carry the dev chat.
+- `_docs/gallery/01_map_2x1.png` is the ATM chapter above: not usable as is.
+
+Next pass (not done): a showcase chapter with English titles only, a zoom where titles render, the chat cleared before
+each shot (`Gui.getChat().clearMessages(true)` in `DevTour.shot`), then re-crop `_docs/gallery/`.
