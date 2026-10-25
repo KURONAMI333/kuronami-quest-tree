@@ -180,7 +180,7 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
             }
             if (category instanceof CrateViewerJeiCategory) {
                 if (focus.getRole() == RecipeIngredientRole.CATALYST) {
-                    return stack.is(CrateViewerJeiCategory.iconStack().getItem()) ? crateRecipes() : List.of();
+                    return stack.is(ViewerIcons.crate().getItem()) ? crateRecipes() : List.of();
                 }
                 return crateRecipes(stack);
             }
@@ -218,7 +218,7 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
                 if (stack.is(QuestViewerRecipe.book().getItem())) {
                     return List.of(QuestViewerJeiCategory.TYPE);
                 }
-                return stack.is(CrateViewerJeiCategory.iconStack().getItem())
+                return stack.is(ViewerIcons.crate().getItem())
                         ? List.of(CrateViewerJeiCategory.TYPE) : List.of();
             }
             var index = QuestViewerData.index();

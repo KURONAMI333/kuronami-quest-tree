@@ -1082,6 +1082,9 @@ public final class ProgressService {
         ServerLevel level = player.serverLevel();
         if (r.sweepResets(p, r.model(), ProgressRules.worldDay(level.getDayTime()))) {
             ProgressStore.get(player.server).setDirty();
+            // a day or a week came, so a repeatable quest starts over: the client has to hear about it without
+            // waiting for the player's next kill or pickup (2026-10-25)
+            markDirty(player);
         }
         BlockPos pos = player.blockPosition();
         for (ProgressModel.Node n : r.model().nodes.values()) {

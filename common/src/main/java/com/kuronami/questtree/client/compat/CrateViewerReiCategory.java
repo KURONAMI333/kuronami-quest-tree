@@ -40,7 +40,7 @@ public final class CrateViewerReiCategory implements DisplayCategory<CrateViewer
 
     @Override
     public Renderer getIcon() {
-        var icon = EntryStacks.of(CrateViewerJeiCategory.iconStack());
+        var icon = EntryStacks.of(ViewerIcons.crate());
         return new Renderer() {
             @Override
             public void render(GuiGraphics graphics, Rectangle bounds, int mouseX, int mouseY, float delta) {

@@ -10,7 +10,7 @@ public final class CrateViewerEmiCategory {
 
     public static final EmiRecipeCategory CATEGORY = new EmiRecipeCategory(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "crate"),
-            EmiStack.of(CrateViewerJeiCategory.iconStack()));
+            EmiStack.of(ViewerIcons.crate()));
 
     private CrateViewerEmiCategory() {
     }

@@ -2,7 +2,6 @@ package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.QuestViewerStyle;
-import com.kuronami.questtree.item.ModItems;
 import com.kuronami.questtree.progress.CrateOdds;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
@@ -18,7 +17,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
 
 /** A crate as a recipe: the crate at the top, the items it can give in a grid below, and the table's id. */
 public final class CrateViewerJeiCategory implements IRecipeCategory<CrateViewerData.Recipe> {
@@ -33,12 +31,7 @@ public final class CrateViewerJeiCategory implements IRecipeCategory<CrateViewer
     private final IDrawable icon;
 
     public CrateViewerJeiCategory(IGuiHelper helper) {
-        this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack());
-    }
-
-    static ItemStack iconStack() {
-        ItemStack stack = ModItems.lootCrate() == null ? ItemStack.EMPTY : new ItemStack(ModItems.lootCrate());
-        return stack.isEmpty() ? QuestViewerRecipe.book() : stack;
+        this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, ViewerIcons.crate());
     }
 
     @Override

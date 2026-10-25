@@ -26,7 +26,7 @@ public class QuestTreeEmiPlugin implements EmiPlugin {
         registry.addCategory(QuestViewerEmiCategory.CATEGORY);
         registry.addCategory(CrateViewerEmiCategory.CATEGORY);
         registry.addWorkstation(QuestViewerEmiCategory.CATEGORY, EmiStack.of(QuestViewerRecipe.book()));
-        registry.addWorkstation(CrateViewerEmiCategory.CATEGORY, EmiStack.of(CrateViewerJeiCategory.iconStack()));
+        registry.addWorkstation(CrateViewerEmiCategory.CATEGORY, EmiStack.of(ViewerIcons.crate()));
         for (var crate : CrateViewerData.all()) {
             if (!crate.contents().isEmpty()) {
                 registry.addRecipe(new CrateViewerEmiRecipe(crate));
