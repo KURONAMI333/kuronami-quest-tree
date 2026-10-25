@@ -87,12 +87,23 @@ public final class QuestTreeJeiPlugin implements IModPlugin {
 
             @Override
             public void showCrates() {
+                showCrates(null);
+            }
+
+            @Override
+            public void showCrates(String tableId) {
                 List<CrateViewerData.Recipe> recipes = CrateViewerData.all();
                 if (recipes.isEmpty()) {
                     return;
                 }
+                // one table opens on its own card; without a table the category starts at its first one
+                CrateViewerData.Recipe target = tableId == null ? null
+                        : recipes.stream().filter(r -> r.tableId().equals(tableId)).findFirst().orElse(null);
+                List<IFocus<?>> focus = target == null ? List.of()
+                        : List.of(runtime.getJeiHelpers().getFocusFactory()
+                                .createFocus(RecipeIngredientRole.INPUT, VanillaTypes.ITEM_STACK, target.crate()));
                 runtime.getRecipesGui().showRecipes(
-                        runtime.getRecipeManager().getRecipeCategory(CrateViewerJeiCategory.TYPE), recipes, List.of());
+                        runtime.getRecipeManager().getRecipeCategory(CrateViewerJeiCategory.TYPE), recipes, focus);
             }
 
             @Override

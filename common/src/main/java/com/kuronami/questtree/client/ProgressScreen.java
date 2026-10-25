@@ -1812,7 +1812,8 @@ public class ProgressScreen extends Screen {
      * pack's pictures and bright tiles; it and the title sit under the rail, which is drawn later at a higher z. The pin
      * marks the chapter for the top of the list, and a magnifier beside it turns the row into the quest search (2026-10-20,
      * the player: the search belongs to the title, not to the chapter list, which now has its own filter). "Claim all"
-     * stays in the top right corner while anything without a choice waits.
+     * stays in the top right corner while anything without a choice waits; the details sheet covers that corner, so
+     * while it is open the button is left out rather than drawn under the panel (2026-10-25).
      */
     private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY, float partialTick) {
         claimRect[2] = 0;
@@ -1919,7 +1920,7 @@ public class ProgressScreen extends Screen {
             }
         }
         if (ch.skills) {
-            renderSkillHeader(g, ch, skillX, ty, mouseX, mouseY);
+            renderSkillHeader(g, ch, skillX, ty, mouseX, mouseY, open);
         }
         // the pin: gold while the chapter is pinned to the top of the list
         boolean pinned = ClientConfig.railPinned(ch.id);
@@ -1941,10 +1942,15 @@ public class ProgressScreen extends Screen {
             String n = String.valueOf(waiting);
             int bx = width - Ui.S2 - bw;
             int by = Ui.S2;
-            boolean bo = mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh && mouseX < open;
-            Ui.surface(g, bx, by, bw, bh, Ui.CORNER, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
-            Ui.text(g, font, claimLabel, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
-            Ui.text(g, font, n, bx + bw - Ui.S2 - Ui.textWidth(font, n), by + (bh - 8) / 2, Tiles.INK);
+            // the sheet slides over this corner, so while it is open the button is not drawn at all: a gold ghost
+            // showing through the panel read as a half-cut button (2026-10-25)
+            boolean shown = bx + bw <= open;
+            boolean bo = shown && mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh;
+            if (shown) {
+                Ui.surface(g, bx, by, bw, bh, Ui.CORNER, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
+                Ui.text(g, font, claimLabel, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
+                Ui.text(g, font, n, bx + bw - Ui.S2 - Ui.textWidth(font, n), by + (bh - 8) / 2, Tiles.INK);
+            }
             Runnable claim = () -> {
                 ClientProgress.send("claim_chapter", ch.id, -1);
                 long start = Util.getMillis();
@@ -1958,10 +1964,10 @@ public class ProgressScreen extends Screen {
                     }
                 }
             };
-            if (bx + bw <= open) {
+            if (shown) {
                 buttons.add(new Button(bx, by, bw, bh, claim));
+                claimRect = new int[]{bx, by, bw, bh};
             }
-            claimRect = new int[]{bx, by, bw, bh};
         }
         g.pose().popPose();
     }
@@ -2043,14 +2049,27 @@ public class ProgressScreen extends Screen {
         return Component.translatable("screen.kuronami_quest_tree.skill.exchange_left", left);
     }
 
-    /** Level, experience bar, points to spend, and the two actions a skill chapter has (respec, exchange). */
-    private void renderSkillHeader(GuiGraphics g, ClientModel.Chapter ch, int x, int y, int mouseX, int mouseY) {
+    /**
+     * Level, experience bar, points to spend, and the two actions a skill chapter has (respec, exchange).
+     * <p>
+     * The details sheet slides over this row too, so an element the sheet would cover is not drawn at all: a chip or a
+     * counter cut mid-glyph at the sheet's edge read as a broken header (2026-10-25). The row is left to right, so the
+     * first element that does not fit ends it.
+     */
+    private void renderSkillHeader(GuiGraphics g, ClientModel.Chapter ch, int x, int y, int mouseX, int mouseY, int open) {
         PlayerProgress p = ClientProgress.progress();
         String key = ProgressRules.key(ch.id, ch.pool);
         int level = p.level.getOrDefault(key, 0);
         String lv = Component.translatable("screen.kuronami_quest_tree.level_short", level).getString();
+        int lw = Ui.textWidth(font, lv);
+        if (x + lw > open) {
+            return;
+        }
         Ui.text(g, font, lv, x, y, Ui.TEXT);
-        int bx = x + Ui.textWidth(font, lv) + Ui.S1;
+        int bx = x + lw + Ui.S1;
+        if (bx + 60 > open) {
+            return;
+        }
         var rules = ClientProgress.rules();
         var mc = rules == null ? null : rules.model().chapters.get(ch.id);
         double need = mc == null ? 0 : rules.experienceForLevel(mc, level);
@@ -2061,19 +2080,23 @@ public class ProgressScreen extends Screen {
         int next = bx + 68;
         if (pts > 0) {
             Component t = pointsLabel(pts);
+            int tw = Ui.textWidth(font, t);
+            if (next + tw > open) {
+                return;
+            }
             Ui.text(g, font, t, next, y, Tiles.GOLD);
-            next += Ui.textWidth(font, t) + 8;
+            next += tw + 8;
         }
         int bx2 = next + Ui.S1;
         if (mc != null) {
             // 14px chip centres its text at y+3; lift the chip so it shares the header's text baseline
-            skillActionButtons(g, ch, mc, p, bx2, y - 3, mouseX, mouseY);
+            skillActionButtons(g, ch, mc, p, bx2, y - 3, mouseX, mouseY, open);
         }
     }
 
     /** The respec and exchange chips beside a skill chapter's points. */
     private void skillActionButtons(GuiGraphics g, ClientModel.Chapter ch, ProgressModel.Chapter mc, PlayerProgress p,
-                                    int x, int y, int mouseX, int mouseY) {
+                                    int x, int y, int mouseX, int mouseY, int open) {
         var rules = ClientProgress.rules();
         if (rules == null) {
             return;
@@ -2082,6 +2105,9 @@ public class ProgressScreen extends Screen {
         boolean owner = team.ownsSharedActions();
         Component respec = respecLabel(ch);
         int rw = Ui.textWidth(font, respec) + 2 * Ui.S1;
+        if (x + rw > open) {
+            return;
+        }
         boolean canRespec = owner && rules.canRespec(p, mc);
         List<Component> respecTip = new ArrayList<>();
         respecTip.add(respec);
@@ -2103,6 +2129,9 @@ public class ProgressScreen extends Screen {
             return;
         }
         int ew = Ui.textWidth(font, exchange) + 2 * Ui.S1;
+        if (x + ew > open) {
+            return;
+        }
         int playerLevel = minecraft == null || minecraft.player == null ? 0 : minecraft.player.experienceLevel;
         boolean canExchange = owner && ProgressRules.canExchange(p, mc, playerLevel);
         List<Component> exchangeTip = new ArrayList<>();
@@ -3855,6 +3884,39 @@ public class ProgressScreen extends Screen {
         v[2] = zoom;
         v[0] = (float) (width / 2.0 - n.x * UNIT * zoom);
         v[1] = (float) (height / 2.0 - n.y * UNIT * zoom);
+    }
+
+    /** Dev tour only: frame a chapter's nodes so they fill the given share of the screen, centred on their middle. */
+    void tourZoomCentre(float fill) {
+        tourZoomCentre(fill, false);
+    }
+
+    /** The same, framed in the room left of the details sheet when one is open. */
+    void tourZoomCentre(float fill, boolean besideSheet) {
+        ClientModel.Chapter ch = chapter();
+        if (ch == null || ch.nodes.isEmpty()) {
+            return;
+        }
+        // the chapter list the tour holds open covers the left of the map, so the frame starts right of it
+        double left = tourRailOpen ? railWidth() : 0;
+        double room = (besideSheet ? width - sheetWidth() : width) - left;
+        double minX = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE;
+        double maxY = -Double.MAX_VALUE;
+        for (ClientModel.Node n : ch.nodes.values()) {
+            minX = Math.min(minX, n.x);
+            maxX = Math.max(maxX, n.x);
+            minY = Math.min(minY, n.y);
+            maxY = Math.max(maxY, n.y);
+        }
+        double bw = Math.max(1.0, maxX - minX);
+        double bh = Math.max(1.0, maxY - minY);
+        double zoom = Math.min(room * fill / (bw * UNIT), height * fill / (bh * UNIT));
+        float[] v = view(ch);
+        v[2] = (float) zoom;
+        v[0] = (float) (left + room / 2.0 - (minX + maxX) / 2.0 * UNIT * zoom);
+        v[1] = (float) (height / 2.0 - (minY + maxY) / 2.0 * UNIT * zoom);
     }
 
     /** Dev tour only: a node treated as under the pointer (null = the real pointer). */

@@ -26,6 +26,11 @@ public interface RecipeViewer {
     default void showCrates() {
     }
 
+    /** Opens the crate category on one table's card; viewers that cannot focus a card show the whole category. */
+    default void showCrates(String tableId) {
+        showCrates();
+    }
+
     /** Whether the viewer's own search field is being typed in. */
     boolean typing();
 

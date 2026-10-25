@@ -30,11 +30,17 @@ final class EditForm {
     static final int ROW = 18;
     private static final int LABEL_FRACTION = 38;
 
-    /** Boxes are built 40 wide, so a value set before layout scrolls to its tail; show the start until focused. */
+    /**
+     * Boxes are built 40 wide, so a value set before layout scrolls to its tail; show the start until focused.
+     * <p>
+     * The cursor moves with the highlight: a box left at cursor-end with its highlight at 0 draws the whole value as
+     * a selection, so every form read as though its text was picked out in blue (2026-10-25).
+     */
     private static void fitBox(EditBox box, int width) {
         box.setWidth(width);
         if (!box.isFocused()) {
             box.setHighlightPos(0);
+            box.setCursorPosition(0);
         }
     }
 
@@ -326,6 +332,8 @@ final class EditForm {
         void focusBox() {
             if (box != null) {
                 box.setFocused(true);
+                // the resting box holds its cursor at the start; a row reached with Tab types at the end, as before
+                box.moveCursorToEnd(false);
             }
         }
 

@@ -90,3 +90,37 @@ All 63 shots were retaken. What the re-run showed, against this plan's own rules
 
 Next pass (not done): a showcase chapter with English titles only, a zoom where titles render, the chat cleared before
 each shot (`Gui.getChat().clearMessages(true)` in `DevTour.shot`), then re-crop `_docs/gallery/`.
+
+## Status 2026-10-25 (dev tour re-run, gallery set rewritten)
+
+`_docs/gallery/` now holds the seven photos below, all from one NeoForge dev-tour run (`ppworld`, English UI, chat
+hidden for the whole tour, `quest_tree reset @s` at the start so every run starts from the same state).
+
+| file | shot | what it shows |
+|---|---|---|
+| `01_map_2x1.png` | `70_gallery_tree` | First Steps, rail open, 3 done + 1 half + open + locked, hover tooltip, `Claim all 3`; 2:1 crop (top 854 of 960) |
+| `02_detail.png` | `71_gallery_detail` | the sheet: chapter, quest, description, `Leads to`, `Defeat Zombie 2/5`, rewards |
+| `03_skills.png` | `73_gallery_skill_take` | the skill tree with a node open: `Lv 6`, the bar, `3 points`, and the sheet's `Unlock (2)` |
+| `04_viewer_quest.png` | `48_viewer_uses` | JEI Quests: three cards, Locked/Done/Open, `Needs: Diamond × 3`, one title ending in an ellipsis |
+| `05_viewer_crate.png` | `50_viewer_crates` | JEI Loot crates: `showcase:loot_crate`, `4 possible rewards`, the reward grid |
+| `06_hud_notice.png` | `63_hud_notice` | the tracker (`The Fighter's Way 2/5`) and the notice (`Defeat Zombie 2/5 · The Fighter's Way`) agreeing |
+| `07_editor.png` | `30_node_edit` | the node editor: title, description markup, shape/size/icon, the quest's toggles |
+
+What changed to make the set, and what the plan asks for but a single photo cannot show:
+
+- **Node titles are never drawn on the map**, at any zoom (`ClientModel.inlineText` puts the title on the tile only in
+  the tooltip and the sheet). The featured image therefore shows one title in a tooltip, not eight. The rail, the
+  connectors, the three states and the chapter list are all legible.
+- The gallery chapter is the dev fixture `questtree_test:start` (English titles, real item icons). Its `fight` node
+  gained a description so `02` has body text; the pack's other nodes have none.
+- The skills photo is the dev pack's own `showcase:skills` (ten vanilla-icon nodes, `level_limit 6`), because the ATM
+  skill chapter's icons need mods the dev client does not have. The tour spends three points so the tree shows taken,
+  open and locked nodes at once.
+- **`07` shows the node form, not a task field.** A task or reward card opens its own screen (`ContentEditScreen`), so
+  no single view holds both; `30b_node_edit_tasks` has the cards (`Item`, `+ Add task`, `Item`/`XP`, `+ Add reward`)
+  and the repeat settings if that reads better for the store page.
+- Fixture namespaces that would collide with the gallery chapter (`fixture_pack/data/artisan`, `.../fixture`) were
+  moved out of `data/` for the run and are back; the ATM pack was moved out of `datapacks/` and is back.
+- Two bugs the photos exposed, both fixed: the chapter header's respec/exchange chips were drawn under the details
+  sheet and cut mid-word, and every unfocused form field drew its whole value as a blue selection
+  (`EditForm.fitBox` moved the highlight to 0 but left the cursor at the end).

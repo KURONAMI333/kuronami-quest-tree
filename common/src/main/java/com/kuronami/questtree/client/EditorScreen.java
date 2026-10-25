@@ -97,6 +97,11 @@ abstract class EditorScreen extends Screen {
         form.scrollToEnd();
     }
 
+    /** Dev tour only: take the keyboard out of the field a fresh screen focused, so no text shows as selected. */
+    void tourUnfocus() {
+        setFocused(null);
+    }
+
     /** The working copy this screen writes; a refusal's snapshot is compared with it on the next leave attempt. */
     protected JsonObject content() {
         return null;

@@ -32,6 +32,13 @@ final class DevTour {
 
     static final boolean ENABLED = Boolean.getBoolean("quest_tree.devTour");
 
+    /** The dev pack's chapter the gallery photos use: real item icons and English text, ten nodes in a tree. */
+    private static final String GALLERY_CHAPTER = "questtree_test:start";
+    /** The dev pack's reward table the gallery's crate card shows. */
+    private static final String GALLERY_CRATE = "showcase:loot_crate";
+    /** The dev pack's skill chapter: vanilla icons only, so no node is a red slash on a store page. */
+    private static final String GALLERY_SKILLS = "showcase:skills";
+
     private record Step(int at, Runnable run) {
     }
 
@@ -94,10 +101,15 @@ final class DevTour {
         screensShot = false;
         ClientModel m = ClientProgress.model();
         ClientModel.Chapter quests = first(m, false);
-        ClientModel.Chapter skills = first(m, true);
+        ClientModel.Chapter skills = gallerySkills(m);
         List<ClientModel.Node> nodes = quests == null ? List.of() : new ArrayList<>(quests.nodes.values());
         ClientConfig.TrackerMode trackerModeBefore = ClientConfig.trackerMode();
+        chatVisibilityBefore = Minecraft.getInstance().options.chatVisibility().get();
+        Minecraft.getInstance().options.chatVisibility().set(net.minecraft.world.entity.player.ChatVisiblity.HIDDEN);
         int t = 100;
+        // a run starts from nothing: the dev world keeps progress between runs, and a level or a count left by an
+        // earlier run reads as test data in a photo (2026-10-25)
+        cmd(t++, "quest_tree reset @s");
         // progress to look at: a few completed (claimable), one claimed, one half done, experience and points
         for (int i = 0; i < Math.min(4, nodes.size()); i++) {
             cmd(t++, "quest_tree complete @s " + nodes.get(i).key);
@@ -106,7 +118,7 @@ final class DevTour {
             give(t++, nodes.get(4), 0.5);
         }
         if (skills != null) {
-            cmd(t++, "quest_tree experience @s " + skills.id + " 2000");
+            cmd(t++, "quest_tree experience @s " + skills.id + " 30");
         }
         at(t + 20, () -> {
             if (!nodes.isEmpty()) {
@@ -146,9 +158,15 @@ final class DevTour {
             at(t + 148, () -> ProgressScreen.tourHover(null));
         }
         if (skills != null) {
+            // a skill chapter reads as a tree only when some nodes are taken: points are capped by the chapter
+            at(t + 145, () -> {
+                take(skills, "crafting");
+                take(skills, "mining");
+                take(skills, "smelting");
+            });
             at(t + 150, () -> open(m.chapters.indexOf(skills)));
             shot(t + 170, "06_skills");
-            at(t + 180, () -> selectFirst(State.CLAIM));
+            at(t + 180, () -> selectFirst(State.OPEN));
             shot(t + 200, "07_skills_take");
             // a skill tree's lines (two-way in the data) with a node selected: arrows run outward only
             at(t + 202, () -> selectFirst(State.OPEN));
@@ -333,14 +351,26 @@ final class DevTour {
         // editing: the mode on, a node selected, then the screens a player reaches from it
         at(et + 17, () -> {
             EditorSession.setAllowed(true);
-            openId("aa_devtour:showcase");
+            openId("showcase:showcase");
         });
         at(et + 19, () -> EditorSession.setActive(true));
         at(et + 21, () -> onScreen("29_editor_map", ProgressScreen::tourEditSelectFirst));
         shot(et + 25, "29_editor_map");
-        at(et + 27, () -> onScreen("30_node_edit", s -> s.tourOpenNodeEditor("aa_devtour:showcase", "rich")));
+        at(et + 27, () -> onScreen("30_node_edit", s -> s.tourOpenNodeEditor("showcase:showcase", "rich")));
+        at(et + 29, () -> {
+            if (Minecraft.getInstance().screen instanceof EditorScreen s) {
+                s.tourUnfocus();
+            }
+        });
         shot(et + 33, "30_node_edit");
-        at(et + 35, () -> onScreen("31_chapter_settings", s -> s.tourOpenChapterEditor("aa_devtour:showcase")));
+        // the same screen's lower half: the task and reward cards, which is the authoring this photo is for
+        at(et + 34, () -> {
+            if (Minecraft.getInstance().screen instanceof EditorScreen s) {
+                s.tourScrollEnd();
+            }
+        });
+        shot(et + 36, "30b_node_edit_tasks");
+        at(et + 38, () -> onScreen("31_chapter_settings", s -> s.tourOpenChapterEditor("showcase:showcase")));
         shot(et + 41, "31_chapter_settings");
         at(et + 43, () -> onScreen("32_reward_table", ProgressScreen::tourOpenTableEditor));
         shot(et + 49, "32_reward_table");
@@ -349,19 +379,19 @@ final class DevTour {
         at(et + 59, () -> onScreen("34_party", ProgressScreen::tourOpenParty));
         shot(et + 65, "34_party");
         // a skill chapter: the respec card, then the exchange chip the same header shows
-        at(et + 67, () -> openId("aa_devtour:skills"));
-        at(et + 71, () -> onScreen("35_respec_confirm", s -> s.tourAskRespec("aa_devtour:skills")));
+        at(et + 67, () -> openId("showcase:skills"));
+        at(et + 71, () -> onScreen("35_respec_confirm", s -> s.tourAskRespec("showcase:skills")));
         shot(et + 75, "35_respec_confirm");
         at(et + 77, () -> onScreen("36_exchange", ProgressScreen::tourClearConfirm));
         shot(et + 81, "36_exchange");
         // a locked chapter in the rail, with the pack's own hint under the pointer
         at(et + 83, () -> {
             ProgressScreen.tourResting(false);
-            openId("aa_devtour:showcase");
+            openId("showcase:showcase");
         });
         at(et + 85, () -> ProgressScreen.tourRailOpen(true));
         at(et + 87, () -> onScreen("37_locked_chapter_hint", s -> {
-            int[] row = s.tourRailRow("aa_devtour:locked");
+            int[] row = s.tourRailRow("showcase:locked");
             if (row == null) {
                 Constants.LOG.warn("Dev tour: the locked chapter has no rail row");
             } else {
@@ -391,8 +421,8 @@ final class DevTour {
             });
         });
         // a description with a picture and both link kinds (the dev pack)
-        at(et + 114, () -> openId("aa_devtour:showcase"));
-        at(et + 116, () -> onScreen("39_description_image_links", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        at(et + 114, () -> openId("showcase:showcase"));
+        at(et + 116, () -> onScreen("39_description_image_links", s -> s.tourSelect("showcase:showcase/rich")));
         shot(et + 124, "39_description_image_links");
         // the emergency row, the chapter list open with the pointer on it, its items in the tooltip
         at(et + 126, () -> ProgressScreen.tourRailOpen(true));
@@ -410,9 +440,9 @@ final class DevTour {
             ProgressScreen.tourRailOpen(false);
             ProgressScreen.tourPointerClear();
             ClientConfig.textScale = 1.2f;
-            openId("aa_devtour:showcase");
+            openId("showcase:showcase");
         });
-        at(et + 139, () -> onScreen("41_text_120", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        at(et + 139, () -> onScreen("41_text_120", s -> s.tourSelect("showcase:showcase/rich")));
         shot(et + 148, "41_text_120");
         at(et + 150, () -> {
             ClientConfig.highContrast = true;
@@ -468,9 +498,9 @@ final class DevTour {
             Ui.loadPalette(Minecraft.getInstance().getResourceManager());
             Ui.setCornerRadius(0);
             ProgressScreen.tourRailOpen(true);
-            openId("aa_devtour:showcase");
+            openId("showcase:showcase");
         });
-        at(et + 186, () -> onScreen("45_corners_0", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        at(et + 186, () -> onScreen("45_corners_0", s -> s.tourSelect("showcase:showcase/rich")));
         shot(et + 190, "45_corners_0");
         at(et + 192, () -> {
             Minecraft.getInstance().setScreen(null);
@@ -480,9 +510,9 @@ final class DevTour {
         shot(et + 196, "45_corners_0_hud");
         at(et + 198, () -> {
             Ui.setCornerRadius(2);
-            openId("aa_devtour:showcase");
+            openId("showcase:showcase");
         });
-        at(et + 200, () -> onScreen("46_corners_2", s -> s.tourSelect("aa_devtour:showcase/rich")));
+        at(et + 200, () -> onScreen("46_corners_2", s -> s.tourSelect("showcase:showcase/rich")));
         shot(et + 204, "46_corners_2");
         at(et + 206, () -> {
             Minecraft.getInstance().setScreen(null);
@@ -510,7 +540,7 @@ final class DevTour {
         // the editor draws. The world photos build their own platform in the sky and put the world back afterwards.
         int qt = et + 219;
         cmd(qt, "item replace entity @s weapon.mainhand with "
-                + "kuronami_quest_tree:loot_crate[kuronami_quest_tree:loot_crate=\"aa_devtour:crate\"]");
+                + "kuronami_quest_tree:loot_crate[kuronami_quest_tree:loot_crate=\"showcase:loot_crate\"]");
         at(qt + 4, () -> {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null || mc.gameMode == null) {
@@ -528,7 +558,7 @@ final class DevTour {
                 Constants.LOG.warn("Dev tour: no recipe viewer for the crate category photo");
                 return;
             }
-            viewer.showCrates();
+            viewer.showCrates(GALLERY_CRATE);
         });
         shot(qt + 18, "50_viewer_crates");
         at(qt + 20, () -> Minecraft.getInstance().setScreen(null));
@@ -556,36 +586,36 @@ final class DevTour {
             ClientConfig.textScale = textScaleBefore;
             Ui.textScale = textScaleBefore;
             Minecraft.getInstance().setScreen(null);
-            openId("aa_devtour:parity");
+            openId("showcase:parity");
         });
         // a closed quest's lock mark, next to the per-quest switch that hides it
         at(qt + 120, () -> ProgressScreen.tourRailOpen(false));
         shot(qt + 122, "55_lock_icons");
         // a quest with guide_page: its details sheet carries the guide button
-        at(qt + 124, () -> onScreen("56_guide_button", s -> s.tourSelect("aa_devtour:parity/guided")));
+        at(qt + 124, () -> onScreen("56_guide_button", s -> s.tourSelect("showcase:parity/guided")));
         shot(qt + 130, "56_guide_button");
         // the map's changelog of the edits other operators made in this session
         at(qt + 132, () -> {
             EditorChangelog.clear();
-            openId("aa_devtour:showcase");
+            openId("showcase:showcase");
         });
         at(qt + 134, () -> {
             long now = net.minecraft.Util.getMillis();
-            EditorChangelog.add("create_node", "aa_devtour:showcase", "second", 1, "", "delete_node", now);
-            EditorChangelog.add("link", "aa_devtour:showcase", "second", 1, "unlink", "", now);
-            EditorChangelog.add("delete_node", "aa_devtour:showcase", "", 3, "restore_node", "", now);
-            EditorChangelog.add("move_node", "aa_devtour:showcase", "rich", 2, "move_node", "move_node", now);
+            EditorChangelog.add("create_node", "showcase:showcase", "second", 1, "", "delete_node", now);
+            EditorChangelog.add("link", "showcase:showcase", "second", 1, "unlink", "", now);
+            EditorChangelog.add("delete_node", "showcase:showcase", "", 3, "restore_node", "", now);
+            EditorChangelog.add("move_node", "showcase:showcase", "rich", 2, "move_node", "move_node", now);
         });
         shot(qt + 136, "57_editor_changelog");
         // one size for a whole selection
         at(qt + 138, () -> Minecraft.getInstance().setScreen(
-                new BulkSizeScreen(null, "aa_devtour:parity", List.of("screens", "guided", "guarded", "blocked"))));
+                new BulkSizeScreen(null, "showcase:parity", List.of("screens", "guided", "guarded", "blocked"))));
         shot(qt + 142, "58_bulk_size");
         // a reward table's screen: its fields up top, then the quests that roll it
-        at(qt + 144, () -> Minecraft.getInstance().setScreen(new TableEditScreen(null, "aa_devtour:crate", false)));
+        at(qt + 144, () -> Minecraft.getInstance().setScreen(new TableEditScreen(null, "showcase:loot_crate", false)));
         shot(qt + 148, "59_table_used_by");
         // a chapter's image card, at the bottom of its settings
-        at(qt + 150, () -> Minecraft.getInstance().setScreen(new ChapterEditScreen(null, "aa_devtour:parity")));
+        at(qt + 150, () -> Minecraft.getInstance().setScreen(new ChapterEditScreen(null, "showcase:parity")));
         at(qt + 152, () -> {
             if (Minecraft.getInstance().screen instanceof EditorScreen s) {
                 s.tourScrollEnd();
@@ -595,25 +625,98 @@ final class DevTour {
         // the picker behind the map's "link to" entry
         at(qt + 158, () -> {
             Minecraft.getInstance().setScreen(null);
-            openId("aa_devtour:parity");
+            openId("showcase:parity");
         });
-        at(qt + 160, () -> onScreen("61_link_picker", s -> s.tourOpenLinkPicker("aa_devtour:parity", "screens")));
+        at(qt + 160, () -> onScreen("61_link_picker", s -> s.tourOpenLinkPicker("showcase:parity", "screens")));
         shot(qt + 164, "61_link_picker");
         // a locale's translation screen: every key the pack's English file has, unset in this one
         at(qt + 166, () -> Minecraft.getInstance().setScreen(new TranslationEditScreen(null, "ja_jp")));
         shot(qt + 170, "62_translation");
+        // the world section has taken its set down by now, and the notice photo wants daylight and open sky rather
+        // than the cave the player was left in (2026-10-25). The client's own clock follows the server's a second
+        // later, so the day is asked for early and again below until the client agrees
+        at(qt + 140, () -> cmdNow("time set day"));
+        at(qt + 171, () -> {
+            cmdNow("time set day");
+            cmdNow("weather clear");
+            cmdNow("fill " + (tourCx - 3) + " " + TOUR_FLOOR_Y + " " + (tourCz - 15) + " "
+                    + (tourCx + 3) + " " + TOUR_FLOOR_Y + " " + (tourCz - 11) + " minecraft:polished_deepslate");
+            cmdNow("tp @s " + fmt(tourCx + 0.5) + " " + (TOUR_FLOOR_Y + 1) + " " + fmt(tourCz - 13.5) + " 0 20");
+            cmdNow("item replace entity @s weapon.mainhand with minecraft:air");
+            waitDay(qt + 177);
+        });
         // the one-line notice above the hotbar, in the tracker card's frame (2026-10-23)
         at(qt + 174, () -> {
             Minecraft.getInstance().setScreen(null);
             ClientModel.Node n = trackerPin();
+            // pins outlive a run, so the card would carry quests from earlier tours: the photo gets this one only
+            for (String k : new ArrayList<>(Pins.all())) {
+                Pins.toggle(k);
+            }
+            if (n != null) {
+                Pins.toggle(n.key);
+            }
+            tourPin = n == null ? null : n.key;
+            ClientConfig.setTrackerMode(ClientConfig.TrackerMode.QUESTS_ONLY);
+            // the notice shows half of the target; the tracker row shows what is recorded, so write the same half
+            if (n != null) {
+                for (int i = 0; i < n.tasks.size(); i++) {
+                    long need = n.tasks.get(i).count;
+                    if (need > 0) {
+                        cmdNow("quest_tree progress @s " + n.key + " " + (i + 1) + " " + Math.max(1, need / 2));
+                        break;
+                    }
+                }
+            }
             Constants.LOG.info("Dev tour: notice screen={} key={}", Minecraft.getInstance().screen,
                     n == null ? null : n.key);
             ProgressHud.tourNotice(n == null ? null : n.key);
         });
         shot(qt + 177, "63_hud_notice");
-        at(qt + 182, () -> Minecraft.getInstance().setScreen(null));
-        at(qt + 200, () -> {
+        // the store page's two map photos: the fixture chapter has real item icons and English text, the chapter list
+        // is held open so its names are in the photo, and a node under the pointer carries one quest name
+        at(qt + 177, EditorChangelog::clear);
+        at(qt + 178, () -> {
+            openId(GALLERY_CHAPTER);
+            ProgressScreen.tourRailOpen(true);
+        });
+        at(qt + 178, () -> onScreen("70_gallery_tree", s -> s.tourZoomCentre(0.72f)));
+        // three states on one map: two quests done, one half way, the rest open or closed behind them. Sent while the
+        // screen is open, so the completion toasts queue instead of covering the photos.
+        at(qt + 179, () -> cmdNow("quest_tree complete @s " + GALLERY_CHAPTER + "/logs"));
+        at(qt + 180, () -> cmdNow("quest_tree complete @s " + GALLERY_CHAPTER + "/table"));
+        at(qt + 181, () -> cmdNow("quest_tree complete @s " + GALLERY_CHAPTER + "/pick"));
+        // the half-done quest, written rather than held: an item task of a repeatable quest counts what is submitted,
+        // so a given stack never turns its tile blue (2026-10-25). A kill task keeps the count it is written with.
+        at(qt + 182, () -> cmdNow("quest_tree progress @s " + GALLERY_CHAPTER + "/fight 1 2"));
+        at(qt + 183, () -> onScreen("70_gallery_tree", ProgressScreen::tourHoverBusiest));
+        shot(qt + 190, "70_gallery_tree");
+        at(qt + 191, () -> ProgressScreen.tourHover(null));
+        at(qt + 192, DevTour::selectGalleryNode);
+        shot(qt + 198, "71_gallery_detail");
+        at(qt + 199, () -> {
+            ProgressScreen.tourRailOpen(false);
+            if (skills != null) {
+                open(m.chapters.indexOf(skills));
+            }
+        });
+        // the skill tree photo: its own chapter, so no node depends on another mod's icon or a test level, and a
+        // tooltip would only repeat a node name, so the tree is framed and left to speak
+        at(qt + 200, () -> onScreen("72_gallery_skills", s -> s.tourZoomCentre(0.72f)));
+        shot(qt + 207, "72_gallery_skills");
+        // the same tree with a node open: its cost and its prerequisite are the point of a skill chapter
+        at(qt + 209, () -> selectFirst(State.CLAIM));
+        at(qt + 210, () -> onScreen("73_gallery_skill_take", s -> s.tourZoomCentre(0.68f, true)));
+        shot(qt + 215, "73_gallery_skill_take");
+        at(qt + 220, () -> Minecraft.getInstance().setScreen(null));
+        at(qt + 222, () -> {
             worldCleanup();
+            // the notice photo's own platform and its daylight
+            cmdNow("fill " + (tourCx - 3) + " " + TOUR_FLOOR_Y + " " + (tourCz - 15) + " "
+                    + (tourCx + 3) + " " + TOUR_FLOOR_Y + " " + (tourCz - 11) + " minecraft:air");
+            cmdNow("time set " + tourHomeDayTime);
+            cmdNow("tp @s " + fmt(tourHomeX) + " " + fmt(tourHomeY) + " " + fmt(tourHomeZ)
+                    + " " + fmt(tourHomeYaw) + " " + fmt(tourHomePitch));
             Ui.clearCornerRadius();
             Minecraft.getInstance().setScreen(null);
             // leave the developer's own settings as they were found
@@ -622,6 +725,7 @@ final class DevTour {
                 tourPin = null;
             }
             ClientConfig.setTrackerMode(trackerModeBefore);
+            Minecraft.getInstance().options.chatVisibility().set(chatVisibilityBefore);
             ClientConfig.textScale = textScaleBefore;
             ClientConfig.highContrast = contrastBefore;
             Ui.textScale = textScaleBefore;
@@ -648,6 +752,10 @@ final class DevTour {
 
     /** A visible unfinished quest to pin for the tracker photo: an item quest first, then anything open. */
     private static ClientModel.Node trackerPin() {
+        ClientModel.Node own = galleryPin();
+        if (own != null) {
+            return own;
+        }
         ClientModel.Node open = openItemQuest();
         if (open != null) {
             return open;
@@ -663,6 +771,50 @@ final class DevTour {
             }
         }
         return null;
+    }
+
+    /**
+     * A quest of the gallery chapter to pin: its titles are English and its tasks real items.
+     * <p>
+     * A task whose count the notice reads back from what is recorded comes first (a kill, or a submitted item): the
+     * tour writes that count, so the notice and the tracker row beside it agree. An inventory-checked item task would
+     * show the held count instead, and the server does not take a written count for it, so the two numbers in one
+     * photo would disagree (2026-10-25).
+     */
+    private static ClientModel.Node galleryPin() {
+        ClientModel.Node agrees = null;
+        ClientModel.Node item = null;
+        ClientModel.Node any = null;
+        for (ClientModel.Node n : ClientProgress.model().nodesByKey.values()) {
+            if (!n.key.startsWith(GALLERY_CHAPTER + "/") || !ClientProgress.visible(n.key)) {
+                continue;
+            }
+            State s = ClientProgress.state(n.key);
+            if (s != State.OPEN && s != State.PROGRESS) {
+                continue;
+            }
+            if (agrees == null && noticeAgrees(n)) {
+                agrees = n;
+            }
+            if (!n.tasks.isEmpty() && !n.tasks.get(0).item.isEmpty()) {
+                if (item == null) {
+                    item = n;
+                }
+            } else if (any == null) {
+                any = n;
+            }
+        }
+        return agrees != null ? agrees : item != null ? item : any;
+    }
+
+    /** Whether the notice and the tracker read the same number for this quest: a counted task that is not held. */
+    private static boolean noticeAgrees(ClientModel.Node n) {
+        for (ClientModel.Task t : n.tasks) {
+            if (t.count > 0) {
+                return !t.type.equals("item") || t.consume;
+            }
+        }
+        return false;
     }
 
     private static boolean respawnIfDead() {
@@ -741,7 +893,7 @@ final class DevTour {
                 // setblock with the NBT in one go: data merge afterwards would change only the server's block entity
                 // and the client would keep an empty one, so the face would not draw
                 String nbt = isCore
-                        ? "{node:\"aa_devtour:parity/screens\",task:" + taskIndex + ",owner:" + owner + "}"
+                        ? "{node:\"showcase:parity/screens\",task:" + taskIndex + ",owner:" + owner + "}"
                         : "{core:" + coreLong + "L}";
                 cmdNow("setblock " + x + " " + y + " " + coreZ + " kuronami_quest_tree:"
                         + (isCore ? "task_screen_" + size : "task_screen_aux") + "[facing=north]" + nbt);
@@ -784,7 +936,7 @@ final class DevTour {
             // setblock only places the core; the aux blocks are what a player's placement fills in, and the core is
             // the bottom-centre of the face (TaskScreenBlock.screenPositions), so they all stand on the floor
             placeScreen(s[2], s[0], s[1], cz, s[3], owner);
-            cmdNow("quest_tree progress @s aa_devtour:parity/screens " + (s[3] + 1) + " " + s[4]);
+            cmdNow("quest_tree progress @s showcase:parity/screens " + (s[3] + 1) + " " + s[4]);
         }
         // setblock sends the block change before it loads the block entity's NBT, so the client would keep an empty
         // core and draw no face. Going far enough for the chunk to unload and coming back makes the client read the
@@ -863,9 +1015,9 @@ final class DevTour {
         int cz = tourCz;
         int y = TOUR_FLOOR_Y;
         // back to the start of the first task, so the detector's pulse is what completes it
-        cmdNow("quest_tree progress @s aa_devtour:parity/screens 1 0");
+        cmdNow("quest_tree progress @s showcase:parity/screens 1 0");
         cmdNow("setblock " + (cx - 9) + " " + (y + 1) + " " + cz + " kuronami_quest_tree:quest_detector"
-                + "{target:\"aa_devtour:parity/screens#0\",radius:" + TOUR_DETECTOR_RADIUS + "}");
+                + "{target:\"showcase:parity/screens#0\",radius:" + TOUR_DETECTOR_RADIUS + "}");
         standAt(-5, -6, cx - 9, cz);
     }
 
@@ -891,7 +1043,33 @@ final class DevTour {
     }
 
     private static void shot(String name) {
+        grab(name);
+    }
+
+    /** The player's chat setting, put back at the end of the tour. */
+    private static net.minecraft.world.entity.player.ChatVisiblity chatVisibilityBefore = net.minecraft.world.entity.player.ChatVisiblity.FULL;
+
+    /** Takes the photo with an empty chat: the tour's own commands would otherwise sit over the bottom of the screen. */
+    /** The client's own day time follows the server's a tick or two later, so the photo waits for it. */
+    private static void waitDay(int until) {
         Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) {
+            return;
+        }
+        long t = mc.level.getDayTime() % 24000L;
+        if (t > 12000L && t < 23000L) {
+            if (ticks < until) {
+                cmdNow("time set day");
+                at(ticks + 2, () -> waitDay(until));
+            } else {
+                Constants.LOG.warn("Dev tour: the notice photo is still at night");
+            }
+        }
+    }
+
+    private static void grab(String name) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.gui.getChat().clearMessages(true);
         Screenshot.grab(mc.gameDirectory, "questtree_" + name + ".png", mc.getMainRenderTarget(),
                 msg -> Constants.LOG.info("Dev tour screenshot {}", name));
     }
@@ -903,6 +1081,19 @@ final class DevTour {
 
     private static ClientModel.Chapter first(ClientModel m, boolean skills) {
         return m.chapters.stream().filter(c -> c.skills == skills).findFirst().orElse(null);
+    }
+
+    /** The dev pack's own skill chapter: the gallery must not photograph a pack whose icons need other mods. */
+    private static ClientModel.Chapter gallerySkills(ClientModel m) {
+        ClientModel.Chapter own = m.chapters.stream().filter(c -> c.id.equals(GALLERY_SKILLS)).findFirst().orElse(null);
+        return own != null ? own : first(m, true);
+    }
+
+    private static void take(ClientModel.Chapter ch, String id) {
+        ClientModel.Node n = ch == null ? null : ch.nodes.get(id);
+        if (n != null) {
+            ClientProgress.send("take", n.key, 0);
+        }
     }
 
     private static void at(int tick, Runnable r) {
@@ -968,11 +1159,38 @@ final class DevTour {
         onScreen("select " + state, s -> s.tourSelectFirst(state));
     }
 
+    /**
+     * Selects a quest of the open chapter for the gallery's detail photo: its sheet then carries a title, a
+     * description, a have/need count and the reward row. One already under way wins over a finished one, so the sheet
+     * shows the count rather than 1/1 (2026-10-25); a kill task counts as well as an item one.
+     */
+    private static void selectGalleryNode() {
+        ClientModel m = ClientProgress.model();
+        if (m == null) {
+            return;
+        }
+        ClientModel.Node pick = null;
+        int best = Integer.MAX_VALUE;
+        for (ClientModel.Node n : m.nodesByKey.values()) {
+            ClientModel.Chapter c = m.chapterOf.get(n.key);
+            State s = ClientProgress.state(n.key);
+            if (c == null || !GALLERY_CHAPTER.equals(c.id) || !ClientProgress.visible(n.key)
+                    || n.tasks.isEmpty()) {
+                continue;
+            }
+            int rank = s == State.PROGRESS ? 0 : s == State.CLAIM ? 1 : s == State.OPEN ? 2 : 3;
+            if (rank < best) {
+                best = rank;
+                pick = n;
+            }
+        }
+        if (pick != null) {
+            ClientModel.Node chosen = pick;
+            onScreen("gallery select " + chosen.key, screen -> screen.tourSelect(chosen.key));
+        }
+    }
+
     private static void shot(int tick, String name) {
-        at(tick, () -> {
-            Minecraft mc = Minecraft.getInstance();
-            Screenshot.grab(mc.gameDirectory, "questtree_" + name + ".png", mc.getMainRenderTarget(),
-                    msg -> Constants.LOG.info("Dev tour screenshot {}", name));
-        });
+        at(tick, () -> grab(name));
     }
 }
