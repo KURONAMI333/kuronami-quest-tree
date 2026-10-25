@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (alpha)
+## 0.1.0-alpha.1
 
 - First alpha release.
 - Quests and skill trees are drawn on one map, with dependencies, optional tasks, exclusive branches, repeatable quests, pins, search, zoom and a minimap.

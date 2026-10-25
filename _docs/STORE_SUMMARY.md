@@ -6,7 +6,7 @@ Open quests and skill trees on one map, share progress with your team, and impor
 
 ## CurseForge categories
 
-- Primary: Adventure
+- Primary: Adventure and RPG
 - Additional: Utility & QoL
 - Additional: API and Library
 
