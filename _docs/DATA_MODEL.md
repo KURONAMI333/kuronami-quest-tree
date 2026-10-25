@@ -255,7 +255,7 @@ A loot crate table can promise an entry after a run of misses:
              {"weight": 1, "reward": {"type": "item", "item": {"id": "minecraft:netherite_ingot"}}}]}
 ```
 
-After `after` rolls that did not take `entry`, the next roll takes it without rolling, and the count starts over. Any roll that takes it starts the count over as well. An empty result (`empty_weight`) counts as a miss. `entry` is the position in `entries`; when it is left out, the entry with the smallest weight above 0 is the one (the first one on a tie). An entry with weight 0 is granted outside the rolls, so it cannot be the ceiling's entry.
+The ceiling is a run: when `after - 1` rolls in a row did not take `entry`, the next roll takes it without rolling, so it arrives within `after` rolls and the count starts over. Any roll that takes it starts the count over as well. An empty result (`empty_weight`) counts as a miss. `entry` is the position in `entries`; when it is left out, the entry with the smallest weight above 0 is the one (the first one on a tie). An entry with weight 0 is granted outside the rolls, so it cannot be the ceiling's entry.
 
 The count belongs to one player and one table, saved with that player's progress. A table without `pity` rolls as before. The chances a recipe viewer shows stay the single-roll chances: the ceiling is not folded into them. A shape the roll cannot use (`after` below 1, `entry` out of range, or an `entry` with weight 0) gives no ceiling, and the table keeps rolling.
 

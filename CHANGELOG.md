@@ -11,6 +11,7 @@
 - A quest book item opens the screen. A quest block opens one quest, and a barrier block opens only after a quest or stage is reached.
 - JEI, REI and EMI can open a quest from an item, and quest descriptions can open a recipe, another quest or a link.
 - Item tooltips show which quests need the item.
+- Loot crates: a crate item and a crate block roll a reward table. The recipe viewers show the chance of each reward, and a table can guarantee an entry after a run of misses.
 - Quest givers: right-click a linked entity or quest board to open the book on a quest or chapter. `/quest_tree giver set|clear`, `QuestTreeApi.open` and KubeJS `QuestTree.open` link one from a command, another mod or an NPC script.
 - `/quest_tree validate` reports problems in overlay restriction rules, not only in the pack's own restrictions file.
 - The rest of the FTB Quests operator commands: `/quest_tree book_lock` closes a team's book, `progress` sets one task counter, `complete_all` finishes every quest, `open_book` opens the book at a chapter or quest, `chapter generate` makes a chapter from the creative list, a player's inventory or a container, and `table export|import|delete_empty` moves reward tables in and out of containers and removes empty ones. `cleanup_translations` finds and deletes language keys the book no longer reads.

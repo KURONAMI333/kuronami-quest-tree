@@ -8,8 +8,9 @@ import java.util.List;
 import java.util.function.DoubleSupplier;
 
 /**
- * A loot crate's ceiling: after {@code after} rolls that did not take the chosen entry, the next roll takes it and
- * the count starts again. Per player and per table, so one player's unlucky streak never moves another's.
+ * A loot crate's ceiling: the chosen entry is guaranteed within {@code after} rolls. After {@code after - 1} rolls
+ * that did not take it, the next roll takes it and the count starts again. Per player and per table, so one player's
+ * unlucky streak never moves another's.
  * <p>
  * The table writes it as {@code "pity": {"after": 20, "entry": 2}}. {@code entry} may be left out: the entry with the
  * smallest weight above 0 (the first one on a tie) is the one the ceiling takes. Kept without game classes so the
@@ -20,7 +21,7 @@ public final class PityRules {
     private PityRules() {
     }
 
-    /** {@code after} rolls without the entry, then {@code entry} is taken. */
+    /** {@code after} is the longest run of rolls without the entry: the last roll of that run takes it. */
     public record Settings(int after, int entry) {
     }
 
