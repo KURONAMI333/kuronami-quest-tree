@@ -95,7 +95,14 @@ public final class SavedDataFiles {
                                                BiFunction<CompoundTag, HolderLookup.Provider, T> deserializer,
                                                HolderLookup.Provider registries) {
         if (!Files.isRegularFile(dataFile)) {
-            return null;
+            // A missing main file is not the same as a new world: a crash between quarantine and restore leaves the
+            // backup behind, and starting empty here would overwrite it on the next save (2026-10-25 review).
+            Path backup = backupPath(dataFile);
+            T recovered = Files.isRegularFile(backup) ? readFile(backup, deserializer, registries) : null;
+            if (recovered != null && restore(backup, dataFile)) {
+                Constants.LOG.warn("{} was missing; restored it from {}", dataFile, backup);
+            }
+            return recovered;
         }
         T store = readFile(dataFile, deserializer, registries);
         if (store != null) {

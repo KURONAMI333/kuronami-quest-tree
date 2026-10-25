@@ -169,13 +169,16 @@ class ProgressStoreLoadTest {
     }
 
     @Test
-    void aMissingFileDoesNotResurrectTheBackup() throws IOException {
+    void aMissingFileIsRestoredFromTheBackup() throws IOException {
         Path file = dir.resolve("progress.dat");
         storeWith("test:book/first").save(file.toFile(), null);
         Files.copy(file, SavedDataFiles.backupPath(file));
         Files.delete(file);
 
-        assertNull(read(file));
-        assertFalse(Files.exists(file), "the backup only replaces a main file that exists but does not read");
+        // A crash between quarantining the main file and restoring the backup leaves exactly this state, and starting
+        // empty here would write an empty main file and then overwrite the backup with it (2026-10-25 review).
+        assertEquals(Set.of("test:book/first"), read(file).team(TEAM).shared.completed,
+                "the backup is read when the main is gone");
+        assertTrue(Files.isRegularFile(file), "the backup is copied back so the next start finds it");
     }
 }

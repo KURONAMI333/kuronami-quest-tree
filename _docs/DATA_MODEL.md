@@ -274,7 +274,7 @@ The five built-in conditions and kinds registered by other mods or KubeJS may be
 {"type": "example:enabled"}
 ```
 
-`stage` checks a Pack Stages stage, including one granted to the team; `score` checks a scoreboard value (also spelled `scoreboard`); `item` checks the inventory; `advancement` checks an advancement; `party_size` checks the number of online party members.
+`stage` checks a stage the book granted to the player (personal or team) and, when Pack Stages is installed, a stage another mod set; stage tasks and stage gates read the same three, so a stage this book grants needs no Pack Stages on either loader. `score` checks a scoreboard value (also spelled `scoreboard`); `item` checks the inventory; `advancement` checks an advancement; `party_size` checks the number of online party members.
 
 The five built-in kinds may be written without a namespace (`item`) or with Quest Tree's namespace (`kuronami_quest_tree:item`); both are read as built in. Any other namespace is always looked up in the registration table, even when the id matches a built-in.
 
@@ -293,7 +293,7 @@ Conditions are evaluated once, when the reward is granted. Revocation (respec, r
    "item_tags": ["minecraft:swords"],
    "blocks": ["minecraft:iron_ore"],
    "block_tags": ["minecraft:ores"],
-   "actions": ["use", "attack", "place", "break", "equip"],
+   "actions": ["use", "place", "break", "equip"],
    "message": "Finish the trial first",
    "conditions": [{"type": "stage", "stage": "trial/one"}]}
 ]}
@@ -307,6 +307,7 @@ Conditions are evaluated once, when the reward is granted. Revocation (respec, r
 - `equip` covers the armour slots and the offhand. It is checked every five ticks, and the players' checks are spread by UUID; an unchanged set of worn item ids with the same rules and progress revision is skipped. A restricted item is put back into the inventory (or dropped when full) within that window. The main hand is not checked, because moving an item into it happens constantly.
 - `use` covers using the item in the air, on a block, or on an entity; it also covers using a restricted block (a chest, a door, and so on).
 - `craft` is checked when a crafting grid's result is taken, by a click or a shift-click; the result stays in the slot and the ingredients are untouched. Furnace, smoker, blast furnace and brewing results are not covered.
+- `attack` is accepted but not enforced yet: nothing asks for it, so a rule that names only `attack` does nothing (0.2.0). Automated crafting from another mod (Applied Energistics, Refined Storage, Create) does not take the result slot and is not covered by `craft` either.
 - `place` is checked in `BlockItem#place`: it matches the item being placed and the block it would become. A placement that does not go through `BlockItem` is not covered. There is no creative-mode or permission-level exemption; a restricted item is refused for every player. `break` matches the block and the item held to break it. A refused action never drops anything or counts toward a task.
 - Restrictions are enforced on the server only. The client mod does not need to know them; the synced bundle carries the rules for the editor.
 - A fake player (one with no connection, or a mod's own `ServerPlayer` subclass, such as Create's deployer) is not restricted and gets no progress record.

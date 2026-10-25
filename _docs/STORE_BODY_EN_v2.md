@@ -14,9 +14,10 @@ Quest books and skill trees usually come from separate mods and live in separate
 - **Import and migration** — convert an existing FTB Quests book or Pufferfish's Skills trees into a data pack, and copy players' existing progress into the team records. Settings that cannot be carried over are listed instead of guessed.
 - **Recipe viewers and tooltips** — JEI, REI and EMI draw quests and loot crates as cards in the quest screen's style: a quest card shows the quest's name, chapter and state and marks whether the item is needed or rewarded, a crate card shows its reward table and the rewards it can roll, and long names end in an ellipsis inside the card instead of running off it. A recipe viewer can open a quest from an item; descriptions can open a recipe, another quest or a link. Item tooltips show which quests need the item.
 - **Crate odds and a floor** — a crate card shows the chance of each reward in JEI, REI and EMI, and a reward table can guarantee an entry after a run of misses.
+- **Restrictions** — a pack can hold an item or a block shut until a quest, a stage, a score, an item, an advancement or a party size says otherwise. A held item cannot be equipped, used, placed, broken or crafted, and the reason appears above the hotbar.
 - **Extension points** — other mods can register task, reward and condition types and listen for completion, claim and task events. KubeJS scripts can do the same on NeoForge.
 
-A quest book item opens the screen from the inventory, and a quest block and a barrier block let a pack put a single quest or a progression gate in the world.
+A quest book item opens the screen from the inventory. In the world, a quest block opens one quest, a barrier block gates progress, a detector block turns a redstone pulse into progress for every player nearby, and task screens take item, fluid and energy hand-ins from other mods' pipes. A loot crate is an item a pack fills with a reward table: use it to roll the table, or sneak to roll the whole stack; a crate opener takes crates from a hopper, rolls them and keeps the output for a hopper to pull. With Jade installed, a quest barrier's overlay shows what it asks for and whether you may pass.
 
 ## Data and commands
 
@@ -37,6 +38,8 @@ The original FTB Quests and Pufferfish's Skills files are only read. The import 
 - A `currency` reward needs an economy mod that registers a provider with FTB Library. A `trophy` reward needs Kuronami's Trophies; without it the reward does nothing and does not block the other rewards on the quest.
 - Migration is a merge. It unites sets and keeps the larger counter; it does not remove progress. A second apply of the same source is refused unless you force it, because replaying it could restore state that was cleared on purpose.
 - KubeJS integration is NeoForge only.
+- A stage this book grants works on both loaders. A stage another mod or a command sets needs Pack Stages, which is NeoForge only on 1.21.1.
+- Energy tasks need an energy API: NeoForge has one, and on Fabric they need Team Reborn Energy.
 - Importing, migrating and editing write into the world. Make a copy of the world before using them on a pack people already play.
 
 <p><a href="https://www.patreon.com/KURONAMI333"><img src="https://media.forgecdn.net/attachments/description/1564253/description_0b5d69f3-bf0d-4a38-8894-6883abaa65e9.png" width="250" height="100" alt="Support my mods on Patreon"></a> <a href="https://x.com/kuronami333"><img src="https://media.forgecdn.net/attachments/description/1564253/description_0ed421f9-f6e1-4334-8e1e-fac25c804fe6.png" width="250" height="100" alt="Follow @kuronami333 on X"></a> <a href="https://www.youtube.com/channel/UCoimycJCVZmxNKyX9Vr7Apg"><img src="https://media.forgecdn.net/attachments/description/1564253/description_b953be14-e0c1-4290-b5d3-5ae75107ce90.png" width="250" height="100" alt="Watch KURONAMI on YouTube"></a></p>

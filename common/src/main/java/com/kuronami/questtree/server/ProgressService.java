@@ -621,7 +621,8 @@ public final class ProgressService {
     private record Conditions(ServerPlayer player, PlayerProgress progress) implements QuestConditions.Context {
         @Override
         public boolean hasStage(String stage) {
-            return progress.teamStages.contains(stage) || ProgressService.hasStage(player, stage);
+            return progress.stages.contains(stage) || progress.teamStages.contains(stage)
+                    || ProgressService.hasStage(player, stage);
         }
 
         @Override
@@ -1103,7 +1104,8 @@ public final class ProgressService {
                     case "location" -> inside(player, t) ? 1 : 0;
                     case "advancement" -> advancementDone(player, str(t, "advancement"), str(t, "criterion")) ? 1 : 0;
                     case "stat" -> stat(player, str(t, "stat"));
-                    case "stage" -> (ProgressModel.boolOf(t, "team") && p.teamStages.contains(str(t, "stage"))
+                    case "stage" -> (p.stages.contains(str(t, "stage"))
+                            || ProgressModel.boolOf(t, "team") && p.teamStages.contains(str(t, "stage"))
                             || hasStage(player, str(t, "stage"))) ? 1 : 0;
                     case "reach_day" -> ProgressRules.dayReached(level.getDayTime(),
                             PackNumbers.savedLong(t.get("day"), 0)) ? 1 : 0;

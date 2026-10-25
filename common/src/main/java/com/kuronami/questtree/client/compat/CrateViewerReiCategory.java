@@ -2,6 +2,7 @@ package com.kuronami.questtree.client.compat;
 
 import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.client.QuestViewerStyle;
+import com.kuronami.questtree.progress.CrateOdds;
 import me.shedaniel.math.Point;
 import me.shedaniel.math.Rectangle;
 import me.shedaniel.rei.api.client.gui.Renderer;
@@ -76,8 +77,11 @@ public final class CrateViewerReiCategory implements DisplayCategory<CrateViewer
         for (int i = 0; i < Math.min(recipe.contents().size(), COLUMNS * ROWS); i++) {
             int x = bounds.x + 10 + (i % COLUMNS) * 18;
             int y = bounds.y + 40 + (i / COLUMNS) * 18;
-            widgets.add(Widgets.createSlot(new Point(x, y))
-                    .entry(EntryStacks.of(recipe.contents().get(i).stack())).markOutput());
+            // the chance goes on the slot as a tooltip: JEI and EMI do the same, and a label under each slot
+            // would not fit the 18px grid (2026-10-25)
+            widgets.add(Widgets.withTooltip(Widgets.createSlot(new Point(x, y))
+                            .entry(EntryStacks.of(recipe.contents().get(i).stack())).markOutput(),
+                    Component.literal(CrateOdds.percent(recipe.chance(i)))));
         }
         return widgets;
     }
