@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.0-alpha.1
+## 1.0.0
 
-- First alpha release.
+- First release.
 - Quests and skill trees are drawn on one map, with dependencies, optional tasks, exclusive branches, repeatable quests, pins, search, zoom and a minimap.
 - Team progress: FTB Teams parties when the mod is installed, or the built-in party commands otherwise. Claimed rewards stay with the player who claimed them.
 - In-game editor: add, move, link and delete nodes; edit tasks, rewards, conditions, chapters and reward tables; undo and restore deleted chapters and nodes; export the result as a data pack.
@@ -18,4 +18,7 @@
 - `/quest_tree validate` reports problems in overlay restriction rules, not only in the pack's own restrictions file.
 - The rest of the FTB Quests operator commands: `/quest_tree book_lock` closes a team's book, `progress` sets one task counter, `complete_all` finishes every quest, `open_book` opens the book at a chapter or quest, `chapter generate` makes a chapter from the creative list, a player's inventory or a container, and `table export|import|delete_empty` moves reward tables in and out of containers and removes empty ones. `cleanup_translations` finds and deletes language keys the book no longer reads.
 - Other mods can register task, reward and condition types and listen for progression events. KubeJS can do the same on NeoForge.
-- Alpha note: data and save formats may still change between alpha versions. Back up a world before importing, migrating or editing a book on it.
+- Restrictions on the `attack` action are enforced on the held item, and a build layout never loads chunks from the placement tick.
+- A progress payload over the network limit now tells the player and online operators that the book is out of date instead of only writing a log line.
+- Reward tables roll the same entries the editor and the recipe viewers show: an unreadable weight can no longer win in a crate while looking impossible elsewhere.
+- Daily and weekly rounds still end while a team's book is locked.

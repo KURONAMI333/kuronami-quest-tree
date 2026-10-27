@@ -1,6 +1,3 @@
-<!-- ALPHA RELEASE ONLY: delete this block before the 1.0 store text. -->
-**Alpha release.** This is an early build, so quest data and saved progress can still change between alpha versions; back up a world before importing a book or migrating progress into it.
-
 Open quests and skill trees on one map, share progress with your team, and keep both halves of a pack in one place.
 
 Quest books and skill trees usually come from separate mods and live in separate screens. Kuronami's Quest Tree reads both from data packs and draws them together: chapters, dependencies, tasks, rewards, skill points and ranks sit on the same map, with the same search, zoom, pins and item tooltips.
@@ -14,7 +11,7 @@ Quest books and skill trees usually come from separate mods and live in separate
 - **Import and migration** — convert an existing FTB Quests book or Pufferfish's Skills trees into a data pack, and copy players' existing progress into the team records. Settings that cannot be carried over are listed instead of guessed.
 - **Recipe viewers and tooltips** — JEI, REI and EMI draw quests and loot crates as cards in the quest screen's style: a quest card shows the quest's name, chapter and state and marks whether the item is needed or rewarded, a crate card shows its reward table and the rewards it can roll, and long names end in an ellipsis inside the card instead of running off it. A recipe viewer can open a quest from an item; descriptions can open a recipe, another quest or a link. Item tooltips show which quests need the item.
 - **Crate odds and a floor** — a crate card shows the chance of each reward in JEI, REI and EMI, and a reward table can guarantee an entry after a run of misses.
-- **Restrictions** — a pack can hold an item or a block shut until a quest, a stage, a score, an item, an advancement or a party size says otherwise. A held item cannot be equipped, used, placed, broken or crafted, and the reason appears above the hotbar.
+- **Restrictions** — a pack can hold an item or a block shut until a quest, a stage, a score, an item, an advancement or a party size says otherwise. A held item cannot be equipped, used, attacked with, placed, broken or crafted in a crafting grid, and the reason appears above the hotbar.
 - **Extension points** — other mods can register task, reward and condition types and listen for completion, claim and task events. KubeJS scripts can do the same on NeoForge.
 
 A quest book item opens the screen from the inventory. In the world, a quest block opens one quest, a barrier block gates progress, a detector block turns a redstone pulse into progress for every player nearby, and task screens take item, fluid and energy hand-ins from other mods' pipes. A loot crate is an item a pack fills with a reward table: use it to roll the table, or sneak to roll the whole stack; a crate opener takes crates from a hopper, rolls them and keeps the output for a hopper to pull. With Jade installed, a quest barrier's overlay shows what it asks for and whether you may pass.
