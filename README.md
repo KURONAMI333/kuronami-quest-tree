@@ -11,7 +11,7 @@ Task, reward and condition types can be registered from another mod, and progres
 
 ## In the world
 
-A quest book item opens the screen. A quest block opens one quest, a barrier block opens only after a quest or stage is reached, and a detector block turns a redstone pulse into progress for every player nearby. A loot crate rolls a reward table; a crate opener does the same from a hopper. Jade shows what a barrier asks for. JEI, REI and EMI open a quest from an item and show crate odds.
+A quest book item opens the screen. A quest block opens one quest or chapter, a barrier block opens only after a quest or stage is reached, and a detector block turns a redstone pulse into progress for every player nearby. A loot crate rolls a reward table; a crate opener does the same from a hopper. Jade shows what a barrier asks for. JEI, REI and EMI open a quest from an item and show crate odds.
 
 ## Commands
 
@@ -35,8 +35,8 @@ Most commands need permission level 2. `migrate` needs level 4 (or the server co
 | `/quest_tree experience <players> <chapter> <amount>` | Add experience to a skill chapter |
 | `/quest_tree edit [on|off]` | Turn the in-game editor on or off for yourself |
 | `/quest_tree giver set <quest or chapter>` | Link the entity or quest block you look at to a quest or chapter |
-| `/quest_tree giver list` | List linked entities and quest blocks |
-| `/quest_tree giver clear [uuid]` | Remove one link, or every link |
+| `/quest_tree giver list` | List the saved entity links (quest blocks are not listed) |
+| `/quest_tree giver clear [uuid]` | Clear the link on what you look at, or one entity link by UUID |
 | `/quest_tree export <namespace> [force]` | Write the edited book as the data pack `quest_tree_export_<namespace>` |
 | `/quest_tree migrate ftbquests [namespace] [dry_run|apply [force]]` | Copy FTB Quests progress into the team records; see `_docs/MIGRATION.md` |
 | `/quest_tree migrate puffish [namespace] [dry_run|apply [force]]` | Copy Pufferfish's Skills progress into the team records |

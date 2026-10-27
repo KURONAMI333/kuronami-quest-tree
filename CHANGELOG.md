@@ -20,5 +20,5 @@
 - Other mods can register task, reward and condition types and listen for progression events. KubeJS can do the same on NeoForge.
 - Restrictions on the `attack` action are enforced on the held item, and a build layout never loads chunks from the placement tick.
 - A progress payload over the network limit now tells the player and online operators that the book is out of date instead of only writing a log line.
-- Reward tables roll the same entries the editor and the recipe viewers show: an unreadable weight can no longer win in a crate while looking impossible elsewhere.
-- Daily and weekly rounds still end while a team's book is locked.
+- Reward tables roll the same entries the editor and the recipe viewers show: an unreadable weight can no longer win in a crate while looking impossible elsewhere. A crate whose whole table is unreadable is no longer consumed for nothing, and the ceiling check reads such an entry as unpayable.
+- Daily and weekly rounds still end while a team's book is locked, and the detector block no longer moves tasks while it is locked.

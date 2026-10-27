@@ -58,6 +58,16 @@ public final class RewardTableEdit {
         return entries;
     }
 
+    /** Whether at least one entry has a reward that can be paid; false for a table of only broken entries. */
+    public static boolean hasPayable(JsonObject table) {
+        for (Entry entry : entries(table)) {
+            if (entry.reward() != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** A table is empty when it has no entries at all; an entry with weight 0 still counts, as in FTB Quests. */
     public static boolean isEmpty(JsonObject table) {
         JsonElement entries = table.get("entries");

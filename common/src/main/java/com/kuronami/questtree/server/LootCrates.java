@@ -78,8 +78,12 @@ public final class LootCrates {
             return false;
         }
         ProgressModel model = ProgressService.rules().model();
-        return model != null
-                && LootCrateRules.crate(tableId, model.rewardTables.get(tableId)).isPresent();
+        if (model == null) {
+            return false;
+        }
+        JsonObject table = model.rewardTables.get(tableId);
+        return table != null && LootCrateRules.crate(tableId, table).isPresent()
+                && RewardTableEdit.hasPayable(table);
     }
 
     /**
@@ -90,7 +94,9 @@ public final class LootCrates {
         ProgressModel model = ProgressService.rules().model();
         JsonObject table = model.rewardTables.get(tableId);
         LootCrateRules.Crate crate = LootCrateRules.crate(tableId, table).orElse(null);
-        if (table == null || crate == null || count <= 0) {
+        if (table == null || crate == null || count <= 0 || !RewardTableEdit.hasPayable(table)) {
+            // a table with no payable entry must not consume the crate: an empty roll is only valid when
+            // empty_weight or the table itself can really give something (2026-10-27 review)
             return null;
         }
         // one slot per entry as the table writes it, so "pity": {"entry": 2} means the same entry everywhere; an
@@ -211,16 +217,6 @@ public final class LootCrates {
         }
         return entity instanceof EnderDragon || entity instanceof WitherBoss
                 || entity instanceof Warden || entity instanceof ElderGuardian;
-    }
-
-    private static List<JsonElement> entries(JsonObject table) {
-        List<JsonElement> out = new ArrayList<>();
-        if (table.has("entries") && table.get("entries").isJsonArray()) {
-            for (JsonElement e : table.getAsJsonArray("entries")) {
-                out.add(e);
-            }
-        }
-        return out;
     }
 
     private static int modelInt(JsonObject table, String key, int fallback) {

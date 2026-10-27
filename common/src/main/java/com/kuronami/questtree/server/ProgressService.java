@@ -1877,6 +1877,9 @@ public final class ProgressService {
             return false;
         }
         PlayerProgress p = progress(player);
+        if (p.bookLocked()) {
+            return false;
+        }
         if (parsed.isTask()) {
             bump(player, p, n, parsed.task(), ProgressRules.target(n.tasks.get(parsed.task())));
         } else {

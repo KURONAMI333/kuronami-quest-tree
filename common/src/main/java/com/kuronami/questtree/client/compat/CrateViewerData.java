@@ -123,6 +123,12 @@ public final class CrateViewerData {
             if (!row.has("reward") || !row.get("reward").isJsonObject()) {
                 continue;
             }
+            // a weight that is not a number makes the entry unpayable in LootCrates.roll, so it must not be
+            // shown as if it could win here either (2026-10-27 review)
+            JsonElement weight = row.get("weight");
+            if (weight != null && !(weight.isJsonPrimitive() && weight.getAsJsonPrimitive().isNumber())) {
+                continue;
+            }
             List<ItemStack> given = QuestViewerRecipe.stacksOfReward(row.getAsJsonObject("reward"));
             if (given.isEmpty()) {
                 continue;
@@ -138,7 +144,7 @@ public final class CrateViewerData {
                     indices.add(found);
                 }
             }
-            weights.add(number(row, "weight", 1));
+            weights.add(weight == null ? 1 : weight.getAsDouble());
             entryStacks.add(indices.stream().mapToInt(Integer::intValue).toArray());
         }
         if (stacks.isEmpty()) {

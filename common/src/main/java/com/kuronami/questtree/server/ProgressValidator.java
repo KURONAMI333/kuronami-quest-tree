@@ -1559,7 +1559,8 @@ public final class ProgressValidator {
                 continue;
             }
             JsonElement weight = item.getAsJsonObject().get("weight");
-            weights.add(weight != null && number(weight) ? weight.getAsDouble() : 1.0);
+            // RewardTableEdit.entries drops an entry whose weight is not a number, so it is 0 here too
+            weights.add(weight != null && number(weight) ? weight.getAsDouble() : 0.0);
         }
         int size = weights.size();
         int pick = entry == null ? -1 : (int) entry.getAsDouble();
@@ -1582,8 +1583,9 @@ public final class ProgressValidator {
         }
         JsonElement e = entry.get("weight");
         if (!numeric(e)) {
-            // Rewards.table builds its weight list before it gives anything: one it cannot read stops the whole table
-            problem(out, Severity.WARNING, ref, path + ".weight", "\"weight\" is not a number, so the table hands out nothing");
+            // RewardTableEdit.entries keeps the entry in place but marks it unpayable, so the editor and the
+            // crate agree that this one can never be given
+            problem(out, Severity.WARNING, ref, path + ".weight", "\"weight\" is not a number, so this entry is never given");
             return;
         }
         double v = e.getAsDouble();

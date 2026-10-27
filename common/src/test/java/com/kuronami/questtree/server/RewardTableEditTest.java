@@ -71,6 +71,18 @@ class RewardTableEditTest {
     }
 
     @Test
+    void aTableOfOnlyBrokenEntriesHasNothingPayable() {
+        assertFalse(RewardTableEdit.hasPayable(table("{\"entries\": []}")));
+        assertFalse(RewardTableEdit.hasPayable(table("""
+                {"entries": [{"weight": "heavy", "reward": {"type": "xp", "amount": 1}},
+                             {"weight": 1, "reward": "not an object"},
+                             "not an object"]}""")));
+        assertTrue(RewardTableEdit.hasPayable(table("""
+                {"entries": [{"weight": "heavy", "reward": {"type": "xp", "amount": 1}},
+                             {"weight": 1, "reward": {"type": "xp", "amount": 2}}]}""")));
+    }
+
+    @Test
     void theWrittenTableIsTheExportShape() {
         JsonObject table = RewardTableEdit.table(List.of(new RewardTableEdit.Item("minecraft:stone", 3)));
         assertEquals(1, table.get("rolls").getAsInt());

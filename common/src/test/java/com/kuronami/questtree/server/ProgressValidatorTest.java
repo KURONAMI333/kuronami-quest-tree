@@ -707,6 +707,19 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void aCeilingOnAnEntryWithANonNumericWeightIsReportedAsNoCeiling() {
+        String json = """
+                {"chapters": {},
+                 "reward_tables": {"t:gems": {"rolls": 1, "pity": {"after": 3, "entry": 0}, "entries": [
+                    {"weight": "heavy", "reward": {"type": "item", "item": {"id": "minecraft:diamond"}}},
+                    {"weight": 1, "reward": {"type": "item", "item": {"id": "minecraft:netherite_ingot"}}}]}}}""";
+        ProgressValidator.Result r = validate(json);
+        assertEquals(0, errors(r));
+        assertTrue(says(r, "\"weight\" is not a number"));
+        assertTrue(says(r, "no entry can be the ceiling's entry"));
+    }
+
+    @Test
     void aNonNumericMinIsAWarningAndTheNodeStillOpens() {
         // ProgressModel.intOf falls back to its default, which for min means "not used"
         String json = """
