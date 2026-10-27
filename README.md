@@ -3,11 +3,15 @@
 Quest books and skill trees in one screen, defined by data packs. Imports existing FTB Quests quest books and Pufferfish's Skills trees with one command.
 
 - Minecraft 1.21.1, NeoForge and Fabric
-- Status: early development. Progress is shared with the team you are in and saved with the world; each player claims their own rewards.
+- Status: 1.0.0. Progress is shared with the team you are in and saved with the world; each player claims their own rewards.
 
 ## Addons
 
 Task, reward and condition types can be registered from another mod, and progression events are available. See [_docs/API.md](_docs/API.md). KubeJS scripts can register the same handlers on NeoForge.
+
+## In the world
+
+A quest book item opens the screen. A quest block opens one quest, a barrier block opens only after a quest or stage is reached, and a detector block turns a redstone pulse into progress for every player nearby. A loot crate rolls a reward table; a crate opener does the same from a hopper. Jade shows what a barrier asks for. JEI, REI and EMI open a quest from an item and show crate odds.
 
 ## Commands
 
@@ -30,6 +34,9 @@ Most commands need permission level 2. `migrate` needs level 4 (or the server co
 | `/quest_tree points <players> <chapter> <amount>` | Add (or remove) points to spend |
 | `/quest_tree experience <players> <chapter> <amount>` | Add experience to a skill chapter |
 | `/quest_tree edit [on|off]` | Turn the in-game editor on or off for yourself |
+| `/quest_tree giver set <quest or chapter>` | Link the entity or quest block you look at to a quest or chapter |
+| `/quest_tree giver list` | List linked entities and quest blocks |
+| `/quest_tree giver clear [uuid]` | Remove one link, or every link |
 | `/quest_tree export <namespace> [force]` | Write the edited book as the data pack `quest_tree_export_<namespace>` |
 | `/quest_tree migrate ftbquests [namespace] [dry_run|apply [force]]` | Copy FTB Quests progress into the team records; see `_docs/MIGRATION.md` |
 | `/quest_tree migrate puffish [namespace] [dry_run|apply [force]]` | Copy Pufferfish's Skills progress into the team records |
