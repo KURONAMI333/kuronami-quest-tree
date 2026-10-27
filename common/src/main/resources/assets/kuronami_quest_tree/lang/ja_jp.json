@@ -137,6 +137,8 @@
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "ほか %s 件（ログに全部出ています）",
   "commands.kuronami_quest_tree.validate.hint": "エラー %s 件。/quest_tree validate",
+  "commands.kuronami_quest_tree.progress.too_large": "クエストの進捗が大きすぎて同期できません。表示が古い可能性があります",
+  "commands.kuronami_quest_tree.progress.too_large.op": "%s のクエスト進捗が大きすぎて同期できません（%s バイト）",
   "item.kuronami_quest_tree.quest_book": "クエストブック",
   "item.kuronami_quest_tree.quest_book.desc": "クエストを開く",
   "screen.kuronami_quest_tree.collect_all": "まとめて受け取る",

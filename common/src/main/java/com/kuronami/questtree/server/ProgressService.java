@@ -34,6 +34,7 @@ import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.TagParser;
+import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -443,12 +444,20 @@ public final class ProgressService {
         return new BuildTaskRules.BlockAt() {
             @Override
             public String id(int dx, int dy, int dz) {
-                return idOf(level.getBlockState(origin.offset(dx, dy, dz)).getBlock());
+                BlockState state = stateOrNull(dx, dy, dz);
+                return state == null ? "" : idOf(state.getBlock());
             }
 
             @Override
             public boolean tag(int dx, int dy, int dz, String tag) {
-                return blockTagMatches("#" + tag, level.getBlockState(origin.offset(dx, dy, dz)).getBlock());
+                BlockState state = stateOrNull(dx, dy, dz);
+                return state != null && blockTagMatches("#" + tag, state.getBlock());
+            }
+
+            /** An unloaded target is read as "not there", so one placement never loads chunks from the server tick. */
+            private BlockState stateOrNull(int dx, int dy, int dz) {
+                BlockPos at = origin.offset(dx, dy, dz);
+                return level.hasChunkAt(at) ? level.getBlockState(at) : null;
             }
         };
     }
@@ -1076,16 +1085,18 @@ public final class ProgressService {
     }
 
     private static void scanWorld(ServerPlayer player, PlayerProgress p) {
-        if (p.bookLocked()) {
-            return;
-        }
         ProgressRules r = rules();
         ServerLevel level = player.serverLevel();
+        // a locked book stops progress, not the calendar: a daily/weekly round still ends while the book is locked,
+        // and waiting for the first scan after an unlock would keep a finished round alive for that long (2026-10-27)
         if (r.sweepResets(p, r.model(), ProgressRules.worldDay(level.getDayTime()))) {
             ProgressStore.get(player.server).setDirty();
             // a day or a week came, so a repeatable quest starts over: the client has to hear about it without
             // waiting for the player's next kill or pickup (2026-10-25)
             markDirty(player);
+        }
+        if (p.bookLocked()) {
+            return;
         }
         BlockPos pos = player.blockPosition();
         for (ProgressModel.Node n : r.model().nodes.values()) {
@@ -1554,6 +1565,7 @@ public final class ProgressService {
             if (TOO_LARGE_LOGGED.add(player.getUUID())) {
                 Constants.LOG.error("Progress of {} is too large to send ({} bytes compressed)",
                         player.getGameProfile().getName(), data.length);
+                reportTooLarge(player, data.length);
             }
             return;
         }
@@ -1577,6 +1589,21 @@ public final class ProgressService {
         Services.PLATFORM.sendToPlayer(player, payload);
         // the party row and the shared-quest labels come from the same update as the progress they describe
         TeamSync.send(player);
+    }
+
+    /**
+     * A payload over the limit leaves the client book on its old state, so the first failure is said out loud instead
+     * of only logged: the player hears that the book is stale, and online operators get the name and the size.
+     */
+    private static void reportTooLarge(ServerPlayer player, int bytes) {
+        player.sendSystemMessage(Component.translatable("commands.kuronami_quest_tree.progress.too_large"));
+        Component line = Component.translatable("commands.kuronami_quest_tree.progress.too_large.op",
+                player.getGameProfile().getName(), bytes);
+        for (ServerPlayer other : player.server.getPlayerList().getPlayers()) {
+            if (other != player && other.hasPermissions(2)) {
+                other.sendSystemMessage(line);
+            }
+        }
     }
 
     public static void onLogout(ServerPlayer player) {

@@ -137,6 +137,8 @@
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "……另有%s项（见日志）",
   "commands.kuronami_quest_tree.validate.hint": "错误：%s；/quest_tree validate",
+  "commands.kuronami_quest_tree.progress.too_large": "任务进度过大，无法同步；任务书可能已过期",
+  "commands.kuronami_quest_tree.progress.too_large.op": "%s 的任务进度过大，无法同步（%s 字节）",
   "item.kuronami_quest_tree.quest_book": "任务书",
   "item.kuronami_quest_tree.quest_book.desc": "打开你的任务",
   "screen.kuronami_quest_tree.collect_all": "全部收取",

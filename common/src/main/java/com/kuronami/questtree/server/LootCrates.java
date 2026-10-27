@@ -93,17 +93,15 @@ public final class LootCrates {
         if (table == null || crate == null || count <= 0) {
             return null;
         }
-        // one slot per entry as the table writes it, so "pity": {"entry": 2} means the same entry everywhere;
-        // an entry that cannot be paid stays in place with weight 0, which the roll never takes
+        // one slot per entry as the table writes it, so "pity": {"entry": 2} means the same entry everywhere; an
+        // entry that cannot be paid stays in place with weight 0, which the roll never takes. The editor and the
+        // roll read the same entries, so a weight that is not a number cannot win here and look impossible there
+        // (2026-10-27)
         List<JsonObject> entries = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
-        for (JsonElement e : entries(table)) {
-            JsonObject entry = e.isJsonObject() ? e.getAsJsonObject() : null;
-            boolean payable = entry != null && entry.has("reward") && entry.get("reward").isJsonObject();
-            entries.add(payable ? entry.getAsJsonObject("reward") : null);
-            weights.add(payable && entry.has("weight") && entry.get("weight").isJsonPrimitive()
-                    && entry.get("weight").getAsJsonPrimitive().isNumber()
-                    ? entry.get("weight").getAsDouble() : payable ? 1.0 : 0.0);
+        for (RewardTableEdit.Entry entry : RewardTableEdit.entries(table)) {
+            entries.add(entry.reward());
+            weights.add(entry.reward() == null ? 0 : entry.weight());
         }
         int rolls = Math.max(0, modelInt(table, "rolls", 1));
         long attempts = (long) rolls * count;

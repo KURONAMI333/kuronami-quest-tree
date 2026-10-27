@@ -137,6 +137,8 @@
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...et %s de plus (voir le journal)",
   "commands.kuronami_quest_tree.validate.hint": "Erreurs : %s ; /quest_tree validate",
+  "commands.kuronami_quest_tree.progress.too_large": "La progression des quêtes est trop volumineuse pour être synchronisée ; le livre peut être obsolète",
+  "commands.kuronami_quest_tree.progress.too_large.op": "La progression des quêtes de %s est trop volumineuse pour être synchronisée (%s octets)",
   "item.kuronami_quest_tree.quest_book": "Livre de quêtes",
   "item.kuronami_quest_tree.quest_book.desc": "Ouvre vos quêtes",
   "screen.kuronami_quest_tree.collect_all": "Tout collecter",

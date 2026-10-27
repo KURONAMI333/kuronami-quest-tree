@@ -137,6 +137,8 @@
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...and %s more (see the log)",
   "commands.kuronami_quest_tree.validate.hint": "Errors: %s; /quest_tree validate",
+  "commands.kuronami_quest_tree.progress.too_large": "Quest progress is too large to sync; the book may be out of date",
+  "commands.kuronami_quest_tree.progress.too_large.op": "Quest progress of %s is too large to sync (%s bytes)",
   "item.kuronami_quest_tree.quest_book": "Quest Book",
   "item.kuronami_quest_tree.quest_book.desc": "Opens your quests",
   "screen.kuronami_quest_tree.collect_all": "Collect all",

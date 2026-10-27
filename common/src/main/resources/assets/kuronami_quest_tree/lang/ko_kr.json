@@ -137,6 +137,8 @@
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...외 %s개 (로그 참조)",
   "commands.kuronami_quest_tree.validate.hint": "오류 %s개. /quest_tree validate",
+  "commands.kuronami_quest_tree.progress.too_large": "퀘스트 진행 상황이 너무 커서 동기화할 수 없습니다. 책이 오래된 상태일 수 있습니다",
+  "commands.kuronami_quest_tree.progress.too_large.op": "%s의 퀘스트 진행 상황이 너무 커서 동기화할 수 없습니다(%s바이트)",
   "item.kuronami_quest_tree.quest_book": "퀘스트 책",
   "item.kuronami_quest_tree.quest_book.desc": "퀘스트를 엽니다",
   "screen.kuronami_quest_tree.collect_all": "모두 받기",

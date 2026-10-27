@@ -137,6 +137,8 @@
   "commands.kuronami_quest_tree.validate.problem": "%s",
   "commands.kuronami_quest_tree.validate.more": "...e mais %s (veja o registro)",
   "commands.kuronami_quest_tree.validate.hint": "Erros: %s; /quest_tree validate",
+  "commands.kuronami_quest_tree.progress.too_large": "O progresso das missões é grande demais para sincronizar; o livro pode estar desatualizado",
+  "commands.kuronami_quest_tree.progress.too_large.op": "O progresso das missões de %s é grande demais para sincronizar (%s bytes)",
   "item.kuronami_quest_tree.quest_book": "Livro de Missões",
   "item.kuronami_quest_tree.quest_book.desc": "Abre suas missões",
   "screen.kuronami_quest_tree.collect_all": "Coletar tudo",

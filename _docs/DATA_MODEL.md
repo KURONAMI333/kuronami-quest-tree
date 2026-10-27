@@ -183,7 +183,7 @@ A `build` task is a multi-block layout checked when the player places a block. I
 - `blocks` is required: 1 to 256 entries, each with `pos` (three whole offsets from the anchor, each within 32 blocks) and `block` (a block id or `#tag`).
 - `anchor` is optional. When written, the check runs only for a placement of that block (id or `#tag`); when omitted, any placement runs it. The anchor is the placed block's own position, so the layout is written relative to it.
 - The task completes when every written block matches. Block state properties (facing, shape and so on) are ignored; only the block kind counts. Extra blocks around the layout do not matter.
-- The check runs on the server at the placement itself, never as an every-tick scan. It only looks when a player places a block, so a layout finished by anything else (a piston, a dispenser, a world edit) does not complete the task.
+- The check runs on the server at the placement itself, never as an every-tick scan. It only looks when a player places a block, so a layout finished by anything else (a piston, a dispenser, a world edit) does not complete the task. An offset whose chunk is not loaded is read as "not there", so a placement never loads chunks from the server tick; a layout that reaches into unloaded space completes on a later placement once those chunks are loaded.
 
 ### Requirements and the item counter
 
@@ -307,7 +307,7 @@ Conditions are evaluated once, when the reward is granted. Revocation (respec, r
 - `equip` covers the armour slots and the offhand. It is checked every five ticks, and the players' checks are spread by UUID; an unchanged set of worn item ids with the same rules and progress revision is skipped. A restricted item is put back into the inventory (or dropped when full) within that window. The main hand is not checked, because moving an item into it happens constantly.
 - `use` covers using the item in the air, on a block, or on an entity; it also covers using a restricted block (a chest, a door, and so on).
 - `craft` is checked when a crafting grid's result is taken, by a click or a shift-click; the result stays in the slot and the ingredients are untouched. Furnace, smoker, blast furnace and brewing results are not covered.
-- `attack` is accepted but not enforced yet: nothing asks for it, so a rule that names only `attack` does nothing (0.2.0). Automated crafting from another mod (Applied Energistics, Refined Storage, Create) does not take the result slot and is not covered by `craft` either.
+- `attack` is checked on the item in the main hand before a player's hit lands; a refused hit deals no damage and never counts toward a task. The vanilla attack path is the only one covered: damage from another source (a projectile already in flight, a mob, a block) is not a player's attack and is not refused. Automated crafting from another mod (Applied Energistics, Refined Storage, Create) does not take the result slot and is not covered by `craft` either.
 - `place` is checked in `BlockItem#place`: it matches the item being placed and the block it would become. A placement that does not go through `BlockItem` is not covered. There is no creative-mode or permission-level exemption; a restricted item is refused for every player. `break` matches the block and the item held to break it. A refused action never drops anything or counts toward a task.
 - Restrictions are enforced on the server only. The client mod does not need to know them; the synced bundle carries the rules for the editor.
 - A fake player (one with no connection, or a mod's own `ServerPlayer` subclass, such as Create's deployer) is not restricted and gets no progress record.
@@ -567,7 +567,6 @@ If validation itself throws, that one failure is recorded as `ERROR` and loading
 - Duplicate keys in one object are `WARNING`: The JSON reader silently keeps the last one, so the check looks at the text.
 - JSON syntax. A file that cannot be read is `ERROR`. References to that chapter remain `WARNING`, because their existence cannot be confirmed.
 - Id lookup checks only real items, blocks, fluids, entities and attributes. A missing id is `WARNING`; a missing namespace is `WARNING`. Tags (`#`) and dynamic registries (biome, structure, dimension, stat) are not checked at load, because their contents cannot be known then. Tag contents are final only after all reload listeners have run, so reading them inside a listener gives an empty result on first start and the previous contents on `/reload`; both are false warnings.
-- Known but not yet working kinds (a reward table's `loot_crate`) are `WARNING`.
 - Duplicate node ids across chapters are not checked: node keys are qualified by the chapter id, so they cannot collide, and using the same id in two chapters is normal.
 
 ## Chapter backgrounds
