@@ -693,8 +693,8 @@ public final class Rewards {
 
     /**
      * A reward table. One with {@code loot_crate} metadata is FTB Quests' crate: opening a crate rolls the same table
-     * once, so the roll result is granted here at claim time (2026-10-20). KQT has no crate item to carry and open
-     * later, so the contents arrive directly instead of the box.
+     * once, so the roll result is granted here at claim time (2026-10-20). A reward never hands out a loot crate item
+     * to open later (crate items come from recipes, drops and the crate block), so the contents arrive directly.
      */
     private static boolean table(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw,
                                  int choice, String rollKey, boolean ignoreBlock) {
