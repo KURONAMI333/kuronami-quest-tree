@@ -58,6 +58,35 @@ The file is read when the book arrives and every time the screen opens, like the
 screen. A missing file means no overrides. Chapter icons, sounds and shapes stay in their own files above; this file
 only changes tile colours.
 
+## Themes: `assets/kuronami_quest_tree/themes/<id>/`
+
+A theme is a whole look selected in the mod's settings screen (Settings, then the Theme row; it cycles and is saved to
+`config/kuronami_quest_tree-client.json`). The ids are `default` and `paper`. `default` reads no theme files at all and
+draws exactly what the mod always drew. `paper` ships a light paper palette (`ground #DCCDB0`, `panel #F2E9D2`, dark
+text, corner radius 1) plus a 64-pixel paper ground and a 32-pixel tile face, so the map, panels and tiles read as
+paper; it is the example of a theme that replaces both colours and pictures.
+
+A theme puts the same files under its own folder, in the mod's namespace:
+
+```
+assets/kuronami_quest_tree/themes/<id>/palette.json
+assets/kuronami_quest_tree/themes/<id>/textures/gui/<path>.png
+```
+
+The palette is the file described above, with the same keys. The pictures are the GUI files listed below, at the same
+paths (`ground.png`, `patch/tile.png`, `shape/rsquare.png`, `shape/rsquare_edge.png`, `glass_mask.png`, …). A theme only
+needs the files it changes; anything it leaves out keeps the mod's file.
+
+Resolution is, lowest priority first, the mod's own file, then the selected theme's, then a resource pack's. A pack
+therefore still wins over a theme, as it always won over the mod's palette, and a theme can replace pictures the mod
+ships (`shape/rsquare.png`, `glass_mask.png`) as well as the optional `ground.png` and `patch/tile.png`. A theme that
+replaces a mask has to keep its size and corners: `shape/rsquare.png` and `glass_mask.png` are 128 pixels with 23-pixel
+corners, `shape/rsquare_edge.png` is 32 with 12. A picture nobody supplies draws the flat colour, as before.
+
+The palette and pictures are read when the book arrives and every time the screen opens (and when the Theme row is
+clicked), so after `F3 + T` reopen the screen. A pack can also supply files for `themes/paper/`; adding a new id needs a
+code change for now.
+
 ### Corner radius: `corner_radius`
 
 `corner_radius` is the palette's one non-colour key: a whole number of GUI pixels, default `2`, and `0` draws square

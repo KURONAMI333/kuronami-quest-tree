@@ -5,8 +5,11 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.StringDecomposer;
 
 import java.util.List;
 
@@ -135,8 +138,6 @@ final class Ui {
     static int R3 = CORNER;
     static int R4 = CORNER;
 
-    private static final ResourceLocation FILL = texture("shape/rsquare");
-    private static final ResourceLocation EDGE = texture("shape/rsquare_edge");
     /** shape/rsquare is a 128px mask whose corners take 23px; shape/rsquare_edge is 32px with 12px corners. */
     private static final int FILL_TEX = 128;
     private static final int FILL_CORNER = 23;
@@ -152,6 +153,9 @@ final class Ui {
     /** Per-chapter and per-quest colour overrides, empty unless a pack supplies {@code gui/theme.json}. */
     private static ThemeOverrides theme = ThemeOverrides.EMPTY;
 
+    /** The theme whose palette and masks are loaded; a change re-reads every shape (2026-10-31). */
+    private static String paletteTheme = Themes.DEFAULT;
+
     /**
      * Reads {@code assets/kuronami_quest_tree/gui/palette.json} so a resource pack can recolour the whole screen
      * (CRAFT_GUI_RULES: the look is replaceable, no colour lives only in code). Missing keys keep their current value;
@@ -160,9 +164,15 @@ final class Ui {
      */
     static void loadPalette(net.minecraft.server.packs.resources.ResourceManager rm) {
         restoreDefaults();
-        // the optional ground and tile-face pictures follow the palette, but only a changed pack list needs the
-        // masks read again (a screen open or a resize must not re-read every shape)
-        Tiles.reloadIfPacksChanged();
+        String themeId = ClientConfig.theme();
+        // the optional ground and tile-face pictures follow the palette, but only a changed pack list or theme needs
+        // the masks read again (a screen open or a resize must not re-read every shape)
+        if (!themeId.equals(paletteTheme)) {
+            paletteTheme = themeId;
+            Tiles.reload();
+        } else {
+            Tiles.reloadIfPacksChanged();
+        }
         theme = ThemeOverrides.EMPTY;
         try {
             var res = rm.getResource(THEME);
@@ -174,17 +184,7 @@ final class Ui {
         } catch (Exception ex) {
             Constants.LOG.warn("Could not read {}: {}", THEME, ex.toString());
         }
-        com.google.gson.JsonObject o = new com.google.gson.JsonObject();
-        try {
-            var res = rm.getResource(PALETTE);
-            if (res.isPresent()) {
-                try (var reader = res.get().openAsReader()) {
-                    o = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
-                }
-            }
-        } catch (Exception ex) {
-            Constants.LOG.warn("Could not read {}: {}", PALETTE, ex.toString());
-        }
+        com.google.gson.JsonObject o = layeredPalette(rm, themeId);
         TEXT = color(o, "text", TEXT);
         MUTED = color(o, "text_muted", MUTED);
         DIM = color(o, "text_dim", DIM);
@@ -357,6 +357,57 @@ final class Ui {
         return theme.resolve(key, fallback, nodeKey);
     }
 
+    /**
+     * A fixed text colour made readable on the current palette's light background (2026-10-31: on paper the toast
+     * yellows, whites and item names were fixed in code, so the palette could not reach them). A dark background
+     * returns the colour untouched, so the default theme keeps every colour it had. The maths lives in
+     * {@link TextContrast} because the tests run without the game; this is the one call the drawing code uses.
+     */
+    static int onLight(int argb) {
+        return TextContrast.readableOn(textBackground(), argb);
+    }
+
+    /** The surface text is judged against: the map ground, or the panel when the ground is see-through. */
+    private static int textBackground() {
+        return (GROUND >>> 24) == 0 ? PANEL : GROUND;
+    }
+
+    private static boolean lightBackground() {
+        return TextContrast.luminance(textBackground()) >= TextContrast.LIGHT_BACKGROUND;
+    }
+
+    /**
+     * Text whose own colours ({@code §} codes and styled components: imported FTB Quests titles and descriptions,
+     * item rarities) are made readable on a light background the way {@link #onLight} does for a fixed colour. The
+     * colour passed to {@code drawString} only reaches characters without a colour of their own, so on paper the
+     * imported yellows and aquas stayed unreadable without this (2026-10-31). A dark background returns the text as it
+     * is.
+     */
+    static FormattedCharSequence readable(FormattedCharSequence s) {
+        if (!lightBackground()) {
+            return s;
+        }
+        int background = textBackground();
+        return sink -> s.accept((index, style, codePoint) -> sink.accept(index, readable(style, background), codePoint));
+    }
+
+    static FormattedCharSequence readable(Component c) {
+        return readable(c.getVisualOrderText());
+    }
+
+    static FormattedCharSequence readable(String s) {
+        return readable((FormattedCharSequence) sink -> StringDecomposer.iterateFormatted(s, Style.EMPTY, sink));
+    }
+
+    private static Style readable(Style style, int background) {
+        TextColor color = style.getColor();
+        if (color == null) {
+            return style;
+        }
+        int rgb = TextContrast.readableOn(background, 0xFF000000 | color.getValue()) & 0xFFFFFF;
+        return rgb == color.getValue() ? style : style.withColor(rgb);
+    }
+
     private static int color(com.google.gson.JsonObject o, String key, int fallback) {
         if (!o.has(key)) {
             return fallback;
@@ -405,8 +456,48 @@ final class Ui {
         cornerOverride = null;
     }
 
-    private static ResourceLocation texture(String path) {
-        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/" + path + ".png");
+    /**
+     * The palette in three layers, lowest first: the mod's own file, the selected theme's (skipped for
+     * {@code default}), then a resource pack's. The pack stays on top, as it always was, but only when the stack's top
+     * layer really is a pack ({@link Themes#packResourceId}): with no pack installed the mod's own file is the only
+     * entry, and it must not be layered over the theme as if a pack had supplied it (2026-10-31).
+     */
+    private static com.google.gson.JsonObject layeredPalette(
+            net.minecraft.server.packs.resources.ResourceManager rm, String themeId) {
+        var stack = rm.getResourceStack(PALETTE);
+        com.google.gson.JsonObject mod = stack.isEmpty()
+                ? new com.google.gson.JsonObject()
+                : readJson(stack.get(0), PALETTE);
+        com.google.gson.JsonObject themed = new com.google.gson.JsonObject();
+        String themePath = Themes.palette(themeId);
+        if (themePath != null) {
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, themePath);
+            var res = rm.getResource(id);
+            if (res.isPresent()) {
+                themed = readJson(res.get(), id);
+            }
+        }
+        com.google.gson.JsonObject pack = new com.google.gson.JsonObject();
+        if (!stack.isEmpty()) {
+            java.util.List<String> sourceIds = new java.util.ArrayList<>(stack.size());
+            for (var res : stack) {
+                sourceIds.add(res.sourcePackId());
+            }
+            if (Themes.packResourceId(sourceIds, stack.get(0).sourcePackId()).isPresent()) {
+                pack = readJson(stack.get(stack.size() - 1), PALETTE);
+            }
+        }
+        return Themes.resolve(mod, themeId, themed, pack);
+    }
+
+    private static com.google.gson.JsonObject readJson(
+            net.minecraft.server.packs.resources.Resource res, ResourceLocation id) {
+        try (var reader = res.openAsReader()) {
+            return com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+        } catch (Exception ex) {
+            Constants.LOG.warn("Could not read {}: {}", id, ex.toString());
+            return new com.google.gson.JsonObject();
+        }
     }
 
     /** A rounded fill. Corners are the top-left of {@code shape/rsquare}, so every rounded box matches. */
@@ -421,16 +512,17 @@ final class Ui {
         }
         int m = FILL_TEX - 2 * FILL_CORNER;
         int e = FILL_TEX - FILL_CORNER;
+        ResourceLocation fill = Tiles.guiTexture("shape/rsquare");
         tint(g, argb);
-        g.blit(FILL, x + r, y, w - 2 * r, r, FILL_CORNER, 0, m, FILL_CORNER, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x + r, y + h - r, w - 2 * r, r, FILL_CORNER, e, m, FILL_CORNER, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x, y + r, r, h - 2 * r, 0, FILL_CORNER, FILL_CORNER, m, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x + w - r, y + r, r, h - 2 * r, e, FILL_CORNER, FILL_CORNER, m, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x + r, y + r, w - 2 * r, h - 2 * r, FILL_CORNER, FILL_CORNER, m, m, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x, y, r, r, 0, 0, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x + w - r, y, r, r, e, 0, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x, y + h - r, r, r, 0, e, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
-        g.blit(FILL, x + w - r, y + h - r, r, r, e, e, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
+        g.blit(fill, x + r, y, w - 2 * r, r, FILL_CORNER, 0, m, FILL_CORNER, FILL_TEX, FILL_TEX);
+        g.blit(fill, x + r, y + h - r, w - 2 * r, r, FILL_CORNER, e, m, FILL_CORNER, FILL_TEX, FILL_TEX);
+        g.blit(fill, x, y + r, r, h - 2 * r, 0, FILL_CORNER, FILL_CORNER, m, FILL_TEX, FILL_TEX);
+        g.blit(fill, x + w - r, y + r, r, h - 2 * r, e, FILL_CORNER, FILL_CORNER, m, FILL_TEX, FILL_TEX);
+        g.blit(fill, x + r, y + r, w - 2 * r, h - 2 * r, FILL_CORNER, FILL_CORNER, m, m, FILL_TEX, FILL_TEX);
+        g.blit(fill, x, y, r, r, 0, 0, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
+        g.blit(fill, x + w - r, y, r, r, e, 0, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
+        g.blit(fill, x, y + h - r, r, r, 0, e, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
+        g.blit(fill, x + w - r, y + h - r, r, r, e, e, FILL_CORNER, FILL_CORNER, FILL_TEX, FILL_TEX);
         g.setColor(1, 1, 1, 1);
     }
 
@@ -449,15 +541,16 @@ final class Ui {
         }
         int m = EDGE_TEX - 2 * EDGE_CORNER;
         int e = EDGE_TEX - EDGE_CORNER;
+        ResourceLocation edge = Tiles.guiTexture("shape/rsquare_edge");
         tint(g, argb);
-        g.blit(EDGE, x + r, y, w - 2 * r, r, EDGE_CORNER, 0, m, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
-        g.blit(EDGE, x + r, y + h - r, w - 2 * r, r, EDGE_CORNER, e, m, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
-        g.blit(EDGE, x, y + r, r, h - 2 * r, 0, EDGE_CORNER, EDGE_CORNER, m, EDGE_TEX, EDGE_TEX);
-        g.blit(EDGE, x + w - r, y + r, r, h - 2 * r, e, EDGE_CORNER, EDGE_CORNER, m, EDGE_TEX, EDGE_TEX);
-        g.blit(EDGE, x, y, r, r, 0, 0, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
-        g.blit(EDGE, x + w - r, y, r, r, e, 0, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
-        g.blit(EDGE, x, y + h - r, r, r, 0, e, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
-        g.blit(EDGE, x + w - r, y + h - r, r, r, e, e, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x + r, y, w - 2 * r, r, EDGE_CORNER, 0, m, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x + r, y + h - r, w - 2 * r, r, EDGE_CORNER, e, m, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x, y + r, r, h - 2 * r, 0, EDGE_CORNER, EDGE_CORNER, m, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x + w - r, y + r, r, h - 2 * r, e, EDGE_CORNER, EDGE_CORNER, m, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x, y, r, r, 0, 0, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x + w - r, y, r, r, e, 0, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x, y + h - r, r, r, 0, e, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
+        g.blit(edge, x + w - r, y + h - r, r, r, e, e, EDGE_CORNER, EDGE_CORNER, EDGE_TEX, EDGE_TEX);
         g.setColor(1, 1, 1, 1);
     }
 
@@ -586,15 +679,24 @@ final class Ui {
 
     /** Text without the vanilla drop shadow; the colour does the work instead. */
     static void text(GuiGraphics g, Font font, Component c, int x, int y, int argb) {
+        if (lightBackground()) {
+            text(g, font, readable(c), x, y, argb);
+            return;
+        }
         scaled(g, x, y, () -> g.drawString(font, c, 0, 0, argb, false));
     }
 
     static void text(GuiGraphics g, Font font, String s, int x, int y, int argb) {
+        if (lightBackground()) {
+            text(g, font, readable(s), x, y, argb);
+            return;
+        }
         scaled(g, x, y, () -> g.drawString(font, s, 0, 0, argb, false));
     }
 
     static void text(GuiGraphics g, Font font, FormattedCharSequence s, int x, int y, int argb) {
-        scaled(g, x, y, () -> g.drawString(font, s, 0, 0, argb, false));
+        FormattedCharSequence shown = readable(s);
+        scaled(g, x, y, () -> g.drawString(font, shown, 0, 0, argb, false));
     }
 
     private static void scaled(GuiGraphics g, int x, int y, Runnable draw) {

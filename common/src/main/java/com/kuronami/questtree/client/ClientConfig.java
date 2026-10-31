@@ -106,6 +106,8 @@ public final class ClientConfig {
     public static float textScale = 1f;
     /** White-on-black text and stronger marks over any resource pack palette (2026-10-22). */
     public static boolean highContrast = false;
+    /** The named look theme ({@link Themes}); an unknown saved id reads as {@code default} (2026-10-31). */
+    public static String theme = Themes.DEFAULT;
 
     /** Chapters kept at the top of the chapter list, in pin order. Not per world: it follows the player. */
     public static final List<String> railPinned = new ArrayList<>();
@@ -159,6 +161,9 @@ public final class ClientConfig {
                     textScale = net.minecraft.util.Mth.clamp(o.get("text_scale").getAsFloat(), 0.8f, 1.2f);
                 }
                 highContrast = bool(o, "high_contrast", highContrast);
+                if (o.has("theme") && o.get("theme").isJsonPrimitive()) {
+                    theme = Themes.normalize(o.get("theme").getAsString());
+                }
                 if (o.has("rail_pinned") && o.get("rail_pinned").isJsonArray()) {
                     for (JsonElement e : o.getAsJsonArray("rail_pinned")) {
                         if (e.isJsonPrimitive() && !railPinned.contains(e.getAsString())) {
@@ -299,6 +304,19 @@ public final class ClientConfig {
         return highContrast;
     }
 
+    /** The selected look theme, always one of {@link Themes#ids()}. */
+    public static String theme() {
+        ensureLoaded();
+        return Themes.normalize(theme);
+    }
+
+    /** Selects a look theme and saves it, so the next session starts with it too. */
+    public static void setTheme(String id) {
+        ensureLoaded();
+        theme = Themes.normalize(id);
+        write();
+    }
+
     /** Saves the settings after a screen changed them. */
     public static void save() {
         ensureLoaded();
@@ -380,6 +398,7 @@ public final class ClientConfig {
             o.addProperty("inventory_button", inventoryButton);
             o.addProperty("text_scale", textScale);
             o.addProperty("high_contrast", highContrast);
+            o.addProperty("theme", theme);
             JsonArray a = new JsonArray();
             railPinned.forEach(a::add);
             o.add("rail_pinned", a);

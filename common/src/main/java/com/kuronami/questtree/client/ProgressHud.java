@@ -203,14 +203,14 @@ public final class ProgressHud {
         }
         int tx = x + TrackerRules.PAD + TrackerRules.ICON + TrackerRules.GAP;
         int ty = y + TrackerRules.PAD + 4;
-        Ui.text(g, font, task, tx, ty, Tiles.withAlpha(Ui.MARK, alpha));
+        Ui.text(g, font, task, tx, ty, Ui.onLight(Tiles.withAlpha(Ui.MARK, alpha)));
         tx += Ui.textWidth(font, task) + 6;
         Ui.text(g, font, count, tx, ty,
-                Tiles.withAlpha(noticeHave >= noticeNeed ? Tiles.GREEN_TEXT : Ui.HUD_TEXT, alpha));
+                Ui.onLight(Tiles.withAlpha(noticeHave >= noticeNeed ? Tiles.GREEN_TEXT : Ui.HUD_TEXT, alpha)));
         tx += Ui.textWidth(font, count) + 4;
         g.fill(tx + 1, ty + 3, tx + 3, ty + 5, Tiles.withAlpha(Ui.HUD_COUNT_DOT, alpha));
         tx += 6;
-        Ui.text(g, font, quest, tx, ty, Tiles.withAlpha(Ui.HUD_QUEST, alpha));
+        Ui.text(g, font, quest, tx, ty, Ui.onLight(Tiles.withAlpha(Ui.HUD_QUEST, alpha)));
         g.pose().popPose();
     }
 
@@ -269,8 +269,8 @@ public final class ProgressHud {
                     ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false, n.key);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
-            Ui.text(g, font, title, tx, y, Ui.MARK);
-            Ui.text(g, font, line, tx, y + lineH, s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT);
+            Ui.text(g, font, title, tx, y, Ui.onLight(Ui.MARK));
+            Ui.text(g, font, line, tx, y + lineH, Ui.onLight(s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT));
             g.pose().popPose();
             y += rowH;
             // the items still needed, with what is in the inventory now (Satisfactory's to-do list, kept per quest)
@@ -284,7 +284,7 @@ public final class ProgressHud {
                 g.pose().pushPose();
                 g.pose().translate(0, 0, Tiles.OVERLAY_Z);
                 String c = Math.min(mat[1], mat[2]) + "/" + mat[2];
-                Ui.text(g, font, c, tx + 12, y + 1, mat[1] >= mat[2] ? Tiles.GREEN_TEXT : Ui.HUD_MUTED);
+                Ui.text(g, font, c, tx + 12, y + 1, Ui.onLight(mat[1] >= mat[2] ? Tiles.GREEN_TEXT : Ui.HUD_MUTED));
                 g.pose().popPose();
                 y += matH;
             }

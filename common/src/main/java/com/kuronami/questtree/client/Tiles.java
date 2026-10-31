@@ -104,10 +104,65 @@ final class Tiles {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/" + path + ".png");
     }
 
-    /** Optional screen ground picture; a pack without it keeps the flat palette ground. */
-    private static final ResourceLocation GROUND = texture("ground");
-    /** Optional picture on a tile's face; a pack without it keeps the flat state colour. */
-    private static final ResourceLocation TILE_PATCH = texture("patch/tile");
+    /** Resolved GUI pictures, keyed by path; cleared when the theme or the pack list changes (2026-10-31). */
+    private static final Map<String, ResourceLocation> GUI_TEXTURES = new HashMap<>();
+    private static String guiTheme = Themes.DEFAULT;
+
+    /**
+     * The picture for a GUI path ({@code shape/rsquare}, {@code ground}, {@code patch/tile}, ...) under the selected
+     * theme (2026-10-31). A resource pack's copy wins, then the theme's, then the mod's own; when nobody ships one this
+     * returns the mod's id, which is missing and makes the caller draw its flat colour, exactly as before themes existed.
+     */
+    static ResourceLocation guiTexture(String path) {
+        String themeId = ClientConfig.theme();
+        if (!themeId.equals(guiTheme)) {
+            guiTheme = themeId;
+            GUI_TEXTURES.clear();
+        }
+        ResourceLocation cached = GUI_TEXTURES.get(path);
+        if (cached != null) {
+            return cached;
+        }
+        ResourceLocation resolved = resolveGuiTexture(path, themeId);
+        GUI_TEXTURES.put(path, resolved);
+        return resolved;
+    }
+
+    private static ResourceLocation resolveGuiTexture(String path, String themeId) {
+        ResourceLocation flat = texture(path);
+        ResourceLocation themed = null;
+        boolean themeHas = false;
+        String themePath = Themes.texture(themeId, path);
+        if (themePath != null) {
+            themed = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, themePath);
+            themeHas = net.minecraft.client.Minecraft.getInstance().getResourceManager()
+                    .getResource(themed).isPresent();
+        }
+        return Themes.layer(hasPackOverride(flat), themeHas) == Themes.Layer.THEME ? themed : flat;
+    }
+
+    /**
+     * Whether a resource pack (not the mod's own built-in pack) ships {@code flat}. The stack is lowest priority
+     * first and the mod's built-in pack is the lowest one that has the palette, so any other source is a pack on top.
+     * The rule itself is {@link Themes#packResourceId}, shared with the palette's pack layer (2026-10-31).
+     */
+    private static boolean hasPackOverride(ResourceLocation flat) {
+        var rm = net.minecraft.client.Minecraft.getInstance().getResourceManager();
+        var stack = rm.getResourceStack(flat);
+        if (stack.isEmpty()) {
+            return false;
+        }
+        var palette = rm.getResourceStack(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "gui/palette.json"));
+        if (palette.isEmpty()) {
+            return false;
+        }
+        List<String> sourceIds = new ArrayList<>(stack.size());
+        for (var res : stack) {
+            sourceIds.add(res.sourcePackId());
+        }
+        return Themes.packResourceId(sourceIds, palette.get(0).sourcePackId()).isPresent();
+    }
 
     /** Sizes of optional pictures, read without the missing-texture warning {@link #textureSize} logs. */
     private static final Map<ResourceLocation, int[]> OPTIONAL_SIZES = new HashMap<>();
@@ -134,7 +189,8 @@ final class Tiles {
      * the flat fill the screen has always drawn.
      */
     static void ground(GuiGraphics g, int w, int h, int argb) {
-        int[] size = optionalSize(GROUND);
+        ResourceLocation ground = guiTexture("ground");
+        int[] size = optionalSize(ground);
         if (size[0] <= 0 || size[1] <= 0) {
             g.fill(0, 0, w, h, argb);
             return;
@@ -142,10 +198,10 @@ final class Tiles {
         // the colour goes down first so a pack's transparent pixels show the ground colour, not whatever was
         // drawn before this screen (2026-10-24)
         g.fill(0, 0, w, h, argb);
-        prepareTiled(GROUND);
+        prepareTiled(ground);
         RenderSystem.enableBlend();
         g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);
-        g.blit(GROUND, 0, 0, w, h, 0, 0, w, h, size[0], size[1]);
+        g.blit(ground, 0, 0, w, h, 0, 0, w, h, size[0], size[1]);
         g.setColor(1, 1, 1, 1);
         RenderSystem.disableBlend();
     }
@@ -308,6 +364,7 @@ final class Tiles {
         PREPARED_REPEAT.clear();
         PREPARED_TILED.clear();
         OPTIONAL_SIZES.clear();
+        GUI_TEXTURES.clear();
         Metrics.ALL.values().forEach(Metrics::release);
         Metrics.ALL.clear();
         TEXTURE_SIZES.clear();
@@ -717,7 +774,8 @@ final class Tiles {
          * lets the rim through. No picture returns {@code flat}, so the face is exactly what it was before.
          */
         private ResourceLocation patchFace(String name, float[] fa, int n, ResourceLocation flat) {
-            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(TILE_PATCH);
+            ResourceLocation patch = guiTexture("patch/tile");
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(patch);
             if (res.isEmpty()) {
                 return flat;
             }
@@ -740,7 +798,7 @@ final class Tiles {
                 }
                 return register(name, alpha, n, rgb);
             } catch (java.io.IOException ex) {
-                Constants.LOG.warn("Could not read tile face {}: {}", TILE_PATCH, ex.toString());
+                Constants.LOG.warn("Could not read tile face {}: {}", patch, ex.toString());
                 return flat;
             }
         }

@@ -235,6 +235,23 @@ public final class SettingsScreen extends Screen {
         rows.add(new Row() {
             @Override
             public Component label() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.theme");
+            }
+
+            @Override
+            public Component value() {
+                return Component.translatable("screen.kuronami_quest_tree.settings.theme." + ClientConfig.theme());
+            }
+
+            @Override
+            public void click() {
+                ClientConfig.setTheme(Themes.next(ClientConfig.theme()));
+                Ui.loadPalette(net.minecraft.client.Minecraft.getInstance().getResourceManager());
+            }
+        });
+        rows.add(new Row() {
+            @Override
+            public Component label() {
                 return Component.translatable("screen.kuronami_quest_tree.settings.keys");
             }
 

@@ -47,7 +47,7 @@ final class NoticeToast implements Toast, OwnSoundToast {
             List<FormattedCharSequence> lines = font.split(title, room);
             int y = 8;
             for (int i = 0; i < Math.min(2, lines.size()); i++) {
-                g.drawString(font, lines.get(i), 32, y, Ui.TOAST_TITLE, false);
+                g.drawString(font, lines.get(i), 32, y, Ui.onLight(Ui.TOAST_TITLE), false);
                 y += 10;
             }
         }
@@ -70,9 +70,9 @@ final class NoticeToast implements Toast, OwnSoundToast {
         int shown = Math.min(maxLines, lines.size());
         for (int i = 0; i < shown; i++) {
             FormattedCharSequence line = lines.get(i);
-            g.drawString(font, line, x, y + i * 10, Ui.TOAST_TITLE, false);
+            g.drawString(font, line, x, y + i * 10, Ui.onLight(Ui.TOAST_TITLE), false);
             if (clipped && i == shown - 1) {
-                g.drawString(font, "…", x + font.width(line), y + i * 10, Ui.TOAST_TITLE, false);
+                g.drawString(font, "…", x + font.width(line), y + i * 10, Ui.onLight(Ui.TOAST_TITLE), false);
             }
         }
     }

@@ -1889,7 +1889,7 @@ public class ProgressScreen extends Screen {
             searchRect = new int[]{tx, py, contentW, pin};
         } else {
             // the component itself, shadowed: FTB Quests titles carry their own colours
-            g.drawString(font, title, tx, ty, Ui.BRIGHT, true);
+            g.drawString(font, Ui.readable(title), tx, ty, Ui.BRIGHT, true);
             boolean sover = mouseX >= sx && mouseX < sx + pin && mouseY >= py && mouseY < py + pin && mouseX < open;
             if (sover) {
                 Ui.surface(g, sx, py, pin, pin, Ui.CORNER, Ui.OVERLAY_1);
@@ -4124,7 +4124,7 @@ public class ProgressScreen extends Screen {
                 case "right" -> dw / 2 - inset - w;
                 default -> -w / 2;
             };
-            g.drawString(font, line, x, top + i * 9, Ui.TEXT, d.textShadow);
+            g.drawString(font, Ui.readable(line), x, top + i * 9, Ui.TEXT, d.textShadow);
         }
     }
 

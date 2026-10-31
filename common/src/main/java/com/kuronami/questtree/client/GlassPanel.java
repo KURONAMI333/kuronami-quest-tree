@@ -1,6 +1,5 @@
 package com.kuronami.questtree.client;
 
-import com.kuronami.questtree.Constants;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -13,7 +12,6 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
@@ -76,9 +74,8 @@ public final class GlassPanel {
     /**
      * What lies outside the rounded panel: opaque in the corners, clear inside, nine-sliced like {@code shape/rsquare}.
      * Stored inverted because the game's textured shader drops fully clear texels, which then multiply nothing.
+     * Resolved per draw so a theme can replace it; a theme must keep the 128px size and 23px corners.
      */
-    private static final ResourceLocation MASK =
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/glass_mask.png");
     private static final int MASK_TEX = 128;
     private static final int MASK_CORNER = 23;
     /** How far from the panel the pointer still pulls the light, in GUI pixels. */
@@ -506,7 +503,7 @@ public final class GlassPanel {
         double[] dy = {0.0, sy0, 1.0 - sy0, 1.0};
         double[] su = {0.0, MASK_CORNER / (double) MASK_TEX, 1.0 - MASK_CORNER / (double) MASK_TEX, 1.0};
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
-        RenderSystem.setShaderTexture(0, MASK);
+        RenderSystem.setShaderTexture(0, Tiles.guiTexture("glass_mask"));
         BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 3; col++) {
