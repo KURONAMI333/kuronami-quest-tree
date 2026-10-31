@@ -74,8 +74,8 @@ final class RewardToast implements Toast, OwnSoundToast {
         var font = toasts.getMinecraft().font;
         g.drawString(font, Component.translatable("toast.kuronami_quest_tree.reward"), 32, 7,
                 Ui.onLight(Tiles.GOLD), false);
-        g.drawString(font, Ui.readable(font.plainSubstrByWidth(names.getString(), width() - 38)), 32, 18,
-                Ui.onLight(Ui.HUD_TEXT), false);
+        Ui.toastText(g, font, font.plainSubstrByWidth(names.getString(), width() - 38), 32, 18,
+                Ui.onLight(Ui.HUD_TEXT));
         return time >= SHOW * toasts.getNotificationDisplayTimeMultiplier() ? Visibility.HIDE : Visibility.SHOW;
     }
 }

@@ -14,14 +14,16 @@ import java.util.Optional;
  * <p>
  * Resolution, lowest priority first: the mod's own files, then the selected theme's, then a resource pack's. A pack
  * therefore still wins over a theme, as it always won over the mod's palette. For pictures the theme also sits above
- * the mod's own copy, so a theme can replace {@code shape/rsquare.png} and the other masks the mod ships.
+ * the mod's own copy. Only the pictures read through {@link Tiles#guiTexture} take a theme's copy: {@code ground},
+ * {@code patch/tile}, {@code shape/rsquare}, {@code shape/rsquare_edge} and {@code glass_mask}; the other shapes and
+ * icons always come from the mod or a pack.
  */
 final class Themes {
 
     /** No theme layer: the mod's own files and the resource pack's, exactly as before 2026-10-31. */
     static final String DEFAULT = "default";
 
-    /** The ids the settings screen offers, in order. {@code paper} ships no files yet; a pack can supply them. */
+    /** The ids the settings screen offers, in order. */
     private static final List<String> IDS = List.of(DEFAULT, "paper");
 
     private Themes() {
@@ -33,6 +35,14 @@ final class Themes {
     }
 
     /** A known id, or {@link #DEFAULT} for anything else (an old or hand-edited config value never throws). */
+    /**
+     * The theme actually drawn: high contrast is a readability switch over everything, so it turns a theme off rather
+     * than mixing its light toast and HUD colours with high contrast's white text (independent review, 2026-10-31).
+     */
+    static String effective(String id, boolean highContrast) {
+        return highContrast ? DEFAULT : normalize(id);
+    }
+
     static String normalize(String id) {
         return id != null && IDS.contains(id) ? id : DEFAULT;
     }

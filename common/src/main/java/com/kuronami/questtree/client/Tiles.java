@@ -61,6 +61,46 @@ final class Tiles {
     }
 
     /**
+     * The average colour of a texture as ARGB, alpha included, read once from a grid of at most 64 x 64 of its pixels
+     * (0 = missing or unreadable). Tells a light theme how dark a chapter's own background picture is (2026-10-31).
+     */
+    static int averageColor(ResourceLocation id) {
+        String cache = CacheKey.of(ClientProgress.model(), id);
+        return TEXTURE_AVERAGES.computeIfAbsent(cache, k -> {
+            var res = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(id);
+            if (res.isEmpty()) {
+                return 0;
+            }
+            try (var in = res.get().open(); var img = com.mojang.blaze3d.platform.NativeImage.read(in)) {
+                int w = img.getWidth();
+                int h = img.getHeight();
+                int stepX = Math.max(1, w / 64);
+                int stepY = Math.max(1, h / 64);
+                long r = 0, gr = 0, b = 0, a = 0, n = 0;
+                for (int y = 0; y < h; y += stepY) {
+                    for (int x = 0; x < w; x += stepX) {
+                        // NativeImage pixels are ABGR
+                        int p = img.getPixelRGBA(x, y);
+                        int pa = (p >>> 24) & 255;
+                        r += (long) (p & 255) * pa;
+                        gr += (long) ((p >> 8) & 255) * pa;
+                        b += (long) ((p >> 16) & 255) * pa;
+                        a += pa;
+                        n++;
+                    }
+                }
+                if (a == 0) {
+                    return 0;
+                }
+                return (int) (a / n) << 24 | (int) (r / a) << 16 | (int) (gr / a) << 8 | (int) (b / a);
+            } catch (java.io.IOException ex) {
+                Constants.LOG.warn("Could not read texture {}: {}", k, ex.toString());
+                return 0;
+            }
+        });
+    }
+
+    /**
      * The file a chapter image names, given the shape FTB Quests writes: a bare path is under {@code textures/}, an
      * {@code ns:block/x} sprite keeps its namespace, and a name ending in {@code .png} is already a texture path.
      */
@@ -95,6 +135,7 @@ final class Tiles {
     }
 
     private static final Map<String, int[]> TEXTURE_SIZES = new HashMap<>();
+    private static final Map<String, Integer> TEXTURE_AVERAGES = new HashMap<>();
 
     static String shapeOf(String shape) {
         return SHAPES.contains(shape) ? shape : "square";
@@ -114,7 +155,7 @@ final class Tiles {
      * returns the mod's id, which is missing and makes the caller draw its flat colour, exactly as before themes existed.
      */
     static ResourceLocation guiTexture(String path) {
-        String themeId = ClientConfig.theme();
+        String themeId = Themes.effective(ClientConfig.theme(), ClientConfig.highContrast());
         if (!themeId.equals(guiTheme)) {
             guiTheme = themeId;
             GUI_TEXTURES.clear();
@@ -368,6 +409,7 @@ final class Tiles {
         Metrics.ALL.values().forEach(Metrics::release);
         Metrics.ALL.clear();
         TEXTURE_SIZES.clear();
+        TEXTURE_AVERAGES.clear();
     }
 
     /**

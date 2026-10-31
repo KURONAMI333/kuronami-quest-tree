@@ -5,11 +5,11 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.util.StringDecomposer;
 
 import java.util.List;
 
@@ -164,7 +164,7 @@ final class Ui {
      */
     static void loadPalette(net.minecraft.server.packs.resources.ResourceManager rm) {
         restoreDefaults();
-        String themeId = ClientConfig.theme();
+        String themeId = Themes.effective(ClientConfig.theme(), ClientConfig.highContrast());
         // the optional ground and tile-face pictures follow the palette, but only a changed pack list or theme needs
         // the masks read again (a screen open or a resize must not re-read every shape)
         if (!themeId.equals(paletteTheme)) {
@@ -268,6 +268,8 @@ final class Ui {
             HUD_TRACKER_EDGE = 0x66FFFFFF;
             HUD_TRACKER_EDGE_BOTTOM = 0x33FFFFFF;
         }
+        light = TextContrast.luminance(paletteBackground()) >= TextContrast.LIGHT_BACKGROUND;
+        INK.clear();
         ProgressScreen.paletteChanged();
     }
 
@@ -364,39 +366,103 @@ final class Ui {
      * {@link TextContrast} because the tests run without the game; this is the one call the drawing code uses.
      */
     static int onLight(int argb) {
-        return TextContrast.readableOn(textBackground(), argb);
+        return light ? ink(paletteBackground(), argb) : argb;
     }
 
+    /** Whether the palette's background is light; set once per {@link #loadPalette}, false for the default theme. */
+    private static boolean light;
+    /** The surface text sits on while {@link #onSurface} runs, 0 when it is the palette's own. */
+    private static int surfaceOverride;
+    /** (background, colour) to the readable colour; the same few pairs repeat every frame. Cleared with the palette. */
+    private static final it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap INK =
+            new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
+
     /** The surface text is judged against: the map ground, or the panel when the ground is see-through. */
-    private static int textBackground() {
+    private static int paletteBackground() {
         return (GROUND >>> 24) == 0 ? PANEL : GROUND;
     }
 
-    private static boolean lightBackground() {
-        return TextContrast.luminance(textBackground()) >= TextContrast.LIGHT_BACKGROUND;
+    private static int textBackground() {
+        return surfaceOverride != 0 ? surfaceOverride : paletteBackground();
+    }
+
+    private static int ink(int background, int argb) {
+        long key = ((long) background << 32) | (argb & 0xFFFFFFFFL);
+        int hit = INK.getOrDefault(key, 0);
+        if (hit != 0 || INK.containsKey(key)) {
+            return hit;
+        }
+        int out = TextContrast.readableAgainst(background, argb);
+        INK.put(key, out);
+        return out;
+    }
+
+    /**
+     * Draws {@code body} as if its text sat on {@code surfaceRgb} rather than on the palette's background: a light
+     * theme's text and icon colours are pulled towards readable on it, darker or lighter as it needs. For text a light
+     * theme puts over a chapter's own background picture, which can be as dark as stone (the player chose this over a
+     * paper band, 2026-10-31). Does nothing for a dark palette, so the default theme is untouched.
+     */
+    static void onSurface(int surfaceRgb, Runnable body) {
+        if (!light) {
+            body.run();
+            return;
+        }
+        int text = TEXT;
+        int muted = MUTED;
+        int dim = DIM;
+        int bright = BRIGHT;
+        int surface = 0xFF000000 | surfaceRgb;
+        surfaceOverride = surface;
+        TEXT = ink(surface, text);
+        MUTED = ink(surface, muted);
+        DIM = ink(surface, dim);
+        BRIGHT = ink(surface, bright);
+        try {
+            body.run();
+        } finally {
+            TEXT = text;
+            MUTED = muted;
+            DIM = dim;
+            BRIGHT = bright;
+            surfaceOverride = 0;
+        }
     }
 
     /**
      * Text whose own colours ({@code §} codes and styled components: imported FTB Quests titles and descriptions,
      * item rarities) are made readable on a light background the way {@link #onLight} does for a fixed colour. The
      * colour passed to {@code drawString} only reaches characters without a colour of their own, so on paper the
-     * imported yellows and aquas stayed unreadable without this (2026-10-31). A dark background returns the text as it
-     * is.
+     * imported yellows and aquas stayed unreadable without this (2026-10-31). A dark palette returns the text as it is.
      */
     static FormattedCharSequence readable(FormattedCharSequence s) {
-        if (!lightBackground()) {
+        if (!light) {
             return s;
         }
         int background = textBackground();
-        return sink -> s.accept((index, style, codePoint) -> sink.accept(index, readable(style, background), codePoint));
+        return new FormattedCharSequence() {
+            @Override
+            public boolean accept(net.minecraft.util.FormattedCharSink sink) {
+                // a run of glyphs shares one Style, so one remembered pair saves the lookup for all but the first
+                Style[] last = {null, null};
+                return s.accept((index, style, codePoint) -> {
+                    if (style != last[0]) {
+                        last[0] = style;
+                        last[1] = readable(style, background);
+                    }
+                    return sink.accept(index, last[1], codePoint);
+                });
+            }
+        };
     }
 
     static FormattedCharSequence readable(Component c) {
         return readable(c.getVisualOrderText());
     }
 
+    /** {@code §} codes are read and the text is bidi-ordered and shaped as {@code drawString(String)} would. */
     static FormattedCharSequence readable(String s) {
-        return readable((FormattedCharSequence) sink -> StringDecomposer.iterateFormatted(s, Style.EMPTY, sink));
+        return readable(net.minecraft.locale.Language.getInstance().getVisualOrder(FormattedText.of(s)));
     }
 
     private static Style readable(Style style, int background) {
@@ -404,8 +470,20 @@ final class Ui {
         if (color == null) {
             return style;
         }
-        int rgb = TextContrast.readableOn(background, 0xFF000000 | color.getValue()) & 0xFFFFFF;
+        int rgb = ink(background, 0xFF000000 | color.getValue()) & 0xFFFFFF;
         return rgb == color.getValue() ? style : style.withColor(rgb);
+    }
+
+    /**
+     * A toast's line: the plain string as before on a dark palette, the readable sequence on a light one. Toasts
+     * draw at the vanilla scale, so this is {@code drawString} without {@link #text}'s scaling.
+     */
+    static void toastText(GuiGraphics g, Font font, String s, int x, int y, int argb) {
+        if (light) {
+            g.drawString(font, readable(s), x, y, argb, false);
+        } else {
+            g.drawString(font, s, x, y, argb, false);
+        }
     }
 
     private static int color(com.google.gson.JsonObject o, String key, int fallback) {
@@ -679,7 +757,7 @@ final class Ui {
 
     /** Text without the vanilla drop shadow; the colour does the work instead. */
     static void text(GuiGraphics g, Font font, Component c, int x, int y, int argb) {
-        if (lightBackground()) {
+        if (light) {
             text(g, font, readable(c), x, y, argb);
             return;
         }
@@ -687,7 +765,7 @@ final class Ui {
     }
 
     static void text(GuiGraphics g, Font font, String s, int x, int y, int argb) {
-        if (lightBackground()) {
+        if (light) {
             text(g, font, readable(s), x, y, argb);
             return;
         }
@@ -696,7 +774,9 @@ final class Ui {
 
     static void text(GuiGraphics g, Font font, FormattedCharSequence s, int x, int y, int argb) {
         FormattedCharSequence shown = readable(s);
-        scaled(g, x, y, () -> g.drawString(font, shown, 0, 0, argb, false));
+        // over a chapter's own picture any fixed colour (the points gold) is judged against it too
+        int colour = surfaceOverride != 0 ? ink(surfaceOverride, argb) : argb;
+        scaled(g, x, y, () -> g.drawString(font, shown, 0, 0, colour, false));
     }
 
     private static void scaled(GuiGraphics g, int x, int y, Runnable draw) {

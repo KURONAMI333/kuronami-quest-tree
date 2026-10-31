@@ -58,4 +58,30 @@ class TextContrastTest {
     private static float hue(int argb) {
         return Color.RGBtoHSB((argb >> 16) & 255, (argb >> 8) & 255, argb & 255, null)[0];
     }
+
+    @Test
+    void againstADarkPictureDarkTextIsLightenedUntilItReads() {
+        int stone = 0xFF6E6E6E;
+        int[] colours = {0xFF3A2E22, 0xFF6B5A44, 0xFF8A6A2A};
+        for (int c : colours) {
+            int out = TextContrast.readableAgainst(stone, c);
+            assertTrue(TextContrast.luminance(out) > TextContrast.luminance(c),
+                    "not lightened: " + Integer.toHexString(c));
+            assertTrue(TextContrast.contrast(out, stone) >= TextContrast.MIN_CONTRAST,
+                    "contrast " + TextContrast.contrast(out, stone) + " for " + Integer.toHexString(c));
+        }
+    }
+
+    @Test
+    void againstALightBackgroundItDarkensLikeReadableOn() {
+        for (int c : new int[]{0xFFFFFFFF, 0xFF55FFFF}) {
+            assertEquals(TextContrast.readableOn(PAPER, c), TextContrast.readableAgainst(PAPER, c));
+        }
+    }
+
+    @Test
+    void againstAnyBackgroundAReadableColourIsUnchanged() {
+        assertEquals(0xFFFFFFFF, TextContrast.readableAgainst(0xFF202020, 0xFFFFFFFF));
+        assertEquals(0xFF202020, TextContrast.readableAgainst(PAPER, 0xFF202020));
+    }
 }

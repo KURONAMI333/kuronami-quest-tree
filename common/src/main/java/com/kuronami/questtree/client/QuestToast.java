@@ -57,8 +57,8 @@ final class QuestToast implements Toast, OwnSoundToast {
         Tiles.tile(g, node.shape, 6, 6, 20, state, 1, ClientProgress.iconFor(node), false, node.key);
         var font = toasts.getMinecraft().font;
         g.drawString(font, top, 32, 7, Ui.onLight(Ui.TOAST_LEVEL), false);
-        g.drawString(font, Ui.readable(font.plainSubstrByWidth(node.title.getString(), width() - 38)), 32, 18,
-                Ui.onLight(Ui.TOAST_TITLE), false);
+        Ui.toastText(g, font, font.plainSubstrByWidth(node.title.getString(), width() - 38), 32, 18,
+                Ui.onLight(Ui.TOAST_TITLE));
         return time >= SHOW * toasts.getNotificationDisplayTimeMultiplier() ? Visibility.HIDE : Visibility.SHOW;
     }
 }

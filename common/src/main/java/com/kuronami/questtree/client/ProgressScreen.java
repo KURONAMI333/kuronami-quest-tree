@@ -1766,7 +1766,11 @@ public class ProgressScreen extends Screen {
         com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, net.minecraft.client.Minecraft.ON_OSX);
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        renderHeader(g, ch, mouseX, mouseY, partialTick);
+        if (ch.background.isEmpty()) {
+            renderHeader(g, ch, mouseX, mouseY, partialTick);
+        } else {
+            Ui.onSurface(headerGround(ch), () -> renderHeader(g, ch, mouseX, mouseY, partialTick));
+        }
         renderMinimap(g, ch, v, mouseX, mouseY);
         renderZoomButtons(g, ch, v, mouseX, mouseY);
         g.pose().popPose();
@@ -1799,6 +1803,30 @@ public class ProgressScreen extends Screen {
 
     private static boolean inRect(int[] r, double mx, double my) {
         return mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3];
+    }
+
+    /**
+     * About the colour under the title row when the chapter brings its own pictures: the ground, each layer's average
+     * colour over it by the layer's opacity, then the title scrim at the text's height. A light theme pulls the row's
+     * text towards readable on it, so a dark stone chapter does not keep paper's dark text (2026-10-31).
+     */
+    private static int headerGround(ClientModel.Chapter ch) {
+        int c = Ui.GROUND;
+        for (ClientModel.BackgroundLayer l : ch.background) {
+            int avg = Tiles.averageColor(l.texture());
+            c = mix(c, avg, l.alpha() * ((avg >>> 24) & 255) / 255f);
+        }
+        float textY = Ui.S2 + 6 + 4;
+        float scrim = (0xB0 / 255f) * Math.max(0, 1 - textY / TITLE_SCRIM_H);
+        return mix(c, Ui.GROUND, scrim) & 0xFFFFFF;
+    }
+
+    private static int mix(int a, int b, float t) {
+        t = Math.max(0, Math.min(1, t));
+        int r = Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
+        int g = Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
+        int bl = Math.round((a & 255) * (1 - t) + (b & 255) * t);
+        return r << 16 | g << 8 | bl;
     }
 
     /** How far down the soft scrim behind the chapter title runs. */
