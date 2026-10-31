@@ -11,6 +11,7 @@
 - A quest book item opens the screen. A quest block opens one quest, and a barrier block opens only after a quest or stage is reached.
 - JEI, REI and EMI can open a quest from an item, and quest descriptions can open a recipe, another quest or a link.
 - Item tooltips show which quests need the item.
+- A paper theme in the settings screen: a light paper look for the map, panels and tiles. On a light ground, text and the colour codes in imported names and descriptions are darkened until they read; on a chapter's own dark background picture, the top bar's text follows that picture. High-contrast mode turns the theme off. Themes are resource-pack files, so a pack can restyle or replace one.
 - Loot crates: a crate item and a crate block roll a reward table. The recipe viewers show the chance of each reward, and a table can guarantee an entry after a run of misses.
 - Stage tasks and stage conditions count a stage the book itself granted on both loaders, not only through Pack Stages.
 - A save whose main file is missing is restored from the backup instead of starting empty.
