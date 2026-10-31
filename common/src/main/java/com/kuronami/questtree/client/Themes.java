@@ -34,7 +34,6 @@ final class Themes {
         return IDS;
     }
 
-    /** A known id, or {@link #DEFAULT} for anything else (an old or hand-edited config value never throws). */
     /**
      * The theme actually drawn: high contrast is a readability switch over everything, so it turns a theme off rather
      * than mixing its light toast and HUD colours with high contrast's white text (independent review, 2026-10-31).
@@ -43,6 +42,7 @@ final class Themes {
         return highContrast ? DEFAULT : normalize(id);
     }
 
+    /** A known id, or {@link #DEFAULT} for anything else (an old or hand-edited config value never throws). */
     static String normalize(String id) {
         return id != null && IDS.contains(id) ? id : DEFAULT;
     }

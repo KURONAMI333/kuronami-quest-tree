@@ -1766,7 +1766,7 @@ public class ProgressScreen extends Screen {
         com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, net.minecraft.client.Minecraft.ON_OSX);
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        if (ch.background.isEmpty()) {
+        if (ch.background.isEmpty() || !Ui.isLight()) {
             renderHeader(g, ch, mouseX, mouseY, partialTick);
         } else {
             Ui.onSurface(headerGround(ch), () -> renderHeader(g, ch, mouseX, mouseY, partialTick));
@@ -1913,7 +1913,7 @@ public class ProgressScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(0, 0, 20);
         if (field) {
-            renderQuestSearch(g, tx, py, contentW, pin, mouseX, mouseY, partialTick);
+            Ui.offSurface(() -> renderQuestSearch(g, tx, py, contentW, pin, mouseX, mouseY, partialTick));
             searchRect = new int[]{tx, py, contentW, pin};
         } else {
             // the component itself, shadowed: FTB Quests titles carry their own colours
@@ -1976,8 +1976,11 @@ public class ProgressScreen extends Screen {
             boolean bo = shown && mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh;
             if (shown) {
                 Ui.surface(g, bx, by, bw, bh, Ui.CORNER, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
-                Ui.text(g, font, claimLabel, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
-                Ui.text(g, font, n, bx + bw - Ui.S2 - Ui.textWidth(font, n), by + (bh - 8) / 2, Tiles.INK);
+                // the label sits on the gold button, not on the chapter's picture
+                Ui.offSurface(() -> {
+                    Ui.text(g, font, claimLabel, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
+                    Ui.text(g, font, n, bx + bw - Ui.S2 - Ui.textWidth(font, n), by + (bh - 8) / 2, Tiles.INK);
+                });
             }
             Runnable claim = () -> {
                 ClientProgress.send("claim_chapter", ch.id, -1);

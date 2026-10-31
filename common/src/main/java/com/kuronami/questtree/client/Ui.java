@@ -386,15 +386,25 @@ final class Ui {
         return surfaceOverride != 0 ? surfaceOverride : paletteBackground();
     }
 
+    /** Whether the palette is a light one (a light theme); always false for the default theme and high contrast. */
+    static boolean isLight() {
+        return light;
+    }
+
     private static int ink(int background, int argb) {
-        long key = ((long) background << 32) | (argb & 0xFFFFFFFFL);
-        int hit = INK.getOrDefault(key, 0);
-        if (hit != 0 || INK.containsKey(key)) {
-            return hit;
+        if ((argb >>> 24) == 0) {
+            return argb;
         }
-        int out = TextContrast.readableAgainst(background, argb);
-        INK.put(key, out);
-        return out;
+        // keyed on RGB only, so a fading HUD's alpha steps share one entry
+        long key = ((long) background << 32) | (argb & 0xFFFFFFL);
+        int rgb;
+        if (INK.containsKey(key)) {
+            rgb = INK.get(key);
+        } else {
+            rgb = TextContrast.readableAgainst(background, 0xFF000000 | argb) & 0xFFFFFF;
+            INK.put(key, rgb);
+        }
+        return (argb & 0xFF000000) | rgb;
     }
 
     /**
@@ -412,6 +422,7 @@ final class Ui {
         int muted = MUTED;
         int dim = DIM;
         int bright = BRIGHT;
+        saved = new int[]{text, muted, dim, bright};
         int surface = 0xFF000000 | surfaceRgb;
         surfaceOverride = surface;
         TEXT = ink(surface, text);
@@ -426,6 +437,44 @@ final class Ui {
             DIM = dim;
             BRIGHT = bright;
             surfaceOverride = 0;
+            saved = null;
+        }
+    }
+
+    /** The palette colours {@link #onSurface} replaced, while it runs. */
+    private static int[] saved;
+
+    /**
+     * Inside {@link #onSurface}, draws {@code body} with the palette's own colours and background again: for things in
+     * the title row that bring their own surface (the gold claim button, the search field), which sit on that surface
+     * and not on the chapter's picture (independent review, 2026-10-31). Outside it, just runs {@code body}.
+     */
+    static void offSurface(Runnable body) {
+        if (saved == null) {
+            body.run();
+            return;
+        }
+        int[] own = saved;
+        int surface = surfaceOverride;
+        int text = TEXT;
+        int muted = MUTED;
+        int dim = DIM;
+        int bright = BRIGHT;
+        TEXT = own[0];
+        MUTED = own[1];
+        DIM = own[2];
+        BRIGHT = own[3];
+        surfaceOverride = 0;
+        saved = null;
+        try {
+            body.run();
+        } finally {
+            TEXT = text;
+            MUTED = muted;
+            DIM = dim;
+            BRIGHT = bright;
+            surfaceOverride = surface;
+            saved = own;
         }
     }
 
@@ -758,7 +807,7 @@ final class Ui {
     /** Text without the vanilla drop shadow; the colour does the work instead. */
     static void text(GuiGraphics g, Font font, Component c, int x, int y, int argb) {
         if (light) {
-            text(g, font, readable(c), x, y, argb);
+            drawLight(g, font, readable(c), x, y, argb);
             return;
         }
         scaled(g, x, y, () -> g.drawString(font, c, 0, 0, argb, false));
@@ -766,15 +815,22 @@ final class Ui {
 
     static void text(GuiGraphics g, Font font, String s, int x, int y, int argb) {
         if (light) {
-            text(g, font, readable(s), x, y, argb);
+            drawLight(g, font, readable(s), x, y, argb);
             return;
         }
         scaled(g, x, y, () -> g.drawString(font, s, 0, 0, argb, false));
     }
 
     static void text(GuiGraphics g, Font font, FormattedCharSequence s, int x, int y, int argb) {
-        FormattedCharSequence shown = readable(s);
-        // over a chapter's own picture any fixed colour (the points gold) is judged against it too
+        if (light) {
+            drawLight(g, font, readable(s), x, y, argb);
+            return;
+        }
+        scaled(g, x, y, () -> g.drawString(font, s, 0, 0, argb, false));
+    }
+
+    /** Already made readable; over a chapter's own picture any fixed colour (the points gold) is judged against it. */
+    private static void drawLight(GuiGraphics g, Font font, FormattedCharSequence shown, int x, int y, int argb) {
         int colour = surfaceOverride != 0 ? ink(surfaceOverride, argb) : argb;
         scaled(g, x, y, () -> g.drawString(font, shown, 0, 0, colour, false));
     }

@@ -84,4 +84,13 @@ class TextContrastTest {
         assertEquals(0xFFFFFFFF, TextContrast.readableAgainst(0xFF202020, 0xFFFFFFFF));
         assertEquals(0xFF202020, TextContrast.readableAgainst(PAPER, 0xFF202020));
     }
+
+    @Test
+    void onAMidToneGroundTextIsDarkenedBecauseWhiteCannotReach() {
+        int mid = 0xFF9A9A9A;
+        assertTrue(TextContrast.contrast(0xFFFFFFFF, mid) < TextContrast.MIN_CONTRAST);
+        int out = TextContrast.readableAgainst(mid, 0xFF8A8A8A);
+        assertTrue(TextContrast.luminance(out) < TextContrast.luminance(0xFF8A8A8A), Integer.toHexString(out));
+        assertTrue(TextContrast.contrast(out, mid) >= TextContrast.MIN_CONTRAST);
+    }
 }

@@ -26,6 +26,11 @@ final class TextContrast {
         if (contrast(argb, background) >= MIN_CONTRAST) {
             return argb;
         }
+        return darkened(background, argb);
+    }
+
+    /** {@code argb} scaled down only as far as {@link #MIN_CONTRAST} on {@code background} needs (black at most). */
+    private static int darkened(int background, int argb) {
         int r = (argb >> 16) & 255;
         int g = (argb >> 8) & 255;
         int b = argb & 255;
@@ -45,16 +50,18 @@ final class TextContrast {
     }
 
     /**
-     * {@code argb} made readable on {@code background} whichever way that needs: darkened on a light background as
-     * {@link #readableOn} does, lightened towards white on a dark one. Used only where a light theme's text lands on a
-     * dark picture (a chapter's own background, 2026-10-31); the default dark theme never calls it.
+     * {@code argb} made readable on {@code background} whichever way that needs: darkened where black reads better
+     * than white, lightened towards white where white does. The turn is near luminance 0.18, not at
+     * {@link #LIGHT_BACKGROUND}: on a mid-tone ground only darkening can reach 4.5:1 (independent review, 2026-10-31).
+     * Used only for a light theme (its palette ground, and a chapter's own picture under the title row); the default
+     * dark theme never calls it.
      */
     static int readableAgainst(int background, int argb) {
-        if (luminance(background) >= LIGHT_BACKGROUND) {
-            return readableOn(background, argb);
-        }
         if ((argb >>> 24) == 0 || contrast(argb, background) >= MIN_CONTRAST) {
             return argb;
+        }
+        if (contrast(0xFF000000, background) >= contrast(0xFFFFFFFF, background)) {
+            return darkened(background, argb);
         }
         int lo = 0;
         int hi = 255;
