@@ -81,8 +81,15 @@ final class DevTour {
         if (respawnIfDead()) {
             return;
         }
+        if (FPS_TAG != null && !fpsReady(mc)) {
+            return;
+        }
         if (ticks < 0) {
-            build();
+            if (FPS_TAG != null) {
+                fpsBuild();
+            } else {
+                build();
+            }
         }
         ticks++;
         while (next < STEPS.size() && STEPS.get(next).at <= ticks) {
@@ -1188,6 +1195,174 @@ final class DevTour {
             ClientModel.Node chosen = pick;
             onScreen("gallery select " + chosen.key, screen -> screen.tourSelect(chosen.key));
         }
+    }
+
+    // ------------------------------------------------------------------ frame-rate measurement (dev only)
+
+    /**
+     * Dev only: set the environment variable {@code KQT_FPS_TOUR} to a label (for example {@code head}) and the tour
+     * measures the frame rate of the biggest chapter at four zooms instead of walking the screens. {@code KQT_FPS_IMPORT=1}
+     * first imports the FTB Quests book of the game directory as namespace atm10; {@code KQT_FPS_OUT} is the folder
+     * for the result file. Unset in normal play, so nothing here runs.
+     */
+    private static final String FPS_TAG = System.getenv("KQT_FPS_TOUR");
+    private static final int FPS_WARM = 60;
+    private static final int FPS_SAMPLE = 200;
+    private static int fpsWaited;
+    private static int fpsSettled;
+    private static boolean fpsImportSent;
+    private static final List<String> FPS_LINES = new ArrayList<>();
+    private static final List<Integer> FPS_VALUES = new ArrayList<>();
+    private static boolean fpsSampling;
+    private static int fpsLimitBefore;
+    private static boolean vsyncBefore;
+    private static int renderDistanceBefore;
+
+    /** Waits for the import (when asked for) and for the chapters to arrive; true when the measuring can start. */
+    private static boolean fpsReady(Minecraft mc) {
+        if (ticks >= 0) {
+            return true;
+        }
+        if (System.getenv("KQT_FPS_IMPORT") != null && !fpsImportSent) {
+            fpsImportSent = true;
+            cmdNow("quest_tree import ftbquests atm10");
+            fpsWaited = 0;
+            return false;
+        }
+        int need = System.getenv("KQT_FPS_IMPORT") != null ? 60 : 0;
+        long atm = ClientProgress.model().chapters.stream().filter(c -> c.id.startsWith("atm10:")).count();
+        if (atm < need && fpsWaited++ < 1200) {
+            return false;
+        }
+        // a few seconds for the resync and the world to settle
+        return fpsSettled++ >= 100;
+    }
+
+    private static void fpsBuild() {
+        ticks = 0;
+        Minecraft mc = Minecraft.getInstance();
+        ClientModel m = ClientProgress.model();
+        ClientModel.Chapter big = m.chapters.stream()
+                .max(java.util.Comparator.comparingInt(c -> c.nodes.size())).orElse(null);
+        if (big == null) {
+            Constants.LOG.error("KQT-FPS no chapter");
+            return;
+        }
+        int idx = m.chapters.indexOf(big);
+        long visible = big.nodes.values().stream().filter(n -> ClientProgress.visible(n.key)).count();
+        Constants.LOG.info("KQT-FPS|{}|chapter={}|nodes={}|visible={}|chapters={}|window={}x{}|gui={}x{}|scale={}",
+                FPS_TAG, big.id, big.nodes.size(), visible, m.chapters.size(),
+                mc.getWindow().getWidth(), mc.getWindow().getHeight(), mc.getWindow().getGuiScaledWidth(),
+                mc.getWindow().getGuiScaledHeight(), mc.getWindow().getGuiScale());
+        // the node nearest the middle of the chapter's nodes: the views centre on it
+        double cx = big.nodes.values().stream().mapToDouble(n -> n.x).average().orElse(0);
+        double cy = big.nodes.values().stream().mapToDouble(n -> n.y).average().orElse(0);
+        ClientModel.Node centre = big.nodes.values().stream()
+                .min(java.util.Comparator.comparingDouble(n -> Math.hypot(n.x - cx, n.y - cy))).orElseThrow();
+        fpsLimitBefore = mc.options.framerateLimit().get();
+        vsyncBefore = mc.options.enableVsync().get();
+        chatVisibilityBefore = mc.options.chatVisibility().get();
+        mc.options.chatVisibility().set(net.minecraft.world.entity.player.ChatVisiblity.HIDDEN);
+        // the frame rate must not be capped at the display's refresh rate
+        mc.options.framerateLimit().set(260);
+        mc.options.enableVsync().set(false);
+        // the world behind the screen costs far more than the map; a short view distance lets the map's cost show
+        String rd = System.getenv("KQT_FPS_RD");
+        renderDistanceBefore = mc.options.renderDistance().get();
+        if (rd != null) {
+            mc.options.renderDistance().set(Integer.parseInt(rd));
+        }
+        Object[][] views = {{"default", 0f}, {"zoomout", 0.3f}, {"zoomin", 1.5f}, {"mid", 1.0f}};
+        int t = 20;
+        for (Object[] v : views) {
+            String name = (String) v[0];
+            float zoom = (Float) v[1];
+            final int base = t;
+            at(base, () -> {
+                if (name.equals("default")) {
+                    open(idx);
+                    ProgressScreen.tourResting(true);
+                    ProgressScreen.tourRailOpen(false);
+                } else {
+                    onScreen(name, s -> s.tourZoomTo(centre, zoom));
+                }
+                ProgressScreen.tourHover(null);
+                FPS_VALUES.clear();
+                fpsSampling = false;
+            });
+            at(base + FPS_WARM, () -> {
+                grab("fps_" + FPS_TAG + "_" + name);
+                fpsSampling = true;
+            });
+            for (int i = 0; i < FPS_SAMPLE; i++) {
+                at(base + FPS_WARM + 5 + i, () -> {
+                    if (fpsSampling) {
+                        FPS_VALUES.add(Minecraft.getInstance().getFps());
+                    }
+                });
+            }
+            at(base + FPS_WARM + 5 + FPS_SAMPLE, () -> {
+                fpsSampling = false;
+                double avg = FPS_VALUES.stream().mapToInt(Integer::intValue).average().orElse(0);
+                int min = FPS_VALUES.stream().mapToInt(Integer::intValue).min().orElse(0);
+                int max = FPS_VALUES.stream().mapToInt(Integer::intValue).max().orElse(0);
+                java.util.Set<Integer> distinct = new java.util.TreeSet<>(FPS_VALUES);
+                String line = String.format(Locale.ROOT, "%s|%s|avg_fps=%.1f|min=%d|max=%d|ticks=%d|distinct=%s",
+                        FPS_TAG, name, avg, min, max, FPS_VALUES.size(), distinct);
+                FPS_LINES.add(line);
+                Constants.LOG.info("KQT-FPS|{}", line);
+            });
+            t += FPS_WARM + 5 + FPS_SAMPLE + 10;
+        }
+        // a quest hovered near the right edge of the screen, at zoom 1.0 (the tooltip must stay on screen)
+        final int hb = t;
+        at(hb, () -> onScreen("hover", s -> {
+            int w = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+            int h = Minecraft.getInstance().getWindow().getGuiScaledHeight();
+            // a pair: the view centres on a, the quest b then sits about 30 px from the right edge, mid-height
+            ClientModel.Node a = centre;
+            ClientModel.Node b = centre;
+            double best = Double.MAX_VALUE;
+            for (ClientModel.Node na : big.nodes.values()) {
+                for (ClientModel.Node nb : big.nodes.values()) {
+                    if (!ClientProgress.visible(nb.key)) {
+                        continue;
+                    }
+                    double cost = Math.abs((nb.x - na.x) * 24 - (w / 2.0 - 30)) + 0.5 * Math.abs((nb.y - na.y) * 24);
+                    if (cost < best) {
+                        best = cost;
+                        a = na;
+                        b = nb;
+                    }
+                }
+            }
+            s.tourZoomTo(a, 1.0f);
+            // the real pointer path (hit test included), not the forced hover key; resting would override the pointer
+            ProgressScreen.tourResting(false);
+            ProgressScreen.tourPointer((int) (w / 2.0 + (b.x - a.x) * 24), (int) (h / 2.0 + (b.y - a.y) * 24));
+            Constants.LOG.info("KQT-FPS|{}|hover node={} at gui x={} of {}", FPS_TAG, b.key,
+                    w / 2.0 + (b.x - a.x) * 24, w);
+        }));
+        shot(hb + FPS_WARM, "fps_" + FPS_TAG + "_hover_edge");
+        at(hb + FPS_WARM + 20, () -> {
+            ProgressScreen.tourHover(null);
+            ProgressScreen.tourPointerClear();
+            ProgressScreen.tourResting(false);
+            mc.options.framerateLimit().set(fpsLimitBefore);
+            mc.options.enableVsync().set(vsyncBefore);
+            mc.options.renderDistance().set(renderDistanceBefore);
+            mc.options.chatVisibility().set(chatVisibilityBefore);
+            String out = System.getenv("KQT_FPS_OUT");
+            try {
+                java.nio.file.Path dir = java.nio.file.Path.of(out == null ? "." : out);
+                java.nio.file.Files.createDirectories(dir);
+                java.nio.file.Files.write(dir.resolve("fps_" + FPS_TAG + ".txt"), FPS_LINES);
+            } catch (java.io.IOException ex) {
+                Constants.LOG.error("KQT-FPS result file", ex);
+            }
+            Constants.LOG.info("KQT-FPS|{}|done", FPS_TAG);
+            mc.stop();
+        });
     }
 
     private static void shot(int tick, String name) {
