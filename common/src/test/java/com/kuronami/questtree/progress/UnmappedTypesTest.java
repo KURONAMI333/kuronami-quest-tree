@@ -29,7 +29,7 @@ class UnmappedTypesTest {
                       {"type": "example:money", "imported_unmapped": true, "count": 5},
                       {"type": "checkmark"}]},
                   "synced": {"tasks": [
-                      {"type": "example:money", "imported_unmapped": true, "skip": true, "count": 5}]},
+                      {"type": "example:money", "imported_unmapped": true, "_kqt_unhandled": true, "count": 5}]},
                   "paid": {"rewards": [{"type": "example:money", "imported_unmapped": true}]}
                 }}}}
                 """).getAsJsonObject());
@@ -80,7 +80,7 @@ class UnmappedTypesTest {
     }
 
     @Test
-    void theServerWritesSkipIntoTheCopyItSends() {
+    void theServerWritesTheSyncKeyIntoTheCopyItSends() {
         JsonObject bundle = JsonParser.parseString("""
                 {"chapters": {"t:c": {"nodes": {
                   "a": {"tasks": [{"type": "example:money", "imported_unmapped": true}]},
@@ -89,14 +89,60 @@ class UnmappedTypesTest {
         UnmappedTypes.markSkipped(bundle);
         JsonObject nodes = bundle.getAsJsonObject("chapters").getAsJsonObject("t:c").getAsJsonObject("nodes");
         JsonObject task = nodes.getAsJsonObject("a").getAsJsonArray("tasks").get(0).getAsJsonObject();
-        assertTrue(task.get("skip").getAsBoolean());
-        assertFalse(nodes.getAsJsonObject("b").getAsJsonArray("tasks").get(0).getAsJsonObject().has("skip"),
+        assertTrue(task.get(UnmappedTypes.SYNC).getAsBoolean());
+        assertFalse(nodes.getAsJsonObject("b").getAsJsonArray("tasks").get(0).getAsJsonObject().has(UnmappedTypes.SYNC),
                 "a built-in task is not marked");
         // with the type registered on the server, the copy says so: a client without the mod must still show it
         assertTrue(QuestTreeApi.registerTaskTypeById(MONEY, context -> 0));
         try {
             UnmappedTypes.markSkipped(bundle);
-            assertFalse(task.get("skip").getAsBoolean());
+            assertFalse(task.get(UnmappedTypes.SYNC).getAsBoolean());
+        } finally {
+            QuestTreeApi.unregisterTaskType(MONEY);
+        }
+    }
+
+    @Test
+    void anAddOnsOwnSkipFieldIsLeftAlone() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:c": {"nodes": {"a": {"tasks": [
+                  {"type": "example:money", "imported_unmapped": true, "skip": 7}]}}}}}
+                """).getAsJsonObject();
+        UnmappedTypes.markSkipped(bundle);
+        JsonObject task = bundle.getAsJsonObject("chapters").getAsJsonObject("t:c").getAsJsonObject("nodes")
+                .getAsJsonObject("a").getAsJsonArray("tasks").get(0).getAsJsonObject();
+        assertEquals(7, task.get("skip").getAsInt());
+        assertTrue(task.get(UnmappedTypes.SYNC).getAsBoolean());
+        assertTrue(UnmappedTypes.taskSkipped(JsonParser.parseString(
+                "{\"type\":\"example:money\",\"imported_unmapped\":true,\"skip\":false}").getAsJsonObject()));
+    }
+
+    @Test
+    void stripRemovesTheSyncKeyFromAnywhereAndOnlyThat() {
+        JsonObject o = JsonParser.parseString("""
+                {"_kqt_unhandled": true, "skip": 1, "nodes": {"a": {"tasks": [
+                  {"type": "x", "_kqt_unhandled": false, "deep": [{"_kqt_unhandled": true, "k": 2}]}]}}}
+                """).getAsJsonObject();
+        assertTrue(UnmappedTypes.strip(o));
+        assertFalse(o.toString().contains(UnmappedTypes.SYNC));
+        assertTrue(o.toString().contains("\"skip\":1") && o.toString().contains("\"k\":2"));
+        assertFalse(UnmappedTypes.strip(o));
+    }
+
+    @Test
+    void aStoredSyncKeyDoesNotFreezeTheServersDecision() {
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:c": {"nodes": {"a": {"tasks": [
+                  {"type": "example:money", "imported_unmapped": true, "_kqt_unhandled": true}]}}}}}
+                """).getAsJsonObject();
+        // what the server does with everything it loads, before the validator and the model see it
+        UnmappedTypes.strip(bundle);
+        ProgressModel server = ProgressModel.of(bundle);
+        JsonObject task = server.chapters.get("t:c").nodes.get("a").tasks.get(0);
+        assertTrue(UnmappedTypes.taskSkipped(task));
+        assertTrue(QuestTreeApi.registerTaskTypeById(MONEY, context -> 0));
+        try {
+            assertFalse(UnmappedTypes.taskSkipped(task), "registering the type opens it again");
         } finally {
             QuestTreeApi.unregisterTaskType(MONEY);
         }

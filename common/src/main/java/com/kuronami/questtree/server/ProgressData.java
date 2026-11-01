@@ -272,6 +272,9 @@ public final class ProgressData {
 
         langs = mergedLangs;
 
+        // the sync key belongs to the copy sent to clients: nothing the server decides from may carry it
+        com.kuronami.questtree.progress.UnmappedTypes.strip(bundle);
+
         // check the data before it becomes a model: a broken node is dropped, the rest of the pack keeps working
         ProgressValidator.Result result;
         try {

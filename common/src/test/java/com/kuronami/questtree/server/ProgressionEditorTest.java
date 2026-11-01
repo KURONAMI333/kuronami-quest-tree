@@ -137,6 +137,18 @@ class ProgressionEditorTest {
     }
 
     @Test
+    void aSyncKeyInAnOpIsNeverStored() throws Exception {
+        ProgressionEditor.Outcome out = apply(editor(), CHAPTER, 0, "update_node",
+                "{\"id\":\"a\",\"patch\":{\"x\":7,\"tasks\":[{\"type\":\"example:money\","
+                        + "\"imported_unmapped\":true,\"_kqt_unhandled\":true,\"skip\":3}]}}");
+
+        assertTrue(out.ok(), out.messages().toString());
+        String written = Files.readString(overlayFile(CHAPTER), StandardCharsets.UTF_8);
+        assertFalse(written.contains("_kqt_unhandled"), written);
+        assertTrue(written.contains("\"skip\""), "an add-on's own skip field is kept: " + written);
+    }
+
+    @Test
     void aMoveWithANonFiniteCoordinateIsRefusedAndWritesNothing() {
         ProgressionEditor editor = editor();
         JsonObject args = new JsonObject();

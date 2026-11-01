@@ -18,8 +18,13 @@ public final class UnmappedTypes {
     /** The marker the importer writes on a task or reward it kept without knowing its type. */
     public static final String MARKER = "imported_unmapped";
 
-    /** What the server writes into the synced bundle, so a client does not need the registration state. */
-    public static final String SKIP = "skip";
+    /**
+     * What the server writes into the copy of the bundle it sends, so a client does not need the registration state:
+     * true when nothing registers the entry's type. A reserved name no content uses (an add-on type may own a plain
+     * {@code skip}). It exists only in that copy: the server never reads it back, and strips it from everything it loads
+     * or receives from an editor ({@link #strip}), so it is never stored in the overlay or exported to a data pack.
+     */
+    public static final String SYNC = "_kqt_unhandled";
 
     private UnmappedTypes() {
     }
@@ -39,8 +44,9 @@ public final class UnmappedTypes {
             return false;
         }
         // the server decides once and writes the answer into the bundle it sends; a client reads that instead of its
-        // own registry, which only holds what the client side registered
-        JsonElement skip = o.get(SKIP);
+        // own registry, which only holds what the client side registered. The server's own data never holds the key
+        // (it is stripped on load and on every editor op), so there this falls through to the registry.
+        JsonElement skip = o.get(SYNC);
         if (skip != null && skip.isJsonPrimitive() && skip.getAsJsonPrimitive().isBoolean()) {
             return skip.getAsBoolean();
         }
@@ -53,7 +59,7 @@ public final class UnmappedTypes {
     }
 
     /**
-     * Writes {@link #SKIP} onto every imported task and reward in the copy of the bundle that goes to clients, saying
+     * Writes {@link #SYNC} onto every imported task and reward in the copy of the bundle that goes to clients, saying
      * whether this server has a handler for its type. Callers pass the copy, never the loaded book, so the marker never
      * reaches a data pack.
      */
@@ -86,6 +92,29 @@ public final class UnmappedTypes {
         }
     }
 
+    /**
+     * Removes {@link #SYNC} from {@code e} and everything nested in it, whatever object holds it. Returns whether
+     * anything was removed.
+     */
+    public static boolean strip(JsonElement e) {
+        boolean removed = false;
+        if (e == null) {
+            return false;
+        }
+        if (e.isJsonObject()) {
+            JsonObject o = e.getAsJsonObject();
+            removed = o.remove(SYNC) != null;
+            for (JsonElement child : o.asMap().values()) {
+                removed |= strip(child);
+            }
+        } else if (e.isJsonArray()) {
+            for (JsonElement child : e.getAsJsonArray()) {
+                removed |= strip(child);
+            }
+        }
+        return removed;
+    }
+
     /** One list of tasks, rewards, or table entries ({@code registered} is null there, and each entry wraps its reward). */
     private static void mark(JsonElement list, java.util.function.Predicate<String> registered) {
         if (list == null || !list.isJsonArray()) {
@@ -110,7 +139,7 @@ public final class UnmappedTypes {
     private static void markOne(JsonObject o, java.util.function.Predicate<String> registered) {
         if (ProgressModel.boolOf(o, MARKER)) {
             // write the answer either way: a client may lack the mod that the server has, so it must not decide again
-            o.addProperty(SKIP, !registered.test(type(o)));
+            o.addProperty(SYNC, !registered.test(type(o)));
         }
     }
 }

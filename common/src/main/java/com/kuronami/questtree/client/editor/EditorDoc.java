@@ -273,7 +273,7 @@ public final class EditorDoc {
         }
         JsonObject out = new JsonObject();
         for (Map.Entry<String, JsonElement> entry : e.getAsJsonObject().entrySet()) {
-            if (!common.contains(entry.getKey())) {
+            if (!shared(common, entry.getKey())) {
                 out.add(entry.getKey(), entry.getValue().deepCopy());
             }
         }
@@ -282,7 +282,7 @@ public final class EditorDoc {
 
     /**
      * Writes the row's JSON object back into the object at {@code path}: each member goes back as it was, and a member
-     * the author left out is removed. Shared members are never touched. False when the text is not one JSON object,
+     * the author left out is removed. Shared members are never touched, and the server's sync key counts as one: it is neither shown nor written, and stays as it is. False when the text is not one JSON object,
      * which leaves the last readable value in place; a blank row clears every member of the type's own.
      */
     public static boolean writeExtras(JsonObject root, String path, String value, Set<String> common) {
@@ -293,7 +293,7 @@ public final class EditorDoc {
         }
         if (blank) {
             for (String key : new ArrayList<>(target.keySet())) {
-                if (!common.contains(key)) {
+                if (!shared(common, key)) {
                     target.remove(key);
                 }
             }
@@ -310,19 +310,24 @@ public final class EditorDoc {
         }
         JsonObject out = parsed.getAsJsonObject();
         for (String key : new ArrayList<>(target.keySet())) {
-            if (!common.contains(key) && !out.has(key)) {
+            if (!shared(common, key) && !out.has(key)) {
                 target.remove(key);
             }
         }
         for (Map.Entry<String, JsonElement> entry : out.entrySet()) {
-            if (!common.contains(entry.getKey())) {
+            if (!shared(common, entry.getKey())) {
                 target.add(entry.getKey(), entry.getValue().deepCopy());
             }
         }
         return true;
     }
 
-    /** The object an extras row edits; {@code create} makes it when the member is absent, never over another value. */
+        /** A member the extras row leaves alone: one every type shares, or the sync key the server adds for clients. */
+    private static boolean shared(Set<String> common, String key) {
+        return common.contains(key) || key.equals(com.kuronami.questtree.progress.UnmappedTypes.SYNC);
+    }
+
+/** The object an extras row edits; {@code create} makes it when the member is absent, never over another value. */
     private static JsonObject extrasObject(JsonObject root, String path, boolean create) {
         JsonElement e = get(root, path);
         if (e != null && e.isJsonObject()) {

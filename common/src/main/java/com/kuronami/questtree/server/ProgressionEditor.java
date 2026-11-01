@@ -152,6 +152,8 @@ public final class ProgressionEditor {
             return fail(readErrors, creatingChapter ? 0 : overlay.revision(chapterId));
         }
         args = args == null ? new JsonObject() : args;
+        // the client edits a copy that carries the sync key; whatever op it came with, none of it may be stored
+        com.kuronami.questtree.progress.UnmappedTypes.strip(args);
         if (restrictionsOp) {
             return updateRestrictions(overlay, revision, args);
         }

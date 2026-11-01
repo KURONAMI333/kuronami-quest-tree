@@ -456,6 +456,20 @@ class EditorContentTest {
     }
 
     @Test
+    void theSyncKeyIsNotAnExtrasRowMember() {
+        FieldSpec extras = ContentSchema.taskOwnFields("example:gone").get(0);
+        JsonObject task = JsonParser.parseString(
+                "{\"type\":\"example:gone\",\"_kqt_unhandled\":true,\"x\":1}").getAsJsonObject();
+        assertEquals("{\"x\":1}", EditorDoc.show(task, extras));
+        assertTrue(EditorDoc.write(task, extras, "{\"x\":2}"));
+        assertTrue(task.get("_kqt_unhandled").getAsBoolean(), "left as it was, not written from the row");
+        assertTrue(EditorDoc.write(task, extras, "{\"_kqt_unhandled\":false,\"y\":3}"));
+        assertTrue(task.get("_kqt_unhandled").getAsBoolean());
+        assertEquals(3, task.get("y").getAsInt());
+        assertFalse(task.has("x"));
+    }
+
+    @Test
     void unreadableExtrasAreNotWritten() {
         FieldSpec extras = ContentSchema.taskOwnFields("example:legacy").get(0);
         JsonObject task = JsonParser.parseString("{\"type\":\"example:legacy\",\"count\":3}").getAsJsonObject();
