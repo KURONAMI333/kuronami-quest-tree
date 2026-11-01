@@ -533,6 +533,16 @@ public class ProgressScreen extends Screen {
     private final List<Button> confirmButtons = new ArrayList<>();
     private final Map<String, Long> flashes = new HashMap<>();
     private final Map<String, Long> shakes = new HashMap<>();
+    /**
+     * The map area the last frame drew, in the pose's own units (grid x {@link #UNIT}): set by
+     * {@link #renderChapter}, so tiles, belts and pictures that fall outside it are not drawn and not tested.
+     */
+    private double viewLeft;
+    private double viewTop;
+    private double viewRight;
+    private double viewBottom;
+    /** The belts of one frame, reused so a chapter of hundreds of lines does not build a list every frame. */
+    private final List<LineDraw> lineBuf = new ArrayList<>();
 
     // ------------------------------------------------------------------ editing (phase 2)
     private enum EditDrag { NONE, MOVE, BOX, LINK }
@@ -1578,6 +1588,12 @@ public class ProgressScreen extends Screen {
         float[] v = view(ch);
         stepPan(v);
         renderBackground(g, ch, v);
+        // what the screen covers in the map's own units: a chapter of hundreds of quests draws only this part
+        float zoom = v[2] > 0 ? v[2] : 1f;
+        viewLeft = MapCull.toMap(0, v[0], zoom);
+        viewTop = MapCull.toMap(0, v[1], zoom);
+        viewRight = MapCull.toMap(width, v[0], zoom);
+        viewBottom = MapCull.toMap(height, v[1], zoom);
         boolean far = v[2] < FAR;
         long now = Util.getMillis();
         g.pose().pushPose();
@@ -1590,6 +1606,12 @@ public class ProgressScreen extends Screen {
             }
             int dw = (int) (d.w * UNIT);
             int dh = (int) (d.h * UNIT);
+            // rotation is kept out of the bounds (as in bounds()), so the half diagonal covers every angle; 24 more for text on the picture
+            double reach = Math.hypot(Math.max(1, dw), Math.max(1, dh)) / 2 + 24;
+            if (!MapCull.rectVisible(d.x * UNIT - reach, d.y * UNIT - reach, d.x * UNIT + reach, d.y * UNIT + reach,
+                    viewLeft, viewTop, viewRight, viewBottom)) {
+                continue;
+            }
             g.pose().pushPose();
             g.pose().translate(d.x * UNIT, d.y * UNIT, 0);
             if (d.rotation != 0) {
@@ -1606,7 +1628,8 @@ public class ProgressScreen extends Screen {
         ClientModel cm = model();
         String focus = hoveredNode != null ? hoveredNode : selected;
         Map<String, Integer> depth = depths(ch);
-        List<LineDraw> lines = new ArrayList<>();
+        List<LineDraw> lines = lineBuf;
+        lines.clear();
         for (ClientModel.Node n : ch.nodes.values()) {
             if (ch.hideLines || n.hideLinesToRequired || !ClientProgress.visible(n.key)) {
                 continue;
@@ -1664,6 +1687,13 @@ public class ProgressScreen extends Screen {
             int s = (int) Math.round(NODE * n.size);
             int x = (int) Math.round(editX(n) * UNIT) - s / 2 + shake(n.key, now);
             int y = (int) Math.round(editY(n) * UNIT) - s / 2;
+            // the tile, its hover growth, the selection and optional rings and the reward icons rising out of a claim
+            // all fit inside this, so a quest outside it would draw nothing on screen
+            double pad = s + 16;
+            if (!MapCull.rectVisible(x - pad, y - pad, x + s + pad, y + s + pad,
+                    viewLeft, viewTop, viewRight, viewBottom)) {
+                continue;
+            }
             String shape = Tiles.shapeOf(n.shape);
             // the node under the mouse grows a little (120ms), so the map answers the pointer
             int grow = Math.round(s * 0.12f * ease(hoverGrow.getOrDefault(n.key, 0f)) / 2) * 2;
@@ -1733,6 +1763,11 @@ public class ProgressScreen extends Screen {
             int s = (int) Math.round(NODE * l.size);
             int x = (int) Math.round(l.x * UNIT) - s / 2;
             int y = (int) Math.round(l.y * UNIT) - s / 2;
+            double pad = s + 16;
+            if (!MapCull.rectVisible(x - pad, y - pad, x + s + pad, y + s + pad,
+                    viewLeft, viewTop, viewRight, viewBottom)) {
+                continue;
+            }
             String shape = Tiles.shapeOf(l.shape.isEmpty() ? target.shape : l.shape);
             Tiles.tile(g, shape, x, y, s, ClientProgress.look(target.key), Motion.fill(target.key, ClientProgress.fraction(target.key)),
                     ClientProgress.glyphFor(target), target.iconScale, false, target.key);
@@ -2952,6 +2987,10 @@ public class ProgressScreen extends Screen {
             double sx = v[0] + editX(n) * UNIT * v[2];
             double sy = v[1] + editY(n) * UNIT * v[2];
             double half = NODE * n.size * v[2] / 2;
+            // a tile off the screen cannot be under the pointer, so it is not tested either
+            if (sx + half < 0 || sx - half > width || sy + half < 0 || sy - half > height) {
+                continue;
+            }
             if (Math.abs(mx - sx) <= half && Math.abs(my - sy) <= half) {
                 hit = n;
             }
@@ -2984,6 +3023,10 @@ public class ProgressScreen extends Screen {
                 double y1 = v[1] + editY(p) * UNIT * v[2];
                 double x2 = v[0] + editX(n) * UNIT * v[2];
                 double y2 = v[1] + editY(n) * UNIT * v[2];
+                // a line no part of which reaches the screen is not measured against the pointer either
+                if (!MapCull.segmentVisible(x1, y1, x2, y2, 0, 0, width, height, 6)) {
+                    continue;
+                }
                 double d = segmentDistance(mx, my, x1, y1, x2, y2);
                 if (d < bestD) {
                     bestD = d;
@@ -5071,6 +5114,11 @@ public class ProgressScreen extends Screen {
         }
         float w = BeltMetrics.width(NODE, zoom);
         float casing = BeltMetrics.casing(NODE, zoom);
+        // a line whose ends are both off screen is still drawn while any part of its belt crosses the view; one that
+        // misses it is dropped before it is built, so a big chapter allocates only for what shows
+        if (!MapCull.segmentVisible(x1, y1, x2, y2, viewLeft, viewTop, viewRight, viewBottom, w / 2 + casing + 1)) {
+            return null;
+        }
         return new LineDraw(x1, y1, x2, y2, w, casing, color, role, open);
     }
 

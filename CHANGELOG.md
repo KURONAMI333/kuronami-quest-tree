@@ -4,6 +4,7 @@
 
 - First release.
 - Quests and skill trees are drawn on one map, with dependencies, optional tasks, exclusive branches, repeatable quests, pins, search, zoom and a minimap.
+- A large book stays light: a chapter draws only the part of the map that is on screen.
 - Team progress: FTB Teams parties when the mod is installed, or the built-in party commands otherwise. Claimed rewards stay with the player who claimed them.
 - In-game editor: add, move, link and delete nodes; edit tasks, rewards, conditions, chapters and reward tables; undo and restore deleted chapters and nodes; export the result as a data pack.
 - Import from FTB Quests and Pufferfish's Skills, with a report of settings that could not be carried over. A task or reward of a type nothing handles (an add-on's kind, such as FTB Money) is kept as written, so a mod that registers that type can use it; until then it is neither counted nor shown, and the quest around it still works.
