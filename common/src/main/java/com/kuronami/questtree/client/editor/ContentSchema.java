@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.kuronami.questtree.api.QuestField;
 import com.kuronami.questtree.api.QuestTypeFields;
 import com.kuronami.questtree.progress.RestrictionRules;
+import com.kuronami.questtree.progress.UnmappedTypes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,14 +40,16 @@ public final class ContentSchema {
     /**
      * The members every task has whatever its type (2026-11-01). A type without a declaration edits its own members as
      * one JSON row, so these stay out of it: the row must not offer the type itself or the shared title for editing,
-     * and a type change must not take them away. {@code team} is not here: a task type may use it as its own member.
+     * and a type change must not take them away. {@code conditions} (read on every task before it counts) and
+     * {@code toast} (the importer writes it on a task of any type) are shared too. {@code team} is not here: a task
+     * type may use it as its own member ({@code stage}).
      */
     public static final Set<String> TASK_COMMON_KEYS = Set.of(
-            "type", "optional", "icon", "title", "text", "imported_unmapped");
+            "type", "optional", "icon", "title", "text", "imported_unmapped", "conditions", "toast");
 
     /** The same for a reward: the task's shared members plus the three claim flags every reward carries. */
     public static final Set<String> REWARD_COMMON_KEYS = Set.of(
-            "type", "optional", "icon", "title", "text", "imported_unmapped",
+            "type", "optional", "icon", "title", "text", "imported_unmapped", "conditions", "toast",
             "team", "auto", "exclude_from_claim_all");
 
     private ContentSchema() {
@@ -231,7 +234,10 @@ public final class ContentSchema {
         }
         reward.addProperty("type", type);
         if (!"table".equals(type)) {
-            reward.remove("mode");
+            // an add-on type may own a member called mode; only a built-in type has no use for the table's
+            if (!externalRewardType(type)) {
+                reward.remove("mode");
+            }
         } else if (!reward.has("mode") || EditorDoc.text(reward, "mode").equals("choice")) {
             reward.addProperty("mode", "random");
         }
@@ -380,6 +386,8 @@ public final class ContentSchema {
             }
         }
         task.addProperty("type", type);
+        // the marker said the old type was unknown to the importer; a type the author picked is theirs to judge
+        task.remove(UnmappedTypes.MARKER);
     }
 
     public static void retypeReward(JsonObject reward, String type) {
@@ -403,6 +411,7 @@ public final class ContentSchema {
             }
         }
         setRewardType(reward, type);
+        reward.remove(UnmappedTypes.MARKER);
     }
 
     private static String topKey(String path) {

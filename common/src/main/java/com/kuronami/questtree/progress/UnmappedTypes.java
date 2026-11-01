@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.kuronami.questtree.api.QuestTreeApi;
 import com.kuronami.questtree.data.ProgressModel;
+import com.kuronami.questtree.server.ProgressValidator;
 
 /**
  * Tasks and rewards an import kept although no handler here knows their type: an FTB Quests add-on's kind such as
@@ -31,16 +32,21 @@ public final class UnmappedTypes {
 
     /** Whether this task is skipped: kept by an import, and no mod registers its type. */
     public static boolean taskSkipped(JsonObject task) {
-        return skipped(task, QuestTreeApi::taskTypeRegistered);
+        return skipped(task, ProgressValidator.TASK_TYPES, QuestTreeApi::taskTypeRegistered);
     }
 
     /** As {@link #taskSkipped}, for a reward. */
     public static boolean rewardSkipped(JsonObject reward) {
-        return skipped(reward, QuestTreeApi::rewardTypeRegistered);
+        return skipped(reward, ProgressValidator.REWARD_TYPES, QuestTreeApi::rewardTypeRegistered);
     }
 
-    private static boolean skipped(JsonObject o, java.util.function.Predicate<String> registered) {
+    private static boolean skipped(JsonObject o, java.util.Set<String> builtIn,
+                                   java.util.function.Predicate<String> registered) {
         if (!ProgressModel.boolOf(o, MARKER)) {
+            return false;
+        }
+        // the marker is a common key and survives a retype, so a built-in type with it is an ordinary entry
+        if (builtIn.contains(type(o))) {
             return false;
         }
         // the server decides once and writes the answer into the bundle it sends; a client reads that instead of its
@@ -79,14 +85,14 @@ public final class UnmappedTypes {
                 if (node == null || !node.isJsonObject()) {
                     continue;
                 }
-                mark(node.getAsJsonObject().get("tasks"), QuestTreeApi::taskTypeRegistered);
-                mark(node.getAsJsonObject().get("rewards"), QuestTreeApi::rewardTypeRegistered);
+                mark(node.getAsJsonObject().get("tasks"), ProgressValidator.TASK_TYPES, QuestTreeApi::taskTypeRegistered);
+                mark(node.getAsJsonObject().get("rewards"), ProgressValidator.REWARD_TYPES, QuestTreeApi::rewardTypeRegistered);
             }
         }
         if (bundle.has("reward_tables") && bundle.get("reward_tables").isJsonObject()) {
             for (JsonElement table : bundle.getAsJsonObject("reward_tables").asMap().values()) {
                 if (table != null && table.isJsonObject()) {
-                    mark(table.getAsJsonObject().get("entries"), null);
+                    mark(table.getAsJsonObject().get("entries"), null, null);
                 }
             }
         }
@@ -116,7 +122,8 @@ public final class UnmappedTypes {
     }
 
     /** One list of tasks, rewards, or table entries ({@code registered} is null there, and each entry wraps its reward). */
-    private static void mark(JsonElement list, java.util.function.Predicate<String> registered) {
+    private static void mark(JsonElement list, java.util.Set<String> builtIn,
+                             java.util.function.Predicate<String> registered) {
         if (list == null || !list.isJsonArray()) {
             return;
         }
@@ -128,18 +135,19 @@ public final class UnmappedTypes {
             if (registered == null) {
                 JsonElement reward = o.get("reward");
                 if (reward != null && reward.isJsonObject()) {
-                    markOne(reward.getAsJsonObject(), QuestTreeApi::rewardTypeRegistered);
+                    markOne(reward.getAsJsonObject(), ProgressValidator.REWARD_TYPES, QuestTreeApi::rewardTypeRegistered);
                 }
                 continue;
             }
-            markOne(o, registered);
+            markOne(o, builtIn, registered);
         }
     }
 
-    private static void markOne(JsonObject o, java.util.function.Predicate<String> registered) {
+    private static void markOne(JsonObject o, java.util.Set<String> builtIn,
+                                java.util.function.Predicate<String> registered) {
         if (ProgressModel.boolOf(o, MARKER)) {
             // write the answer either way: a client may lack the mod that the server has, so it must not decide again
-            o.addProperty(SYNC, !registered.test(type(o)));
+            o.addProperty(SYNC, !builtIn.contains(type(o)) && !registered.test(type(o)));
         }
     }
 }

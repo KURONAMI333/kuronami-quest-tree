@@ -317,16 +317,19 @@ public final class ProgressRules {
         if (vis.has("invisible_until_tasks")) {
             int need = vis.get("invisible_until_tasks").getAsInt();
             int done = 0;
+            int counted = 0;
             for (int i = 0; i < n.tasks.size(); i++) {
                 // a task kept for a mod that is not here never counts, so it must not hold the node invisible
                 if (UnmappedTypes.taskSkipped(n.tasks.get(i))) {
                     continue;
                 }
+                counted++;
                 if (p.task(n.key, i) >= target(n.tasks.get(i))) {
                     done++;
                 }
             }
-            if (done < need) {
+            // the need cannot exceed the tasks that count, or a node with skipped tasks would stay hidden forever
+            if (done < Math.min(need, counted)) {
                 return false;
             }
         }

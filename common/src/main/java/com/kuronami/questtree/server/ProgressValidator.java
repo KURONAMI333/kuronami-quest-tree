@@ -132,7 +132,7 @@ public final class ProgressValidator {
 
     // Task and reward types the model knows (DATA_MODEL.md). Types that are recognized but do nothing yet get a
     // WARNING instead of an ERROR, so adding a field to the documented format never breaks a pack that uses it.
-    private static final Set<String> TASK_TYPES = Set.of(
+    public static final Set<String> TASK_TYPES = Set.of(
             "item", "checkmark", "kill", "advancement", "structure", "biome", "dimension", "location",
             "observation", "stat", "xp", "fluid", "energy", "break", "place_block", "build", "stage", "custom",
             "interaction", "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride",
@@ -140,7 +140,7 @@ public final class ProgressValidator {
     private static final Set<String> TASK_UNIMPLEMENTED = Set.of();
     private static final Set<String> INTERACTION_KINDS = Set.of(
             "craft", "use_item", "right_click_block", "interact_entity", "tame", "breed", "ride", "pickup");
-    private static final Set<String> REWARD_TYPES = Set.of(
+    public static final Set<String> REWARD_TYPES = Set.of(
             "item", "xp", "xp_levels", "command", "table", "advancement", "stage", "attribute", "points",
             "tag", "toast", "trophy", "scoreboard", "custom", "dummy", "currency");
     private static final Set<String> REWARD_UNIMPLEMENTED = Set.of();
