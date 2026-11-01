@@ -61,6 +61,36 @@ QuestTreeApi.addListener(event -> {
 
 Listeners run on the server thread and are called once at that moment. `player` is the member who performed the action. An exception is logged and the next listener still runs.
 
+## Replacing how a type looks (client)
+
+`com.kuronami.questtree.api.client.QuestTreeClientApi` is the client half: a registered task or reward type keeps its built-in row unless the mod that registered it says what the row looks like. Register from the client side of your mod, once, before the book is opened.
+
+```java
+ResourceLocation level = ResourceLocation.fromNamespaceAndPath("example", "level");
+
+QuestTreeClientApi.registerTaskDisplay(level, task -> new QuestTreeClientApi.Display(
+        new ItemStack(Items.EXPERIENCE_BOTTLE),
+        Component.translatable("task.example.level"),
+        Component.literal((task.current() >= task.required() ? task.required() : task.current()) + "/" + task.required())));
+
+QuestTreeClientApi.registerRewardDisplay(level, reward -> new QuestTreeClientApi.Display(
+        new ItemStack(Items.DIAMOND), Component.translatable("reward.example.prize"), null));
+```
+
+| Field | Task row | Reward row |
+|---|---|---|
+| `icon` | the icon left of the name; empty keeps the built-in one | the icon in the slot; empty keeps the built-in one |
+| `name` | the task's line; null keeps the built-in one | a line drawn under the icon row (where a reward table's name goes); null keeps the built-in one |
+| `progress` | the right-aligned count; null keeps the built-in `have/count` | not drawn |
+
+What arrives at the callback is what the pack wrote for that task or reward (`TaskView.json()`, `RewardView.json()`), plus `current()` / `required()` for a task. The JSON is already a copy: changing it changes nothing in the book.
+
+```java
+QuestTreeClientApi.unregisterTaskDisplay(level.toString()); // back to the built-in row
+```
+
+Registering an id again replaces the handler. If a callback throws, that row falls back to the built-in look, the first failure of that type is logged once, and the type is not asked again for the rest of the session. The class is client-only: a dedicated server never loads it.
+
 ## KubeJS (NeoForge only)
 
 KubeJS 7 is NeoForge-only on 1.21.1, so the integration class lives only in `:neoforge`. KubeJS reads `kubejs.plugins.txt` from the jar; without KubeJS the classes are never loaded.

@@ -2,6 +2,7 @@ package com.kuronami.questtree.client;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.api.client.QuestTreeClientApi;
 import com.kuronami.questtree.client.edit.EditorClipboard;
 import com.kuronami.questtree.client.edit.EditorSelection;
 import com.kuronami.questtree.client.edit.GridSnap;
@@ -543,6 +544,8 @@ public class ProgressScreen extends Screen {
     private double viewBottom;
     /** The belts of one frame, reused so a chapter of hundreds of lines does not build a list every frame. */
     private final List<LineDraw> lineBuf = new ArrayList<>();
+    /** Reward names a display addon gives for the open quest, one row each, reused like the belt list. */
+    private final List<Component> rewardNames = new ArrayList<>();
 
     // ------------------------------------------------------------------ editing (phase 2)
     private enum EditDrag { NONE, MOVE, BOX, LINK }
@@ -2501,9 +2504,12 @@ public class ProgressScreen extends Screen {
                     // kept for a mod that is not here: the server does not count it, so the row is not drawn
                     continue;
                 }
-                long have = Math.min(p.task(n.key, i), t.count);
+                long raw = p.task(n.key, i);
+                long have = Math.min(raw, t.count);
                 boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
                 boolean open = met || ClientProgress.taskOpen(n.key, i);
+                // a registered type may say how its row looks (api/client); without one the row is the built-in one
+                QuestTreeClientApi.Display look = QuestTreeClientApi.taskDisplay(t.type, t.json(), raw, t.count);
                 Ui.divider(g, x, y - 2, w);
                 ItemStack shownItem = t.shown();
                 if (!shownItem.isEmpty() && lastMouseX >= x && lastMouseX < x + 16 && lastMouseY >= y + 2 && lastMouseY < y + 18) {
@@ -2514,8 +2520,9 @@ public class ProgressScreen extends Screen {
                         buttons.add(new Button(x, y + 2, 16, 16, () -> viewer.showRecipes(it)));
                     }
                 }
-                if (!t.icon().isEmpty()) {
-                    g.renderItem(t.icon(), x, y + 2);
+                ItemStack taskIcon = look == null || look.icon().isEmpty() ? t.icon() : look.icon();
+                if (!taskIcon.isEmpty()) {
+                    g.renderItem(taskIcon, x, y + 2);
                 } else if (t.type.equals("checkmark")) {
                     Tiles.icon(g, "tick", x + 3, y + 5, 11, met ? Tiles.GREEN_TEXT : Ui.MUTED);
                 }
@@ -2532,7 +2539,8 @@ public class ProgressScreen extends Screen {
                 }
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
-                String cnt = (met ? t.count : have) + "/" + t.count;
+                Component cnt = look == null || look.progress() == null
+                        ? Component.literal((met ? t.count : have) + "/" + t.count) : look.progress();
                 int right = x + w;
                 if (open && !met && working && (t.consume || t.type.equals("checkmark")) && y + 20 > contentTop && y < contentBottom) {
                     Component label = Component.translatable(t.type.equals("checkmark") ? "screen.kuronami_quest_tree.check" : "screen.kuronami_quest_tree.submit");
@@ -2556,7 +2564,8 @@ public class ProgressScreen extends Screen {
                 } else {
                     Ui.textRight(g, font, cnt, right, y + 6, met ? Tiles.GREEN_TEXT : Ui.DIM);
                 }
-                Ui.text(g, font, trim(ProgressFeedback.taskLine(t).getString(), right - Ui.textWidth(font, cnt) - x - 26), x + 20, y + 6,
+                Component taskLabel = look == null || look.name() == null ? ProgressFeedback.taskLine(t) : look.name();
+                Ui.text(g, font, trim(taskLabel.getString(), right - Ui.textWidth(font, cnt) - x - 26), x + 20, y + 6,
                         met || t.optional || !open ? Ui.DIM : Ui.TEXT);
                 g.pose().popPose();
                 y += 20;
@@ -2567,13 +2576,19 @@ public class ProgressScreen extends Screen {
             Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.rewards"), x, y, Ui.DIM);
             y += 12;
             int rx = x;
+            rewardNames.clear();
             for (int i = 0; i < n.rewards.size(); i++) {
                 ItemStack r = n.rewards.get(i);
                 int index = i < n.rewardIndices.size() ? n.rewardIndices.get(i) : i;
                 boolean taken = ClientProgress.rewardClaimed(n.key, index);
                 boolean canTake = state == State.CLAIM && !taken
                         && (!n.needsChoice() || choicePick >= 0);
-                slot(g, r, rx, y, false, taken);
+                // a registered reward type may say what its icon and name are (api/client); else the built-in ones apply
+                QuestTreeClientApi.Display look = QuestTreeClientApi.rewardDisplay(rewardType(n, i), n.rewardJson(i));
+                slot(g, look == null || look.icon().isEmpty() ? r : look.icon(), rx, y, false, taken);
+                if (look != null && look.name() != null) {
+                    rewardNames.add(look.name());
+                }
                 if (canTake && y + 22 > contentTop && y < contentBottom) {
                     buttons.add(new Button(rx, y, 22, 22, () -> {
                         ClientProgress.send("claim_reward", n.key, index, n.needsChoice() ? choicePick : -1);
@@ -2587,6 +2602,10 @@ public class ProgressScreen extends Screen {
             }
             if (!n.rewards.isEmpty()) {
                 y += 30;
+            }
+            for (int i = 0; i < rewardNames.size(); i++) {
+                Ui.text(g, font, trim(rewardNames.get(i).getString(), w), x, y, Ui.TEXT);
+                y += 10;
             }
             for (String line : n.rewardLines) {
                 Ui.text(g, font, line, x, y, Ui.TEXT);
@@ -2632,6 +2651,15 @@ public class ProgressScreen extends Screen {
         int actionsY = height - BTN - Ui.S2;
         int actionsTop = overflow ? actionsY : Math.min(contentEnd + Ui.S3, actionsY);
         renderActions(g, n, ch, state, x, actionsTop, w, mouseX, mouseY);
+    }
+
+    // the registered type of a reward slot, used to let a mod replace its icon and name (api/client)
+    private static String rewardType(ClientModel.Node n, int index) {
+        JsonObject json = n.rewardJson(index);
+        if (json == null || !json.has("type")) {
+            return "";
+        }
+        return json.get("type").getAsString();
     }
 
     private void renderActions(GuiGraphics g, ClientModel.Node n, ClientModel.Chapter ch, State state, int x, int y, int w, int mouseX, int mouseY) {

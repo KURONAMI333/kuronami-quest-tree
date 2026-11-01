@@ -3,6 +3,7 @@ package com.kuronami.questtree.client;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.api.client.QuestTreeClientApi;
 import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PackNumbers;
 import com.kuronami.questtree.progress.ProgressRules;
@@ -409,6 +410,10 @@ public final class ClientModel {
         public final List<ItemStack> rewards = new ArrayList<>();
         /** Raw reward index of each entry in {@link #rewards} (per-reward claim, 2026-10-20). */
         public final List<Integer> rewardIndices = new ArrayList<>();
+        /** One per entry in {@link #rewards}: the reward as the pack wrote it, for a client display addon. */
+        private final List<JsonObject> rewardSource = new ArrayList<>();
+        /** The same entries as copies, made only when an addon asks ({@link #rewardJson}). */
+        private final List<JsonObject> rewardCopy = new ArrayList<>();
         public final List<String> rewardLines = new ArrayList<>();
         /** One side of a pick-one choice: {@code exclusive} or {@code exclusive_with} (hover tooltip, 2026-10-20). */
         public final boolean exclusive;
@@ -530,21 +535,21 @@ public final class ClientModel {
                 // any reward may name its own icon (FTB Quests reward icons; command rewards have nothing else to show)
                 ItemStack own = ro.has("icon") ? stack(ro.get("icon")) : ItemStack.EMPTY;
                 if (!own.isEmpty()) {
-                    addReward(own, ri);
+                    addReward(own, ri, ro);
                     continue;
                 }
                 switch (type) {
                     case "trophy" -> {
                         ItemStack t = trophyPreview(ro.has("trophy") ? ro.get("trophy").getAsString() : "");
                         if (!t.isEmpty()) {
-                            addReward(t, ri);
+                            addReward(t, ri, ro);
                         }
                     }
-                    case "item" -> addReward(stack(ro.get("item")), ri);
+                    case "item" -> addReward(stack(ro.get("item")), ri, ro);
                     case "xp", "xp_levels" -> addReward(new ItemStack(Items.EXPERIENCE_BOTTLE, Math.max(1, Math.min(64,
-                            PackNumbers.intOr(ro.get("amount"), 1)))), ri);
+                            PackNumbers.intOr(ro.get("amount"), 1)))), ri, ro);
                     case "table" -> {
-                        addReward(new ItemStack(Items.CHEST), ri);
+                        addReward(new ItemStack(Items.CHEST), ri, ro);
                         // the table's own title, unless the author hid it: the chest icon alone says nothing about
                         // which table this reward rolls (2026-10-22, p6-editor)
                         JsonObject table = ro.has("table") ? obj(m.tables, ro.get("table").getAsString())
@@ -563,7 +568,13 @@ public final class ClientModel {
                         }
                     }
                     case "attribute" -> rewardLines.add(attributeLine(ro));
-                    default -> { }
+                    default -> {
+                        // a reward type another mod registered has no icon of its own: it gets a slot when that mod
+                        // says how it looks (api/client), the paper standing in until the display names an icon
+                        if (QuestTreeClientApi.hasRewardDisplay(type)) {
+                            addReward(new ItemStack(Items.PAPER), ri, ro);
+                        }
+                    }
                 }
             }
             this.choiceReward = hasChoiceReward;
@@ -651,9 +662,32 @@ public final class ClientModel {
             return null;
         }
 
-        private void addReward(ItemStack stack, int index) {
+        private void addReward(ItemStack stack, int index, JsonObject source) {
             rewards.add(stack);
             rewardIndices.add(index);
+            rewardSource.add(source);
+            rewardCopy.add(null);
+        }
+
+        /**
+         * The reward as the pack wrote it, for {@link com.kuronami.questtree.api.client.QuestTreeClientApi}. The object
+         * is a copy made the first time it is asked for, so a book no addon styles pays nothing for it, and changing
+         * the copy changes nothing in the book.
+         *
+         * @param index the entry's position in {@link #rewards}
+         * @return the copy, or null when no reward sits at that position
+         */
+        public JsonObject rewardJson(int index) {
+            if (index < 0 || index >= rewardSource.size()) {
+                return null;
+            }
+            JsonObject copy = rewardCopy.get(index);
+            if (copy == null) {
+                JsonObject source = rewardSource.get(index);
+                copy = source == null ? new JsonObject() : source.deepCopy();
+                rewardCopy.set(index, copy);
+            }
+            return copy;
         }
 
         private static String attributeLine(JsonObject ro) {
@@ -775,6 +809,8 @@ public final class ClientModel {
         private Component name;
         /** Advancements reach the client after the bundle (first server tick), so their text is looked up again later. */
         private final JsonObject source;
+        /** A copy of {@link #source} for a display addon, made the first time one asks. */
+        private JsonObject jsonCopy;
         private boolean resolved;
         private final boolean authorTitle;
 
@@ -833,6 +869,17 @@ public final class ClientModel {
         public Component name() {
             resolve();
             return name;
+        }
+
+        /**
+         * The task as the pack wrote it, for {@link com.kuronami.questtree.api.client.QuestTreeClientApi}. The object is
+         * a copy made the first time it is asked for, and changing it changes nothing in the book.
+         */
+        public JsonObject json() {
+            if (jsonCopy == null) {
+                jsonCopy = source == null ? new JsonObject() : source.deepCopy();
+            }
+            return jsonCopy;
         }
 
         /** The item matcher as written ({@code id}, {@code #tag}, or {@code ~filter}); empty when the task names none. */
