@@ -93,7 +93,7 @@ at once, so a command that says "created" is followed by a book that has it (the
 - Tasks and rewards of types the importer does not convert are kept in place with their own fields and marked
   `imported_unmapped`, so their positions in the book are the positions in the pack and task and reward progress lines
   up. Nothing counts them until a mod registers the type; until then the task is neither counted nor shown, and the
-  reward pays nothing. They are not reported as unresolved.
+  reward pays nothing. They are not reported as unresolved. The importer copies an add-on's fields verbatim, except the reserved names (`id`, `type`, `title`, `icon`, `text`, `optional`, and the flags every task or reward shares), which keep their book meaning. A quest whose tasks are all skipped completes once it is unlocked, like a quest with no tasks, and that is not undone if the mod that handles the type is installed later.
 - Renaming a chapter file after the import changes every node key in it; re-import under the same namespace first, then
   migrate.
 - Completion times and claim times are not kept (KQT has no field for them).

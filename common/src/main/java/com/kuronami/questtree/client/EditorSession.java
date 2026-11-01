@@ -140,6 +140,9 @@ public final class EditorSession {
     public static final String SETTINGS = "settings";
 
     public static void onBundle(JsonObject bundle) {
+        // only an editor's bundle carries the server's add-on types; any other clears what an earlier one reported
+        com.kuronami.questtree.api.QuestTypeFields.setRemote(bundle.has("addon_types")
+                && bundle.get("addon_types").isJsonObject() ? bundle.getAsJsonObject("addon_types") : null);
         revisions.clear();
         tableRevisions.clear();
         readRevisions(bundle, "revisions", revisions);

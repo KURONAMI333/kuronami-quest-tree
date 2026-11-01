@@ -12,9 +12,10 @@ import java.util.List;
  * {@code true}/{@code false}, and a picker kind can also be typed, so an id the client does not list still reaches the
  * JSON.
  * <p>
- * The members every type shares ({@code type}, {@code title}, {@code icon}, {@code optional}, {@code text},
- * {@code team}, {@code auto}, {@code exclude_from_claim_all}, {@code mode}, {@code imported_unmapped}) are already
- * drawn by the editor, so a declaration for one of them is ignored.
+ * The members every type shares are already drawn by the editor, so a declaration for one of them is ignored. For a
+ * task: {@code type}, {@code title}, {@code icon}, {@code optional}, {@code text}, {@code conditions}, {@code toast},
+ * {@code imported_unmapped}. A reward shares those and also {@code team}, {@code auto} and
+ * {@code exclude_from_claim_all}. Anything else, {@code team} and {@code mode} included, is the type's own to declare.
  * <h2>Example</h2>
  * <pre>{@code
  * QuestTreeApi.describeTaskType(id, List.of(

@@ -66,6 +66,7 @@ public final class CommonClass {
      */
     public static void onServerTick(MinecraftServer server) {
         ProgressData.runPendingAchievability(server);
+        ProgressData.resyncIfRegistryChanged(server);
         Restrictions.tickHints();
         ProgressService.tickScreens(server);
         EditorService.onServerTick(server);

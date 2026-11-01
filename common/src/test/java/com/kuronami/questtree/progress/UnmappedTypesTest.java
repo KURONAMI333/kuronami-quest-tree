@@ -147,4 +147,51 @@ class UnmappedTypesTest {
             QuestTreeApi.unregisterTaskType(MONEY);
         }
     }
+
+    @Test
+    void aBuiltInTypeKeepingTheMarkerIsNotSkipped() {
+        JsonObject task = JsonParser.parseString(
+                "{\"type\": \"item\", \"imported_unmapped\": true}").getAsJsonObject();
+        JsonObject reward = JsonParser.parseString(
+                "{\"type\": \"xp\", \"imported_unmapped\": true}").getAsJsonObject();
+        assertFalse(UnmappedTypes.taskSkipped(task), "an author retyped the task to a built-in one");
+        assertFalse(UnmappedTypes.rewardSkipped(reward));
+        JsonObject bundle = JsonParser.parseString("""
+                {"chapters": {"t:c": {"nodes": {"n": {
+                  "tasks": [{"type": "item", "imported_unmapped": true}],
+                  "rewards": [{"type": "xp", "imported_unmapped": true}]}}}}}
+                """).getAsJsonObject();
+        UnmappedTypes.markSkipped(bundle);
+        JsonObject node = bundle.getAsJsonObject("chapters").getAsJsonObject("t:c").getAsJsonObject("nodes")
+                .getAsJsonObject("n");
+        assertFalse(node.getAsJsonArray("tasks").get(0).getAsJsonObject().get(UnmappedTypes.SYNC).getAsBoolean());
+        assertFalse(node.getAsJsonArray("rewards").get(0).getAsJsonObject().get(UnmappedTypes.SYNC).getAsBoolean());
+    }
+
+    @Test
+    void aNodeWhoseTasksAreAllSkippedDoesNotStayHidden() {
+        ProgressModel m = ProgressModel.of(JsonParser.parseString("""
+                {"chapters": {"v:c": {"nodes": {
+                  "gated": {"visibility": {"invisible_until_tasks": 2}, "tasks": [
+                      {"type": "example:money", "imported_unmapped": true},
+                      {"type": "checkmark"}]}
+                }}}}
+                """).getAsJsonObject());
+        ProgressRules r = new ProgressRules(m);
+        PlayerProgress p = new PlayerProgress();
+        ProgressModel.Node gated = m.nodes.get("v:c/gated");
+        assertFalse(r.visible(p, gated), "the one counted task is not done yet");
+        p.setTask(gated.key, 1, 1);
+        assertTrue(r.visible(p, gated), "two were asked for but only one task counts");
+    }
+
+    @Test
+    void theRegistryVersionMovesWhenATypeComesOrGoes() {
+        long before = QuestTreeApi.registryVersion();
+        assertTrue(QuestTreeApi.registerTaskTypeById("example:versioned", context -> 0));
+        long registered = QuestTreeApi.registryVersion();
+        assertTrue(registered != before);
+        QuestTreeApi.unregisterTaskType("example:versioned");
+        assertTrue(QuestTreeApi.registryVersion() != registered);
+    }
 }

@@ -330,6 +330,7 @@ public final class ProgressData {
 
         base = bundle;
         COMPRESSED.clear();
+        builtRegistryVersion = com.kuronami.questtree.api.QuestTreeApi.registryVersion();
         model = built;
         com.kuronami.questtree.progress.ProgressRules.applyPersonalNodes(built);
         restrictions = RestrictionRules.of(bundle);
@@ -761,6 +762,10 @@ public final class ProgressData {
             JsonObject b = base.deepCopy();
             // the server knows which imported types nothing registered; a client learns it from this copy
             com.kuronami.questtree.progress.UnmappedTypes.markSkipped(b);
+            if (allLocales) {
+                // an editor's type list and field rows come from this server, whose add-ons the client may not have
+                b.add("addon_types", com.kuronami.questtree.api.QuestTypeFields.toJson());
+            }
             JsonObject lang = new JsonObject();
             if (langs.containsKey("en_us")) {
                 lang.add("en_us", langs.get("en_us"));
@@ -777,6 +782,26 @@ public final class ProgressData {
             b.add("lang", lang);
             return gzip(GSON.toJson(b).getBytes(StandardCharsets.UTF_8));
         });
+    }
+
+    /** {@link com.kuronami.questtree.api.QuestTreeApi#registryVersion} when the cached bundles were built. */
+    private static volatile long builtRegistryVersion = -1;
+
+    /**
+     * Server tick: when a type was registered or removed since the cached bundles were built (a script reload does
+     * both after the book loaded), drops the cache and sends the new bundle to everyone connected. One long compare
+     * per tick; the rebuild happens only after a change.
+     */
+    public static void resyncIfRegistryChanged(MinecraftServer server) {
+        long now = com.kuronami.questtree.api.QuestTreeApi.registryVersion();
+        if (now == builtRegistryVersion) {
+            return;
+        }
+        builtRegistryVersion = now;
+        COMPRESSED.clear();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            sync(player);
+        }
     }
 
     private static RestrictionRules restrictions = RestrictionRules.empty();

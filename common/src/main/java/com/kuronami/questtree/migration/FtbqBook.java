@@ -20,9 +20,10 @@ import java.util.stream.Stream;
 /**
  * The FTB Quests book as the importer saw it, reduced to "which KQT node, task index and reward index does this FTBQ
  * id become" (2026-10-20). Built from the same chapter files the import read, with the importer's own rules for the
- * chapter path ({@code slug} of {@code filename}), the node id (the lower-cased id string) and which tasks and rewards
- * are skipped as unknown types. The skip rule matters: an unconverted task shifts the index of every later task of its
- * quest, so counting positions in the SNBT would put progress on the wrong task.
+ * chapter path ({@code slug} of {@code filename}) and the node id (the lower-cased id string). Tasks and rewards of
+ * types the importer does not convert are kept, marked {@code imported_unmapped}, and counted here too (2026-11-01).
+ * Counting every one matters: dropping a task would shift the index of every later task of its quest, so progress would
+ * land on the wrong task.
  * <p>
  * The generated data pack drops task and reward ids (only tasks keep a {@code text} key ending in the id), which is why
  * the book is read again instead of the pack alone. The caller checks the result against the pack (node present, same

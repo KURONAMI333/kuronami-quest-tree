@@ -30,7 +30,9 @@ import java.util.function.Consumer;
  *         QuestField.integer("count", "example.field.count"),
  *         QuestField.choice("scope", "example.field.scope", "self", "team")));
  * }</pre>
- * A registered type is offered in the in-game editor's type list by its id. A description gives it one row per
+ * A registered type is offered in the in-game editor's type list by its id. The server sends the ids it registered and
+ * their declared fields to an editor with its bundle, and the editor uses those together with the client's own
+ * registrations, so a type that exists only on the server (a Java add-on or a KubeJS server script) is offered too. A description gives it one row per
  * {@link QuestField}; without one the editor shows the task's or reward's own members as one compact JSON row, so a
  * type whose shape the editor does not know is still editable. A description is optional and is replaced as a whole.
  * <h2>Events</h2>
@@ -57,6 +59,7 @@ public final class QuestTreeApi {
     private static final Map<String, QuestTaskType> TASKS = new ConcurrentHashMap<>();
     private static final Map<String, QuestRewardType> REWARDS = new ConcurrentHashMap<>();
     private static final Map<String, QuestConditionType> CONDITIONS = new ConcurrentHashMap<>();
+    private static final java.util.concurrent.atomic.AtomicLong CONDITION_CHANGES = new java.util.concurrent.atomic.AtomicLong();
     private static final List<Consumer<QuestEvent>> LISTENERS = new CopyOnWriteArrayList<>();
 
     private QuestTreeApi() {
@@ -86,6 +89,7 @@ public final class QuestTreeApi {
             return;
         }
         CONDITIONS.put(key(id), type);
+        CONDITION_CHANGES.incrementAndGet();
     }
 
     public static void addListener(Consumer<QuestEvent> listener) {
@@ -148,6 +152,7 @@ public final class QuestTreeApi {
             Constants.LOG.warn("Condition type '{}' is already registered; the existing handler is kept", key);
             return false;
         }
+        CONDITION_CHANGES.incrementAndGet();
         return true;
     }
 
@@ -172,7 +177,11 @@ public final class QuestTreeApi {
 
     public static boolean unregisterConditionType(String id) {
         String key = key(id);
-        return key != null && CONDITIONS.remove(key) != null;
+        boolean removed = key != null && CONDITIONS.remove(key) != null;
+        if (removed) {
+            CONDITION_CHANGES.incrementAndGet();
+        }
+        return removed;
     }
 
     /**
@@ -221,24 +230,33 @@ public final class QuestTreeApi {
         return true;
     }
 
-    /** The task type ids other mods registered, sorted; the editor offers them beside its built-in types. */
+    /** The task type ids registered in this JVM, sorted; a server sends them to its editors beside their own. */
     public static List<String> taskTypeIds() {
-        return QuestTypeFields.taskTypes();
+        return QuestTypeFields.localTaskTypes();
     }
 
     public static List<String> rewardTypeIds() {
-        return QuestTypeFields.rewardTypes();
+        return QuestTypeFields.localRewardTypes();
     }
 
-    /** The declared editor fields of a task type, or an empty list when it declared none. */
+    /** The editor fields declared in this JVM for a task type, or an empty list when it declared none. */
     public static List<QuestField> taskTypeFields(String id) {
         String key = key(id);
-        return key == null ? List.of() : QuestTypeFields.taskFields(key);
+        return key == null ? List.of() : QuestTypeFields.localTaskFields(key);
     }
 
     public static List<QuestField> rewardTypeFields(String id) {
         String key = key(id);
-        return key == null ? List.of() : QuestTypeFields.rewardFields(key);
+        return key == null ? List.of() : QuestTypeFields.localRewardFields(key);
+    }
+
+    /**
+     * A number that changes whenever a task, reward or condition type is registered or removed, or a type's editor
+     * fields change. The server compares it with the value its cached client bundle was built at, and resends the bundle
+     * when they differ (a script reload registers types after the book loaded).
+     */
+    public static long registryVersion() {
+        return QuestTypeFields.version() + CONDITION_CHANGES.get();
     }
 
     public static boolean taskTypeRegistered(String id) {

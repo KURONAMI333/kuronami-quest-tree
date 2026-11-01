@@ -38,6 +38,8 @@ On the data side, write the registered id as-is.
 
 The in-game editor draws a registered type beside the built-in ones. Without a declaration it shows the type's own members as one JSON row; describe the fields to get one row per member instead.
 
+The editor's type list and field rows do not depend on the client having the mod. The server puts the type ids it registered (Java add-ons and KubeJS `server_scripts` alike) and their declared fields into the bundle it sends to an editor, and the client uses those together with its own registrations. A server-only add-on is therefore pickable and editable from a client that does not have it. The server also resends its bundle to connected clients when a registration changes after the book loaded (a script reload), checked once per server tick through `QuestTreeApi.registryVersion()`, so which imported types are skipped never disagrees between server and client.
+
 ```java
 ResourceLocation heldLevel = ResourceLocation.fromNamespaceAndPath("example", "held_level");
 
@@ -63,7 +65,7 @@ A path is written the same way Quest Tree's own fields are: dotted, with array i
 | `ids` | a JSON array of ids, as one comma-separated line |
 | `json` | any JSON value as compact text; unreadable text is not written and the row says so |
 
-`label` is a translation key; a blank label shows the path. The type's own name in the picker is `screen.kuronami_quest_tree.editor.task.<id>` / `.reward.<id>` when a resource pack or lang file supplies it, and the id otherwise. Do not declare `type`, `title`, `icon`, `optional`, `text` or `imported_unmapped` (and for a reward `team`, `auto` or `exclude_from_claim_all`); the editor already draws them for every type, and a declaration for one is ignored. `describeTaskType(id, List.of())` removes an earlier declaration, and a type that declares nothing (or only shared members) keeps the JSON row.
+`label` is a translation key; a blank label shows the path. The type's own name in the picker is `screen.kuronami_quest_tree.editor.task.<id>` / `.reward.<id>` when a resource pack or lang file supplies it, and the id otherwise. Do not declare `type`, `title`, `icon`, `optional`, `text`, `conditions`, `toast` or `imported_unmapped` (and for a reward `team`, `auto` or `exclude_from_claim_all`); the editor already draws them for every type, and a declaration for one is ignored. `describeTaskType(id, List.of())` removes an earlier declaration, and a type that declares nothing (or only shared members) keeps the JSON row.
 
 A type with no declaration edits every member except the shared ones as one compact JSON object; leaving a member out removes it. Changing a type drops the members only the old type owned, so switching from a registered type to a built-in one removes what the registered type's row held.
 

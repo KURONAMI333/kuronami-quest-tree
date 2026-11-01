@@ -1,14 +1,10 @@
 package com.kuronami.questtree.neoforge;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.kuronami.questtree.Constants;
 import com.kuronami.questtree.api.QuestConditionType;
-import com.kuronami.questtree.api.QuestField;
 import com.kuronami.questtree.api.QuestRewardType;
 import com.kuronami.questtree.api.QuestTaskType;
 import com.kuronami.questtree.api.QuestTreeApi;
+import com.kuronami.questtree.api.QuestTypeFields;
 import dev.latvian.mods.kubejs.event.EventGroup;
 import dev.latvian.mods.kubejs.event.EventGroupRegistry;
 import dev.latvian.mods.kubejs.event.EventHandler;
@@ -17,11 +13,6 @@ import dev.latvian.mods.kubejs.plugin.KubeJSPlugin;
 import dev.latvian.mods.kubejs.script.BindingRegistry;
 import dev.latvian.mods.kubejs.script.ScriptManager;
 import net.minecraft.server.level.ServerPlayer;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-
 
 /**
  * The KubeJS integration. KubeJS 7 is NeoForge-only on 1.21.1, so this class lives in {@code :neoforge}; the operations
@@ -122,67 +113,16 @@ public final class QuestTreeKubeJsPlugin implements KubeJSPlugin {
          * An empty array or string clears an earlier declaration.
          */
         public boolean describeTask(String id, String fieldsJson) {
-            return QuestTreeApi.describeTaskTypeById(id, parseFields(fieldsJson));
+            return QuestTreeApi.describeTaskTypeById(id, QuestTypeFields.parseFields(fieldsJson, com.kuronami.questtree.Constants.LOG::warn));
         }
 
         public boolean describeReward(String id, String fieldsJson) {
-            return QuestTreeApi.describeRewardTypeById(id, parseFields(fieldsJson));
+            return QuestTreeApi.describeRewardTypeById(id, QuestTypeFields.parseFields(fieldsJson, com.kuronami.questtree.Constants.LOG::warn));
         }
 
         /** Opens a quest or chapter for a player, e.g. from an NPC script. */
         public boolean open(ServerPlayer player, String target) {
             return QuestTreeApi.open(player, target);
-        }
-    }
-
-    /**
-     * Reads the script's JSON array into fields. A script cannot build the record itself, so the binding takes the JSON
-     * text; an entry with no path or an unknown kind is reported and skipped rather than failing the whole list.
-     */
-    private static List<QuestField> parseFields(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            JsonElement parsed = JsonParser.parseString(json);
-            if (!parsed.isJsonArray()) {
-                Constants.LOG.warn("Quest editor fields must be a JSON array: '{}'", json);
-                return List.of();
-            }
-            List<QuestField> out = new ArrayList<>();
-            for (JsonElement element : parsed.getAsJsonArray()) {
-                if (!element.isJsonObject()) {
-                    continue;
-                }
-                JsonObject o = element.getAsJsonObject();
-                String path = o.has("path") ? o.get("path").getAsString() : "";
-                String label = o.has("label") ? o.get("label").getAsString() : path;
-                String kindName = o.has("kind") ? o.get("kind").getAsString() : "text";
-                List<String> options = new ArrayList<>();
-                if (o.has("options") && o.get("options").isJsonArray()) {
-                    for (JsonElement option : o.getAsJsonArray("options")) {
-                        if (option.isJsonPrimitive()) {
-                            options.add(option.getAsString());
-                        }
-                    }
-                }
-                QuestField.Kind kind;
-                try {
-                    kind = QuestField.Kind.valueOf(kindName.trim().toUpperCase(Locale.ROOT));
-                } catch (IllegalArgumentException ex) {
-                    Constants.LOG.warn("Unknown quest editor field kind '{}' for '{}'; shown as text", kindName, path);
-                    kind = QuestField.Kind.TEXT;
-                }
-                try {
-                    out.add(new QuestField(path, kind, label, options));
-                } catch (IllegalArgumentException ex) {
-                    Constants.LOG.warn("Skipping a quest editor field with no path: {}", element);
-                }
-            }
-            return out;
-        } catch (RuntimeException ex) {
-            Constants.LOG.warn("Could not read quest editor fields '{}': {}", json, ex.getMessage());
-            return List.of();
         }
     }
 

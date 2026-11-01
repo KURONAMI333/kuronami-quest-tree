@@ -517,6 +517,77 @@ class EditorContentTest {
     }
 
     @Test
+    void retypingKeepsTheSharedConditionsAndToastAndDropsTheUnmappedMarker() {
+        JsonObject task = JsonParser.parseString("""
+                {"type":"example:legacy","charge":4,"imported_unmapped":true,"conditions":[{"type":"stage"}],"toast":false}
+                """).getAsJsonObject();
+        ContentSchema.retypeTask(task, "item");
+        assertFalse(task.has("charge"));
+        assertFalse(task.has("imported_unmapped"));
+        assertTrue(task.has("conditions"));
+        assertTrue(task.has("toast"));
+
+        JsonObject reward = JsonParser.parseString("""
+                {"type":"example:legacy_reward","charge":5,"imported_unmapped":true,"conditions":[{"type":"stage"}],"toast":true}
+                """).getAsJsonObject();
+        ContentSchema.retypeReward(reward, "xp");
+        assertFalse(reward.has("charge"));
+        assertFalse(reward.has("imported_unmapped"));
+        assertTrue(reward.has("conditions"));
+        assertTrue(reward.has("toast"));
+    }
+
+    @Test
+    void anExternalRewardTypeKeepsItsOwnModeMember() {
+        JsonObject reward = JsonParser.parseString("{\"type\":\"xp\",\"mode\":\"random\"}").getAsJsonObject();
+        ContentSchema.setRewardType(reward, "example:legacy_reward");
+        assertTrue(reward.has("mode"), "only a built-in non-table type has no use for the table mode");
+        ContentSchema.setRewardType(reward, "xp");
+        assertFalse(reward.has("mode"));
+    }
+
+    @Test
+    void theServersTypesAndFieldsReachAClientThatDoesNotHaveThem() {
+        QuestTypeFields.registerTask("example:serveronly");
+        QuestTypeFields.describeTask("example:serveronly", List.of(
+                QuestField.integer("power", "example.field.power"),
+                QuestField.choice("mode", "example.field.mode", "a", "b")));
+        QuestTypeFields.registerReward("example:serverreward");
+        JsonObject wire = QuestTypeFields.toJson();
+        QuestTypeFields.unregisterTask("example:serveronly");
+        QuestTypeFields.unregisterReward("example:serverreward");
+        try {
+            assertFalse(ContentSchema.taskTypeChoices().contains("example:serveronly"));
+            QuestTypeFields.setRemote(wire);
+            assertTrue(ContentSchema.taskTypeChoices().contains("example:serveronly"));
+            assertTrue(ContentSchema.rewardTypeChoices().contains("example:serverreward"));
+            List<FieldSpec> own = ContentSchema.taskOwnFields("example:serveronly");
+            assertEquals(2, own.size());
+            assertEquals("power", own.get(0).path());
+            assertEquals(FieldSpec.Kind.ENUM, own.get(1).kind());
+            assertEquals(List.of("a", "b"), own.get(1).options());
+            assertEquals(1, ContentSchema.rewardOwnFields("example:serverreward").size(), "no declaration: the JSON row");
+        } finally {
+            QuestTypeFields.setRemote(null);
+        }
+        assertFalse(ContentSchema.taskTypeChoices().contains("example:serveronly"));
+    }
+
+    @Test
+    void oneBadScriptFieldDoesNotDropTheList() {
+        List<String> warnings = new java.util.ArrayList<>();
+        List<QuestField> fields = QuestTypeFields.parseFields("""
+                [{"path":"a","kind":"int"}, null, [1], {"path":{"x":1}}, "text", {"kind":"bool"},
+                 {"path":"b","kind":"nonsense"}, {"path":"c","kind":"enum","options":["x","y"]}]
+                """, warnings::add);
+        assertEquals(6, warnings.size(), "five bad entries and one unknown kind are each reported once");
+        assertEquals(List.of("a", "b", "c"), fields.stream().map(QuestField::path).toList());
+        assertEquals(QuestField.Kind.TEXT, fields.get(1).kind());
+        assertTrue(QuestTypeFields.parseFields("{}", warnings::add).isEmpty());
+        assertTrue(QuestTypeFields.parseFields("[", warnings::add).isEmpty());
+    }
+
+    @Test
     void anEntryOfAnExternalRewardTypeEditsItsRewardObject() {
         List<FieldSpec> fields = ContentSchema.entryFields("example:legacy_reward");
         assertEquals(2, fields.size());
