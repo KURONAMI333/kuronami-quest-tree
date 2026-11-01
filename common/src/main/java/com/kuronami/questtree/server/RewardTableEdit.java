@@ -3,6 +3,7 @@ package com.kuronami.questtree.server;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.progress.UnmappedTypes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +21,8 @@ public final class RewardTableEdit {
 
     /**
      * One parsed table entry, kept at its original position so a choice keeps the index the client showed.
-     * {@code reward} is null when the entry cannot be paid (not an object, no object reward, or a non-number weight).
+     * {@code reward} is null when the entry cannot be paid (not an object, no object reward, a non-number weight, or a
+     * reward an import kept for a type no mod here registers).
      */
     public record Entry(JsonObject reward, double weight) {
     }
@@ -43,6 +45,12 @@ public final class RewardTableEdit {
             JsonObject o = e.getAsJsonObject();
             JsonElement reward = o.get("reward");
             if (reward == null || !reward.isJsonObject()) {
+                entries.add(new Entry(null, 0));
+                continue;
+            }
+            if (UnmappedTypes.rewardSkipped(reward.getAsJsonObject())) {
+                // it would pay nothing, so it must not take a roll from the entries that do; the recipe viewers leave
+                // it out of the odds for the same reason (2026-11-01)
                 entries.add(new Entry(null, 0));
                 continue;
             }

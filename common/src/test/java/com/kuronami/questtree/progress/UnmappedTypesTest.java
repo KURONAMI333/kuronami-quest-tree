@@ -194,4 +194,18 @@ class UnmappedTypesTest {
         QuestTreeApi.unregisterTaskType("example:versioned");
         assertTrue(QuestTreeApi.registryVersion() != registered);
     }
+
+    @Test
+    void aTableEntryNobodyPaysDoesNotTakeARoll() {
+        JsonObject table = JsonParser.parseString("""
+                {"entries": [
+                  {"weight": 5, "reward": {"type": "example:money", "imported_unmapped": true}},
+                  {"weight": 1, "reward": {"type": "item", "item": "minecraft:stone"}}]}
+                """).getAsJsonObject();
+        var entries = com.kuronami.questtree.server.RewardTableEdit.entries(table);
+        assertEquals(2, entries.size(), "the entry keeps its place, so a choice keeps the index the client showed");
+        assertEquals(null, entries.get(0).reward());
+        assertEquals(0, entries.get(0).weight());
+        assertTrue(entries.get(1).reward() != null);
+    }
 }
