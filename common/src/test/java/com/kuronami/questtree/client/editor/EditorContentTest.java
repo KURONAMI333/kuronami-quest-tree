@@ -517,6 +517,16 @@ class EditorContentTest {
     }
 
     @Test
+    void anIdsRowWritesAnArray() {
+        FieldSpec ids = new FieldSpec("targets", FieldSpec.Kind.IDS, "sample", java.util.List.of(), false);
+        JsonObject task = new JsonObject();
+        assertTrue(EditorDoc.write(task, ids, "minecraft:stone, minecraft:dirt"));
+        assertTrue(task.get("targets").isJsonArray());
+        assertEquals(2, task.getAsJsonArray("targets").size());
+        assertEquals("minecraft:stone, minecraft:dirt", EditorDoc.show(task, ids));
+    }
+
+    @Test
     void pickingTheSameTypeAgainKeepsAnImportedEntryAsItWas() {
         JsonObject task = JsonParser.parseString("""
                 {"type":"ftbmoney:money","value":50,"imported_unmapped":true}

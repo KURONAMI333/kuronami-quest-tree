@@ -379,6 +379,7 @@ public final class EditorDoc {
                 setNumber(root, field.path(), value, false);
             }
             case ITEM -> setItem(root, field.path(), value);
+            case IDS -> writeIds(root, field.path(), value);
             case JSON -> {
                 return writeJson(root, field.path(), value);
             }
