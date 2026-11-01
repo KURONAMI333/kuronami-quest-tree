@@ -9,6 +9,7 @@ import com.kuronami.questtree.data.ProgressModel;
 import com.kuronami.questtree.progress.PlayerProgress;
 import com.kuronami.questtree.progress.ProgressRules;
 import com.kuronami.questtree.progress.SkillRewardPolicy;
+import com.kuronami.questtree.progress.UnmappedTypes;
 import com.kuronami.questtree.team.TeamResolver;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
@@ -59,6 +60,11 @@ public final class Rewards {
      */
     private static boolean give(ServerPlayer player, PlayerProgress p, ProgressModel.Node n, JsonObject rw, int choice,
                                 String rollKey, boolean ignoreBlock, boolean conditionsChecked) {
+        if (UnmappedTypes.rewardSkipped(rw)) {
+            // kept by an import, and no mod registers its type: nothing is given, and the claim is settled so the
+            // quest does not wait for a reward that can never be paid (2026-11-01)
+            return true;
+        }
         if ((!conditionsChecked && !ProgressService.conditionsMet(player, p, n, rw, false))
                 || (!ignoreBlock && blocked(p, rw))) {
             return false;

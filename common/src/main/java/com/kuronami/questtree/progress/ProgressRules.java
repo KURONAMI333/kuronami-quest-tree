@@ -99,12 +99,16 @@ public final class ProgressRules {
 
     /**
      * As above, but rewards the caller marks as skipped (a reward whose conditions this player does not meet) do not
-     * hold the node open (2026-10-21 review).
+     * hold the node open (2026-10-21 review). A reward an import kept without a handler for its type is skipped too:
+     * it pays nothing, so waiting for it would leave the quest unclaimed forever (2026-11-01).
      */
     public static boolean allRewardsClaimed(PlayerProgress p, ProgressModel.Node n,
                                             java.util.function.IntPredicate skip) {
         for (int i = 0; i < n.rewards.size(); i++) {
-            if (!skip.test(i) && !p.rewardClaimed(n.key + "#" + i)) {
+            if (skip.test(i) || UnmappedTypes.rewardSkipped(n.rewards.get(i))) {
+                continue;
+            }
+            if (!p.rewardClaimed(n.key + "#" + i)) {
                 return false;
             }
         }
@@ -314,6 +318,10 @@ public final class ProgressRules {
             int need = vis.get("invisible_until_tasks").getAsInt();
             int done = 0;
             for (int i = 0; i < n.tasks.size(); i++) {
+                // a task kept for a mod that is not here never counts, so it must not hold the node invisible
+                if (UnmappedTypes.taskSkipped(n.tasks.get(i))) {
+                    continue;
+                }
                 if (p.task(n.key, i) >= target(n.tasks.get(i))) {
                     done++;
                 }
@@ -366,16 +374,24 @@ public final class ProgressRules {
     /**
      * Whether a task may move now (FTB Quests' {@code require_sequential_tasks}, 2026-10-20): tasks run in the order
      * they are written, and each waits until the one before it reached its target. The last task still has to be done;
-     * the rule only stops a later task from being counted or submitted early.
+     * the rule only stops a later task from being counted or submitted early. A task an import kept without a handler
+     * for its type never opens, and it does not hold the task after it back either (2026-11-01).
      */
     public boolean taskOpen(PlayerProgress p, ProgressModel.Node n, int index) {
+        if (index < 0 || index >= n.tasks.size() || UnmappedTypes.taskSkipped(n.tasks.get(index))) {
+            return false;
+        }
         if (!n.sequentialTasks || index <= 0) {
             return true;
         }
-        if (index >= n.tasks.size()) {
-            return false;
+        for (int before = index - 1; before >= 0; before--) {
+            JsonObject t = n.tasks.get(before);
+            if (UnmappedTypes.taskSkipped(t)) {
+                continue;
+            }
+            return p.task(n.key, before) >= target(t);
         }
-        return p.task(n.key, index - 1) >= target(n.tasks.get(index - 1));
+        return true;
     }
 
     /** Share of the node's tasks done, 0..1 (counts weighted by their targets). */
@@ -386,19 +402,29 @@ public final class ProgressRules {
         double got = 0;
         double need = 0;
         for (int i = 0; i < n.tasks.size(); i++) {
-            long target = target(n.tasks.get(i));
+            JsonObject task = n.tasks.get(i);
+            if (UnmappedTypes.taskSkipped(task)) {
+                continue;
+            }
+            long target = target(task);
             got += Math.min(p.task(n.key, i), target);
             need += target;
         }
         return need == 0 ? 0 : got / need;
     }
 
-    /** Whether all (or {@code tasks_required}) non-optional tasks reached their targets. */
+    /**
+     * Whether all (or {@code tasks_required}) non-optional tasks reached their targets. A task an import kept without
+     * a handler for its type is not required, so a quest whose only task is such a one still finishes (2026-11-01).
+     */
     public boolean tasksDone(PlayerProgress p, ProgressModel.Node n) {
         int done = 0;
         int required = 0;
         for (int i = 0; i < n.tasks.size(); i++) {
             JsonObject t = n.tasks.get(i);
+            if (UnmappedTypes.taskSkipped(t)) {
+                continue;
+            }
             boolean optional = t.has("optional") && t.get("optional").getAsBoolean();
             boolean ok = p.task(n.key, i) >= target(t);
             if (!optional) {

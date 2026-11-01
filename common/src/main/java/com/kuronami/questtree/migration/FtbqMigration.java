@@ -166,10 +166,6 @@ public final class FtbqMigration {
             report.unresolved("reward", FtbqIds.hex(c.reward()) + " team " + who);
             return;
         }
-        if (!r.converted()) {
-            report.add("rewards_not_converted", 1);
-            return;
-        }
         String node = nodeKey(r.quest(), who, c.reward());
         if (node == null) {
             return;
@@ -248,10 +244,6 @@ public final class FtbqMigration {
         FtbqBook.PartRef t = in.book().task(id);
         if (t == null) {
             report.unresolved(field, FtbqIds.hex(id) + " team " + who);
-            return null;
-        }
-        if (!t.converted()) {
-            report.add("tasks_not_converted", 1);
             return null;
         }
         String node = nodeKey(t.quest(), who, id);

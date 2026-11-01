@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.kuronami.questtree.progress.UnmappedTypes;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -406,21 +407,32 @@ public final class FtbQuestsImporter {
             String ty = typeOf(t);
             out.count("tasks", 1);
             Map<String, String> spec = TASK.get(ty);
-            if (spec == null) {
-                out.unknown("task_type", ty);
-                continue;
-            }
+            // an add-on's type (ftbmoney:money): kept with its own fields, so a mod that registers the type can read it
+            boolean kept = spec == null;
             JsonObject o = new JsonObject();
-            o.addProperty("type", TASK_RENAME.getOrDefault(ty, ty));
+            o.addProperty("type", kept ? fullType(t) : TASK_RENAME.getOrDefault(ty, ty));
             String tp = prefix + ".task." + id(t);
             out.textPrefix.put(id(t), tp);
             for (Map.Entry<String, JsonElement> kv : t.entrySet()) {
-                String target = spec.containsKey(kv.getKey()) ? spec.get(kv.getKey()) : TASK_COMMON.get(kv.getKey());
-                if (target == null) {
-                    out.unknown("task[" + ty + "]", kv.getKey());
-                    continue;
+                String target;
+                if (kept) {
+                    target = TASK_COMMON.get(kv.getKey());
+                    if (target == null) {
+                        o.add(kv.getKey(), kv.getValue());
+                        continue;
+                    }
+                } else {
+                    target = spec.containsKey(kv.getKey()) ? spec.get(kv.getKey()) : TASK_COMMON.get(kv.getKey());
+                    if (target == null) {
+                        out.unknown("task[" + ty + "]", kv.getKey());
+                        continue;
+                    }
                 }
                 mapValue(o, target, kv.getKey(), kv.getValue(), tp, out);
+            }
+            if (kept) {
+                o.addProperty(UnmappedTypes.MARKER, true);
+                out.note("task type '" + fullType(t) + "' kept; a mod has to register it before the task counts");
             }
             if (o.has("toast")) {
                 o.addProperty("toast", !bool(t, "disable_toast"));
@@ -456,22 +468,33 @@ public final class FtbQuestsImporter {
 
     private static JsonObject reward(String ty, JsonObject r, String langPrefix, ImportOutput out, String where) {
         Map<String, String> spec = REWARD.get(ty);
-        if (spec == null) {
-            out.unknown(where + "_type", ty);
-            return null;
-        }
+        // as for tasks: an add-on's reward type is kept with its own fields instead of being dropped
+        boolean kept = spec == null;
         JsonObject o = new JsonObject();
-        o.addProperty("type", REWARD_RENAME.getOrDefault(ty, ty));
+        o.addProperty("type", kept ? fullType(r) : REWARD_RENAME.getOrDefault(ty, ty));
         for (Map.Entry<String, JsonElement> kv : r.entrySet()) {
             if (kv.getKey().equals("weight")) {
                 continue;
             }
-            String target = spec.containsKey(kv.getKey()) ? spec.get(kv.getKey()) : REWARD_COMMON.get(kv.getKey());
-            if (target == null) {
-                out.unknown(where + "[" + ty + "]", kv.getKey());
-                continue;
+            String target;
+            if (kept) {
+                target = REWARD_COMMON.get(kv.getKey());
+                if (target == null) {
+                    o.add(kv.getKey(), kv.getValue());
+                    continue;
+                }
+            } else {
+                target = spec.containsKey(kv.getKey()) ? spec.get(kv.getKey()) : REWARD_COMMON.get(kv.getKey());
+                if (target == null) {
+                    out.unknown(where + "[" + ty + "]", kv.getKey());
+                    continue;
+                }
             }
             mapValue(o, target, kv.getKey(), kv.getValue(), langPrefix, out);
+        }
+        if (kept) {
+            o.addProperty(UnmappedTypes.MARKER, true);
+            out.note("reward type '" + fullType(r) + "' kept; a mod has to register it before the reward is given");
         }
         if (TABLE_MODE.containsKey(ty)) {
             o.addProperty("mode", TABLE_MODE.get(ty));
@@ -813,16 +836,12 @@ public final class FtbQuestsImporter {
     }
 
     /**
-     * Whether a task of this type is converted (unknown types are skipped, which shifts every later task index of the
-     * quest). Progress migration uses this to count task indexes the way the import did (2026-10-20).
+     * The type as the book writes it, with a namespace: FTB Quests' own kinds have none in older books, and every type
+     * is registered under {@code ftbquests:} (2026-11-01). Mapped kinds keep their short name, as the built-in ones do.
      */
-    public static boolean convertsTask(JsonObject task) {
-        return TASK.containsKey(typeOf(task));
-    }
-
-    /** As {@link #convertsTask}, for rewards. */
-    public static boolean convertsReward(JsonObject reward) {
-        return REWARD.containsKey(typeOf(reward));
+    static String fullType(JsonObject o) {
+        String t = o.has("type") ? o.get("type").getAsString() : "?";
+        return t.indexOf(':') >= 0 ? t : "ftbquests:" + t;
     }
 
     private static String id(JsonObject o) {

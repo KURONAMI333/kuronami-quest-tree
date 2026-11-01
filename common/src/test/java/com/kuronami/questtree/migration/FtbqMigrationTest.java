@@ -38,8 +38,9 @@ class FtbqMigrationTest {
     private static final UUID PARTY = UUID.fromString("00000000-0000-0000-0000-0000000000ff");
 
     /**
-     * Quest 1 (hex id): checkmark + item task, xp + team item reward. Quest 2 (id with the top bit set): an unsupported
-     * task first, so the item task is pack index 0. Quest 3 (decimal id 4660 = 0x1234): one task, two rewards.
+     * Quest 1 (hex id): checkmark + item task, xp + team item reward. Quest 2 (id with the top bit set): a type nothing
+     * handles first, kept at index 0, so the item task is index 1. Quest 3 (decimal id 4660 = 0x1234): one task, two
+     * rewards.
      */
     private static final String BOOK = """
             {
@@ -161,9 +162,9 @@ class FtbqMigrationTest {
         assertNotNull(model.nodes.get(Q1));
         assertNotNull(model.nodes.get(Q2));
         assertNotNull(model.nodes.get(Q3));
-        // the unsupported task and reward are dropped by the importer: one task and one reward are left on quest 2
-        assertEquals(1, model.nodes.get(Q2).tasks.size());
-        assertEquals(1, model.nodes.get(Q2).rewards.size());
+        // the unknown task and reward are kept in place, so quest 2 has two of each
+        assertEquals(2, model.nodes.get(Q2).tasks.size());
+        assertEquals(2, model.nodes.get(Q2).rewards.size());
     }
 
     @Test
@@ -214,10 +215,11 @@ class FtbqMigrationTest {
         Map<String, Long> tasks = store.team(ALICE).shared.tasks;
         assertEquals(3L, tasks.get(Q1 + "#1"));
         assertEquals(1L, tasks.get(Q1 + "#0"));
-        // the unsupported task has no pack counterpart and is dropped; the item task is index 0
-        assertEquals(1L, tasks.get(Q2 + "#0"));
-        assertEquals(3, tasks.size());
-        assertEquals(1, report.get("tasks_not_converted"));
+        // the unknown task keeps index 0 and its progress comes across; the item task after it is index 1
+        assertEquals(7L, tasks.get(Q2 + "#0"));
+        assertEquals(1L, tasks.get(Q2 + "#1"));
+        assertEquals(4, tasks.size());
+        assertEquals(0, report.get("tasks_not_converted"));
         assertEquals(List.of("task_progress 0000000000000099 team " + ALICE), report.unresolvedList());
     }
 
@@ -256,7 +258,7 @@ class FtbqMigrationTest {
         assertEquals(java.util.Set.of(Q1, Q3), party.shared.completed);
         // the NIL claim is the team reward, kept once for the whole party
         assertEquals(java.util.Set.of(Q1 + "#1"), party.teamClaimedRewards);
-        assertEquals(java.util.Set.of(Q1 + "#0", Q3 + "#0", Q3 + "#1"), party.part(ALICE).claimedRewards);
+        assertEquals(java.util.Set.of(Q1 + "#0", Q2 + "#0", Q3 + "#0", Q3 + "#1"), party.part(ALICE).claimedRewards);
         assertEquals(java.util.Set.of(Q3 + "#0"), party.part(BOB).claimedRewards);
         // Alice has both rewards of quest 1 (one of them through the team) and both of quest 3; Bob only one of quest 3
         assertEquals(java.util.Set.of(Q1, Q3), party.part(ALICE).claimed);
@@ -264,11 +266,11 @@ class FtbqMigrationTest {
         // Bob's view reads the team reward as claimed too
         assertTrue(party.view(BOB).rewardClaimed(Q1 + "#1"));
         assertFalse(party.view(BOB).rewardClaimed(Q1 + "#0"));
-        // a reward the importer dropped is counted, not reported as unknown
-        assertEquals(1, report.get("rewards_not_converted"));
+        // a reward of a type nothing handles is kept, so its claim has a place to go
+        assertEquals(0, report.get("rewards_not_converted"));
         assertEquals(0, report.get("unresolved"));
         assertEquals(1, report.get("team_rewards_found"));
-        assertEquals(4, report.get("rewards_found"));
+        assertEquals(5, report.get("rewards_found"));
         // the invited player is not a member
         assertNull(store.teams.get(UUID.fromString("00000000-0000-0000-0000-0000000000cc")));
         assertEquals(2, report.get("players"));

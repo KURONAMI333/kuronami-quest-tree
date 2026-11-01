@@ -756,6 +756,8 @@ public final class ProgressData {
         String loc = langs.containsKey(locale) ? locale : "en_us";
         return COMPRESSED.computeIfAbsent((allLocales ? "all:" : "") + loc, key -> {
             JsonObject b = base.deepCopy();
+            // the server knows which imported types nothing registered; a client learns it from this copy
+            com.kuronami.questtree.progress.UnmappedTypes.markSkipped(b);
             JsonObject lang = new JsonObject();
             if (langs.containsKey("en_us")) {
                 lang.add("en_us", langs.get("en_us"));

@@ -90,8 +90,10 @@ at once, so a command that says "created" is followed by a book that has it (the
   differs between book and pack, or a pack task whose text names another task id is listed as unresolved and skipped.
   `unresolved` kinds in the report: `completed`, `task_progress`, `reward`, `node_missing`, `task_index`, `reward_index`,
   `task_moved`, `category`, `skill`, `unreadable_file`, `unreadable_key`.
-- Tasks and rewards of types the importer does not convert are counted (`tasks_not_converted`, `rewards_not_converted`),
-  not reported as unresolved.
+- Tasks and rewards of types the importer does not convert are kept in place with their own fields and marked
+  `imported_unmapped`, so their positions in the book are the positions in the pack and task and reward progress lines
+  up. Nothing counts them until a mod registers the type; until then the task is neither counted nor shown, and the
+  reward pays nothing. They are not reported as unresolved.
 - Renaming a chapter file after the import changes every node key in it; re-import under the same namespace first, then
   migrate.
 - Completion times and claim times are not kept (KQT has no field for them).

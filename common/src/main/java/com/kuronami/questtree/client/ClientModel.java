@@ -511,6 +511,10 @@ public final class ClientModel {
                     continue;
                 }
                 JsonObject ro = r.getAsJsonObject();
+                if (com.kuronami.questtree.progress.UnmappedTypes.rewardSkipped(ro)) {
+                    // kept by an import for a mod that is not here: it pays nothing, so it is not listed either
+                    continue;
+                }
                 String type = ro.has("type") ? ro.get("type").getAsString() : "";
                 // a choice table is a pick before claim, not a reward of its own: an icon on it is only for display and
                 // must not turn it into a plain item (2026-10-20 review)
@@ -566,14 +570,16 @@ public final class ClientModel {
             IconSpec custom = iconSpec(o.get("icon"), ch.namespace);
             boolean drawn = custom.texture != null || custom.entity != null;
             ItemStack ic = drawn ? ItemStack.EMPTY : stack(o.get("icon"));
-            this.iconTask = ic.isEmpty() && !drawn && !tasks.isEmpty() && tasks.get(0).filter != null ? tasks.get(0) : null;
-            if (ic.isEmpty() && !drawn && this.iconTask == null && !tasks.isEmpty()) {
-                ic = tasks.get(0).icon();
+            // a task kept for a missing mod says nothing about the quest, so the icon and title come from a shown task
+            Task first = firstShownTask();
+            this.iconTask = ic.isEmpty() && !drawn && first != null && first.filter != null ? first : null;
+            if (ic.isEmpty() && !drawn && this.iconTask == null && first != null) {
+                ic = first.icon();
             }
             this.icon = ic;
             String base = "progression." + ch.namespace + "." + ch.path + "." + id;
             Component fallbackTitle = o.has("title") && o.get("title").isJsonPrimitive() ? parseText(o.get("title").getAsString())
-                    : !tasks.isEmpty() ? tasks.get(0).name() : Component.literal(id);
+                    : first != null ? first.name() : Component.literal(id);
             // text written into the node wins over the translation key the overlay replaced it with: the editor keeps
             // the pack's key in the overlay but shows the text the author just typed
             String inlineTitle = inlineText(o, "title");
@@ -633,6 +639,16 @@ public final class ClientModel {
                 mode = ch.defaults.get("progression_mode").getAsString();
             }
             return mode.equals("flexible");
+        }
+
+        /** The first task the screen draws: one kept for a mod that is not here has nothing to say about the quest. */
+        private Task firstShownTask() {
+            for (Task t : tasks) {
+                if (!t.skipped) {
+                    return t;
+                }
+            }
+            return null;
         }
 
         private void addReward(ItemStack stack, int index) {
@@ -749,6 +765,11 @@ public final class ClientModel {
         /** Item tasks that take the items (a Submit button) instead of checking the inventory. */
         public final boolean consume;
         public final boolean optional;
+        /**
+         * Kept by an import for a mod that is not here: the server neither counts it nor shows it, so the screen draws
+         * no row for it (the row keeps its position, because the client sends the list index as the task index).
+         */
+        public final boolean skipped;
         /** What the row shows: the target (mob, advancement, biome...) rather than just the kind of task. */
         private ItemStack icon;
         private Component name;
@@ -764,6 +785,7 @@ public final class ClientModel {
                     ? o.get("consume").getAsBoolean() : chapterConsume;
             this.consume = (type.equals("item") && (repeatable || take)) || type.equals("xp");
             this.optional = o.has("optional") && o.get("optional").isJsonPrimitive() && o.get("optional").getAsBoolean();
+            this.skipped = com.kuronami.questtree.progress.UnmappedTypes.taskSkipped(o);
             String fx = type.equals("item") && o.has("item") && o.get("item").isJsonObject()
                     ? com.kuronami.questtree.progress.ItemFilter.filterExpression(o.getAsJsonObject("item")) : null;
             this.filter = fx == null ? null : com.kuronami.questtree.progress.ItemFilter.parse(fx);

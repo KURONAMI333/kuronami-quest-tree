@@ -70,6 +70,64 @@ class ImporterTest {
     }
 
     @Test
+    void aTypeNoHandlerKnowsIsKeptWithItsOwnFields(@TempDir Path tmp) throws Exception {
+        Path chapters = Files.createDirectories(tmp.resolve("chapters"));
+        Files.writeString(chapters.resolve("c.snbt"), """
+                {
+                    id: "1000000000000001"
+                    filename: "c"
+                    quests: [
+                        {
+                            id: "1000000000000002"
+                            x: 0.0d
+                            y: 0.0d
+                            tasks: [
+                                {
+                                    id: "1000000000000003"
+                                    type: "ftbmoney:money"
+                                    amount: 250
+                                    optional_task: true
+                                }
+                                {
+                                    id: "1000000000000004"
+                                    type: "no_namespace_kind"
+                                }
+                            ]
+                            rewards: [
+                                {
+                                    id: "1000000000000005"
+                                    type: "ftbmoney:money"
+                                    amount: 100
+                                }
+                            ]
+                        }
+                    ]
+                }
+                """);
+        ImportOutput out = new ImportOutput("test");
+        FtbQuestsImporter.convert(tmp, out);
+        JsonObject node = out.chapters.get("c").getAsJsonObject("nodes")
+                .entrySet().iterator().next().getValue().getAsJsonObject();
+        JsonObject task = node.getAsJsonArray("tasks").get(0).getAsJsonObject();
+        assertEquals("ftbmoney:money", task.get("type").getAsString());
+        assertEquals(250, task.get("amount").getAsInt());
+        assertTrue(task.get("imported_unmapped").getAsBoolean());
+        // a key both kinds share is still converted as before
+        assertTrue(task.get("optional").getAsBoolean());
+        // a type written without a namespace is one of FTB Quests' own
+        JsonObject bare = node.getAsJsonArray("tasks").get(1).getAsJsonObject();
+        assertEquals("ftbquests:no_namespace_kind", bare.get("type").getAsString());
+        assertTrue(bare.get("imported_unmapped").getAsBoolean());
+        JsonObject reward = node.getAsJsonArray("rewards").get(0).getAsJsonObject();
+        assertEquals("ftbmoney:money", reward.get("type").getAsString());
+        assertEquals(100, reward.get("amount").getAsInt());
+        assertTrue(reward.get("imported_unmapped").getAsBoolean());
+        // the report says a mod is needed, instead of listing the type as an unknown key
+        assertTrue(out.notes.keySet().stream().anyMatch(n -> n.contains("ftbmoney:money")), out.notes.toString());
+        assertTrue(out.unmapped.keySet().stream().noneMatch(k -> k.contains("ftbmoney")), out.unmapped.toString());
+    }
+
+    @Test
     void snbtReadsPrettyFormat() {
         JsonObject o = Snbt.parse("{\n\tid: \"A\"\n\tx: 1.5d\n\tn: 5L\n\tlist: [I; 1, 2]\n\tflag: true\n\tnested: { k: \"v\" }\n}").getAsJsonObject();
         assertEquals("A", o.get("id").getAsString());

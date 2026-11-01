@@ -6,7 +6,7 @@
 - Quests and skill trees are drawn on one map, with dependencies, optional tasks, exclusive branches, repeatable quests, pins, search, zoom and a minimap.
 - Team progress: FTB Teams parties when the mod is installed, or the built-in party commands otherwise. Claimed rewards stay with the player who claimed them.
 - In-game editor: add, move, link and delete nodes; edit tasks, rewards, conditions, chapters and reward tables; undo and restore deleted chapters and nodes; export the result as a data pack.
-- Import from FTB Quests and Pufferfish's Skills, with a report of settings that could not be carried over.
+- Import from FTB Quests and Pufferfish's Skills, with a report of settings that could not be carried over. A task or reward of a type nothing handles (an add-on's kind, such as FTB Money) is kept as written, so a mod that registers that type can use it; until then it is neither counted nor shown, and the quest around it still works.
 - Copy existing FTB Quests or Pufferfish's Skills player progress into the new team records. `dry_run` first, then `apply`; the progress file is backed up before it changes.
 - A quest book item opens the screen. A quest block opens one quest, and a barrier block opens only after a quest or stage is reached.
 - JEI, REI and EMI can open a quest from an item, and quest descriptions can open a recipe, another quest or a link.

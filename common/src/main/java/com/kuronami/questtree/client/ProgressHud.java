@@ -373,13 +373,23 @@ public final class ProgressHud {
     /** "n/N" of the first unfinished task, or the share done for nodes with several tasks. */
     static String progressLine(ClientModel.Node n) {
         var p = ClientProgress.progress();
-        for (int i = 0; i < n.tasks.size(); i++) {
-            long have = p.task(n.key, i);
-            ClientModel.Task t = n.tasks.get(i);
-            if (have < t.count) {
-                return Math.min(have, t.count) + "/" + t.count + (n.tasks.size() > 1 ? "  " + ProgressFeedback.taskLine(t).getString() : "");
+        int shown = 0;
+        for (ClientModel.Task t : n.tasks) {
+            if (!t.skipped) {
+                shown++;
             }
         }
-        return n.tasks.size() + "/" + n.tasks.size();
+        for (int i = 0; i < n.tasks.size(); i++) {
+            ClientModel.Task t = n.tasks.get(i);
+            // a task kept for a mod that is not here is not counted by the server, so it has no progress to show
+            if (t.skipped) {
+                continue;
+            }
+            long have = p.task(n.key, i);
+            if (have < t.count) {
+                return Math.min(have, t.count) + "/" + t.count + (shown > 1 ? "  " + ProgressFeedback.taskLine(t).getString() : "");
+            }
+        }
+        return shown + "/" + shown;
     }
 }

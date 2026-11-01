@@ -934,7 +934,13 @@ public final class ProgressValidator {
             return;
         }
         if (!TASK_TYPES.contains(name) && !QuestTreeApi.taskTypeRegistered(name)) {
-            problem(out, Severity.ERROR, ref, path + ".type", "unknown task type " + quote(name) + ", so the task never counts");
+            if (com.kuronami.questtree.progress.UnmappedTypes.taskSkipped(t)) {
+                // an import kept a type of another mod's FTB add-on: the quest works, this task just waits for that mod
+                problem(out, Severity.WARNING, ref, path + ".type", "no mod registers task type " + quote(name)
+                        + ", so this task is neither counted nor shown until one does");
+            } else {
+                problem(out, Severity.ERROR, ref, path + ".type", "unknown task type " + quote(name) + ", so the task never counts");
+            }
             return;
         }
         if (TASK_UNIMPLEMENTED.contains(name)) {
@@ -1391,7 +1397,12 @@ public final class ProgressValidator {
             return;
         }
         if (!REWARD_TYPES.contains(name) && !QuestTreeApi.rewardTypeRegistered(name)) {
-            problem(out, Severity.WARNING, ref, path + ".type", "unknown reward type " + quote(name) + ", so nothing is given");
+            if (com.kuronami.questtree.progress.UnmappedTypes.rewardSkipped(rw)) {
+                problem(out, Severity.WARNING, ref, path + ".type", "no mod registers reward type " + quote(name)
+                        + ", so this reward gives nothing and is not shown until one does");
+            } else {
+                problem(out, Severity.WARNING, ref, path + ".type", "unknown reward type " + quote(name) + ", so nothing is given");
+            }
             return;
         }
         if (REWARD_UNIMPLEMENTED.contains(name)) {

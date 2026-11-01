@@ -38,13 +38,10 @@ public final class FtbqBook {
     }
 
     /**
-     * A task or reward: the quest it belongs to and its position among the converted ones, or -1 when the importer
-     * skipped it because the type is not supported.
+     * A task or reward: the quest it belongs to and its position in the quest. The import keeps every task and reward,
+     * so the position here is the position in the book (2026-11-01).
      */
     public record PartRef(QuestRef quest, int index, String rawId) {
-        public boolean converted() {
-            return index >= 0;
-        }
     }
 
     private final Map<Long, QuestRef> quests = new HashMap<>();
@@ -111,18 +108,15 @@ public final class FtbqBook {
             if (!te.isJsonObject()) {
                 continue;
             }
-            JsonObject t = te.getAsJsonObject();
-            boolean converted = FtbQuestsImporter.convertsTask(t);
-            put(tasks, t, ref, converted ? index++ : -1);
+            // every task keeps its position: a type the importer does not know is kept as it is (2026-11-01)
+            put(tasks, te.getAsJsonObject(), ref, index++);
         }
         index = 0;
         for (JsonElement re : FtbQuestsImporter.arr(q, "rewards")) {
             if (!re.isJsonObject()) {
                 continue;
             }
-            JsonObject r = re.getAsJsonObject();
-            boolean converted = FtbQuestsImporter.convertsReward(r);
-            put(rewards, r, ref, converted ? index++ : -1);
+            put(rewards, re.getAsJsonObject(), ref, index++);
         }
     }
 

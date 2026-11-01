@@ -439,7 +439,7 @@ public class ProgressScreen extends Screen {
             return true;
         }
         for (ClientModel.Task t : n.tasks) {
-            if (t.name().getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
+            if (!t.skipped && t.name().getString().toLowerCase(java.util.Locale.ROOT).contains(q)) {
                 return true;
             }
         }
@@ -2449,12 +2449,23 @@ public class ProgressScreen extends Screen {
                 }
             }
         }
-        if (!n.tasks.isEmpty() && details) {
+        boolean anyTask = false;
+        for (ClientModel.Task t : n.tasks) {
+            if (!t.skipped) {
+                anyTask = true;
+                break;
+            }
+        }
+        if (anyTask && details) {
             y += 8;
             Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.tasks"), x, y, Ui.DIM);
             y += 12;
             for (int i = 0; i < n.tasks.size(); i++) {
                 ClientModel.Task t = n.tasks.get(i);
+                if (t.skipped) {
+                    // kept for a mod that is not here: the server does not count it, so the row is not drawn
+                    continue;
+                }
                 long have = Math.min(p.task(n.key, i), t.count);
                 boolean met = have >= t.count || state == State.DONE || state == State.CLAIM;
                 boolean open = met || ClientProgress.taskOpen(n.key, i);

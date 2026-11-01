@@ -192,6 +192,10 @@ public final class QuestViewerData {
         List<Need> needs = new ArrayList<>();
         for (int i = 0; i < node.tasks.size(); i++) {
             ClientModel.Task task = node.tasks.get(i);
+            if (task.skipped) {
+                // kept for a mod that is not here: it is neither counted nor shown
+                continue;
+            }
             if (task.filter != null) {
                 // one row per task, not one per example: the filter itself answers whether a stack counts
                 needs.add(new Need(Kind.TASK, Spec.filter(task.filter.expression()), task.count,

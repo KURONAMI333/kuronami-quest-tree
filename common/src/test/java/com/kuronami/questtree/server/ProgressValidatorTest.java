@@ -103,6 +103,16 @@ class ProgressValidatorTest {
     }
 
     @Test
+    void anImportedTaskOfAMissingTypeWarnsAndTheNodeStays() {
+        ProgressValidator.Result r = validate(chapter(
+                "{\"type\": \"ftbmoney:money\", \"imported_unmapped\": true}", ""));
+        assertEquals(0, errors(r));
+        assertEquals(1, warnings(r));
+        assertTrue(says(r, "no mod registers task type"));
+        assertTrue(r.droppedNodes.isEmpty());
+    }
+
+    @Test
     void anItemTaskWithoutAnItemIsAnError() {
         ProgressValidator.Result r = validate(chapter("{\"type\": \"item\", \"count\": 1}", ""));
         assertTrue(says(r, "item task has no item"));
