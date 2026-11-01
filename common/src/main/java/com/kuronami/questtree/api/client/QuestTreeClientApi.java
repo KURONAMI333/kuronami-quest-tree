@@ -20,11 +20,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * ResourceLocation level = ResourceLocation.fromNamespaceAndPath("example", "level");
  * QuestTreeClientApi.registerTaskDisplay(level, task -> new QuestTreeClientApi.Display(
  *         new ItemStack(Items.EXPERIENCE_BOTTLE),
- *         Component.translatable("task.example.level"),
+ *         Component.literal("Level"),
  *         Component.literal((task.current() >= task.required() ? task.required() : task.current()) + "/" + task.required())));
  *
  * QuestTreeClientApi.registerRewardDisplay(level, reward -> new QuestTreeClientApi.Display(
- *         new ItemStack(Items.DIAMOND), Component.translatable("reward.example.prize"), null));
+ *         new ItemStack(Items.DIAMOND), Component.literal("Prize"), null));
  * }</pre>
  * <h2>What is passed and what comes back</h2>
  * The task or reward is taken from the book's JSON as written by the pack. The JSON is a copy: changing it changes
