@@ -517,6 +517,23 @@ class EditorContentTest {
     }
 
     @Test
+    void pickingTheSameTypeAgainKeepsAnImportedEntryAsItWas() {
+        JsonObject task = JsonParser.parseString("""
+                {"type":"ftbmoney:money","value":50,"imported_unmapped":true}
+                """).getAsJsonObject();
+        JsonObject before = task.deepCopy();
+        ContentSchema.retypeTask(task, "ftbmoney:money");
+        assertEquals(before, task);
+
+        JsonObject reward = JsonParser.parseString("""
+                {"type":"ftbmoney:money","value":10,"imported_unmapped":true}
+                """).getAsJsonObject();
+        JsonObject rewardBefore = reward.deepCopy();
+        ContentSchema.retypeReward(reward, "ftbmoney:money");
+        assertEquals(rewardBefore, reward);
+    }
+
+    @Test
     void retypingKeepsTheSharedConditionsAndToastAndDropsTheUnmappedMarker() {
         JsonObject task = JsonParser.parseString("""
                 {"type":"example:legacy","charge":4,"imported_unmapped":true,"conditions":[{"type":"stage"}],"toast":false}

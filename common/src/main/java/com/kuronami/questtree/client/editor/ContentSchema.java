@@ -366,6 +366,10 @@ public final class ContentSchema {
     /** Changing a task's type drops the fields only the old type had; common fields and unknown ones stay. */
     public static void retypeTask(JsonObject task, String type) {
         String old = EditorDoc.text(task, "type");
+        if (old.equals(type)) {
+            // picking the type it already has changes nothing: an imported entry keeps its marker and its members
+            return;
+        }
         List<String> keep = new ArrayList<>();
         for (FieldSpec f : taskOwnFields(type)) {
             keep.add(topKey(f.path()));
@@ -392,6 +396,9 @@ public final class ContentSchema {
 
     public static void retypeReward(JsonObject reward, String type) {
         String old = rewardType(reward);
+        if (old.equals(type)) {
+            return;
+        }
         List<String> keep = new ArrayList<>();
         for (FieldSpec f : rewardOwnFields(type)) {
             keep.add(topKey(f.path()));
