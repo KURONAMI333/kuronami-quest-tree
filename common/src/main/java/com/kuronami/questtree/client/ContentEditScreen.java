@@ -52,11 +52,16 @@ final class ContentEditScreen extends EditorScreen {
     }
 
     private List<String> types() {
-        return kind == Kind.TASK ? ContentSchema.TASK_TYPES : ContentSchema.REWARD_TYPES;
+        return kind == Kind.TASK ? ContentSchema.taskTypeChoices() : ContentSchema.rewardTypeChoices();
     }
 
     private String typePrefix() {
         return PREFIX + (kind == Kind.TASK ? "task." : "reward.");
+    }
+
+    /** A registered type's own name may live in another mod; an id nobody named shows as the id, never as a lang key. */
+    private Component typeName(String type) {
+        return Component.translatableWithFallback(typePrefix() + type, type);
     }
 
     private List<FieldSpec> fields(String type) {
@@ -83,8 +88,7 @@ final class ContentEditScreen extends EditorScreen {
     protected void build() {
         String type = type();
         List<EditForm.Line> lines = new ArrayList<>();
-        lines.add(new EditForm.CardLine(Component.translatable(typePrefix() + type), this::openTypePicker,
-                List.of()));
+        lines.add(new EditForm.CardLine(typeName(type), this::openTypePicker, List.of()));
         lines.addAll(fieldRows(fields(type), root));
         if ((kind != Kind.TASK) && (type.equals("table") || type.equals("choice"))) {
             String table = tableId().isBlank() ? "-" : tableId();
@@ -97,7 +101,7 @@ final class ContentEditScreen extends EditorScreen {
     private void openTypePicker() {
         List<EditPickers.Option> options = new ArrayList<>();
         for (String type : types()) {
-            options.add(new EditPickers.Option(type, Component.translatable(typePrefix() + type), ItemStack.EMPTY));
+            options.add(new EditPickers.Option(type, typeName(type), ItemStack.EMPTY));
         }
         if (minecraft != null) {
             minecraft.setScreen(new EditPickerScreen(this, Component.translatable(PREFIX + "type"), options, false,

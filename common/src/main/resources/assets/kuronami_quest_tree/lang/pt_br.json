@@ -296,6 +296,7 @@
   "screen.kuronami_quest_tree.editor.field.milestone": "Marco",
   "screen.kuronami_quest_tree.editor.field.optional": "Opcional",
   "screen.kuronami_quest_tree.editor.field.invalid": "Inválido",
+  "screen.kuronami_quest_tree.editor.field.extras": "Outros campos",
   "screen.kuronami_quest_tree.editor.field.root": "Nó inicial",
   "screen.kuronami_quest_tree.editor.field.cost": "Custo",
   "screen.kuronami_quest_tree.editor.field.hidden_until": "Oculta até",

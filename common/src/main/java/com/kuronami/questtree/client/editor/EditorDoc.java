@@ -8,6 +8,7 @@ import com.google.gson.JsonPrimitive;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Reads and writes one field by path, and builds the RFC 7396 patch a save sends (2026-10-21, phase 3).
@@ -260,6 +261,81 @@ public final class EditorDoc {
         }
     }
 
+    /**
+     * The object at {@code path} without the members every type shares, as one compact JSON object (2026-11-01).
+     * This is the row a registered type gets when its mod declared no fields: the editor does not know the shape, so
+     * the author edits the type's own members as JSON. A blank path is the form's own object.
+     */
+    public static String showExtras(JsonObject root, String path, Set<String> common) {
+        JsonElement e = get(root, path);
+        if (e == null || !e.isJsonObject()) {
+            return "";
+        }
+        JsonObject out = new JsonObject();
+        for (Map.Entry<String, JsonElement> entry : e.getAsJsonObject().entrySet()) {
+            if (!common.contains(entry.getKey())) {
+                out.add(entry.getKey(), entry.getValue().deepCopy());
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * Writes the row's JSON object back into the object at {@code path}: each member goes back as it was, and a member
+     * the author left out is removed. Shared members are never touched. False when the text is not one JSON object,
+     * which leaves the last readable value in place; a blank row clears every member of the type's own.
+     */
+    public static boolean writeExtras(JsonObject root, String path, String value, Set<String> common) {
+        boolean blank = value == null || value.isBlank();
+        JsonObject target = extrasObject(root, path, !blank);
+        if (target == null) {
+            return blank;
+        }
+        if (blank) {
+            for (String key : new ArrayList<>(target.keySet())) {
+                if (!common.contains(key)) {
+                    target.remove(key);
+                }
+            }
+            return true;
+        }
+        JsonElement parsed;
+        try {
+            parsed = com.google.gson.JsonParser.parseString(value.trim());
+        } catch (RuntimeException ex) {
+            return false;
+        }
+        if (!parsed.isJsonObject()) {
+            return false;
+        }
+        JsonObject out = parsed.getAsJsonObject();
+        for (String key : new ArrayList<>(target.keySet())) {
+            if (!common.contains(key) && !out.has(key)) {
+                target.remove(key);
+            }
+        }
+        for (Map.Entry<String, JsonElement> entry : out.entrySet()) {
+            if (!common.contains(entry.getKey())) {
+                target.add(entry.getKey(), entry.getValue().deepCopy());
+            }
+        }
+        return true;
+    }
+
+    /** The object an extras row edits; {@code create} makes it when the member is absent, never over another value. */
+    private static JsonObject extrasObject(JsonObject root, String path, boolean create) {
+        JsonElement e = get(root, path);
+        if (e != null && e.isJsonObject()) {
+            return e.getAsJsonObject();
+        }
+        if (!create || e != null && !e.isJsonNull()) {
+            return null;
+        }
+        JsonObject made = new JsonObject();
+        set(root, path, made);
+        return made;
+    }
+
     public static String show(JsonObject root, FieldSpec field) {
         return switch (field.kind()) {
             case BOOL -> String.valueOf(bool(root, field.path(), field.defaultOn()));
@@ -269,19 +345,61 @@ public final class EditorDoc {
                 yield d == null ? "" : field.kind() == FieldSpec.Kind.INT || d == Math.rint(d)
                         ? String.valueOf(Math.round(d)) : String.valueOf(d);
             }
+            case IDS -> showIds(root, field.path());
+            case JSON -> showJson(root, field.path());
+            case EXTRAS -> showExtras(root, field.path(), Set.copyOf(field.options()));
             default -> text(root, field.path());
         };
     }
 
-    /** Writes what the player typed or picked; a blank removes the member, a bool/flag takes "true" or "false". */
-    public static void write(JsonObject root, FieldSpec field, String value) {
+    /**
+     * Writes what the player typed or picked; a blank removes the member, a bool/flag takes "true" or "false".
+     * False means the text could not be stored (an unparsable number, an unreadable JSON value), so the row can say
+     * so while the member keeps the last value that parsed.
+     */
+    public static boolean write(JsonObject root, FieldSpec field, String value) {
         switch (field.kind()) {
             case BOOL -> setBool(root, field.path(), Boolean.parseBoolean(value));
             case FLAG_OBJECT -> setFlag(root, field.path(), Boolean.parseBoolean(value));
-            case INT -> setNumber(root, field.path(), value, true);
-            case DOUBLE -> setNumber(root, field.path(), value, false);
+            case INT -> {
+                if (!blank(value) && !numberParses(value.trim(), true)) {
+                    return false;
+                }
+                setNumber(root, field.path(), value, true);
+            }
+            case DOUBLE -> {
+                if (!blank(value) && !numberParses(value.trim(), false)) {
+                    return false;
+                }
+                setNumber(root, field.path(), value, false);
+            }
             case ITEM -> setItem(root, field.path(), value);
+            case JSON -> {
+                return writeJson(root, field.path(), value);
+            }
+            case EXTRAS -> {
+                return writeExtras(root, field.path(), value, Set.copyOf(field.options()));
+            }
             default -> setString(root, field.path(), value);
+        }
+        return true;
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    /** The number the box holds is written only when it parses, the same way {@link #setNumber} reads it. */
+    static boolean numberParses(String value, boolean integer) {
+        try {
+            if (integer) {
+                Long.parseLong(value);
+            } else if (!Double.isFinite(Double.parseDouble(value))) {
+                return false;
+            }
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
         }
     }
 

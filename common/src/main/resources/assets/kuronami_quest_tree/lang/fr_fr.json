@@ -296,6 +296,7 @@
   "screen.kuronami_quest_tree.editor.field.milestone": "Jalon",
   "screen.kuronami_quest_tree.editor.field.optional": "Facultative",
   "screen.kuronami_quest_tree.editor.field.invalid": "Invalide",
+  "screen.kuronami_quest_tree.editor.field.extras": "Autres champs",
   "screen.kuronami_quest_tree.editor.field.root": "Nœud de départ",
   "screen.kuronami_quest_tree.editor.field.cost": "Coût",
   "screen.kuronami_quest_tree.editor.field.hidden_until": "Masquée jusqu'à",

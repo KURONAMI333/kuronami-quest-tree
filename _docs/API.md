@@ -34,6 +34,46 @@ On the data side, write the registered id as-is.
 - **Conditions**: a task advances and a reward is given only when every entry in `conditions` is true. The five built-in types (`stage`, `score`, `item`, `advancement`, `party_size`) and registered types are evaluated by the same check. A type counts as built-in only when it has no namespace (`item`) or uses `kuronami_quest_tree:item`; any other namespace (`example:item`) always looks in the registry even when the id matches a built-in. Registered types are matched by their full namespaced id, and a type found in neither place is false (fail closed). `QuestTreeApi.conditionsMet(player, node, data, task)` is the public entry point that runs the same check.
 - Registered types are excluded from `ProgressValidator`'s unknown-type warnings and errors. Conditions treat built-ins and registered types as known; anything else is a warning (the node is not dropped).
 
+## Editing a registered type
+
+The in-game editor draws a registered type beside the built-in ones. Without a declaration it shows the type's own members as one JSON row; describe the fields to get one row per member instead.
+
+```java
+ResourceLocation heldLevel = ResourceLocation.fromNamespaceAndPath("example", "held_level");
+
+QuestTreeApi.registerTaskType(heldLevel, context -> context.player().experienceLevel);
+QuestTreeApi.describeTaskType(heldLevel, List.of(
+        QuestField.integer("level", "example.field.level"),
+        QuestField.choice("scope", "example.field.scope", "", "self", "team")));
+
+ResourceLocation prize = ResourceLocation.fromNamespaceAndPath("example", "prize");
+QuestTreeApi.registerRewardType(prize, context -> context.player().addItem(new ItemStack(Items.DIAMOND)));
+QuestTreeApi.describeRewardType(prize, List.of(QuestField.integer("count", "example.field.count")));
+```
+
+A path is written the same way Quest Tree's own fields are: dotted, with array indexes in brackets (`level`, `item.id`, `drops[0].chance`). An empty value clears the member. `kind` picks the control:
+
+| `kind` | Control |
+|---|---|
+| `text` / `multiline` | a single line / a paragraph box |
+| `int` / `decimal` | a number; text that does not parse is not written and the row says so |
+| `bool` | a toggle; off removes the member |
+| `enum` | a value cycled from `options`; `""` means not written |
+| `item`, `entity`, `dimension`, `biome`, `structure`, `advancement` | an id with a search list; typing an id the list lacks still works |
+| `ids` | a JSON array of ids, as one comma-separated line |
+| `json` | any JSON value as compact text; unreadable text is not written and the row says so |
+
+`label` is a translation key; a blank label shows the path. The type's own name in the picker is `screen.kuronami_quest_tree.editor.task.<id>` / `.reward.<id>` when a resource pack or lang file supplies it, and the id otherwise. Do not declare `type`, `title`, `icon`, `optional`, `text` or `imported_unmapped` (and for a reward `team`, `auto` or `exclude_from_claim_all`); the editor already draws them for every type, and a declaration for one is ignored. `describeTaskType(id, List.of())` removes an earlier declaration, and a type that declares nothing (or only shared members) keeps the JSON row.
+
+A type with no declaration edits every member except the shared ones as one compact JSON object; leaving a member out removes it. Changing a type drops the members only the old type owned, so switching from a registered type to a built-in one removes what the registered type's row held.
+
+On KubeJS (NeoForge), a script passes the same list as JSON text:
+
+```js
+QuestTree.registerTask('example:held_level', context => context.player().experienceLevel)
+QuestTree.describeTask('example:held_level', '[{"path":"level","kind":"int","label":"example.field.level"}]')
+```
+
 ## Opening a quest or chapter
 
 ```java

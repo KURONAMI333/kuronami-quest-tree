@@ -24,6 +24,15 @@ import java.util.function.Consumer;
  * A pack then writes {@code "type": "example:level"} and the server consults the handler on its tick (tasks) or at
  * claim time (rewards). Java registration replaces a type with the same id, so a reload can update one without a
  * restart; a script's register call never replaces one, so the next script reload cannot take a Java handler with it.
+ * <h2>Editor fields</h2>
+ * <pre>{@code
+ * QuestTreeApi.describeTaskType(id, List.of(
+ *         QuestField.integer("count", "example.field.count"),
+ *         QuestField.choice("scope", "example.field.scope", "self", "team")));
+ * }</pre>
+ * A registered type is offered in the in-game editor's type list by its id. A description gives it one row per
+ * {@link QuestField}; without one the editor shows the task's or reward's own members as one compact JSON row, so a
+ * type whose shape the editor does not know is still editable. A description is optional and is replaced as a whole.
  * <h2>Events</h2>
  * <pre>{@code
  * QuestTreeApi.addListener(event -> {
@@ -59,6 +68,7 @@ public final class QuestTreeApi {
             return;
         }
         TASKS.put(key(id), type);
+        QuestTypeFields.registerTask(key(id));
     }
 
     public static void registerRewardType(ResourceLocation id, QuestRewardType type) {
@@ -67,6 +77,7 @@ public final class QuestTreeApi {
             return;
         }
         REWARDS.put(key(id), type);
+        QuestTypeFields.registerReward(key(id));
     }
 
     public static void registerConditionType(ResourceLocation id, QuestConditionType type) {
@@ -101,6 +112,7 @@ public final class QuestTreeApi {
             Constants.LOG.warn("Task type '{}' is already registered; the existing handler is kept", key);
             return false;
         }
+        QuestTypeFields.registerTask(key);
         return true;
     }
 
@@ -118,6 +130,7 @@ public final class QuestTreeApi {
             Constants.LOG.warn("Reward type '{}' is already registered; the existing handler is kept", key);
             return false;
         }
+        QuestTypeFields.registerReward(key);
         return true;
     }
 
@@ -141,17 +154,91 @@ public final class QuestTreeApi {
     /** Removes a type an addon registered, for a script reload. Returns whether one was there. */
     public static boolean unregisterTaskType(String id) {
         String key = key(id);
-        return key != null && TASKS.remove(key) != null;
+        boolean removed = key != null && TASKS.remove(key) != null;
+        if (removed) {
+            QuestTypeFields.unregisterTask(key);
+        }
+        return removed;
     }
 
     public static boolean unregisterRewardType(String id) {
         String key = key(id);
-        return key != null && REWARDS.remove(key) != null;
+        boolean removed = key != null && REWARDS.remove(key) != null;
+        if (removed) {
+            QuestTypeFields.unregisterReward(key);
+        }
+        return removed;
     }
 
     public static boolean unregisterConditionType(String id) {
         String key = key(id);
         return key != null && CONDITIONS.remove(key) != null;
+    }
+
+    /**
+     * Declares the fields the in-game editor shows for a task type (2026-11-01). Call it beside
+     * {@link #registerTaskType}; a type registered without a description is still offered, with the task's own
+     * members as one compact JSON row. An empty list removes an earlier description. Returns false when the id is not
+     * a resource location.
+     * <pre>{@code
+     * QuestTreeApi.describeTaskType(id, List.of(QuestField.integer("count", "example.field.count")));
+     * }</pre>
+     */
+    public static boolean describeTaskType(ResourceLocation id, List<QuestField> fields) {
+        if (id == null) {
+            return false;
+        }
+        QuestTypeFields.describeTask(id.toString(), fields);
+        return true;
+    }
+
+    public static boolean describeRewardType(ResourceLocation id, List<QuestField> fields) {
+        if (id == null) {
+            return false;
+        }
+        QuestTypeFields.describeReward(id.toString(), fields);
+        return true;
+    }
+
+    /** The string form of {@link #describeTaskType}, for a script bridge. */
+    public static boolean describeTaskTypeById(String id, List<QuestField> fields) {
+        String key = key(id);
+        if (key == null) {
+            Constants.LOG.warn("Not a task type id: '{}'", id);
+            return false;
+        }
+        QuestTypeFields.describeTask(key, fields);
+        return true;
+    }
+
+    public static boolean describeRewardTypeById(String id, List<QuestField> fields) {
+        String key = key(id);
+        if (key == null) {
+            Constants.LOG.warn("Not a reward type id: '{}'", id);
+            return false;
+        }
+        QuestTypeFields.describeReward(key, fields);
+        return true;
+    }
+
+    /** The task type ids other mods registered, sorted; the editor offers them beside its built-in types. */
+    public static List<String> taskTypeIds() {
+        return QuestTypeFields.taskTypes();
+    }
+
+    public static List<String> rewardTypeIds() {
+        return QuestTypeFields.rewardTypes();
+    }
+
+    /** The declared editor fields of a task type, or an empty list when it declared none. */
+    public static List<QuestField> taskTypeFields(String id) {
+        String key = key(id);
+        return key == null ? List.of() : QuestTypeFields.taskFields(key);
+    }
+
+    public static List<QuestField> rewardTypeFields(String id) {
+        String key = key(id);
+        return key == null ? List.of() : QuestTypeFields.rewardFields(key);
     }
 
     public static boolean taskTypeRegistered(String id) {

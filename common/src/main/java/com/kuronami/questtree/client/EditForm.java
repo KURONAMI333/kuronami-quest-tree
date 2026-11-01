@@ -280,8 +280,8 @@ final class EditForm {
         private final Runnable extra;
         private final java.util.function.Function<String, Component> optionName;
         private String error;
-        /** The box holds text the numeric field cannot write: say so instead of leaving the JSON silently behind. */
-        private boolean invalidNumber;
+        /** The box holds text its row cannot write (a number or JSON that does not parse): say so, do not fail silently. */
+        private boolean invalid;
         private boolean boxed;
 
         FieldLine(Font font, FieldSpec spec, JsonObject root, Component label, Runnable changed, Runnable pick,
@@ -304,19 +304,9 @@ final class EditForm {
                 box.setBordered(false);
                 box.setMaxLength(8192);
                 box.setTextColor(Ui.TEXT);
-                box.setValue(spec.kind() == FieldSpec.Kind.IDS ? EditorDoc.showIds(root, spec.path())
-                        : spec.kind() == FieldSpec.Kind.JSON ? EditorDoc.showJson(root, spec.path())
-                        : EditorDoc.show(root, spec));
+                box.setValue(EditorDoc.show(root, spec));
                 box.setResponder(v -> {
-                    if (spec.kind() == FieldSpec.Kind.IDS) {
-                        EditorDoc.writeIds(root, spec.path(), v);
-                    } else if (spec.kind() == FieldSpec.Kind.JSON) {
-                        EditorDoc.writeJson(root, spec.path(), v);
-                    } else {
-                        EditorDoc.write(root, spec, v);
-                    }
-                    invalidNumber = (spec.kind() == FieldSpec.Kind.INT || spec.kind() == FieldSpec.Kind.DOUBLE)
-                            && !v.isBlank() && !numberParses(v.trim(), spec.kind() == FieldSpec.Kind.INT);
+                    invalid = !EditorDoc.write(root, spec, v);
                     edited.accept(spec.path());
                 });
                 boxed = true;
@@ -350,33 +340,17 @@ final class EditForm {
         @Override
         public void refresh() {
             if (box != null && !box.isFocused()) {
-                box.setValue(spec.kind() == FieldSpec.Kind.IDS ? EditorDoc.showIds(root, spec.path())
-                        : spec.kind() == FieldSpec.Kind.JSON ? EditorDoc.showJson(root, spec.path())
-                        : EditorDoc.show(root, spec));
+                box.setValue(EditorDoc.show(root, spec));
             }
         }
 
-        /** The validator's sentence for this row, or the one word for text the numeric field cannot write. */
+        /** The validator's sentence for this row, or the one word for text the row cannot write. */
         private String message() {
             if (error != null) {
                 return error;
             }
-            return invalidNumber
+            return invalid
                     ? Component.translatable("screen.kuronami_quest_tree.editor.field.invalid").getString() : null;
-        }
-
-        /** The number the box holds is written only when it parses, the same way {@link EditorDoc#setNumber} reads it. */
-        private static boolean numberParses(String value, boolean integer) {
-            try {
-                if (integer) {
-                    Long.parseLong(value);
-                } else if (!Double.isFinite(Double.parseDouble(value))) {
-                    return false;
-                }
-                return true;
-            } catch (NumberFormatException ex) {
-                return false;
-            }
         }
 
         @Override

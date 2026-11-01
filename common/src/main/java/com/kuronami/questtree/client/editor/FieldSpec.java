@@ -8,7 +8,8 @@ import java.util.List;
  * one screen and be missing from the round-trip test.
  *
  * @param path      a dotted path inside the object this row edits ({@code item.id}, {@code visibility.hidden_until},
- *                  {@code position[1]}); a form prefixes it with the array slot it sits in
+ *                  {@code position[1]}); a form prefixes it with the array slot it sits in. A {@link Kind#EXTRAS} row
+ *                  names the object it completes ("" for the form's own object, {@code reward} one level down)
  * @param kind      the control and the JSON shape it writes
  * @param label     translation key for the row's label
  * @param options   values for {@link Kind#ENUM}, in cycle order, where "" means "not written"; empty for other kinds
@@ -24,7 +25,12 @@ public record FieldSpec(String path, Kind kind, String label, List<String> optio
         /** A JSON array of ids, shown as a comma-separated line. */
         IDS,
         /** A JSON value shown as compact JSON text (an object, an array, a number); unreadable text is not written. */
-        JSON
+        JSON,
+        /**
+         * Every member of one object the schema does not own, edited as one compact JSON object (a type that declared
+         * no fields). Writing puts each member back and removes the ones left out; unreadable text is not written.
+         */
+        EXTRAS
     }
 
     public static FieldSpec text(String path, String label) {
@@ -64,12 +70,23 @@ public record FieldSpec(String path, Kind kind, String label, List<String> optio
         return new FieldSpec(path, Kind.JSON, label, List.of(), false);
     }
 
+    /** Every member one object does not own, as one compact JSON object: what a type without a declaration gets. */
+    public static FieldSpec extras(String label, java.util.Collection<String> common) {
+        // the options of an extras row are the members it leaves to the shared rows
+        return new FieldSpec("", Kind.EXTRAS, label, common.stream().sorted().toList(), false);
+    }
+
     public static FieldSpec picker(String path, String label, Kind kind) {
         return new FieldSpec(path, kind, label, List.of(), false);
     }
 
     /** The same row one level down: a task's fields inside {@code tasks[2]}, an entry's reward inside {@code entries[0]}. */
     public FieldSpec under(String prefix) {
+        if (kind == Kind.EXTRAS) {
+            // an extras row names the object it completes, not a member under it
+            String parent = prefix.endsWith(".") ? prefix.substring(0, prefix.length() - 1) : prefix;
+            return new FieldSpec(parent, kind, label, options, defaultOn);
+        }
         return new FieldSpec(prefix + path, kind, label, options, defaultOn);
     }
 

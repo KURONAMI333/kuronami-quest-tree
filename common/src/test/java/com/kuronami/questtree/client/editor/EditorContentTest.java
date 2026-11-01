@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.kuronami.questtree.api.QuestField;
+import com.kuronami.questtree.api.QuestTypeFields;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -326,6 +328,7 @@ class EditorContentTest {
             all.addAll(ContentSchema.rewardOwnFields(t));
         }
         all.addAll(ContentSchema.entryFields("item"));
+        all.add(ContentSchema.taskOwnFields("example:plain").get(0));
         for (String locale : List.of("en_us", "ja_jp")) {
             JsonObject lang;
             try (var in = getClass().getResourceAsStream("/assets/kuronami_quest_tree/lang/" + locale + ".json")) {
@@ -367,6 +370,155 @@ class EditorContentTest {
         assertFalse(EditorDoc.sameContent(refused, draft));
     }
 
+    @Test
+    void aDeclaredExternalTypeEditsItsDeclaredFields() {
+        QuestTypeFields.describeTask("example:level", List.of(
+                QuestField.integer("level", "example.field.level"),
+                QuestField.choice("scope", "example.field.scope", "", "self", "team"),
+                QuestField.json("extra", "example.field.extra")));
+        try {
+            List<FieldSpec> fields = ContentSchema.taskFields("example:level");
+            assertEquals(List.of("level", "scope", "extra", "optional", "icon", "title"),
+                    fields.stream().map(FieldSpec::path).toList());
+            JsonObject original = JsonParser.parseString("""
+                    {"type":"example:level","level":5,"unknown":{"kept":7}}
+                    """).getAsJsonObject();
+            JsonObject edited = original.deepCopy();
+            for (FieldSpec field : fields) {
+                writeSample(edited, field);
+            }
+            JsonObject merged = original.deepCopy();
+            EditorDoc.mergePatch(merged, EditorDoc.patch(original, edited));
+            assertEquals("example:level", EditorDoc.text(merged, "type"));
+            assertEquals(7, merged.getAsJsonObject("unknown").get("kept").getAsInt());
+            for (FieldSpec field : fields) {
+                assertEquals(EditorDoc.show(edited, field), EditorDoc.show(merged, field), field.path());
+            }
+        } finally {
+            QuestTypeFields.unregisterTask("example:level");
+        }
+    }
+
+    @Test
+    void aRegisteredTypeJoinsTheTypeChoices() {
+        QuestTypeFields.registerTask("example:level");
+        QuestTypeFields.registerReward("example:reward");
+        try {
+            List<String> tasks = ContentSchema.taskTypeChoices();
+            assertEquals(ContentSchema.TASK_TYPES.size() + 1, tasks.size());
+            assertEquals("example:level", tasks.get(tasks.size() - 1));
+            List<String> rewards = ContentSchema.rewardTypeChoices();
+            assertEquals("example:reward", rewards.get(rewards.size() - 1));
+        } finally {
+            QuestTypeFields.unregisterTask("example:level");
+            QuestTypeFields.unregisterReward("example:reward");
+        }
+    }
+
+    @Test
+    void anUndeclaredTypeGetsOneRowForItsOwnMembers() {
+        QuestTypeFields.registerTask("example:legacy");
+        try {
+            List<FieldSpec> fields = ContentSchema.taskOwnFields("example:legacy");
+            assertEquals(1, fields.size());
+            assertEquals(FieldSpec.Kind.EXTRAS, fields.get(0).kind());
+            assertEquals("", fields.get(0).path());
+            JsonObject task = JsonParser.parseString("""
+                    {"type":"example:legacy","charge":4,"note":"hi","optional":true,"imported_unmapped":true}
+                    """).getAsJsonObject();
+            String shown = EditorDoc.show(task, fields.get(0));
+            assertFalse(shown.contains("\"type\""), shown);
+            assertFalse(shown.contains("\"optional\""), shown);
+            assertFalse(shown.contains("\"imported_unmapped\""), shown);
+            assertTrue(shown.contains("\"charge\""), shown);
+            assertEquals("{\"charge\":4,\"note\":\"hi\"}", shown);
+
+            // a member the author left out is removed; the shared members and the type stay
+            assertTrue(EditorDoc.write(task, fields.get(0), "{\"charge\":9,\"new\":1}"));
+            assertEquals(9, task.get("charge").getAsInt());
+            assertEquals(1, task.get("new").getAsInt());
+            assertFalse(task.has("note"));
+            assertTrue(task.get("optional").getAsBoolean());
+            assertEquals("example:legacy", EditorDoc.text(task, "type"));
+        } finally {
+            QuestTypeFields.unregisterTask("example:legacy");
+        }
+    }
+
+    @Test
+    void aTypeNobodyRegisteredStillEditsAsJson() {
+        assertFalse(ContentSchema.taskTypeChoices().contains("example:gone"));
+        List<FieldSpec> fields = ContentSchema.taskOwnFields("example:gone");
+        assertEquals(1, fields.size());
+        assertEquals(FieldSpec.Kind.EXTRAS, fields.get(0).kind());
+        JsonObject task = JsonParser.parseString("{\"type\":\"example:gone\",\"x\":1}").getAsJsonObject();
+        assertEquals("{\"x\":1}", EditorDoc.show(task, fields.get(0)));
+    }
+
+    @Test
+    void unreadableExtrasAreNotWritten() {
+        FieldSpec extras = ContentSchema.taskOwnFields("example:legacy").get(0);
+        JsonObject task = JsonParser.parseString("{\"type\":\"example:legacy\",\"count\":3}").getAsJsonObject();
+        assertFalse(EditorDoc.write(task, extras, "{not json"));
+        assertEquals(3, task.get("count").getAsInt());
+        assertFalse(EditorDoc.write(task, extras, "[1,2]"));
+        assertEquals(3, task.get("count").getAsInt());
+        assertTrue(EditorDoc.write(task, extras, "{\"count\":5}"));
+        assertEquals(5, task.get("count").getAsInt());
+    }
+
+    @Test
+    void unreadableJsonIsNotWritten() {
+        FieldSpec json = FieldSpec.json("blocks", "sample");
+        JsonObject task = JsonParser.parseString("{\"blocks\":[{\"x\":1}]}").getAsJsonObject();
+        assertFalse(EditorDoc.write(task, json, "[{"));
+        assertEquals(1, task.getAsJsonArray("blocks").get(0).getAsJsonObject().get("x").getAsInt());
+        assertTrue(EditorDoc.write(task, json, "{\"a\":1}"));
+        assertEquals(1, task.getAsJsonObject("blocks").get("a").getAsInt());
+    }
+
+    @Test
+    void changingFromAnExternalTypeDropsItsOwnMembers() {
+        JsonObject task = JsonParser.parseString("""
+                {"type":"example:legacy","charge":4,"optional":true,"count":2}
+                """).getAsJsonObject();
+        ContentSchema.retypeTask(task, "item");
+        assertEquals("item", EditorDoc.text(task, "type"));
+        assertFalse(task.has("charge"));
+        assertTrue(task.get("optional").getAsBoolean());
+        assertTrue(task.has("count"), "the built-in item type owns count");
+
+        ContentSchema.retypeTask(task, "example:legacy");
+        assertEquals("example:legacy", EditorDoc.text(task, "type"));
+        assertFalse(task.has("count"));
+        assertTrue(task.get("optional").getAsBoolean());
+
+        JsonObject reward = JsonParser.parseString("""
+                {"type":"example:legacy_reward","charge":5,"team":true}
+                """).getAsJsonObject();
+        ContentSchema.retypeReward(reward, "xp");
+        assertEquals("xp", ContentSchema.rewardType(reward));
+        assertFalse(reward.has("charge"));
+        assertTrue(reward.get("team").getAsBoolean());
+    }
+
+    @Test
+    void anEntryOfAnExternalRewardTypeEditsItsRewardObject() {
+        List<FieldSpec> fields = ContentSchema.entryFields("example:legacy_reward");
+        assertEquals(2, fields.size());
+        assertEquals("reward", fields.get(1).path());
+        assertEquals(FieldSpec.Kind.EXTRAS, fields.get(1).kind());
+        JsonObject entry = ContentSchema.newEntry();
+        JsonObject reward = entry.getAsJsonObject("reward");
+        reward.addProperty("type", "example:legacy_reward");
+        reward.addProperty("charge", 3);
+        assertEquals("{\"charge\":3}", EditorDoc.show(entry, fields.get(1)));
+        assertTrue(EditorDoc.write(entry, fields.get(1), "{\"charge\":6,\"power\":2}"));
+        assertEquals(6, reward.get("charge").getAsInt());
+        assertEquals(2, reward.get("power").getAsInt());
+        assertEquals("example:legacy_reward", EditorDoc.text(entry, "reward.type"));
+    }
+
     private static void writeSample(JsonObject object, FieldSpec field) {
         switch (field.kind()) {
             case TEXT, MULTILINE -> EditorDoc.setString(object, field.path(), "sample");
@@ -377,6 +529,8 @@ class EditorContentTest {
             case FLAG_OBJECT -> EditorDoc.setFlag(object, field.path(), true);
             case ITEM, ENTITY, DIMENSION, BIOME, STRUCTURE, ADVANCEMENT ->
                     EditorDoc.setItem(object, field.path(), "minecraft:stone");
+            case IDS -> EditorDoc.writeIds(object, field.path(), "minecraft:stone");
+            case JSON, EXTRAS -> EditorDoc.write(object, field, "{\"sample\":1}");
         }
     }
 }

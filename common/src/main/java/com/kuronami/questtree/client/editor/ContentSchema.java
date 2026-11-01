@@ -2,10 +2,13 @@ package com.kuronami.questtree.client.editor;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.kuronami.questtree.api.QuestField;
+import com.kuronami.questtree.api.QuestTypeFields;
 import com.kuronami.questtree.progress.RestrictionRules;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Which fields each task, reward, node, chapter and reward table has (2026-10-21, phase 3). It is plain data with no
@@ -33,7 +36,51 @@ public final class ContentSchema {
     /** The actions a restriction rule may name, in the order the editor offers them. */
     public static final List<String> RESTRICTION_ACTIONS = RestrictionRules.ACTIONS;
 
+    /**
+     * The members every task has whatever its type (2026-11-01). A type without a declaration edits its own members as
+     * one JSON row, so these stay out of it: the row must not offer the type itself or the shared title for editing,
+     * and a type change must not take them away. {@code team} is not here: a task type may use it as its own member.
+     */
+    public static final Set<String> TASK_COMMON_KEYS = Set.of(
+            "type", "optional", "icon", "title", "text", "imported_unmapped");
+
+    /** The same for a reward: the task's shared members plus the three claim flags every reward carries. */
+    public static final Set<String> REWARD_COMMON_KEYS = Set.of(
+            "type", "optional", "icon", "title", "text", "imported_unmapped",
+            "team", "auto", "exclude_from_claim_all");
+
     private ContentSchema() {
+    }
+
+    /**
+     * The task types the editor offers: the built-in ones, then the ids other mods registered through
+     * {@code QuestTreeApi.registerTaskType} (2026-11-01). A registered type is picked and edited like a built-in one.
+     */
+    public static List<String> taskTypeChoices() {
+        return withRegistered(TASK_TYPES, QuestTypeFields.taskTypes());
+    }
+
+    public static List<String> rewardTypeChoices() {
+        return withRegistered(REWARD_TYPES, QuestTypeFields.rewardTypes());
+    }
+
+    private static List<String> withRegistered(List<String> builtIn, List<String> registered) {
+        List<String> out = new ArrayList<>(builtIn);
+        for (String id : registered) {
+            if (!out.contains(id)) {
+                out.add(id);
+            }
+        }
+        return out;
+    }
+
+    /** Whether this task type comes from another mod rather than the schema's own list. */
+    public static boolean externalTaskType(String type) {
+        return type != null && !type.isEmpty() && !TASK_TYPES.contains(type);
+    }
+
+    public static boolean externalRewardType(String type) {
+        return type != null && !type.isEmpty() && !REWARD_TYPES.contains(type);
     }
 
     public static List<FieldSpec> questFields() {
@@ -83,6 +130,9 @@ public final class ContentSchema {
 
     /** The fields that belong to one task type only; changing the type removes exactly these. */
     public static List<FieldSpec> taskOwnFields(String type) {
+        if (externalTaskType(type)) {
+            return declaredFields(QuestTypeFields.taskFields(type), TASK_COMMON_KEYS);
+        }
         List<FieldSpec> out = new ArrayList<>();
         switch (type == null ? "" : type) {
             case "item" -> {
@@ -194,6 +244,9 @@ public final class ContentSchema {
     }
 
     public static List<FieldSpec> rewardOwnFields(String type) {
+        if (externalRewardType(type)) {
+            return declaredFields(QuestTypeFields.rewardFields(type), REWARD_COMMON_KEYS);
+        }
         List<FieldSpec> out = new ArrayList<>();
         switch (type == null ? "" : type) {
             case "item" -> {
@@ -252,6 +305,45 @@ public final class ContentSchema {
                 FieldSpec.text("title", P + "reward_title"));
     }
 
+    /**
+     * A registered type's declaration in the editor's own shape (2026-11-01). A type nobody described gets one row for
+     * its own members as JSON, because the editor cannot know a shape it was never told.
+     */
+    private static List<FieldSpec> declaredFields(List<QuestField> declared, Set<String> common) {
+        List<FieldSpec> out = new ArrayList<>();
+        for (QuestField field : declared) {
+            if (!common.contains(topKey(field.path()))) {
+                out.add(specOf(field));
+            }
+        }
+        if (out.isEmpty()) {
+            // no declaration, or one that only named shared members: the type's own members are still editable
+            out.add(FieldSpec.extras(P + "extras", common));
+        }
+        return out;
+    }
+
+    /** A declared field as a row; an enum without values has nothing to cycle, so it is edited as text. */
+    private static FieldSpec specOf(QuestField field) {
+        FieldSpec.Kind kind = switch (field.kind()) {
+            case TEXT -> FieldSpec.Kind.TEXT;
+            case MULTILINE -> FieldSpec.Kind.MULTILINE;
+            case INT -> FieldSpec.Kind.INT;
+            case DECIMAL -> FieldSpec.Kind.DOUBLE;
+            case BOOL -> FieldSpec.Kind.BOOL;
+            case ENUM -> field.options().isEmpty() ? FieldSpec.Kind.TEXT : FieldSpec.Kind.ENUM;
+            case ITEM -> FieldSpec.Kind.ITEM;
+            case ENTITY -> FieldSpec.Kind.ENTITY;
+            case DIMENSION -> FieldSpec.Kind.DIMENSION;
+            case BIOME -> FieldSpec.Kind.BIOME;
+            case STRUCTURE -> FieldSpec.Kind.STRUCTURE;
+            case ADVANCEMENT -> FieldSpec.Kind.ADVANCEMENT;
+            case IDS -> FieldSpec.Kind.IDS;
+            case JSON -> FieldSpec.Kind.JSON;
+        };
+        return new FieldSpec(field.path(), kind, field.label(), field.options(), false);
+    }
+
     /** A new task of this type, with nothing filled in: the validator names what is missing next to its field. */
     public static JsonObject newTask(String type) {
         JsonObject task = new JsonObject();
@@ -272,9 +364,19 @@ public final class ContentSchema {
         for (FieldSpec f : taskOwnFields(type)) {
             keep.add(topKey(f.path()));
         }
-        for (FieldSpec f : taskOwnFields(old)) {
-            if (!keep.contains(topKey(f.path()))) {
-                task.remove(topKey(f.path()));
+        if (externalTaskType(old)) {
+            // an external type's own members are every non-common key: nothing in them says which type wrote them
+            for (String key : new ArrayList<>(task.keySet())) {
+                if (!TASK_COMMON_KEYS.contains(key) && !keep.contains(key)) {
+                    task.remove(key);
+                }
+            }
+        } else {
+            for (FieldSpec f : taskOwnFields(old)) {
+                String key = topKey(f.path());
+                if (!keep.contains(key)) {
+                    task.remove(key);
+                }
             }
         }
         task.addProperty("type", type);
@@ -286,9 +388,18 @@ public final class ContentSchema {
         for (FieldSpec f : rewardOwnFields(type)) {
             keep.add(topKey(f.path()));
         }
-        for (FieldSpec f : rewardOwnFields(old)) {
-            if (!keep.contains(topKey(f.path()))) {
-                reward.remove(topKey(f.path()));
+        if (externalRewardType(old)) {
+            for (String key : new ArrayList<>(reward.keySet())) {
+                if (!REWARD_COMMON_KEYS.contains(key) && !keep.contains(key)) {
+                    reward.remove(key);
+                }
+            }
+        } else {
+            for (FieldSpec f : rewardOwnFields(old)) {
+                String key = topKey(f.path());
+                if (!keep.contains(key)) {
+                    reward.remove(key);
+                }
             }
         }
         setRewardType(reward, type);

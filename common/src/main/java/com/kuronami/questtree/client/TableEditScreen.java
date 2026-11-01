@@ -105,7 +105,8 @@ final class TableEditScreen extends EditorScreen {
         String type = reward != null && reward.isJsonObject()
                 ? ContentSchema.rewardType(reward.getAsJsonObject()) : "item";
         String weight = EditorDoc.text(entry, "weight");
-        String label = "· " + Component.translatable(PREFIX + "reward." + type).getString();
+        String name = Component.translatableWithFallback(PREFIX + "reward." + type, type).getString();
+        String label = "· " + name;
         return Component.literal((index + 1) + " " + label + (weight.isBlank() ? "" : " · " + weight));
     }
 

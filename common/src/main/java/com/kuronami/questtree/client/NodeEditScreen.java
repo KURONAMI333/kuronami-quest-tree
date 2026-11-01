@@ -100,7 +100,8 @@ final class NodeEditScreen extends EditorScreen {
     }
 
     private static Component cardName(String prefix, String type, JsonObject object) {
-        Component name = Component.translatable(prefix + type);
+        // a registered type's name may come from another mod; an unnamed id shows as the id rather than a lang key
+        Component name = Component.translatableWithFallback(prefix + type, type);
         String title = EditorDoc.text(object, "title");
         return title.isBlank() ? name : Component.literal(name.getString() + " · " + title);
     }
@@ -163,8 +164,9 @@ final class NodeEditScreen extends EditorScreen {
     private static List<EditPickers.Option> typeOptions(boolean rewards) {
         List<EditPickers.Option> out = new ArrayList<>();
         String prefix = PREFIX + (rewards ? "reward." : "task.");
-        for (String type : rewards ? ContentSchema.REWARD_TYPES : ContentSchema.TASK_TYPES) {
-            out.add(new EditPickers.Option(type, Component.translatable(prefix + type), ItemStack.EMPTY));
+        for (String type : rewards ? ContentSchema.rewardTypeChoices() : ContentSchema.taskTypeChoices()) {
+            out.add(new EditPickers.Option(type, Component.translatableWithFallback(prefix + type, type),
+                    ItemStack.EMPTY));
         }
         return out;
     }
