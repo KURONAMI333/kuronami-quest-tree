@@ -428,7 +428,12 @@ public final class ClientProgress {
         if (n.iconTexture != null || n.iconEntity != null) {
             return new Tiles.Glyph(net.minecraft.world.item.ItemStack.EMPTY, n.iconTexture, n.iconEntity);
         }
-        return Tiles.Glyph.item(iconFor(n));
+        net.minecraft.world.item.ItemStack stack = iconFor(n);
+        if (stack.isEmpty()) {
+            // no icon of its own and nothing to show for the first task: its kind's picture, never an empty frame
+            return Tiles.Glyph.symbol(NodeIconFallback.symbol(false, false, n.tasks.isEmpty() ? null : n.tasks.get(0).type));
+        }
+        return Tiles.Glyph.item(stack);
     }
 
     public static double fraction(String key) {

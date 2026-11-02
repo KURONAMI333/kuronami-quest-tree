@@ -2431,7 +2431,7 @@ public class ProgressScreen extends Screen {
                     y += 20;
                     continue;
                 }
-                Tiles.tile(g, req.shape, x, y, 16, ClientProgress.look(req.key), ClientProgress.fraction(req.key), ClientProgress.iconFor(req), false, req.key);
+                Tiles.tile(g, req.shape, x, y, 16, ClientProgress.look(req.key), ClientProgress.fraction(req.key), ClientProgress.glyphFor(req), 1, false, req.key);
                 g.pose().pushPose();
                 g.pose().translate(0, 0, OVERLAY_Z);
                 ClientModel.Chapter other = reqChapter;
@@ -2466,7 +2466,7 @@ public class ProgressScreen extends Screen {
                 Ui.text(g, font, Component.translatable("screen.kuronami_quest_tree.leads_to"), x, y, Ui.DIM);
                 y += 12;
                 for (ClientModel.Node d : leads) {
-                    Tiles.tile(g, d.shape, x, y, 16, ClientProgress.look(d.key), ClientProgress.fraction(d.key), ClientProgress.iconFor(d), false, d.key);
+                    Tiles.tile(g, d.shape, x, y, 16, ClientProgress.look(d.key), ClientProgress.fraction(d.key), ClientProgress.glyphFor(d), 1, false, d.key);
                     g.pose().pushPose();
                     g.pose().translate(0, 0, OVERLAY_Z);
                     ClientModel.Chapter other = m.chapterOf.get(d.key);
