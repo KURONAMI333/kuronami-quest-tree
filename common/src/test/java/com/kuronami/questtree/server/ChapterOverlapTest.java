@@ -73,6 +73,14 @@ class ChapterOverlapTest {
     }
 
     @Test
+    void sameFileNameWithNoSharedQuestIsNotAnOverlap() {
+        Map<String, JsonObject> all = new LinkedHashMap<>();
+        all.put("packa:intro", chapter(null, "welcome"));
+        all.put("packb:intro", chapter(null, "first_steps"));
+        assertTrue(ChapterOverlap.find(all, null).isEmpty());
+    }
+
+    @Test
     void differentBooksDoNotOverlapAndSameNamespaceIsIgnored() {
         Map<String, JsonObject> all = new LinkedHashMap<>();
         all.put("a:one", chapter("aa", "q"));

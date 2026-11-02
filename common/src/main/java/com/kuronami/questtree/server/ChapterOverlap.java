@@ -18,8 +18,9 @@ import java.util.TreeMap;
  * unrelated chapters and the player sees every quest twice.
  * <p>
  * Two chapters are twins when they carry the same {@code ftbquests_id} (written by the importer), or when their file
- * names are the same: older imports and hand-made copies have no source id, but an import names the chapter file
- * after the FTB chapter file.
+ * names are the same and at least one quest is shared: older imports and hand-made copies have no source id, but an
+ * import names the chapter file after the FTB chapter file and the quest after the FTB quest id. A shared file name
+ * with no shared quest (two packs that both have an "intro" chapter) is not an overlap.
  */
 public final class ChapterOverlap {
 
@@ -62,8 +63,10 @@ public final class ChapterOverlap {
             String ns = namespace(key);
             // other namespace -> its twin chapters of this one
             Map<String, Set<String>> twins = new TreeMap<>();
+            Map<String, Set<String>> bySourceTwins = new TreeMap<>();
             String source = sourceId(e.getValue());
             if (source != null) {
+                addTwins(bySourceTwins, bySource.get(source), ns);
                 addTwins(twins, bySource.get(source), ns);
             }
             addTwins(twins, byName.get(local(key)), ns);
@@ -72,9 +75,14 @@ public final class ChapterOverlap {
                 if (only != null && !only.equals(ns) && !only.equals(other)) {
                     continue;
                 }
+                int shared = sharedNodes(e.getValue(), t.getValue(), chapters);
+                // a file name alone is common ("intro", "main"): it counts only when a quest is shared as well
+                if (shared == 0 && !bySourceTwins.containsKey(other)) {
+                    continue;
+                }
                 String pair = ns + "|" + other;
                 chapterCount.merge(pair, 1, Integer::sum);
-                questCount.merge(pair, sharedNodes(e.getValue(), t.getValue(), chapters), Integer::sum);
+                questCount.merge(pair, shared, Integer::sum);
             }
         }
         List<Overlap> out = new ArrayList<>();
