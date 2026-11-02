@@ -27,7 +27,7 @@ import java.util.stream.Stream;
 public final class FtbQuestsImporter {
 
     private static final Map<String, String> QUEST = Map.ofEntries(
-            Map.entry("id", ""), Map.entry("x", "x"), Map.entry("y", "y"), Map.entry("shape", "shape"), Map.entry("size", "size"),
+            Map.entry("id", "ftbquests_id"), Map.entry("x", "x"), Map.entry("y", "y"), Map.entry("shape", "shape"), Map.entry("size", "size"),
             Map.entry("icon", "icon"), Map.entry("icon_scale", "icon_scale"), Map.entry("optional", "optional"),
             Map.entry("title", "lang:title"), Map.entry("subtitle", "lang:subtitle"), Map.entry("description", "lang:desc"),
             Map.entry("dependency_requirement", "requires.mode"), Map.entry("min_required_dependencies", "requires.min"),
@@ -147,7 +147,9 @@ public final class FtbQuestsImporter {
             String k = kv.getKey();
             JsonElement v = kv.getValue();
             switch (k) {
-                case "id", "filename", "quests", "images", "quest_links" -> { }
+                case "filename", "quests", "images", "quest_links" -> { }
+                // the FTB chapter id: lets a later import or /quest_tree validate recognise the same book under another namespace
+                case "id" -> o.addProperty("ftbquests_id", v.getAsString().toLowerCase(Locale.ROOT));
                 case "group" -> o.addProperty("group", v.getAsString().toLowerCase(Locale.ROOT));
                 case "order_index" -> o.add("order", v);
                 case "icon" -> o.add("icon", itemStack(v));

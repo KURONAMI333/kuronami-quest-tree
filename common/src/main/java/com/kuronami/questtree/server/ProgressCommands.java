@@ -205,7 +205,31 @@ public final class ProgressCommands {
             c.getSource().sendFailure(Component.translatableWithFallback("commands.kuronami_quest_tree.import.failed", "Import failed: %s", ex.getMessage()));
             return 0;
         }
+        warnOverlap(c.getSource(), out);
         return finish(c, out);
+    }
+
+    /**
+     * Warns when the book just converted is already loaded from another namespace (a kubejs pack, an older import).
+     * The import still goes ahead: the author may be replacing that copy on purpose.
+     */
+    private static void warnOverlap(CommandSourceStack src, ImportOutput out) {
+        Map<String, JsonObject> all = new TreeMap<>();
+        // what is loaded now, except this namespace's own previous import, which this import replaces
+        ChapterOverlap.chaptersOf(ProgressData.mergedBundle()).forEach((k, v) -> {
+            if (!k.startsWith(out.namespace + ":")) {
+                all.put(k, v);
+            }
+        });
+        out.chapters.forEach((k, v) -> all.put(out.namespace + ":" + k, v));
+        for (ChapterOverlap.Overlap o : ChapterOverlap.find(all, out.namespace)) {
+            if (!o.namespace().equals(out.namespace)) {
+                continue;
+            }
+            src.sendSuccess(() -> Component.translatableWithFallback("commands.kuronami_quest_tree.import.overlap",
+                    "Warning: %s chapters (%s quests) are already loaded from namespace %s, so they will show twice. Remove one copy.",
+                    o.chapters(), o.quests(), o.other()).withStyle(ChatFormatting.YELLOW), false);
+        }
     }
 
     /** The FTB Quests quest folder the import reads, also used to find the ids a progress migration needs. */
