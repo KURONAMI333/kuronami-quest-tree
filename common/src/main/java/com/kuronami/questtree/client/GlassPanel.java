@@ -9,6 +9,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
@@ -31,11 +32,10 @@ import org.lwjgl.opengl.GL11;
  *     <li>{@link Kind#CLEAR}: sharp and see-through with a strong lens and a light dimming layer, for a small control
  *     over a busy picture (the minimap over the map).</li>
  * </ul>
- * The rim catches a light from the top left; it leans towards the pointer while the pointer is near, and the panel
- * minimap glows softly under the pointer, the way Apple's interactive glass lights up under a finger. Only the
- * game's own {@code position_tex}, {@code position_tex_color} and {@code position_color} shaders are used: a shader
- * pack replaces the world shaders, and a core shader of our own is the first thing it takes with it (Iris docs).
- * All colours come from the palette.
+ * The rim catches a light from the top left; while the pointer is near, the sides facing it light up and the light
+ * eases around the rim as the pointer moves. Only the game's own {@code position_tex}, {@code position_tex_color} and
+ * {@code position_color} shaders are used: a shader pack replaces the world shaders, and a core shader of our own is
+ * the first thing it takes with it (Iris docs). All colours come from the palette.
  */
 public final class GlassPanel {
 
@@ -80,6 +80,31 @@ public final class GlassPanel {
     private static final int MASK_CORNER = 23;
     /** How far from the panel the pointer still pulls the light, in GUI pixels. */
     private static final double REACH = 48.0;
+    /** The light every panel carries with no pointer near it: from the top left, as {@code (x, y)} in GUI pixels. */
+    private static final double LIGHT_X = -0.6;
+    private static final double LIGHT_Y = -0.8;
+    /** How far one side leads the others: the cosines of the sides' angles raised to this power. */
+    private static final double LIGHT_FOCUS = 3.0;
+    /** Time constant of the light easing towards the pointer, in milliseconds. */
+    private static final double LIGHT_MS = 90.0;
+
+    /**
+     * One panel's rim light kept between frames: a brightness per side (top, bottom, left, right), eased towards where
+     * the pointer is. Until 2026-11-02 one direction was snapped to the pointer, so circling the pointer over a panel
+     * swung the whole rim at once and read as the nearest of its four sides jumping alight (the player).
+     */
+    private static final class Rim {
+        static final int TOP = 0;
+        static final int BOTTOM = 1;
+        static final int LEFT = 2;
+        static final int RIGHT = 3;
+
+        final double[] side = new double[4];
+        boolean started;
+        long at;
+    }
+
+    private static final java.util.Map<Slot, Rim> RIMS = new java.util.IdentityHashMap<>();
 
     private GlassPanel() {
     }
@@ -191,7 +216,7 @@ public final class GlassPanel {
             RenderSystem.viewport(0, 0, pw, ph);
             double lx = (mouseX - sx) * scale;
             double ly = (mouseY - sy) * scale;
-            lens(kind, px0 - x0, py0 - top, pw, ph, tw, th, scale, radius, lx, ly, source.getColorTextureId(),
+            lens(slot, kind, px0 - x0, py0 - top, pw, ph, tw, th, scale, radius, lx, ly, source.getColorTextureId(),
                     usedW / (double) source.width, usedH / (double) source.height, source.width, source.height);
 
             // only the coverage is cut: the colour is multiplied by it once, when the panel is drawn onto the screen
@@ -296,12 +321,13 @@ public final class GlassPanel {
      *     slab, refractive index 1.5). The clear variant has a deeper rim and bends further.</li>
      *     <li>Tone: the regular variant mixes the blurred picture with {@code glass_regular} (its alpha is how much);
      *     the clear one keeps the picture sharp, dims it by {@code glass_clear} and tints it with {@code glass_tint}.</li>
-     *     <li>Light: a thin rim highlight from the top left, leaning towards the pointer when it is near, a fainter one
-     *     on the opposite rim, and on the clear kind a soft glow under the pointer while it is over the panel.</li>
+     *     <li>Light: a thin rim highlight, brightest on the sides the pointer's side of the panel faces, an echo of it
+     *     on the others, and on the clear kind a soft glow under the pointer while it is over the panel.</li>
      * </ul>
      */
-    private static void lens(Kind kind, int ox, int oy, int pw, int ph, int tw, int th, double scale, int radiusGui,
-                             double lx, double ly, int texture, double su, double sv, int texW, int texH) {
+    private static void lens(Slot slot, Kind kind, int ox, int oy, int pw, int ph, int tw, int th, double scale,
+                             int radiusGui, double lx, double ly, int texture, double su, double sv, int texW,
+                             int texH) {
         boolean clear = kind == Kind.CLEAR;
         double radius = Math.min(radiusGui * scale, Math.min(pw, ph) * 0.5);
         double rimDepth = Math.min((clear ? 12.0 : 7.0) * scale, Math.min(pw, ph) * 0.45);
@@ -328,23 +354,8 @@ public final class GlassPanel {
         double cap = rimDepth * 1.2;
         double rimWidth = Math.max(1.0, 1.2 * scale);
 
-        // the light: from the top left, pulled towards the pointer as it comes near
-        double lightX = -0.6;
-        double lightY = -0.8;
-        double cx = lx - halfW;
-        double cy = ly - halfH;
-        double outside = Math.max(Math.abs(cx) - halfW, 0) + Math.max(Math.abs(cy) - halfH, 0);
-        double pull = clamp(1.0 - outside / (REACH * scale), 0.0, 1.0);
-        double cl = Math.sqrt(cx * cx + cy * cy);
-        if (pull > 0 && cl > 1e-3) {
-            lightX = lightX * (1 - pull) + cx / cl * pull;
-            lightY = lightY * (1 - pull) + cy / cl * pull;
-            double ll = Math.sqrt(lightX * lightX + lightY * lightY);
-            if (ll > 1e-3) {
-                lightX /= ll;
-                lightY /= ll;
-            }
-        }
+        // the light: one brightness per side, from where the pointer is, eased between frames
+        double[] lit = rimLight(slot, lx, ly, scale, halfW, halfH);
         // the glow under the pointer only on the clear kind: on the panels with text it sits behind the row being read
         boolean hover = clear && lx >= 0 && ly >= 0 && lx < pw && ly < ph;
         double glowR = 28.0 * scale;
@@ -406,13 +417,15 @@ public final class GlassPanel {
                 uu[k] = (float) clamp((ox + vx + offX) / tw * su, 0.5 / texW, su - 0.5 / texW);
                 vv[k] = (float) clamp((1.0 - (oy + vy + offY) / th) * sv, 0.5 / texH, sv - 0.5 / texH);
 
-                // light on the rim: strongest where the rim faces the light, a weaker echo on the far side. Kept low: at
-                // +0.55 white (until 2026-10-20) the rim read as a white outline, not as a glint (the player: too white)
+                // light on the rim: each side keeps the brightness of the pointer's side of the panel that it faces, so
+                // the light holds its shape while the pointer moves instead of jumping to whichever side is nearest (the
+                // player, 2026-11-02). Kept low: at +0.55 white (until 2026-10-20) the rim read as a white outline
                 double rim = 1.0 - smooth(0.0, rimWidth, depth);
-                double facing = nxv * lightX + nyv * lightY;
-                double spec = rim * (0.03 + 0.20 * Math.max(facing, 0.0) + 0.07 * Math.max(-facing, 0.0));
+                double facing = Math.min(1.0, lit[Rim.TOP] * Math.max(0.0, -nyv) + lit[Rim.BOTTOM] * Math.max(0.0, nyv)
+                        + lit[Rim.LEFT] * Math.max(0.0, -nxv) + lit[Rim.RIGHT] * Math.max(0.0, nxv));
+                double spec = rim * (0.03 + 0.20 * facing + 0.07 * (1.0 - facing));
                 // a soft sheen across the rim band, so the lens reads as a curved edge and not a cut
-                spec += (1.0 - t) * (clear ? 0.03 : 0.015) * (0.5 + 0.5 * Math.max(facing, 0.0));
+                spec += (1.0 - t) * (clear ? 0.03 : 0.015) * (0.5 + 0.5 * facing);
                 if (hover) {
                     double gd = Math.sqrt((vx - lx) * (vx - lx) + (vy - ly) * (vy - ly));
                     spec += 0.07 * (1.0 - smooth(0.0, glowR, gd));
@@ -445,6 +458,64 @@ public final class GlassPanel {
                 .setColor(unit(add[k * 3]), unit(add[k * 3 + 1]), unit(add[k * 3 + 2]), 255));
         BufferUploader.drawWithShader(light.buildOrThrow());
         GlStateManager._colorMask(true, true, true, true);
+    }
+
+    /**
+     * How brightly each side of one panel's rim is lit, top, bottom, left, right, from where the pointer is.
+     * <p>
+     * Each side takes the cosine of the angle between the way the pointer lies from the panel's middle and that side's
+     * own normal, raised to {@link #LIGHT_FOCUS}, so one side leads and the others fall away instead of all four
+     * turning at once. The leading side is scaled to 1. Away from the pointer, or with the pointer off the screen, the
+     * light rests on the top left ({@link #LIGHT_X}, {@link #LIGHT_Y}), which is where the panels carried it before
+     * any of them followed the pointer.
+     * <p>
+     * The four values are eased towards that target with a {@link #LIGHT_MS} time constant and kept per panel, so a
+     * pointer circling over a panel slides the light around the rim instead of snapping it from one side to the next
+     * between two frames (the player, 2026-11-02).
+     */
+    private static double[] rimLight(Slot slot, double lx, double ly, double scale, double halfW, double halfH) {
+        double cx = lx - halfW;
+        double cy = ly - halfH;
+        double outside = Math.max(Math.abs(cx) - halfW, 0) + Math.max(Math.abs(cy) - halfH, 0);
+        double pull = clamp(1.0 - outside / (REACH * scale), 0.0, 1.0);
+        double cl = Math.sqrt(cx * cx + cy * cy);
+        // the way the light lies: the resting top-left one, taken over by the pointer as it comes near
+        double dirX = LIGHT_X;
+        double dirY = LIGHT_Y;
+        if (pull > 0 && cl > 1e-3) {
+            dirX = dirX * (1 - pull) + cx / cl * pull;
+            dirY = dirY * (1 - pull) + cy / cl * pull;
+            double dl = Math.sqrt(dirX * dirX + dirY * dirY);
+            if (dl > 1e-3) {
+                dirX /= dl;
+                dirY /= dl;
+            }
+        }
+        double[] target = new double[4];
+        target[Rim.TOP] = Math.pow(Math.max(0.0, -dirY), LIGHT_FOCUS);
+        target[Rim.BOTTOM] = Math.pow(Math.max(0.0, dirY), LIGHT_FOCUS);
+        target[Rim.LEFT] = Math.pow(Math.max(0.0, -dirX), LIGHT_FOCUS);
+        target[Rim.RIGHT] = Math.pow(Math.max(0.0, dirX), LIGHT_FOCUS);
+        double lead = 0;
+        for (double v : target) {
+            lead = Math.max(lead, v);
+        }
+        if (lead > 1e-6) {
+            for (int i = 0; i < 4; i++) {
+                target[i] /= lead;
+            }
+        }
+
+        Rim rim = RIMS.computeIfAbsent(slot, s -> new Rim());
+        long now = Util.getMillis();
+        // the share of the way left to go this frame: a time constant, so the ease lasts the same at any frame rate
+        double step = rim.started ? 1.0 - Math.exp(-Math.max(0L, now - rim.at) / LIGHT_MS) : 1.0;
+        for (int i = 0; i < 4; i++) {
+            rim.side[i] += (target[i] - rim.side[i]) * step;
+        }
+        rim.started = true;
+        rim.at = now;
+        return rim.side;
     }
 
     /** Vertex positions along one side: every {@code cell} within {@code band} of either end, nothing in between. */
