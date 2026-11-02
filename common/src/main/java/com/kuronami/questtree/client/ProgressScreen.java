@@ -87,7 +87,6 @@ public class ProgressScreen extends Screen {
      */
     private static final int RAIL_ROW = 14;
     /** A rail row whose chapter name needs two lines. */
-    private static final int RAIL_ROW_WRAP = 26;
     /** Icon size in a row: 0.75 of an item, whole screen pixels per item pixel at GUI scale 4. */
     private static final int RAIL_ICON = 12;
     /** Left edge of a row's icon and of its label. */
@@ -866,8 +865,9 @@ public class ProgressScreen extends Screen {
             editSelection.clear();
             cancelEditGestures();
         }
-        // icon, gaps and a count like "12/127" beside the longest name, within two fifths of the screen
-        railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width * 2 / 5));
+        // icon, gaps and a count like "12/127" beside the longest name, within half the screen: names stay on one
+        // line, so the list widens for them instead (2026-11-02, the player: wrapped names made the rows uneven)
+        railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width / 2));
         ClientModel.Chapter ch = chapter();
         if (!railOnly && (ch == null || ClientProgress.chapterLocked(ch.id))) {
             // no overview screen any more: open on the last chapter, or the first one the player may enter
@@ -1129,17 +1129,13 @@ public class ProgressScreen extends Screen {
         return content;
     }
 
-    /** Height of a rail row: a long chapter name wraps to two lines instead of being cut (2026-10-22). */
+    /**
+     * Height of a rail row. Every chapter name is one line, as FTB Quests shows it (2026-11-02, the player: from
+     * 2026-10-22 a long name wrapped to two lines and the rows lost their even height); a name wider than half the
+     * screen is cut and shown whole beside the row on hover.
+     */
     private int railRowHeight(RailRow row) {
-        if (row.isHeader()) {
-            return HEADER_H;
-        }
-        if (railT <= 0.6f) {
-            // the folded rail draws one line, so it must not reserve the two-line height
-            return RAIL_ROW;
-        }
-        int avail = Math.max(20, railOpenW - RAIL_TEXT_X - Ui.S1 - 34);
-        return Ui.textWidth(font, row.chapter().title) > avail ? RAIL_ROW_WRAP : RAIL_ROW;
+        return row.isHeader() ? HEADER_H : RAIL_ROW;
     }
 
     /**
@@ -1190,6 +1186,12 @@ public class ProgressScreen extends Screen {
                     String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
                             ClientProgress.progress().level.getOrDefault(ProgressRules.key(c.id, c.pool), 0)).getString() : cnt[0] + "/" + cnt[1];
                     boolean hover = mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + hgt;
+                    if (hover && !locked && railT > 0.6f && Ui.textWidth(font, c.title) > w - RAIL_TEXT_X - Ui.S1 - 34) {
+                        // the name is cut in the row: the whole of it beside the rail
+                        railTip = List.of(c.title);
+                        railTipX = 4 + w + 4;
+                        railTipY = Math.round(top - shown + ry);
+                    }
                     if (hover && locked) {
                         // the pack's own words for why it is closed; the row itself stays a row
                         Component hint = c.lockHint != null ? c.lockHint
@@ -1391,17 +1393,7 @@ public class ProgressScreen extends Screen {
             }
             int color = locked ? Ui.DIM : on ? Ui.BRIGHT : Ui.MUTED;
             int labelW = w - RAIL_TEXT_X - Ui.S1 - rightW;
-            if (hgt > RAIL_ROW) {
-                // two lines, clipped to the row instead of a cut name (the row is only this tall when it is needed)
-                var lines = font.split(label, Ui.textRoom(labelW));
-                int ly = y + (hgt - 18) / 2;
-                for (int i = 0; i < lines.size() && i < 2; i++) {
-                    Ui.text(g, font, lines.get(i), RAIL_TEXT_X, ly + i * 10, (color & 0xFFFFFF) | alpha);
-                }
-            } else {
-                Ui.text(g, font, trim(label.getString(), labelW), RAIL_TEXT_X, ty,
-                        (color & 0xFFFFFF) | alpha);
-            }
+            Ui.text(g, font, trim(label.getString(), labelW), RAIL_TEXT_X, ty, (color & 0xFFFFFF) | alpha);
         }
         g.pose().popPose();
     }
@@ -1817,11 +1809,7 @@ public class ProgressScreen extends Screen {
         com.mojang.blaze3d.systems.RenderSystem.clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, net.minecraft.client.Minecraft.ON_OSX);
         g.pose().pushPose();
         g.pose().translate(0, 0, OVERLAY_Z);
-        if (ch.background.isEmpty() || !Ui.isLight()) {
-            renderHeader(g, ch, mouseX, mouseY, partialTick);
-        } else {
-            Ui.onSurface(headerGround(ch), () -> renderHeader(g, ch, mouseX, mouseY, partialTick));
-        }
+        renderHeader(g, ch, mouseX, mouseY, partialTick);
         renderMinimap(g, ch, v, mouseX, mouseY);
         renderZoomButtons(g, ch, v, mouseX, mouseY);
         g.pose().popPose();
@@ -1857,38 +1845,12 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * About the colour under the title row when the chapter brings its own pictures: the ground, each layer's average
-     * colour over it by the layer's opacity, then the title scrim at the text's height. A light theme pulls the row's
-     * text towards readable on it, so a dark stone chapter does not keep paper's dark text (2026-10-31).
-     */
-    private static int headerGround(ClientModel.Chapter ch) {
-        int c = Ui.GROUND;
-        for (ClientModel.BackgroundLayer l : ch.background) {
-            int avg = Tiles.averageColor(l.texture());
-            c = mix(c, avg, l.alpha() * ((avg >>> 24) & 255) / 255f);
-        }
-        float textY = Ui.S2 + 6 + 4;
-        float scrim = (0xB0 / 255f) * Math.max(0, 1 - textY / TITLE_SCRIM_H);
-        return mix(c, Ui.GROUND, scrim) & 0xFFFFFF;
-    }
-
-    private static int mix(int a, int b, float t) {
-        t = Math.max(0, Math.min(1, t));
-        int r = Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
-        int g = Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
-        int bl = Math.round((a & 255) * (1 - t) + (b & 255) * t);
-        return r << 16 | g << 8 | bl;
-    }
-
-    /** How far down the soft scrim behind the chapter title runs. */
-    private static final int TITLE_SCRIM_H = 40;
-
-    /**
      * The chapter's name and its pin, written plainly across the top (2026-10-20, the player: the glass box at the top
      * right spent its room on the done/total and hidden counts and cut the title). The title now keeps the chapter's own
      * colours and is shown in full, centred over the map's area — from the closed chapter list's edge to the screen's,
-     * not the drawn rail or sheet — so opening either never moves it. A soft scrim under it keeps it readable over the
-     * pack's pictures and bright tiles; it and the title sit under the rail, which is drawn later at a higher z. The pin
+     * not the drawn rail or sheet — so opening either never moves it. A plate under the row keeps it readable over the
+     * pack's pictures and bright tiles (until 2026-11-02 a soft fade, which was not enough); it and the title sit under
+     * the rail, which is drawn later at a higher z. The pin
      * marks the chapter for the top of the list, and a magnifier beside it turns the row into the quest search (2026-10-20,
      * the player: the search belongs to the title, not to the chapter list, which now has its own filter). "Claim all"
      * stays in the top right corner while anything without a choice waits; the details sheet covers that corner, so
@@ -1950,8 +1912,17 @@ public class ProgressScreen extends Screen {
         // controls +20, the chapter icon ends about +35, so all of it stays under the details sheet (+50) and rail (+100)
         g.pose().pushPose();
         g.pose().translate(0, 0, 10);
-        // a soft landing for the title over whatever the chapter draws at the top of the map
-        g.fillGradient(0, 0, width, TITLE_SCRIM_H, 0xB0000000 | (Ui.GROUND & 0xFFFFFF), Ui.GROUND & 0xFFFFFF);
+        // the title row sits on its own plate, as the zoom buttons do: the soft fade it had before left the name over
+        // bright quest tiles and pictures hard to read (2026-11-02, the player)
+        int plateX = x - Ui.S2;
+        int plateR = (ch.skills ? skillX + skillHeaderWidth(ch) : titleRect[0] + titleRect[2]) + Ui.S1;
+        int plateW = plateR - plateX;
+        if (GlassPanel.on()) {
+            GlassPanel.render(g, GlassPanel.HEADER, GlassPanel.Kind.REGULAR, plateX, py, plateW, pin, Ui.R2, mouseX, mouseY);
+        } else {
+            Ui.surface(g, plateX, py, plateW, pin, Ui.R2, Ui.PANEL_TRANSLUCENT);
+            Ui.outline(g, plateX, py, plateW, pin, Ui.R2, Ui.HAIRLINE);
+        }
         g.pose().popPose();
         g.pose().pushPose();
         // renderItem lifts the item by 150: 35 - 150 puts the icon's front at about +35 over the caller
