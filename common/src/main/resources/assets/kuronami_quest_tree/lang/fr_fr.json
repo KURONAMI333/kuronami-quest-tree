@@ -16,6 +16,7 @@
   "commands.kuronami_quest_tree.import.ftbquests.missing": "Aucune donnée FTB Quests trouvée dans config/ftbquests/quests",
   "commands.kuronami_quest_tree.import.puffish.missing": "Aucune catégorie Pufferfish's Skills trouvée",
   "commands.kuronami_quest_tree.import.failed": "Échec de l'importation : %s",
+  "commands.kuronami_quest_tree.import.overlap": "Attention : %s chapitres (%s quêtes) sont déjà chargés depuis l'espace de noms %s et s'afficheront en double. Retirez une copie.",
   "commands.kuronami_quest_tree.import.done": "%s chapitres avec %s nœuds importés dans le pack de données « quest_tree_import » (espace de noms %s). Rechargement.",
   "commands.kuronami_quest_tree.import.unmapped": "%s paramètres n'ont pas pu être repris :",
   "commands.kuronami_quest_tree.import.namespace": "%s n'est pas un espace de noms de ressources valide",

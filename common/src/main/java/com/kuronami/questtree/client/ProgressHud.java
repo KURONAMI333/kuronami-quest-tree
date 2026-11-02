@@ -224,18 +224,22 @@ public final class ProgressHud {
         int lineH = TrackerRules.lineH(ClientConfig.textScale());
         int[] textWidths = new int[rows.size()];
         int[] materialCounts = new int[rows.size()];
+        boolean[] countShown = new boolean[rows.size()];
         for (int i = 0; i < rows.size(); i++) {
             ClientModel.Node n = rows.get(i);
             List<long[]> mats = materials(n);
-            int w = Math.max(Ui.textWidth(font, clipped(font, n.title.getString())),
-                    Ui.textWidth(font, progressLine(n)));
+            countShown[i] = questCountShown(n, mats);
+            int w = Ui.textWidth(font, clipped(font, n.title.getString()));
+            if (countShown[i]) {
+                w = Math.max(w, Ui.textWidth(font, progressLine(n)));
+            }
             for (long[] mat : mats) {
-                w = Math.max(w, 12 + Ui.textWidth(font, Math.min(mat[1], mat[2]) + "/" + mat[2]));
+                w = Math.max(w, 12 + Ui.textWidth(font, materialText(mat)));
             }
             textWidths[i] = w;
             materialCounts[i] = mats.size();
         }
-        TrackerRules.Size card = TrackerRules.card(lineH, textWidths, materialCounts);
+        TrackerRules.Size card = TrackerRules.card(lineH, textWidths, materialCounts, countShown);
         int total = card.height() - 2 * TrackerRules.PAD;
         int y = g.guiHeight() / 2 - total / 2;
         // side and scale from the client settings (2026-10-20); the tracker is centred either way
@@ -256,21 +260,24 @@ public final class ProgressHud {
             Ui.frame(g, 2, y - TrackerRules.PAD, card.width(), card.height(), Ui.R2,
                     Ui.HUD_TRACKER_EDGE, Ui.HUD_TRACKER_EDGE_BOTTOM, Ui.HUD_TRACKER);
         }
-        int rowH = lineH * 2;
         int matH = lineH + 2;
         int tx = 2 + TrackerRules.PAD + TrackerRules.ICON + TrackerRules.GAP;
         for (ClientModel.Node n : rows) {
             State s = ClientProgress.state(n.key);
             List<long[]> mats = materials(n);
+            boolean countOn = questCountShown(n, mats);
+            int rowH = TrackerRules.rowHeight(lineH, countOn);
             String title = clipped(font, n.title.getString());
             String line = progressLine(n);
             int iconY = y + (rowH - TrackerRules.ICON) / 2;
             Tiles.tile(g, n.shape, 2 + TrackerRules.PAD, iconY, TrackerRules.ICON, ClientProgress.look(n.key),
-                    ClientProgress.fraction(n.key), ClientProgress.iconFor(n), false, n.key);
+                    ClientProgress.fraction(n.key), ClientProgress.glyphFor(n), 1, false, n.key);
             g.pose().pushPose();
             g.pose().translate(0, 0, Tiles.OVERLAY_Z);
-            Ui.text(g, font, title, tx, y, Ui.onLight(Ui.MARK));
-            Ui.text(g, font, line, tx, y + lineH, Ui.onLight(s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT));
+            Ui.text(g, font, title, tx, countOn ? y : y + (rowH - lineH) / 2, Ui.onLight(Ui.MARK));
+            if (countOn) {
+                Ui.text(g, font, line, tx, y + lineH, Ui.onLight(s == State.CLAIM ? Tiles.GOLD : Ui.HUD_TEXT));
+            }
             g.pose().popPose();
             y += rowH;
             // the items still needed, with what is in the inventory now (Satisfactory's to-do list, kept per quest)
@@ -283,7 +290,7 @@ public final class ProgressHud {
                 g.pose().popPose();
                 g.pose().pushPose();
                 g.pose().translate(0, 0, Tiles.OVERLAY_Z);
-                String c = Math.min(mat[1], mat[2]) + "/" + mat[2];
+                String c = materialText(mat);
                 Ui.text(g, font, c, tx + 12, y + 1, Ui.onLight(mat[1] >= mat[2] ? Tiles.GREEN_TEXT : Ui.HUD_MUTED));
                 g.pose().popPose();
                 y += matH;
@@ -368,6 +375,16 @@ public final class ProgressHud {
             out.add(new long[]{i, have, need});
         }
         return out;
+    }
+
+    /** The text of one item line under a quest: what the inventory holds (up to the need) over what is still needed. */
+    private static String materialText(long[] mat) {
+        return Math.min(mat[1], mat[2]) + "/" + mat[2];
+    }
+
+    /** Whether the quest's own count line is drawn; see {@link TrackerRules#questCountShown}. */
+    private static boolean questCountShown(ClientModel.Node n, List<long[]> mats) {
+        return TrackerRules.questCountShown(n.tasks.size(), progressLine(n), mats.stream().map(ProgressHud::materialText).toList());
     }
 
     /** "n/N" of the first unfinished task, or the share done for nodes with several tasks. */

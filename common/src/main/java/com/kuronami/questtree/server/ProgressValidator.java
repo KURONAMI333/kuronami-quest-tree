@@ -329,6 +329,18 @@ public final class ProgressValidator {
                 }
             }
         }
+
+        // pass 5: the same book loaded under two namespaces shows every chapter and quest twice
+        Map<String, JsonObject> chapterObjects = ChapterOverlap.chaptersOf(bundle);
+        for (ChapterOverlap.Overlap o : ChapterOverlap.find(chapterObjects, null)) {
+            if (o.namespace().compareTo(o.other()) >= 0) {
+                continue;
+            }
+            String first = chapterObjects.keySet().stream().filter(k -> namespace(k).equals(o.namespace())).findFirst().orElse("");
+            problem(out, Severity.WARNING, refs.getOrDefault(first, ref(first, sources)), "chapters." + local(first),
+                    o.chapters() + " chapters of namespace " + quote(o.namespace()) + " are also in namespace "
+                            + quote(o.other()) + " (" + o.quests() + " quests share an id), so players see them twice");
+        }
         return out;
     }
 

@@ -43,4 +43,29 @@ class TrackerRulesTest {
         assertEquals(2 * TrackerRules.PAD, none.width());
         assertEquals(2 * TrackerRules.PAD, none.height());
     }
+
+    @Test
+    void aSingleTaskQuestDoesNotSayItsCountTwice() {
+        assertFalse(TrackerRules.questCountShown(1, "0/1", java.util.List.of("0/1")));
+    }
+
+    @Test
+    void theQuestCountStaysWhenTheNumbersDifferOrThereIsNoItemLine() {
+        // the quest counts what was handed in, the item line what the inventory holds
+        assertTrue(TrackerRules.questCountShown(1, "0/8", java.util.List.of("3/8")));
+        assertTrue(TrackerRules.questCountShown(1, "0/1", java.util.List.of()));
+        // several tasks: the quest line is the share done, not one task's count
+        assertTrue(TrackerRules.questCountShown(2, "0/1", java.util.List.of("0/1")));
+        assertTrue(TrackerRules.questCountShown(2, "0/1", java.util.List.of("0/1", "0/4")));
+    }
+
+    @Test
+    void aRowWithoutItsCountLineIsAsTallAsTheIcon() {
+        assertEquals(20, TrackerRules.rowHeight(10, true));
+        assertEquals(TrackerRules.ICON, TrackerRules.rowHeight(10, false));
+        assertEquals(20, TrackerRules.rowHeight(20, false));
+        int full = TrackerRules.card(10, new int[]{40}, new int[]{1}).height();
+        int trimmed = TrackerRules.card(10, new int[]{40}, new int[]{1}, new boolean[]{false}).height();
+        assertEquals(full - 4, trimmed);
+    }
 }

@@ -16,6 +16,7 @@
   "commands.kuronami_quest_tree.import.ftbquests.missing": "在 config/ftbquests/quests 中未找到 FTB Quests 数据",
   "commands.kuronami_quest_tree.import.puffish.missing": "未找到 Pufferfish's Skills 的类别",
   "commands.kuronami_quest_tree.import.failed": "导入失败：%s",
+  "commands.kuronami_quest_tree.import.overlap": "警告：%s个章节（%s个任务）已从命名空间%s加载，将会显示两次。请移除其中一份。",
   "commands.kuronami_quest_tree.import.done": "已将%s个章节（共%s个节点）导入数据包“quest_tree_import”（命名空间%s）。正在重新加载。",
   "commands.kuronami_quest_tree.import.unmapped": "有%s项设置无法迁移：",
   "commands.kuronami_quest_tree.import.namespace": "%s 不是有效的资源命名空间",

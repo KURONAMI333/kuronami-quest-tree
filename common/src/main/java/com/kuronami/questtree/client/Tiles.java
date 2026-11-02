@@ -549,15 +549,24 @@ final class Tiles {
      * What a tile shows: an item, a drawn picture, or an entity's face. FTB Quests' custom icon item can carry either
      * of the last two, and the importer keeps that choice instead of dropping the icon (2026-10-22).
      */
-    record Glyph(ItemStack stack, ResourceLocation texture, ResourceLocation entity) {
-        static final Glyph EMPTY = new Glyph(ItemStack.EMPTY, null, null);
+    record Glyph(ItemStack stack, ResourceLocation texture, ResourceLocation entity, String symbol) {
+        static final Glyph EMPTY = new Glyph(ItemStack.EMPTY, null, null, null);
+
+        Glyph(ItemStack stack, ResourceLocation texture, ResourceLocation entity) {
+            this(stack, texture, entity, null);
+        }
 
         static Glyph item(ItemStack stack) {
-            return stack == null || stack.isEmpty() ? EMPTY : new Glyph(stack, null, null);
+            return stack == null || stack.isEmpty() ? EMPTY : new Glyph(stack, null, null, null);
+        }
+
+        /** A tinted picture from {@code textures/gui/icon/<name>.png}, shown when the node has nothing else (NodeIconFallback). */
+        static Glyph symbol(String name) {
+            return name == null ? EMPTY : new Glyph(ItemStack.EMPTY, null, null, name);
         }
 
         boolean empty() {
-            return stack.isEmpty() && texture == null && entity == null;
+            return stack.isEmpty() && texture == null && entity == null && symbol == null;
         }
     }
 
@@ -628,6 +637,10 @@ final class Tiles {
             }
             if (tex != null) {
                 textureIcon(g, tex, cx, cy, size);
+            } else if (glyph.symbol() != null) {
+                // a mark, not an item: it fills less of the face than an item's picture does
+                float mark = size * 0.7f;
+                icon(g, glyph.symbol(), x + s / 2f - mark / 2f, y + s * m.innerCentre - mark / 2f, mark, Ui.TEXT);
             } else if (!glyph.stack().isEmpty()) {
                 float k = size / 16f;
                 g.pose().pushPose();

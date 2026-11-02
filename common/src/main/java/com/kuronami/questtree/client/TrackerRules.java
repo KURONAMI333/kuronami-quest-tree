@@ -33,7 +33,14 @@ public final class TrackerRules {
      * always has at least one line, so a card for rows is never empty.
      */
     public static Size card(int lineH, int[] textWidths, int[] materialCounts) {
-        int rowH = lineH * 2;
+        return card(lineH, textWidths, materialCounts, null);
+    }
+
+    /**
+     * As {@link #card(int, int[], int[])}; {@code countShown[i]} false means row {@code i} has only its title line
+     * (see {@link #questCountShown}), which is as tall as the icon. Null means every row shows its count line.
+     */
+    public static Size card(int lineH, int[] textWidths, int[] materialCounts, boolean[] countShown) {
         int matH = lineH + 2;
         int widest = 0;
         int height = 0;
@@ -43,8 +50,25 @@ public final class TrackerRules {
             if (i > 0) {
                 height += 2;
             }
-            height += rowH + matH * mats;
+            height += rowHeight(lineH, countShown == null || i >= countShown.length || countShown[i]) + matH * mats;
         }
         return new Size(widest + 2 * PAD, height + 2 * PAD);
+    }
+
+    /** A row's own height: title and count line, or just the title (never shorter than the icon). */
+    public static int rowHeight(int lineH, boolean countShown) {
+        return countShown ? lineH * 2 : Math.max(lineH, ICON);
+    }
+
+    /**
+     * Whether a quest's own "have/need" line is drawn. A quest with one task that is also listed as an item line
+     * ("(icon) 0/1") with the same text would say the number twice, so only the item line stays.
+     *
+     * @param taskCount     how many tasks the quest has
+     * @param questLine     the quest's count line
+     * @param materialTexts the texts of the item lines drawn under the quest
+     */
+    public static boolean questCountShown(int taskCount, String questLine, java.util.List<String> materialTexts) {
+        return !(taskCount == 1 && materialTexts.size() == 1 && materialTexts.get(0).equals(questLine));
     }
 }
