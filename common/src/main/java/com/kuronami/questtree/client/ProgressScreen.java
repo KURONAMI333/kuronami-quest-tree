@@ -57,7 +57,7 @@ public class ProgressScreen extends Screen {
      * above it (2026-10-17, picked from renders of the same 196-quest chapter at five grounds: the old near-black left
      * the zoomed-out map almost black). Since 2026-10-18 it is Discord's main surface (see {@link Ui}).
      */
-    private static int SCRIM = Ui.GROUND;
+    private static int SCRIM = Ui.GROUND_SCRIM;
     /** What a node the search does not match wears, so it sinks into the ground instead of going dark. */
     private static int SINK = 0xC0000000 | (Ui.GROUND & 0xFFFFFF);
 
@@ -130,6 +130,8 @@ public class ProgressScreen extends Screen {
     private int matchCursor = -1;
     /** The quest search field's hit area (x, y, w, h), set every frame by {@link #renderHeader}. */
     private int[] searchRect = new int[4];
+    /** The quest search field's clear cross, drawn only while it has text; width 0 means it is not there. */
+    private int[] searchClearRect = new int[4];
     /**
      * The chapter list's own filter (2026-10-20, the player: the field at the top of the list looked like it searched
      * the list, so it now does). Kept apart from the quest search: it only narrows the rows shown there.
@@ -138,6 +140,8 @@ public class ProgressScreen extends Screen {
     private net.minecraft.client.gui.components.EditBox railBox;
     /** The rail field's hit area (x, y, w, h), set every frame by {@link #renderRailField}. */
     private int[] railRect = new int[4];
+    /** The rail field's clear cross, drawn only while it has text; width 0 means it is not there. */
+    private int[] railClearRect = new int[4];
     /** The chapters the rail lists after its filter (all of them when the field is empty). */
     private final List<ClientModel.Chapter> railShown = new ArrayList<>();
     /** The filter text the rows were last built for, part of the rebuild key. */
@@ -912,15 +916,17 @@ public class ProgressScreen extends Screen {
         renderEditorNotices(g);
         renderEditorChangelog(g);
         renderEditorMenu(g, mouseX, mouseY);
+        // above the editor's menu (+320) and notices (+280), and still under the confirm card (+400): a tip that opened
+        // under either of them was unreadable
         if (pendingTip != null && confirmPrompt == null) {
             g.pose().pushPose();
-            g.pose().translate(0, 0, OVERLAY_Z + 300);
+            g.pose().translate(0, 0, OVERLAY_Z + 340);
             Ui.tooltip(g, font, pendingTip, mouseX, mouseY);
             g.pose().popPose();
         }
         if (railTip != null && confirmPrompt == null) {
             g.pose().pushPose();
-            g.pose().translate(0, 0, OVERLAY_Z + 300);
+            g.pose().translate(0, 0, OVERLAY_Z + 340);
             Ui.tooltipAt(g, font, railTip, railTipX, railTipY);
             g.pose().popPose();
         }
@@ -928,7 +934,7 @@ public class ProgressScreen extends Screen {
             // the vanilla item tooltip (name, line, mod name) at the vanilla position, for every item icon and inline
             // item in the sheet; it replaces no text: the rows already say what the item is for
             g.pose().pushPose();
-            g.pose().translate(0, 0, OVERLAY_Z + 300);
+            g.pose().translate(0, 0, OVERLAY_Z + 340);
             g.renderTooltip(font, hoverStack, lastMouseX, lastMouseY);
             g.pose().popPose();
         }
@@ -1005,8 +1011,9 @@ public class ProgressScreen extends Screen {
 
     /**
      * The field at the top of the chapter list now filters the list itself (2026-10-20, the player: it looked like a
-     * list search, so it is one). Closed, one magnifier in the icon column; open, a rounded field over the list's width,
-     * its count the number of chapters left. The EditBox is placed every frame so it fits the drawn rail.
+     * list search, so it is one). Closed, one magnifier in the icon column; open, a rounded field over the list's width.
+     * The EditBox is placed every frame so it fits the drawn rail. The matches are not counted here: a count in the field
+     * read as part of what was typed, so the only thing at its right edge is the cross that empties it (2026-11-02).
      */
     private void renderRailField(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int w = railWidth();
@@ -1021,6 +1028,7 @@ public class ProgressScreen extends Screen {
             railBox.setY(y + (SEARCH_H - EDIT_H) / 2);
             railBox.setWidth(RAIL_ICON);
             railRect = new int[]{4, y, w, SEARCH_H};
+            railClearRect[2] = 0;
             return;
         }
         int fx = 4 + Ui.S1;
@@ -1032,18 +1040,39 @@ public class ProgressScreen extends Screen {
         int ix = fx + Ui.S1;
         Tiles.icon(g, "search", ix, y + (SEARCH_H - RAIL_ICON) / 2f, RAIL_ICON,
                 railBox.isFocused() ? Ui.TEXT : Ui.MUTED);
-        String n = railFiltering() ? String.valueOf(railShown.size()) : null;
-        int countW = n == null ? 0 : Ui.textWidth(font, n) + Ui.S1;
         int ex = ix + RAIL_ICON + Ui.S1;
+        int room = fx + fw - Ui.S2;
+        if (railFiltering()) {
+            room = clearButton(g, room, y, SEARCH_H, mouseX, mouseY, railClearRect);
+        } else {
+            railClearRect[2] = 0;
+        }
         railBox.setX(ex);
         railBox.setY(y + (SEARCH_H - EDIT_H) / 2);
-        railBox.setWidth(Math.max(10, fx + fw - Ui.S2 - countW - ex));
+        railBox.setWidth(Math.max(10, room - ex));
         railBox.render(g, mouseX, mouseY, partialTick);
-        if (n != null) {
-            Ui.textRight(g, font, n, fx + fw - Ui.S2, y + (SEARCH_H - 8) / 2 + 1,
-                    railShown.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
-        }
         railRect = new int[]{fx, y, fw, SEARCH_H};
+    }
+
+    /** Width of the cross that empties a field, and of the room it is given at the field's right edge. */
+    private static final int FIELD_CLEAR = 12;
+
+    /**
+     * The cross that empties a search field, at the field's right edge ({@code right} is the field's inner right edge),
+     * only while there is text to empty. Returns where the text may run to.
+     */
+    private int clearButton(GuiGraphics g, int right, int y, int h, int mouseX, int mouseY, int[] rect) {
+        int bx = right - FIELD_CLEAR;
+        boolean hover = mouseX >= bx && mouseX < right && mouseY >= y && mouseY < y + h;
+        if (hover) {
+            Ui.surface(g, bx, y + 1, FIELD_CLEAR, h - 2, Ui.CORNER, Ui.OVERLAY_1);
+        }
+        Tiles.icon(g, "cross", bx + (FIELD_CLEAR - 8) / 2f, y + (h - 8) / 2f, 8, hover ? Ui.TEXT : Ui.MUTED);
+        rect[0] = bx;
+        rect[1] = y;
+        rect[2] = FIELD_CLEAR;
+        rect[3] = h;
+        return bx - Ui.S1;
     }
 
     @Override
@@ -1060,9 +1089,7 @@ public class ProgressScreen extends Screen {
     /** Height of a group header row in the rail; chapter rows are {@link #RAIL_ROW}. */
     private static final int HEADER_H = 14;
 
-    /** Rows kept under the list: "collect all", the party while it is relevant, and the gear (2026-10-20/21). */
-    private static final int RAIL_FOOT_ROW = 18;
-    /** The divider above the footer, plus the gap before its first row. */
+    /** The divider above the footer rows. */
     private static final int RAIL_FOOT_SEP = Ui.S1;
 
     private int railFootRows() {
@@ -1082,12 +1109,8 @@ public class ProgressScreen extends Screen {
     }
 
     private int railFootH() {
-        // open, the four buttons share one row of icons; folded, they keep the labelled stack (2026-10-22)
-        if (railT > 0.6f) {
-            return RAIL_FOOT_SEP + RAIL_FOOT_ROW;
-        }
-        int rows = railFootRows();
-        return RAIL_FOOT_SEP + rows * RAIL_FOOT_ROW + (rows - 1) * 4;
+        // one stack of rows in both states, at the chapter rows' own height, so the buttons keep their places
+        return RAIL_FOOT_SEP + railFootRows() * RAIL_ROW;
     }
 
     private int railListBottom() {
@@ -1192,20 +1215,14 @@ public class ProgressScreen extends Screen {
         if (max > 0) {
             g.pose().pushPose();
             g.pose().translate(0, 0, OVERLAY_Z + 1);
-            // soft edges where rows run under, and a scrollbar that is always there while the list overflows
+            // soft edges where rows run under, so rows leaving the list fade instead of being cut; no scrollbar: it
+            // could not be grabbed, and a bar that does not move under the pointer promises a drag it cannot do
+            // (2026-11-02). The wheel still scrolls the list.
             if (railScroll > 1) {
                 g.fillGradient(4, top, 4 + w, top + 8, 0xCC000000 | (Ui.PANEL & 0xFFFFFF), Ui.PANEL & 0xFFFFFF);
             }
             if (railScroll < max - 1) {
                 g.fillGradient(4, bottom - 10, 4 + w, bottom, Ui.PANEL & 0xFFFFFF, 0xCC000000 | (Ui.PANEL & 0xFFFFFF));
-            }
-            if (railT > 0.6f) {
-                float h = bottom - top;
-                float content = h + max;
-                int thumb = Math.max(12, Math.round(h * h / content));
-                int ty = top + Math.round((h - thumb) * (railScroll / max));
-                boolean over = mouseX < 4 + w && mouseX >= 4 && mouseY >= top && mouseY < bottom;
-                Ui.surface(g, 4 + w - 5, ty, 2, thumb, Ui.CORNER, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
             }
             g.pose().popPose();
         }
@@ -1216,20 +1233,29 @@ public class ProgressScreen extends Screen {
     /** One footer button. The tip is a label (and, for the emergency, the items it hands out). */
     private record RailFoot(String icon, List<Component> tip, int color, int badge, boolean dot,
                             boolean clickable, Runnable action) {
+
+        /** The row's own name: the first of its tip's lines, written beside the icon while the list is open. */
+        Component label() {
+            return tip.isEmpty() ? Component.empty() : tip.get(0);
+        }
     }
 
     /**
      * The fixed buttons under the chapter list: collect every claimable reward, the party while it is relevant, the
-     * pack's emergency items, and the client settings (2026-10-20/21). Open, they share one row of icons; folded, they
-     * keep the labelled stack. Their labels are the hover tooltips either way (2026-10-22).
+     * pack's emergency items, and the client settings (2026-10-20/21). One stack of rows in both states, at the same x
+     * and with the same row height as the chapter rows above, so the buttons never move sideways when the list opens
+     * or closes: folded, the marks and their dots are all that shows; open, each row adds its name and the count sits at
+     * the row's right edge, as the chapter rows do (2026-11-02, the player: open, the four icons spread across the
+     * list's width and the two most used ones left their places). A folded row's tip opens beside the rail, so it never
+     * covers the icon it explains; open rows carry their name, so they have none.
      */
     private void renderRailFooter(GuiGraphics g, int mouseX, int mouseY) {
         int w = railWidth();
         int left = 4 + Ui.S1;
         int rowW = w - 2 * Ui.S1;
         int top = height - 8 - railFootH();
-        int cy = top + RAIL_FOOT_SEP;
         boolean open = railT > 0.6f;
+        int alpha = (int) (255 * Mth.clamp((railT - 0.6f) / 0.4f, 0, 1)) << 24;
         int waiting = ClientProgress.claimableCount();
         int invites = ClientTeam.view().activeInvites(System.currentTimeMillis()).size();
 
@@ -1271,53 +1297,40 @@ public class ProgressScreen extends Screen {
                 }));
 
         Ui.divider(g, left, top, rowW);
-        if (open) {
-            int slotW = rowW / feet.size();
-            int start = left + (rowW - slotW * feet.size()) / 2;
-            for (int i = 0; i < feet.size(); i++) {
-                RailFoot foot = feet.get(i);
-                int sx = start + i * slotW;
-                boolean hover = mouseX >= sx && mouseX < sx + slotW && mouseY >= cy && mouseY < cy + RAIL_FOOT_ROW;
-                if (hover && foot.clickable()) {
-                    Ui.surface(g, sx, cy, slotW, RAIL_FOOT_ROW, Ui.CORNER, Ui.OVERLAY_1);
-                }
-                int ix = sx + (slotW - RAIL_ICON) / 2;
-                int iy = cy + (RAIL_FOOT_ROW - RAIL_ICON) / 2;
-                Tiles.icon(g, foot.icon(), ix, iy, RAIL_ICON, hover && foot.clickable() ? Ui.TEXT : foot.color());
-                if (foot.badge() > 0) {
-                    Ui.cornerBadge(g, font, String.valueOf(foot.badge()), ix + RAIL_ICON, iy);
-                } else if (foot.dot()) {
-                    Tiles.icon(g, "dot", ix + RAIL_ICON + 1, iy - 1, 6, Tiles.GOLD);
-                }
-                if (foot.clickable()) {
-                    buttons.add(new Button(sx, cy, slotW, RAIL_FOOT_ROW, foot.action()));
-                }
-                if (hover) {
-                    pendingTip = foot.tip();
-                }
-            }
-            return;
-        }
-
-        int y = cy;
+        int y = top + RAIL_FOOT_SEP;
         for (RailFoot foot : feet) {
-            boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + RAIL_FOOT_ROW;
+            boolean hover = mouseX >= 4 && mouseX < 4 + w && mouseY >= y && mouseY < y + RAIL_ROW;
             if (hover && foot.clickable()) {
-                Ui.surface(g, left, y, rowW, RAIL_FOOT_ROW, Ui.CORNER, Ui.OVERLAY_1);
+                Ui.surface(g, left, y, rowW, RAIL_ROW, Ui.CORNER, Ui.OVERLAY_1);
             }
-            Tiles.icon(g, foot.icon(), RAIL_ICON_X, y + (RAIL_FOOT_ROW - RAIL_ICON) / 2f, RAIL_ICON,
+            Tiles.icon(g, foot.icon(), RAIL_ICON_X, y + (RAIL_ROW - RAIL_ICON) / 2f, RAIL_ICON,
                     hover && foot.clickable() ? Ui.TEXT : foot.color());
-            if (foot.badge() > 0 || foot.dot()) {
+            if (!open) {
                 // folded, the 24px rail has no room for a count beside the mark: a dot, as the rows above use
-                Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON, y + (RAIL_FOOT_ROW - 6) / 2, 6, Tiles.GOLD);
+                if (foot.badge() > 0 || foot.dot()) {
+                    Tiles.icon(g, "dot", RAIL_ICON_X + RAIL_ICON, y + (RAIL_ROW - 6) / 2, 6, Tiles.GOLD);
+                }
+            } else {
+                int edge = w - Ui.S2;
+                int rightW = 0;
+                if (foot.badge() > 0) {
+                    rightW = Ui.badge(g, font, String.valueOf(foot.badge()), edge + 2,
+                            y + (RAIL_ROW - Ui.BADGE_H) / 2) + 4;
+                }
+                int color = hover && foot.clickable() ? Ui.TEXT : foot.clickable() ? Ui.MUTED : Ui.DIM;
+                Ui.text(g, font, trim(foot.label().getString(), w - RAIL_TEXT_X - Ui.S1 - rightW), RAIL_TEXT_X,
+                        y + (RAIL_ROW - 8) / 2, (color & 0xFFFFFF) | alpha);
             }
             if (foot.clickable()) {
-                buttons.add(new Button(left, y, rowW, RAIL_FOOT_ROW, foot.action()));
+                buttons.add(new Button(left, y, rowW, RAIL_ROW, foot.action()));
             }
-            if (hover) {
-                pendingTip = foot.tip();
+            if (hover && !open) {
+                // beside the rail, level with the row: at the pointer it covered the mark it belongs to
+                railTip = foot.tip();
+                railTipX = 4 + w + 4;
+                railTipY = y;
             }
-            y += RAIL_FOOT_ROW + 4;
+            y += RAIL_ROW;
         }
     }
 
@@ -1517,7 +1530,7 @@ public class ProgressScreen extends Screen {
 
     /** Colours worked out from the palette, refreshed when it is read again. */
     static void paletteChanged() {
-        SCRIM = Ui.GROUND;
+        SCRIM = Ui.GROUND_SCRIM;
         SINK = 0xC0000000 | (Ui.GROUND & 0xFFFFFF);
         LINE_WALKED = Tiles.GREEN;
         LINE_CASING_COLOR = 0xE6000000 | (Ui.GROUND & 0xFFFFFF);
@@ -1883,6 +1896,8 @@ public class ProgressScreen extends Screen {
      */
     private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY, float partialTick) {
         claimRect[2] = 0;
+        // the field's cross is only reachable while it is drawn; both are set again below when it is
+        searchClearRect[2] = 0;
         int pin = TITLE_BTN;
         boolean canEdit = EditorSession.allowed();
         int editBtn = canEdit ? TITLE_BTN : 0;
@@ -2041,6 +2056,40 @@ public class ProgressScreen extends Screen {
         g.pose().popPose();
     }
 
+    /**
+     * Empties the quest search: the field closes back into its magnifier and every quest shows again. The keyboard stays
+     * in the field, so a new search can be typed at once.
+     */
+    private void clearSearch() {
+        query = "";
+        matchCursor = -1;
+        if (searchBox != null) {
+            searchBox.setValue("");
+            setFocused(searchBox);
+            searchBox.setFocused(true);
+        }
+        if (railBox != null) {
+            railBox.setFocused(false);
+        }
+        ProgressFeedback.click();
+    }
+
+    /** Empties the chapter list's own filter, which puts every chapter back in the list at its top. */
+    private void clearRailFilter() {
+        railQuery = "";
+        railScroll = 0;
+        railScrollTarget = 0;
+        if (railBox != null) {
+            railBox.setValue("");
+            setFocused(railBox);
+            railBox.setFocused(true);
+        }
+        if (searchBox != null) {
+            searchBox.setFocused(false);
+        }
+        ProgressFeedback.click();
+    }
+
     /** Give the quest search the keyboard, and put the chapter list's field away. */
     private void focusSearch() {
         if (searchBox != null) {
@@ -2053,9 +2102,12 @@ public class ProgressScreen extends Screen {
     }
 
     /**
-     * The quest search in the title row: a rounded field with a magnifier at its left, the EditBox inside it and its
-     * match count right-aligned ("n", or "cursor/n" after Enter has walked the matches). The title is hidden while it
-     * shows; it takes the title's place and depth, so nothing about the map or the panels moves.
+     * The quest search in the title row: a rounded field with a magnifier at its left, the EditBox inside it, and, once
+     * it has text, a cross at its right edge that empties it. The title is hidden while it shows; it takes the title's
+     * place and depth, so nothing about the map or the panels moves.
+     * <p>
+     * The match count is gone (2026-11-02, the player: the "3/12" beside the field read as part of what was typed, and
+     * it changed under every keystroke). Enter still walks the matches, and the tiles that match light up.
      */
     private void renderQuestSearch(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY, float partialTick) {
         if (w <= 0) {
@@ -2074,18 +2126,17 @@ public class ProgressScreen extends Screen {
         int ix = x + Ui.S1;
         Tiles.icon(g, "search", ix, y + (h - TITLE_GLYPH) / 2f, TITLE_GLYPH,
                 searchBox.isFocused() ? Ui.TEXT : Ui.MUTED);
-        String n = searching()
-                ? (matches.isEmpty() ? "0" : (matchCursor >= 0 ? (matchCursor + 1) + "/" : "") + matches.size()) : null;
-        int countW = n == null ? 0 : Ui.textWidth(font, n) + Ui.S1;
         int ex = ix + TITLE_GLYPH + Ui.S1;
+        int room = x + w - Ui.S2;
+        if (searching()) {
+            room = clearButton(g, room, y, h, mouseX, mouseY, searchClearRect);
+        } else {
+            searchClearRect[2] = 0;
+        }
         searchBox.setX(ex);
         searchBox.setY(y + (h - EDIT_H) / 2);
-        searchBox.setWidth(Math.max(10, x + w - Ui.S2 - countW - ex));
+        searchBox.setWidth(Math.max(10, room - ex));
         searchBox.render(g, mouseX, mouseY, partialTick);
-        if (n != null) {
-            Ui.textRight(g, font, n, x + w - Ui.S2, y + (h - 8) / 2 + 1,
-                    matches.isEmpty() ? Ui.TEXT_ERROR : Ui.MUTED);
-        }
     }
 
     private int skillHeaderWidth(ClientModel.Chapter ch) {
@@ -2638,16 +2689,10 @@ public class ProgressScreen extends Screen {
         int contentEnd = y + scroll;
         sheetContentMax = Math.max(0, (contentEnd - contentTop) - (contentBottom - contentTop));
         boolean overflow = sheetContentMax > 0;
-        if (overflow) {
-            // the scrollbar on the sheet's right edge, in the chapter list's look (only while the content overflows)
-            int trackH = contentBottom - contentTop;
-            int thumb = Math.max(12, Math.round((float) trackH * trackH / (trackH + sheetContentMax)));
-            int ty = contentTop + Math.round((trackH - thumb) * (sheetScroll / Math.max(1, sheetContentMax)));
-            boolean over = mouseX >= x0 && mouseX < x0 + sw && mouseY >= contentTop && mouseY < contentBottom;
-            Ui.surface(g, x0 + pw - Ui.S1 - 3, ty, 3, thumb, Ui.CORNER, over ? Ui.SCROLLBAR_HOVER : Ui.SCROLLBAR);
-        }
+        // no scrollbar on the sheet either, for the same reason as the chapter list's: it never took a drag (2026-11-02).
+        // The wheel scrolls the sheet.
         // the actions sit just under short content instead of pinned to the bottom; while the content overflows they
-        // stay at the bottom, where the scrollbar ends
+        // stay at the bottom
         int actionsY = height - BTN - Ui.S2;
         int actionsTop = overflow ? actionsY : Math.min(contentEnd + Ui.S3, actionsY);
         renderActions(g, n, ch, state, x, actionsTop, w, mouseX, mouseY);
@@ -3750,6 +3795,16 @@ public class ProgressScreen extends Screen {
             return true;
         }
         ClientModel m = model();
+        // the field's cross comes before the field itself: it sits inside the field's rectangle
+        if (button == 0 && railClearRect[2] > 0 && inRect(railClearRect, mx, my)) {
+            clearRailFilter();
+            return true;
+        }
+        if (button == 0 && searchClearRect[2] > 0 && inRect(searchClearRect, mx, my)
+                && mx < (sheetT > 0 ? sheetLeft() : width)) {
+            clearSearch();
+            return true;
+        }
         if (railBox != null && inRect(railRect, mx, my)) {
             setFocused(railBox);
             railBox.setFocused(true);
@@ -4188,16 +4243,9 @@ public class ProgressScreen extends Screen {
         if (index < 0 || index >= count) {
             return null;
         }
-        int w = railWidth();
-        int left = 4 + Ui.S1;
-        int rowW = w - 2 * Ui.S1;
+        // the icons share one column in both states, so the centre is the same whether the rail is open or folded
         int cy = height - 8 - railFootH() + RAIL_FOOT_SEP;
-        if (railT > 0.6f) {
-            int slotW = rowW / count;
-            int start = left + (rowW - slotW * count) / 2;
-            return new int[]{start + index * slotW + slotW / 2, cy + RAIL_FOOT_ROW / 2};
-        }
-        return new int[]{left + 24, cy + index * (RAIL_FOOT_ROW + 4) + RAIL_FOOT_ROW / 2};
+        return new int[]{RAIL_ICON_X + RAIL_ICON / 2, cy + index * RAIL_ROW + RAIL_ROW / 2};
     }
 
     /** Dev tour only: the centre of the emergency row, or null when the pack hands nothing out. */
