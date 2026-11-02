@@ -225,9 +225,10 @@ final class Tiles {
     }
 
     /**
-     * The screen's map background: the palette's {@code ground} colour, or {@code textures/gui/ground.png} tinted by
-     * it and repeated across the screen at one picture pixel per GUI pixel. A pack without the picture gets exactly
-     * the flat fill the screen has always drawn.
+     * The screen's ground: the palette's colour at the palette's own alpha, or a pack's {@code ground.png} tinted by it,
+     * tiled at one picture pixel per GUI pixel. A pack without the picture gets the flat fill. One layer, not the colour and then the picture: the ground is see-through so the world shows behind the
+     * book, and two translucent layers compose into an opaque one (2026-11-02). A pack whose tile has transparent pixels
+     * therefore shows the world through them, which is what a see-through ground means.
      */
     static void ground(GuiGraphics g, int w, int h, int argb) {
         ResourceLocation ground = guiTexture("ground");
@@ -236,9 +237,6 @@ final class Tiles {
             g.fill(0, 0, w, h, argb);
             return;
         }
-        // the colour goes down first so a pack's transparent pixels show the ground colour, not whatever was
-        // drawn before this screen (2026-10-24)
-        g.fill(0, 0, w, h, argb);
         prepareTiled(ground);
         RenderSystem.enableBlend();
         g.setColor(((argb >> 16) & 255) / 255f, ((argb >> 8) & 255) / 255f, (argb & 255) / 255f, ((argb >>> 24) & 255) / 255f);

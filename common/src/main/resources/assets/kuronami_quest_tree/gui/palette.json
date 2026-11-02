@@ -4,6 +4,7 @@
   "text_dim": "#FF949BA4",
   "text_bright": "#FFF2F3F5",
   "ground": "#FF313338",
+  "ground_scrim": "#A6313338",
   "panel": "#FF2B2D31",
   "panel_translucent": "#F22B2D31",
   "rail_closed": "#F21E1F22",

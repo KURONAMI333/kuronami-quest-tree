@@ -36,6 +36,14 @@ final class Ui {
 
     /** The map's ground: Discord's main surface. */
     static int GROUND = 0xFF313338;
+    /**
+     * The map's ground as it is drawn: the same tone, but see-through, so the world shows behind the book (2026-11-02,
+     * the player: the map area read as its own app, not as something laid over where they were standing). 0xA6 is 65%
+     * ground, 35% world. Read from {@code ground_scrim}, and left out of the compiled defaults below because it is
+     * worked out from {@link #GROUND} when the palette is read, so a theme or pack that only recolours the ground keeps
+     * its own hue.
+     */
+    static int GROUND_SCRIM = 0xA6313338;
     /** Sidebars and the detail sheet sit one step below the ground, as Discord's channel list does. */
     static int PANEL = 0xFF2B2D31;
     /** Nearly opaque: the world behind only tints the panel, it must not show through as texture. */
@@ -190,6 +198,7 @@ final class Ui {
         DIM = color(o, "text_dim", DIM);
         BRIGHT = color(o, "text_bright", BRIGHT);
         GROUND = color(o, "ground", GROUND);
+        GROUND_SCRIM = color(o, "ground_scrim", (GROUND & 0xFFFFFF) | (GROUND_SCRIM_A << 24));
         PANEL = color(o, "panel", PANEL);
         PANEL_TRANSLUCENT = color(o, "panel_translucent", PANEL_TRANSLUCENT);
         RAIL_CLOSED = color(o, "rail_closed", RAIL_CLOSED);
@@ -254,6 +263,8 @@ final class Ui {
             DIM = 0xFFCFCFCF;
             BRIGHT = 0xFFFFFFFF;
             GROUND = 0xFF0E0F12;
+            // high contrast is about reading the screen, so the world does not show through there
+            GROUND_SCRIM = 0xFA0E0F12;
             PANEL = 0xFF17181C;
             PANEL_TRANSLUCENT = 0xFA17181C;
             RAIL_CLOSED = 0xFA0B0C0E;
@@ -368,6 +379,9 @@ final class Ui {
     static int onLight(int argb) {
         return light ? ink(paletteBackground(), argb) : argb;
     }
+
+    /** How much of the ground the default theme keeps over the world: 0xA6 = 65%, so 35% of the world shows. */
+    private static final int GROUND_SCRIM_A = 0xA6;
 
     /** Whether the palette's background is light; set once per {@link #loadPalette}, false for the default theme. */
     private static boolean light;

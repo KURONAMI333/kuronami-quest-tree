@@ -13,7 +13,7 @@ arrives and every time it opens, so after `F3 + T` reopen the screen to see a ch
 | Keys | What they colour |
 |---|---|
 | `text`, `text_muted`, `text_dim`, `text_bright`, `text_error` | Text, from main to quietest; the selected row; a search with no match |
-| `ground`, `panel`, `panel_translucent`, `rail_closed`, `floating` | The map behind the tree; the chapter list and detail panel; the closed chapter list; tooltips |
+| `ground`, `ground_scrim`, `panel`, `panel_translucent`, `rail_closed`, `floating` | The map behind the tree; the ground as drawn, which is `ground` at 65% alpha (`#A6`) so the world shows behind the book, and can be set on its own to change how much; the chapter list and detail panel; the closed chapter list; tooltips |
 | `accent` | The selected chapter's mark and the button that spends skill points |
 | `badge`, `badge_text` | Count badges (rewards waiting, points to spend) |
 | `overlay_hover`, `overlay_selected`, `overlay_pressed`, `hairline`, `divider`, `focus`, `disabled` | Rows and buttons under the pointer or selected, panel edges, separators, the focused search field, disabled buttons |
