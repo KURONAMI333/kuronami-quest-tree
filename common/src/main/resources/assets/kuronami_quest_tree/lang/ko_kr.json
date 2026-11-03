@@ -62,7 +62,7 @@
   "key.kuronami_quest_tree.editor_duplicate": "복제",
   "key.kuronami_quest_tree.editor_delete": "삭제",
   "key.kuronami_quest_tree.editor_link": "연결",
-  "screen.kuronami_quest_tree.claim_all": "모두 수령",
+  "screen.kuronami_quest_tree.claim_all": "이 장 수령",
   "screen.kuronami_quest_tree.claim": "수령",
   "screen.kuronami_quest_tree.points": "%s포인트",
   "screen.kuronami_quest_tree.points_one": "%s포인트",

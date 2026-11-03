@@ -62,7 +62,7 @@
   "key.kuronami_quest_tree.editor_duplicate": "Дублировать",
   "key.kuronami_quest_tree.editor_delete": "Удалить",
   "key.kuronami_quest_tree.editor_link": "Связать",
-  "screen.kuronami_quest_tree.claim_all": "Получить всё",
+  "screen.kuronami_quest_tree.claim_all": "Получить главу",
   "screen.kuronami_quest_tree.claim": "Получить",
   "screen.kuronami_quest_tree.points": "Очков: %s",
   "screen.kuronami_quest_tree.points_one": "%s очко",

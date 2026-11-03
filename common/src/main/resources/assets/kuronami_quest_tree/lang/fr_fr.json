@@ -62,7 +62,7 @@
   "key.kuronami_quest_tree.editor_duplicate": "Dupliquer",
   "key.kuronami_quest_tree.editor_delete": "Supprimer",
   "key.kuronami_quest_tree.editor_link": "Lier",
-  "screen.kuronami_quest_tree.claim_all": "Tout récupérer",
+  "screen.kuronami_quest_tree.claim_all": "Récupérer le chapitre",
   "screen.kuronami_quest_tree.claim": "Récupérer",
   "screen.kuronami_quest_tree.points": "%s points",
   "screen.kuronami_quest_tree.points_one": "%s point",
