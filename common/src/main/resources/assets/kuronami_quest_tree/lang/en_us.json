@@ -142,7 +142,7 @@
   "commands.kuronami_quest_tree.progress.too_large.op": "Quest progress of %s is too large to sync (%s bytes)",
   "item.kuronami_quest_tree.quest_book": "Quest Book",
   "item.kuronami_quest_tree.quest_book.desc": "Opens your quests",
-  "screen.kuronami_quest_tree.collect_all": "Claim all chapters",
+  "screen.kuronami_quest_tree.collect_all": "Claim all",
   "screen.kuronami_quest_tree.settings": "Settings",
   "screen.kuronami_quest_tree.open_guide": "Open guide",
   "screen.kuronami_quest_tree.guide_missing": "No guide page for this quest",

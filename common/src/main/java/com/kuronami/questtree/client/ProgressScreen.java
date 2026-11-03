@@ -683,7 +683,6 @@ public class ProgressScreen extends Screen {
             if (!ClientProgress.chapterAlwaysHidden(c.id)) {
                 // a locked chapter stays in the list, greyed with the pack's hint, instead of vanishing
                 railChapters.add(c);
-                railWidest = Math.max(railWidest, Ui.textWidth(font, c.title));
             }
             int done = 0;
             int badge = 0;
@@ -728,6 +727,13 @@ public class ProgressScreen extends Screen {
             }
             badges.put(c.id, badge);
             chapterCounts.put(c.id, new int[]{done, shown, hidden});
+            if (!ClientProgress.chapterAlwaysHidden(c.id)) {
+                // the name and what sits right of it in its row (a count like "12/127", or a badge): the open list is
+                // as wide as the widest of these, so a name is cut only when the list hits its limit
+                int right = badge > 0 ? Math.max(Ui.BADGE_H, Ui.textWidth(font, String.valueOf(badge)) + 4) + 4
+                        : Ui.textWidth(font, done + "/" + shown) + 6;
+                railWidest = Math.max(railWidest, Ui.textWidth(font, c.title) + right);
+            }
         }
         // the rail's filter: a chapter stays when its own name or its group's name contains the text; a group with no
         // chapter left simply never gets its header, and while filtering no group is folded shut (the player)
@@ -867,7 +873,7 @@ public class ProgressScreen extends Screen {
         }
         // icon, gaps and a count like "12/127" beside the longest name, within half the screen: names stay on one
         // line, so the list widens for them instead (2026-11-02, the player: wrapped names made the rows uneven)
-        railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + 34 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width / 2));
+        railOpenW = Mth.clamp(railWidest + RAIL_TEXT_X + Ui.S1 + Ui.S2, RAIL_OPEN_MIN, Math.max(RAIL_OPEN_MIN, width / 2));
         ClientModel.Chapter ch = chapter();
         if (!railOnly && (ch == null || ClientProgress.chapterLocked(ch.id))) {
             // no overview screen any more: open on the last chapter, or the first one the player may enter
@@ -1186,12 +1192,6 @@ public class ProgressScreen extends Screen {
                     String right = c.skills ? Component.translatable("screen.kuronami_quest_tree.level_short",
                             ClientProgress.progress().level.getOrDefault(ProgressRules.key(c.id, c.pool), 0)).getString() : cnt[0] + "/" + cnt[1];
                     boolean hover = mouseX >= 4 && mouseX < 4 + w && my >= ry && my < ry + hgt;
-                    if (hover && !locked && railT > 0.6f && Ui.textWidth(font, c.title) > w - RAIL_TEXT_X - Ui.S1 - 34) {
-                        // the name is cut in the row: the whole of it beside the rail
-                        railTip = List.of(c.title);
-                        railTipX = 4 + w + 4;
-                        railTipY = Math.round(top - shown + ry);
-                    }
                     if (hover && locked) {
                         // the pack's own words for why it is closed; the row itself stays a row
                         Component hint = c.lockHint != null ? c.lockHint
@@ -1201,13 +1201,20 @@ public class ProgressScreen extends Screen {
                         railTipX = 4 + w + 4;
                         railTipY = Math.round(top - shown + ry);
                     }
+                    boolean cut;
                     if (searching()) {
                         // while searching, the rail shows where the matches are instead
                         int hits = matchCount.getOrDefault(c.id, 0);
-                        rowRail(g, ry, hgt, m.chapters.indexOf(c), c.displayIcon(), c.iconTexture, c.title, w, hover, 0, String.valueOf(hits), locked);
+                        cut = rowRail(g, ry, hgt, m.chapters.indexOf(c), c.displayIcon(), c.iconTexture, c.title, w, hover, 0, String.valueOf(hits), locked);
                     } else {
-                        rowRail(g, ry, hgt, m.chapters.indexOf(c), c.displayIcon(), c.iconTexture, c.title, w, hover, badges.getOrDefault(c.id, 0),
+                        cut = rowRail(g, ry, hgt, m.chapters.indexOf(c), c.displayIcon(), c.iconTexture, c.title, w, hover, badges.getOrDefault(c.id, 0),
                                 !c.skills && cnt[1] > 0 && cnt[0] == cnt[1] && cnt[2] == 0 ? "" : right, locked);
+                    }
+                    if (hover && cut && !locked) {
+                        // the name is cut in its row: the whole of it beside the rail, level with the row
+                        railTip = List.of(c.title);
+                        railTipX = 4 + w + 4;
+                        railTipY = Math.round(top - shown + ry);
                     }
                 }
             }
@@ -1342,8 +1349,9 @@ public class ProgressScreen extends Screen {
      * open chapter is one solid accent pill with bright text, the one mark of selection (2026-10-20, the player: the pale
      * grey box together with a blue bar on the left read cheap and said the same thing twice); hover is a faint pill.
      */
-    private void rowRail(GuiGraphics g, int y, int hgt, int index, ItemStack icon, ResourceLocation iconTexture, Component label, int w, boolean hover, int badge,
-                         String right, boolean locked) {
+    private boolean rowRail(GuiGraphics g, int y, int hgt, int index, ItemStack icon, ResourceLocation iconTexture, Component label, int w, boolean hover, int badge,
+                            String right, boolean locked) {
+        boolean cut = false;
         boolean on = index == chapterIndex;
         if ((on || hover) && !locked) {
             Ui.surface(g, 4 + Ui.S1, y, w - 2 * Ui.S1, hgt, Ui.CORNER, on ? Ui.ACCENT : Ui.OVERLAY_1);
@@ -1393,9 +1401,11 @@ public class ProgressScreen extends Screen {
             }
             int color = locked ? Ui.DIM : on ? Ui.BRIGHT : Ui.MUTED;
             int labelW = w - RAIL_TEXT_X - Ui.S1 - rightW;
+            cut = Ui.textWidth(font, label.getString()) > labelW;
             Ui.text(g, font, trim(label.getString(), labelW), RAIL_TEXT_X, ty, (color & 0xFFFFFF) | alpha);
         }
         g.pose().popPose();
+        return cut;
     }
 
     /**
@@ -1909,7 +1919,10 @@ public class ProgressScreen extends Screen {
         int cx = (field ? px : sx) + pin;
         int skillX = cx + claimW + Ui.S2;
         int py = Ui.S2;
-        titleRect = new int[]{x, py, cx - x, pin};
+        // the whole plate takes the clicks, up to where the details sheet covers it: a click on its padding or between
+        // the controls must not reach the map under it
+        int plateEnd = (ch.skills ? skillX + skillHeaderWidth(ch) : cx + claimW) + Ui.S1;
+        titleRect = new int[]{x - Ui.S2, py, Math.max(0, Math.min(plateEnd, sheetT > 0 ? sheetLeft() : width) - (x - Ui.S2)), pin};
         // the details sheet slides over the row: whatever it covers neither lights up nor takes clicks
         int open = sheetT > 0 ? sheetLeft() : width;
         // Depth, from the caller's OVERLAY_Z (the map's tiles and overlays reach up to it): scrim +10, title and its
@@ -1919,7 +1932,7 @@ public class ProgressScreen extends Screen {
         // the title row sits on its own plate, as the zoom buttons do: the soft fade it had before left the name over
         // bright quest tiles and pictures hard to read (2026-11-02, the player)
         int plateX = x - Ui.S2;
-        int plateR = (ch.skills ? skillX + skillHeaderWidth(ch) : cx + claimW) + Ui.S1;
+        int plateR = plateEnd;
         int plateW = plateR - plateX;
         if (GlassPanel.on()) {
             GlassPanel.render(g, GlassPanel.HEADER, GlassPanel.Kind.REGULAR, plateX, py, plateW, pin, Ui.R2, mouseX, mouseY);
