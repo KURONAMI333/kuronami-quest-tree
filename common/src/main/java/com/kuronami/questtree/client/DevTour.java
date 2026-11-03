@@ -211,6 +211,14 @@ final class DevTour {
         pt += 20;
         at(pt, () -> Minecraft.getInstance().setScreen(null));
         pt += 5;
+        // a chapter with rewards waiting: the gold gift and its count on the title's plate
+        // looked up when the step runs: the progress is only known once the tour is under way
+        at(pt, () -> m.chapters.stream().filter(c -> !c.skills && c.nodes.values().stream()
+                .anyMatch(n -> ClientProgress.state(n.key) == State.CLAIM && !n.needsChoice()))
+                .findFirst().ifPresent(c -> open(m.chapters.indexOf(c))));
+        at(pt + 2, DevTour::parkMouse);
+        shot(pt + 18, "04b_title_claim");
+        pt += 25;
         if (big != null) {
             // the zoom buttons and the minimap (it shows while the map moves), then the search over the whole book,
             // with everything it does not match sunk into the ground

@@ -1852,9 +1852,10 @@ public class ProgressScreen extends Screen {
      * pack's pictures and bright tiles (until 2026-11-02 a soft fade, which was not enough); it and the title sit under
      * the rail, which is drawn later at a higher z. The pin
      * marks the chapter for the top of the list, and a magnifier beside it turns the row into the quest search (2026-10-20,
-     * the player: the search belongs to the title, not to the chapter list, which now has its own filter). "Claim all"
-     * stays in the top right corner while anything without a choice waits; the details sheet covers that corner, so
-     * while it is open the button is left out rather than drawn under the panel (2026-10-25).
+     * the player: the search belongs to the title, not to the chapter list, which now has its own filter). While
+     * anything without a choice waits, a gold gift with the chapter's count follows the magnifier and claims this
+     * chapter's rewards (until 2026-11-03 a big gold button in the top right corner); whatever part of the row the
+     * details sheet covers takes no clicks.
      */
     private void renderHeader(GuiGraphics g, ClientModel.Chapter ch, int mouseX, int mouseY, float partialTick) {
         claimRect[2] = 0;
@@ -1869,15 +1870,17 @@ public class ProgressScreen extends Screen {
         int avail = width - left;
         int waiting = claimable.getOrDefault(ch.id, 0);
         Component claimLabel = Component.translatable("screen.kuronami_quest_tree.claim_all");
-        int bh = 20;
-        int bw = waiting > 0 ? Ui.textWidth(font, claimLabel) + Ui.S1 + Ui.textWidth(font, String.valueOf(waiting)) + 2 * Ui.S2 + 4 : 0;
-        int limitRight = width - Ui.S2 - (waiting > 0 ? bw + Ui.S1 : 0);
+        String waitingText = String.valueOf(waiting);
+        // the chapter's claim is one more control on the title's plate, a gold gift with its count, the size of the pin
+        // beside it (2026-11-03, the player: the big gold button in the corner was the old design and looked cheap)
+        int claimW = waiting > 0 ? TITLE_BTN + Ui.textWidth(font, waitingText) + 2 : 0;
+        int limitRight = width - Ui.S2;
         int skillW = ch.skills ? Ui.S2 + skillHeaderWidth(ch) : 0;
         // the quest search takes the title's place while it is focused or has text (2026-10-20, the player: the search
         // had moved into the chapter list, which now filters itself, so it comes back up to the title row)
         boolean field = searchBox != null && (searchBox.isFocused() || !query.isBlank());
         int searchBtn = field ? 0 : TITLE_BTN;
-        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - editBtn - pin - searchBtn - skillW - Ui.S2);
+        int maxTitleW = Math.max(0, limitRight - left - icon - Ui.S1 - Ui.S1 - editBtn - pin - searchBtn - claimW - skillW - Ui.S2);
         Component title = ch.title;
         int titleW = Ui.textWidth(font, title);
         int contentW;
@@ -1892,7 +1895,7 @@ public class ProgressScreen extends Screen {
             }
             contentW = titleW;
         }
-        int gw = icon + Ui.S1 + contentW + Ui.S1 + editBtn + pin + searchBtn + skillW;
+        int gw = icon + Ui.S1 + contentW + Ui.S1 + editBtn + pin + searchBtn + claimW + skillW;
         int x = left + (avail - gw) / 2;
         if (x + gw > limitRight) {
             x = limitRight - gw;
@@ -1903,9 +1906,10 @@ public class ProgressScreen extends Screen {
         int px = ex + editBtn;
         // the magnifier sits directly right of the pin; the field already holds one at its left
         int sx = px + pin;
-        int skillX = (field ? px : sx) + pin + Ui.S2;
+        int cx = (field ? px : sx) + pin;
+        int skillX = cx + claimW + Ui.S2;
         int py = Ui.S2;
-        titleRect = new int[]{x, py, (field ? px + pin : sx + pin) - x, pin};
+        titleRect = new int[]{x, py, cx - x, pin};
         // the details sheet slides over the row: whatever it covers neither lights up nor takes clicks
         int open = sheetT > 0 ? sheetLeft() : width;
         // Depth, from the caller's OVERLAY_Z (the map's tiles and overlays reach up to it): scrim +10, title and its
@@ -1915,7 +1919,7 @@ public class ProgressScreen extends Screen {
         // the title row sits on its own plate, as the zoom buttons do: the soft fade it had before left the name over
         // bright quest tiles and pictures hard to read (2026-11-02, the player)
         int plateX = x - Ui.S2;
-        int plateR = (ch.skills ? skillX + skillHeaderWidth(ch) : titleRect[0] + titleRect[2]) + Ui.S1;
+        int plateR = (ch.skills ? skillX + skillHeaderWidth(ch) : cx + claimW) + Ui.S1;
         int plateW = plateR - plateX;
         if (GlassPanel.on()) {
             GlassPanel.render(g, GlassPanel.HEADER, GlassPanel.Kind.REGULAR, plateX, py, plateW, pin, Ui.R2, mouseX, mouseY);
@@ -1991,21 +1995,15 @@ public class ProgressScreen extends Screen {
         }
         if (waiting > 0) {
             // this chapter's rewards only: the count and the claim are the chapter's
-            String n = String.valueOf(waiting);
-            int bx = width - Ui.S2 - bw;
-            int by = Ui.S2;
-            // the sheet slides over this corner, so while it is open the button is not drawn at all: a gold ghost
-            // showing through the panel read as a half-cut button (2026-10-25)
-            boolean shown = bx + bw <= open;
-            boolean bo = shown && mouseX >= bx && mouseX < bx + bw && mouseY >= by && mouseY < by + bh;
-            if (shown) {
-                Ui.surface(g, bx, by, bw, bh, Ui.CORNER, bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD);
-                // the label sits on the gold button, not on the chapter's picture
-                Ui.offSurface(() -> {
-                    Ui.text(g, font, claimLabel, bx + Ui.S2, by + (bh - 8) / 2, Tiles.INK);
-                    Ui.text(g, font, n, bx + bw - Ui.S2 - Ui.textWidth(font, n), by + (bh - 8) / 2, Tiles.INK);
-                });
+            boolean shown = cx + claimW <= open;
+            boolean bo = shown && mouseX >= cx && mouseX < cx + claimW && mouseY >= py && mouseY < py + pin;
+            if (bo) {
+                Ui.surface(g, cx, py, claimW, pin, Ui.CORNER, Ui.OVERLAY_1);
+                pendingTip = List.of(claimLabel);
             }
+            int gold = bo ? lerpColor(Tiles.GOLD, 0xFFFFFFFF, 0.25f) : Tiles.GOLD;
+            Tiles.icon(g, "gift", cx + (pin - TITLE_GLYPH) / 2f, py + (pin - TITLE_GLYPH) / 2f, TITLE_GLYPH, gold);
+            Ui.text(g, font, waitingText, cx + pin - 1, py + (pin - 8) / 2, gold);
             Runnable claim = () -> {
                 ClientProgress.send("claim_chapter", ch.id, -1);
                 long start = Util.getMillis();
@@ -2020,8 +2018,8 @@ public class ProgressScreen extends Screen {
                 }
             };
             if (shown) {
-                buttons.add(new Button(bx, by, bw, bh, claim));
-                claimRect = new int[]{bx, by, bw, bh};
+                buttons.add(new Button(cx, py, claimW, pin, claim));
+                claimRect = new int[]{cx, py, claimW, pin};
             }
         }
         g.pose().popPose();
